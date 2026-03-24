@@ -1,0 +1,7 @@
+*
+!.gitignore
+!supervisor/
+
+supervisor/*
+!supervisor/skills/
+!supervisor/skills/**
