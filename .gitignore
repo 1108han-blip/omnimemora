@@ -1,7 +1,12 @@
 *
 !.gitignore
+!README.md
 !supervisor/
+!docs/
 
 supervisor/*
 !supervisor/skills/
 !supervisor/skills/**
+
+docs/*
+!docs/editions.md
