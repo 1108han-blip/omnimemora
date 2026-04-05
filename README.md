@@ -1,5 +1,7 @@
 # OpenViking
 
+![OpenViking hero](docs/assets/openviking-hero-banner.png)
+
 OpenViking is the memory compilation and orchestration layer for agents. It helps you transform fragmented memory writes, filtering, compilation, recall, and conflict handling into a verifiable middle layer pipeline -- not just stopping at "store and retrieve" plugin-level functionality.
 
 This GitHub edition is for users who want to get the pipeline running, understand the architecture, and verify value first. It provides basic integration, core memory capabilities, and minimal working examples to help you quickly establish an intuitive understanding of the project's capabilities.
@@ -63,4 +65,3 @@ OpenViking uses a three-tier distribution strategy to match different stages of 
 This tiering isn't about splitting features for monetization -- it's about putting different stages of real requirements into the most appropriate product form.
 
 For more details about edition boundaries, see [docs/editions.md](docs/editions.md).
-

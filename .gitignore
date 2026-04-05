@@ -13,3 +13,6 @@ docs/*
 !docs/quick-start.md
 !docs/architecture.md
 !docs/pricing-and-upgrade.md
+!docs/assets/
+docs/assets/*
+!docs/assets/openviking-hero-banner.png
