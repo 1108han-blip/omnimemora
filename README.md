@@ -4,6 +4,15 @@ OpenViking is the memory compilation and orchestration layer for agents. It help
 
 This GitHub edition is for users who want to get the pipeline running, understand the architecture, and verify value first. It provides basic integration, core memory capabilities, and minimal working examples to help you quickly establish an intuitive understanding of the project's capabilities.
 
+## Start Here
+
+New to OpenViking? These documents will guide you:
+
+- **[Quick Start](docs/quick-start.md)**: Your first stop -- understand what this repo contains and how to explore it
+- **[Architecture Overview](docs/architecture.md)**: Learn the high-level architecture and how the layers fit together
+- **[Editions Comparison](docs/editions.md)**: See detailed capability boundaries between editions
+- **[Pricing & Upgrade Paths](docs/pricing-and-upgrade.md)**: Understand when to upgrade and what you get
+
 ## What Problems Does OpenViking Solve?
 
 OpenViking doesn't solve "can we store a memory" -- it solves "how should an agent manage memory." In real-world usage, the hardest problems usually aren't the write interface itself, but questions like:

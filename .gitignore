@@ -10,3 +10,6 @@ supervisor/*
 
 docs/*
 !docs/editions.md
+!docs/quick-start.md
+!docs/architecture.md
+!docs/pricing-and-upgrade.md
