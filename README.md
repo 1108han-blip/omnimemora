@@ -6,6 +6,13 @@ OpenViking is the memory compilation and orchestration layer for agents. It help
 
 This GitHub edition is for users who want to get the pipeline running, understand the architecture, and verify value first. It provides basic integration, core memory capabilities, and minimal working examples to help you quickly establish an intuitive understanding of the project's capabilities.
 
+## Get Started
+
+| Quick Start | Get Pro | Enterprise Inquiry |
+|-------------|---------|--------------------|
+| Explore the GitHub edition and run the pipeline locally | Upgrade to worry-free installation, stable upgrades, and official support | For regulated environments, full auditability, and enterprise governance |
+| [Start Here →](docs/quick-start.md) | [Learn About Pro →](docs/pricing-and-upgrade.md#upgrade-to-pro-edition-when) | [Contact Us →](https://github.com/1108han-blip/desktop-tutorial/issues/new?template=commercial-inquiry.yml) |
+
 ## Start Here
 
 New to OpenViking? These documents will guide you:
@@ -14,6 +21,17 @@ New to OpenViking? These documents will guide you:
 - **[Architecture Overview](docs/architecture.md)**: Learn the high-level architecture and how the layers fit together
 - **[Editions Comparison](docs/editions.md)**: See detailed capability boundaries between editions
 - **[Pricing & Upgrade Paths](docs/pricing-and-upgrade.md)**: Understand when to upgrade and what you get
+
+## Commercial
+
+Ready to move to production? OpenViking Pro and Enterprise editions provide:
+- Standard installation with acceptance verification
+- Safe upgrades with automatic rollback
+- Audit reports and operational visibility
+- Official support with response SLAs
+- Enterprise-grade governance and full audit chains
+
+Learn more about our [commercial editions](docs/pricing-and-upgrade.md) or [contact us directly](https://github.com/1108han-blip/desktop-tutorial/issues/new?template=commercial-inquiry.yml) to discuss your needs.
 
 ## What Problems Does OpenViking Solve?
 

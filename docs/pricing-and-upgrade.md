@@ -118,9 +118,26 @@ Specific pricing for Pro and Enterprise editions is available by contacting our 
 - Support requirements
 - Custom integration needs
 
+## Ready to Take the Next Step?
+
+When you're ready to move from experimentation to reliable deployment or production governance, we're here to help. The transition from GitHub Edition to Pro or Enterprise is smooth -- your existing configuration and strategies are fully compatible.
+
+### How to Get Started
+
+1. **Verify with GitHub Edition**: Make sure the core approach fits your needs
+2. **Open a Commercial Inquiry**: Let us know what you need and when you're looking to deploy
+3. **Get Pricing & Access**: We'll provide pricing information and, if desired, evaluation access
+4. **Deploy with Confidence**: Our team will help you with a smooth transition
+
+### Contact Us Today
+
+[Open a Commercial Inquiry →](https://github.com/1108han-blip/desktop-tutorial/issues/new?template=commercial-inquiry.yml)
+
+Our team typically responds within 2 business days. We'll discuss your requirements, answer any questions, and help you choose the right edition for your needs.
+
 ## Next Steps
 
 - Review [editions.md](./editions.md) for detailed capability comparisons
 - Explore [architecture.md](./architecture.md) to understand how the layers fit together
 - Try the GitHub Edition if you haven't yet
-- Contact our sales team when you're ready to discuss Pro or Enterprise
+- [Open a Commercial Inquiry](https://github.com/1108han-blip/desktop-tutorial/issues/new?template=commercial-inquiry.yml) when you're ready to discuss Pro or Enterprise

@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Commercial Inquiry
+    url: https://github.com/1108han-blip/desktop-tutorial/issues/new?template=commercial-inquiry.yml
+    about: Request information about OpenViking Pro or Enterprise editions
+  - name: Documentation
+    url: https://github.com/1108han-blip/desktop-tutorial/tree/main/docs
+    about: Read our documentation for quick start, architecture, and pricing

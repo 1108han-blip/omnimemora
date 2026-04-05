@@ -1,0 +1,100 @@
+name: Commercial Inquiry
+description: Request information about OpenViking Pro or Enterprise editions
+title: "[Commercial Inquiry]: "
+labels: ["commercial", "inquiry"]
+assignees: []
+
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thank you for your interest in OpenViking Pro or Enterprise! Please fill out this form to help us understand your needs.
+
+  - type: dropdown
+    id: edition-interest
+    attributes:
+      label: Edition Interest
+      description: Which edition are you interested in?
+      options:
+        - Pro Edition
+        - Enterprise Edition
+        - Not sure yet
+    validations:
+      required: true
+
+  - type: dropdown
+    id: use-case
+    attributes:
+      label: Primary Use Case
+      description: What will you be using OpenViking for?
+      options:
+        - Team deployment
+        - Staging environment
+        - Small production
+        - Large production
+        - Regulated environment
+        - Learning/evaluation
+    validations:
+      required: true
+
+  - type: input
+    id: team-size
+    attributes:
+      label: Team Size
+      description: Approximately how many engineers will be working with OpenViking?
+      placeholder: e.g., 5 engineers, 20 engineers
+    validations:
+      required: true
+
+  - type: dropdown
+    id: timeline
+    attributes:
+      label: Deployment Timeline
+      description: When are you looking to deploy?
+      options:
+        - Immediately
+        - Within 1 month
+        - Within 3 months
+        - Within 6 months
+        - Just exploring for now
+    validations:
+      required: true
+
+  - type: textarea
+    id: project-description
+    attributes:
+      label: Project Description
+      description: Tell us about your project and what you're building
+      placeholder: |
+        What problem are you solving?
+        What does your current architecture look like?
+        Any specific requirements or constraints?
+    validations:
+      required: true
+
+  - type: checkboxes
+    id: needs
+    attributes:
+      label: What do you need help with?
+      description: Select all that apply
+      options:
+        - label: Pricing information
+        - label: Evaluation access
+        - label: Integration support
+        - label: Custom deployment
+        - label: Compliance questions
+        - label: Other (please describe below)
+
+  - type: textarea
+    id: additional-info
+    attributes:
+      label: Additional Information
+      description: Anything else you'd like us to know?
+      placeholder: Any other details, questions, or specific requirements...
+
+  - type: input
+    id: contact-email
+    attributes:
+      label: Contact Email (Optional)
+      description: If you'd like us to respond via email instead of GitHub
+      placeholder: your@email.com

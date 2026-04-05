@@ -1,8 +1,10 @@
 *
 !.gitignore
 !README.md
+!index.html
 !supervisor/
 !docs/
+!.github/
 
 supervisor/*
 !supervisor/skills/
@@ -13,6 +15,13 @@ docs/*
 !docs/quick-start.md
 !docs/architecture.md
 !docs/pricing-and-upgrade.md
+!docs/contact.md
 !docs/assets/
 docs/assets/*
 !docs/assets/openviking-hero-banner.png
+
+.github/*
+!.github/ISSUE_TEMPLATE/
+.github/ISSUE_TEMPLATE/*
+!.github/ISSUE_TEMPLATE/commercial-inquiry.yml
+!.github/ISSUE_TEMPLATE/config.yml
