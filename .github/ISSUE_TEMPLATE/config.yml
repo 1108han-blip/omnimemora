@@ -1,8 +1,11 @@
 blank_issues_enabled: false
 contact_links:
-  - name: Commercial Inquiry
+  - name: Private Commercial Contact
+    url: https://doloclaw.com/contact/
+    about: Use the private contact form for pricing, API access, or deployment planning
+  - name: Public Commercial Inquiry
     url: https://github.com/1108han-blip/omnimemora/issues/new?template=commercial-inquiry.yml
-    about: Request information about OmniMemora Pro or Enterprise editions
+    about: Use GitHub only for non-sensitive public questions
   - name: Documentation
     url: https://github.com/1108han-blip/omnimemora/tree/main/docs
     about: Read our documentation for quick start, architecture, and pricing

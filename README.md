@@ -15,7 +15,7 @@ OmniMemora gives AI agents reliable, production-grade memory management — via 
 | Try the Free Edition | Get API Access | Enterprise Inquiry |
 |---------------------|----------------|-------------------|
 | Explore the pipeline, run examples, verify fit | Worry-free installation, stable upgrades, official support SLAs | For regulated environments, full audit chains, and enterprise governance |
-| [Start Free →](docs/quick-start.md) | [Get Pro →](docs/pricing-and-upgrade.md#upgrade-to-pro-edition-when) | [Contact Us →](https://github.com/1108han-blip/omnimemora/issues/new?template=commercial-inquiry.yml) |
+| [Start Free →](docs/quick-start.md) | [Get Pro →](docs/pricing-and-upgrade.md#upgrade-to-pro-edition-when) | [Contact Us →](https://doloclaw.com/contact/) |
 
 ## Start Here
 
@@ -33,7 +33,9 @@ OmniMemora Pro and Enterprise are built for teams moving agent memory from proto
 - **Pro** — Standard installation, acceptance verification, safe upgrades with rollback, audit reports, and direct support SLAs
 - **Enterprise** — Offline execution windows, complete audit chains, Execute Engine packets, and dedicated enterprise support
 
-Not sure which tier fits? See the [full edition comparison](docs/editions.md) or [talk to our team](https://github.com/1108han-blip/omnimemora/issues/new?template=commercial-inquiry.yml) — we'll help you figure it out.
+Not sure which tier fits? See the [full edition comparison](docs/editions.md) or [talk to our team privately](https://doloclaw.com/contact/) — we'll help you figure it out.
+
+If you only have a non-sensitive public question, you can also use the [public commercial inquiry issue](https://github.com/1108han-blip/omnimemora/issues/new?template=commercial-inquiry.yml). Do not post confidential pricing, customer, or deployment details there.
 
 ## What Problems Does OmniMemora Solve?
 

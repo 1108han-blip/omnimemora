@@ -1,5 +1,5 @@
 name: Commercial Inquiry
-description: Request information about OmniMemora Pro or Enterprise editions
+description: Public, non-sensitive questions about OmniMemora Pro or Enterprise editions
 title: "[Commercial Inquiry]: "
 labels: ["commercial", "inquiry"]
 assignees: []
@@ -8,7 +8,11 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thank you for your interest in OmniMemora Pro or Enterprise! Please fill out this form to help us understand your needs.
+        Thank you for your interest in OmniMemora Pro or Enterprise.
+
+        This GitHub issue is public. Please do not include confidential pricing expectations, customer names, credentials, proprietary architecture details, or regulated deployment information here.
+
+        If you need a private commercial conversation, use: https://doloclaw.com/contact/
 
   - type: dropdown
     id: edition-interest

@@ -90,7 +90,7 @@ Enterprise Edition
 ### How to Upgrade
 
 1. **Start with GitHub**: Verify the approach fits your needs
-2. **Contact Sales**: When you're ready for Pro or Enterprise, reach out to our team
+2. **Contact Sales**: When you're ready for Pro or Enterprise, use the private contact flow at `doloclaw.com/contact/`
 3. **Get a Package**: We'll provide the appropriate edition package for your needs
 4. **Migrate Smoothly**: Your existing configuration and strategies are compatible with higher editions
 
@@ -103,28 +103,25 @@ Enterprise Edition
 
 ## Getting Pricing
 
-Pro and Enterprise pricing is available on request. We tailor based on deployment scale, support requirements, and integration needs. [Open a commercial inquiry](https://github.com/1108han-blip/omnimemora/issues/new?template=commercial-inquiry.yml) to get a conversation started.
+Pro and Enterprise pricing is available on request. We tailor based on deployment scale, support requirements, and integration needs. [Use the private contact form](https://doloclaw.com/contact/) to get a conversation started.
 
 ## Ready to Take the Next Step?
 
-When you're ready to move from experimentation to reliable deployment or production governance, we're here to help. The transition from GitHub Edition to Pro or Enterprise is smooth -- your existing configuration and strategies are fully compatible.
+Your existing GitHub Edition configuration is fully compatible with Pro and Enterprise — no rewrite needed when you upgrade.
 
 ### How to Get Started
 
-1. **Verify with GitHub Edition**: Make sure the core approach fits your needs
-2. **Open a Commercial Inquiry**: Let us know what you need and when you're looking to deploy
-3. **Get Pricing & Access**: We'll provide pricing information and, if desired, evaluation access
-4. **Deploy with Confidence**: Our team will help you with a smooth transition
+1. **Evaluate with GitHub Edition** — make sure the approach fits
+2. **Use the Private Contact Form** — tell us your use case and timeline
+3. **Get Pricing & Access** — we'll provide pricing and evaluation access if desired
+4. **Deploy with Confidence** — our team helps with a smooth transition
 
-### Contact Us Today
+[Open the Private Contact Form →](https://doloclaw.com/contact/)
 
-[Open a Commercial Inquiry →](https://github.com/1108han-blip/omnimemora/issues/new?template=commercial-inquiry.yml)
+Typical response time is 2 business days. We'll discuss your requirements, answer questions, and help you pick the right edition.
 
-Our team typically responds within 2 business days. We'll discuss your requirements, answer any questions, and help you choose the right edition for your needs.
+### Next Steps
 
-## Next Steps
-
-- Review [editions.md](./editions.md) for detailed capability comparisons
-- Explore [architecture.md](./architecture.md) to understand how the layers fit together
+- Review the [edition comparison](docs/editions.md) for detailed capability details
+- Explore the [architecture overview](docs/architecture.md)
 - Try the GitHub Edition if you haven't yet
-- [Open a Commercial Inquiry](https://github.com/1108han-blip/omnimemora/issues/new?template=commercial-inquiry.yml) when you're ready to discuss Pro or Enterprise

@@ -1,46 +1,46 @@
 # Contact & Commercial Inquiries
 
-Ready to move to production with OmniMemora Pro or Enterprise? We're here to help.
+Ready to move to production with OmniMemora Pro or Enterprise? Use the private contact flow first, and keep GitHub for non-sensitive public questions.
 
-## How to Contact Us
+## Private Contact First
 
-The fastest way to reach our team is through a GitHub issue in this repository.
+[Open the Private Contact Form →](https://doloclaw.com/contact/)
 
-### Step 1: Open a Commercial Inquiry
+This is the recommended path for pricing, API access, deployment planning, and any conversation that should stay private.
 
-[Open a new Commercial Inquiry issue →](https://github.com/1108han-blip/omnimemora/issues/new?template=commercial-inquiry.yml)
+## Public GitHub Inquiry
 
-This will guide you through providing the information we need to help you quickly.
+[Open a Public Commercial Inquiry Issue →](https://github.com/1108han-blip/omnimemora/issues/new?template=commercial-inquiry.yml)
 
-### Step 2: What to Expect
+Use the GitHub issue only if your question can be public. Do **not** post confidential pricing expectations, customer names, architecture secrets, credentials, or regulated deployment information there.
 
-Once you open an inquiry:
-1. Our team will review the inquiry and follow up through GitHub or the contact email you provide
-2. We'll discuss your use case and requirements
-3. We'll provide pricing information and a deployment path
-4. You'll receive access to the appropriate edition package
+### What to Expect
 
-## What We'll Ask For
+1. Our team reviews your inquiry and follows up through the appropriate channel
+2. We discuss your use case, timeline, and edition fit
+3. We provide pricing and a deployment path tailored to your needs
+4. You receive access to the appropriate edition package
 
-To help us serve you better, be prepared to share:
+### What to Have Ready
 
-- **Your use case**: What are you building with OmniMemora?
+- **Use case**: What are you building with OmniMemora?
 - **Team size**: How many engineers will be working with it?
 - **Deployment timeline**: When are you looking to go to production?
 - **Edition interest**: Pro or Enterprise? (See [editions.md](./editions.md) for comparison)
-- **Any custom needs**: Do you have specific integration or compliance requirements?
+- **Special requirements**: Integration or compliance needs?
 
-## Evaluation Process
+## Evaluating Before You Buy
 
-If you'd like to evaluate Pro or Enterprise before committing:
+If you'd like to try Pro or Enterprise before committing:
 
-1. **Start with GitHub Edition**: Verify that the core approach fits your needs
-2. **Open an Inquiry**: Let us know you'd like to evaluate a paid edition
-3. **Trial Access**: We can provide temporary access for evaluation purposes
-4. **Decision**: When you're ready, we'll help you transition to a full license
+1. **Start with GitHub Edition** — verify the approach fits your needs
+2. **Open an inquiry** — let us know you'd like to evaluate a paid edition
+3. **Request trial access** — we can arrange temporary access for evaluation
+4. **Decide** — when you're ready, we help you transition to a full license
 
-## Next Steps
+## Ready to Talk?
 
-- Not sure which edition is right? Review [editions.md](./editions.md)
-- Want to understand pricing? See [pricing-and-upgrade.md](./pricing-and-upgrade.md)
-- Ready to talk? [Open a Commercial Inquiry →](https://github.com/1108han-blip/omnimemora/issues/new?template=commercial-inquiry.yml)
+- [Private Contact Form →](https://doloclaw.com/contact/)
+- [Public GitHub Inquiry →](https://github.com/1108han-blip/omnimemora/issues/new?template=commercial-inquiry.yml)
+
+Not sure which edition fits? Review the [edition comparison](./editions.md) or [pricing overview](./pricing-and-upgrade.md) first.
