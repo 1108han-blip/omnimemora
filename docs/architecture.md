@@ -1,6 +1,6 @@
 # Architecture Overview
 
-OpenViking is structured as a memory compilation and orchestration layer that sits between your agents and raw storage systems.
+OmniMemora is structured as a memory compilation and orchestration layer that sits between your agents and raw storage systems.
 
 ## High-Level Architecture
 
@@ -12,7 +12,7 @@ graph TB
         Agent3[Third-Party Agent]
     end
 
-    subgraph "OpenViking Layer"
+    subgraph "OmniMemora Layer"
         subgraph "Memory Compilation Pipeline"
             Filter[Content Filtering]
             Scope[Scope Determination]
@@ -35,9 +35,9 @@ graph TB
         File[File Storage]
     end
 
-    Agent1 --> OpenViking Layer
-    Agent2 --> OpenViking Layer
-    Agent3 --> OpenViking Layer
+    Agent1 --> OmniMemora Layer
+    Agent2 --> OmniMemora Layer
+    Agent3 --> OmniMemora Layer
 
     Filter --> Scope
     Scope --> Compile
@@ -48,7 +48,7 @@ graph TB
     Verify --> Audit
     Audit --> Governance
 
-    OpenViking Layer --> Storage Layer
+    OmniMemora Layer --> Storage Layer
 ```
 
 ## Core Pipeline Flow
@@ -69,7 +69,7 @@ The memory pipeline processes operations in this sequence:
 
 ## Edition Layers
 
-OpenViking uses a tiered architecture to match different deployment needs:
+OmniMemora uses a tiered architecture to match different deployment needs:
 
 ```mermaid
 graph TB

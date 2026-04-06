@@ -1,6 +1,6 @@
 # Contact & Commercial Inquiries
 
-Ready to move to production with OpenViking Pro or Enterprise? We're here to help.
+Ready to move to production with OmniMemora Pro or Enterprise? We're here to help.
 
 ## How to Contact Us
 
@@ -24,7 +24,7 @@ Once you open an inquiry:
 
 To help us serve you better, be prepared to share:
 
-- **Your use case**: What are you building with OpenViking?
+- **Your use case**: What are you building with OmniMemora?
 - **Team size**: How many engineers will be working with it?
 - **Deployment timeline**: When are you looking to go to production?
 - **Edition interest**: Pro or Enterprise? (See [editions.md](./editions.md) for comparison)

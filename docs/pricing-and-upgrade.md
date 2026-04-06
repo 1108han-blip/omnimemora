@@ -1,10 +1,10 @@
 # Pricing & Upgrade Paths
 
-This document explains the value proposition and upgrade path for OpenViking editions. It does not include specific pricing numbers -- those are available separately through our sales channel.
+This document explains the value proposition and upgrade path for OmniMemora editions. It does not include specific pricing numbers -- those are available separately through our sales channel.
 
 ## Overview
 
-OpenViking's tiered model matches the natural progression of agent projects:
+OmniMemora's tiered model matches the natural progression of agent projects:
 
 1. **Experiment** with GitHub Edition (free)
 2. **Deploy reliably** with Pro Edition (paid)
@@ -18,7 +18,7 @@ The GitHub Edition is free and ideal for:
 
 ### Use Cases
 - **Learning & Exploration**: You want to understand how agent memory orchestration works
-- **Prototype Validation**: You're testing whether OpenViking solves your specific problem
+- **Prototype Validation**: You're testing whether OmniMemora solves your specific problem
 - **Personal Projects**: You're building something for yourself, not for production
 - **Architecture Evaluation**: You're comparing approaches before committing
 

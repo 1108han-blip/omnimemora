@@ -1,5 +1,5 @@
 name: Commercial Inquiry
-description: Request information about OpenViking Pro or Enterprise editions
+description: Request information about OmniMemora Pro or Enterprise editions
 title: "[Commercial Inquiry]: "
 labels: ["commercial", "inquiry"]
 assignees: []
@@ -8,7 +8,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thank you for your interest in OpenViking Pro or Enterprise! Please fill out this form to help us understand your needs.
+        Thank you for your interest in OmniMemora Pro or Enterprise! Please fill out this form to help us understand your needs.
 
   - type: dropdown
     id: edition-interest
@@ -26,7 +26,7 @@ body:
     id: use-case
     attributes:
       label: Primary Use Case
-      description: What will you be using OpenViking for?
+      description: What will you be using OmniMemora for?
       options:
         - Team deployment
         - Staging environment
@@ -41,7 +41,7 @@ body:
     id: team-size
     attributes:
       label: Team Size
-      description: Approximately how many engineers will be working with OpenViking?
+      description: Approximately how many engineers will be working with OmniMemora?
       placeholder: e.g., 5 engineers, 20 engineers
     validations:
       required: true

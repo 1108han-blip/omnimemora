@@ -1,10 +1,10 @@
-# Quick Start: OpenViking GitHub Edition
+# Quick Start: OmniMemora GitHub Edition
 
-Welcome to OpenViking! This guide helps you understand what this repository contains, how to explore it, and what to do next.
+Welcome to OmniMemora! This guide helps you understand what this repository contains, how to explore it, and what to do next.
 
 ## What This Repository Is (and Isn't)
 
-This is the **GitHub Edition** of OpenViking -- a public base version designed to demonstrate capability, not a full commercial product.
+This is the **GitHub Edition** of OmniMemora -- a public base version designed to demonstrate capability, not a full commercial product.
 
 **You will find here:**
 - Core memory compilation and orchestration logic
@@ -22,10 +22,10 @@ This is intentional. The GitHub Edition exists to help you verify the approach a
 
 ## Step 1: Understand the Core Problem
 
-OpenViking solves "how should an agent manage memory," not just "can we store a memory."
+OmniMemora solves "how should an agent manage memory," not just "can we store a memory."
 
 Start by reading the [README.md](../README.md) to understand:
-- What problems OpenViking solves
+- What problems OmniMemora solves
 - What's included in this edition
 - The three-tier edition strategy
 
@@ -39,7 +39,7 @@ Go to [supervisor/skills/video-prompt-engineering/SKILL.md](../supervisor/skills
 - How output contracts deliver reliable, reusable results
 - How references and examples accumulate knowledge over time
 
-This skill shows the kind of structured, verifiable capability that OpenViking orchestrates.
+This skill shows the kind of structured, verifiable capability that OmniMemora orchestrates.
 
 ## Step 3: Review Edition Boundaries
 

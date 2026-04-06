@@ -1,6 +1,6 @@
-# OpenViking Editions
+# OmniMemora Editions
 
-This document explains the capability boundaries between the GitHub (open source) edition, Pro edition, and Enterprise edition of OpenViking.
+This document explains the capability boundaries between the GitHub edition, Pro edition, and Enterprise edition of OmniMemora.
 
 ## Core Principle
 
@@ -44,7 +44,7 @@ This document explains the capability boundaries between the GitHub (open source
 
 The GitHub edition's mission is to "demonstrate capability," not "bear delivery pressure." It should help users quickly understand:
 
-- What problem OpenViking solves
+- What problem OmniMemora solves
 - That it's not just a plugin, but an agent memory compilation and orchestration layer
 - That its core capabilities are valid and can run locally
 
