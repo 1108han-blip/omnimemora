@@ -1,88 +1,79 @@
 # Pricing & Upgrade Paths
 
-This document explains the value proposition and upgrade path for OmniMemora editions. It does not include specific pricing numbers -- those are available separately through our sales channel.
+OmniMemora offers three editions aligned to where you are in your agent project's lifecycle. This document explains the value at each tier and when to consider upgrading.
 
 ## Overview
 
-OmniMemora's tiered model matches the natural progression of agent projects:
+Three tiers, matched to real stages of agent projects:
 
-1. **Experiment** with GitHub Edition (free)
-2. **Deploy reliably** with Pro Edition (paid)
-3. **Govern in production** with Enterprise Edition (paid)
-
-This isn't about locking features behind paywalls -- it's about delivering the right set of capabilities at the right stage of your project.
+1. **Evaluate** — GitHub Edition (free): Understand the architecture, verify the approach
+2. **Deploy** — Pro Edition (paid): Reliable installation, support SLAs, audit visibility
+3. **Govern** — Enterprise Edition (paid): Production-grade governance and complete audit chains
 
 ## Stay on GitHub Edition When...
 
-The GitHub Edition is free and ideal for:
+The GitHub Edition is free and the right choice when you're still validating the approach.
 
 ### Use Cases
-- **Learning & Exploration**: You want to understand how agent memory orchestration works
-- **Prototype Validation**: You're testing whether OmniMemora solves your specific problem
-- **Personal Projects**: You're building something for yourself, not for production
-- **Architecture Evaluation**: You're comparing approaches before committing
+- **Learning & Exploration**: Understanding how agent memory orchestration works
+- **Prototype Validation**: Testing whether OmniMemora fits your specific problem
+- **Personal Projects**: Building for yourself, not for production deployment
+- **Architecture Evaluation**: Comparing approaches before committing to a paid tier
 
-### Value You Get
+### What You Get
 - Full core memory compilation and orchestration logic
-- Basic working examples
-- Supervisor skill patterns
-- Architecture documentation
-- Community-based support
+- Basic working examples and architecture documentation
+- Community-based support via GitHub issues
 
-### Limitations to Accept
-- No standard installer
-- No acceptance verification suite
+### Limitations
+- No standard installer or acceptance verification suite
 - No upgrade/rollback guarantees
-- No official support
-- No audit reporting
+- No official support or audit reporting
 
 ## Upgrade to Pro Edition When...
 
-Pro Edition is for when you're ready to move from experimentation to real deployment.
+Pro is for teams ready to move from prototype to reliable production deployment.
 
 ### Use Cases
-- **Team Deployments**: Multiple engineers need a consistent installation
-- **Staging Environments**: You want a reliable upgrade path
-- **Small Production**: You're running in production but don't need enterprise governance
-- **Audit Needs**: You need basic audit reports for compliance
+- **Team Deployments**: Multiple engineers need a consistent, repeatable installation
+- **Staging Environments**: You want a safe upgrade path between environments
+- **Small Production**: Running in production and need installation rigor and support
+- **Audit Needs**: You need basic operational visibility and audit reports
 
-### Value You Get
+### What You Get
 - **Worry-Free Installation**: Standard installer that handles environment differences
-- **Acceptance Verification**: Pre-built verification suite to confirm successful deployments
-- **Upgrade/Rollback**: Safe upgrades with automatic rollback on failure
-- **Basic Audit**: Standard audit reports for operational visibility
-- **Standard Support**: Official support channel with response SLAs
-- **Delivery Certainty**: Clear boundaries for what's supported and what's not
+- **Acceptance Verification**: Pre-built suite to confirm successful deployments
+- **Upgrade/Rollback Safety**: Safe upgrades with automatic rollback on failure
+- **Basic Audit Reports**: Standard operational visibility
+- **Official Support**: Direct channel with response SLAs
 
 ### What You're Paying For
-You're not paying for "more features" -- you're paying for:
-- **Delivery certainty**: It installs correctly, it upgrades safely
+Not "more features" — delivery confidence:
+- **Installation certainty**: It installs correctly, every time
 - **Support boundary**: Someone to call when things go wrong
-- **Operational tooling**: The utilities that make day-to-day usage manageable
+- **Operational tooling**: Utilities that make day-to-day usage manageable
 
 ## Upgrade to Enterprise Edition When...
 
-Enterprise Edition is for when you need production-grade governance and auditability.
+Enterprise is for organizations that need production-grade governance, complete auditability, and enterprise support.
 
 ### Use Cases
-- **Regulated Environments**: Finance, healthcare, or other industries with strict compliance
-- **Large-Scale Production**: Mission-critical agent deployments
-- **Change Governance**: Need for offline windows and controlled changes
-- **Full Auditability**: Complete audit chain for every operation
+- **Regulated Environments**: Finance, healthcare, or industries with strict compliance requirements
+- **Mission-Critical Production**: Agent deployments where failure has real consequences
+- **Change Governance**: Controlled deployment windows and packet-based change management
+- **Full Auditability**: Complete evidence trail for every memory operation
 
 ### Value You Get
-- **Offline Execution Windows**: Make changes in controlled windows with pre-packaged updates
+- **Offline Execution Windows**: Controlled deployment windows with pre-packaged updates
 - **Execute Engine**: Packet-based delivery for strict change control
 - **Complete Audit Chain**: Full evidence trail for every memory operation
-- **Strict Governance**: Enhanced rollback and recovery closed-loop
-- **Enterprise Support**: Dedicated support team, onboarding assistance, and custom SLAs
-- **Production Governance**: Tools and processes for safe, auditable production operations
+- **Enhanced Governance**: Strict rollback and recovery closed-loop
+- **Enterprise Support**: Dedicated team, onboarding assistance, and custom SLAs
 
 ### What You're Paying For
-You're paying for:
-- **Governance capability**: The ability to operate safely in regulated environments
-- **Audit evidence**: Complete, defensible records of everything that happens
-- **Enterprise-grade support**: The level of support that mission-critical systems require
+- **Governance capability**: Operate safely in regulated environments
+- **Audit evidence**: Complete, defensible records of all memory operations
+- **Enterprise-grade support**: The level of coverage that mission-critical systems require
 
 ## Upgrade Path
 
@@ -110,13 +101,9 @@ Enterprise Edition
 - Skills and strategies developed on GitHub Edition work on Pro and Enterprise
 - No rewrite needed when upgrading -- you just get more operational capabilities
 
-## Getting Pricing Information
+## Getting Pricing
 
-Specific pricing for Pro and Enterprise editions is available by contacting our sales team. We tailor pricing based on:
-- Edition selection (Pro vs. Enterprise)
-- Deployment scale
-- Support requirements
-- Custom integration needs
+Pro and Enterprise pricing is available on request. We tailor based on deployment scale, support requirements, and integration needs. [Open a commercial inquiry](https://github.com/1108han-blip/omnimemora/issues/new?template=commercial-inquiry.yml) to get a conversation started.
 
 ## Ready to Take the Next Step?
 
