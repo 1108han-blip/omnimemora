@@ -131,7 +131,7 @@ When you're ready to move from experimentation to reliable deployment or product
 
 ### Contact Us Today
 
-[Open a Commercial Inquiry →](https://github.com/1108han-blip/desktop-tutorial/issues/new?template=commercial-inquiry.yml)
+[Open a Commercial Inquiry →](https://github.com/1108han-blip/omnimemora/issues/new?template=commercial-inquiry.yml)
 
 Our team typically responds within 2 business days. We'll discuss your requirements, answer any questions, and help you choose the right edition for your needs.
 
@@ -140,4 +140,4 @@ Our team typically responds within 2 business days. We'll discuss your requireme
 - Review [editions.md](./editions.md) for detailed capability comparisons
 - Explore [architecture.md](./architecture.md) to understand how the layers fit together
 - Try the GitHub Edition if you haven't yet
-- [Open a Commercial Inquiry](https://github.com/1108han-blip/desktop-tutorial/issues/new?template=commercial-inquiry.yml) when you're ready to discuss Pro or Enterprise
+- [Open a Commercial Inquiry](https://github.com/1108han-blip/omnimemora/issues/new?template=commercial-inquiry.yml) when you're ready to discuss Pro or Enterprise

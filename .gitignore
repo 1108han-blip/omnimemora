@@ -18,7 +18,7 @@ docs/*
 !docs/contact.md
 !docs/assets/
 docs/assets/*
-!docs/assets/openviking-hero-banner.png
+!docs/assets/omnimemora-hero-banner.png
 
 .github/*
 !.github/ISSUE_TEMPLATE/

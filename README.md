@@ -1,6 +1,6 @@
 # OmniMemora
 
-![OmniMemora hero](docs/assets/openviking-hero-banner.png)
+![OmniMemora hero](docs/assets/omnimemora-hero-banner.png)
 
 OmniMemora is the memory compilation and orchestration layer for agents. It helps you transform fragmented memory writes, filtering, compilation, recall, and conflict handling into a verifiable middle layer pipeline -- not just stopping at "store and retrieve" plugin-level functionality.
 
@@ -13,7 +13,7 @@ This GitHub edition is for users who want to get the pipeline running, understan
 | Quick Start | Get Pro | Enterprise Inquiry |
 |-------------|---------|--------------------|
 | Explore the GitHub edition and run the pipeline locally | Upgrade to worry-free installation, stable upgrades, and official support | For regulated environments, full auditability, and enterprise governance |
-| [Start Here →](docs/quick-start.md) | [Learn About Pro →](docs/pricing-and-upgrade.md#upgrade-to-pro-edition-when) | [Contact Us →](https://github.com/1108han-blip/desktop-tutorial/issues/new?template=commercial-inquiry.yml) |
+| [Start Here →](docs/quick-start.md) | [Learn About Pro →](docs/pricing-and-upgrade.md#upgrade-to-pro-edition-when) | [Contact Us →](https://github.com/1108han-blip/omnimemora/issues/new?template=commercial-inquiry.yml) |
 
 ## Start Here
 
@@ -33,7 +33,7 @@ Ready to move to production? OmniMemora Pro and Enterprise editions provide:
 - Official support with response SLAs
 - Enterprise-grade governance and full audit chains
 
-Learn more about our [commercial editions](docs/pricing-and-upgrade.md) or [contact us directly](https://github.com/1108han-blip/desktop-tutorial/issues/new?template=commercial-inquiry.yml) to discuss your needs.
+Learn more about our [commercial editions](docs/pricing-and-upgrade.md) or [contact us directly](https://github.com/1108han-blip/omnimemora/issues/new?template=commercial-inquiry.yml) to discuss your needs.
 
 ## What Problems Does OmniMemora Solve?
 

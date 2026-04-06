@@ -8,7 +8,7 @@ The fastest way to reach our team is through a GitHub issue in this repository.
 
 ### Step 1: Open a Commercial Inquiry
 
-[Open a new Commercial Inquiry issue →](https://github.com/1108han-blip/desktop-tutorial/issues/new?template=commercial-inquiry.yml)
+[Open a new Commercial Inquiry issue →](https://github.com/1108han-blip/omnimemora/issues/new?template=commercial-inquiry.yml)
 
 This will guide you through providing the information we need to help you quickly.
 
@@ -43,4 +43,4 @@ If you'd like to evaluate Pro or Enterprise before committing:
 
 - Not sure which edition is right? Review [editions.md](./editions.md)
 - Want to understand pricing? See [pricing-and-upgrade.md](./pricing-and-upgrade.md)
-- Ready to talk? [Open a Commercial Inquiry →](https://github.com/1108han-blip/desktop-tutorial/issues/new?template=commercial-inquiry.yml)
+- Ready to talk? [Open a Commercial Inquiry →](https://github.com/1108han-blip/omnimemora/issues/new?template=commercial-inquiry.yml)
