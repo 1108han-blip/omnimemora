@@ -1,0 +1,11 @@
+# License
+
+Copyright (c) 2026 OmniMemora / Doloclaw Technology Limited. All rights reserved.
+
+This repository contains only public interface specifications and reference implementations
+(OpenAPI spec, JSON schemas, MCP reference server, integration documentation).
+
+Proprietary software components — including but not limited to the memory adapter,
+normalizer, filter, router, dedup engine, quota enforcement, token savings metering,
+and tenant management systems — are not included in this repository and are
+exclusively owned by Doloclaw Technology Limited.

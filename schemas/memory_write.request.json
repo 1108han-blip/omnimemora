@@ -1,0 +1,36 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MemoryWriteRequest",
+  "type": "object",
+  "required": ["agent", "type", "content"],
+  "properties": {
+    "agent": {
+      "type": "string",
+      "description": "Agent identifier",
+      "example": "claude"
+    },
+    "type": {
+      "type": "string",
+      "description": "Memory category type",
+      "example": "general"
+    },
+    "content": {
+      "type": "string",
+      "description": "Memory content to store",
+      "example": "Remember that the user prefers concise responses."
+    },
+    "tags": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Optional tags for categorization"
+    },
+    "memory_type": {
+      "type": "string",
+      "description": "Explicit memory type override (long_term or short_term)"
+    },
+    "timestamp": {
+      "type": "integer",
+      "description": "Unix timestamp in seconds. Defaults to current time if omitted."
+    }
+  }
+}

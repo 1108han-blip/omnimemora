@@ -1,0 +1,56 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MemoryWriteResponse",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["stored", "skipped", "duplicate", "rate_limited", "error"],
+      "description": "Result status"
+    },
+    "reason": {
+      "type": "string",
+      "description": "Human-readable reason for non-stored status"
+    },
+    "memory_id": {
+      "type": "string",
+      "description": "Unique memory identifier (URI)"
+    },
+    "memory_type": {
+      "type": "string",
+      "description": "Assigned memory type"
+    },
+    "memory_level": {
+      "type": "integer",
+      "description": "Assigned memory level (1=L1, 2=L2, 3=L3)"
+    },
+    "memory_expire_at": {
+      "type": "integer",
+      "description": "Unix timestamp when this memory expires (-1=permanent, 0=expired)"
+    },
+    "score": {
+      "type": "integer",
+      "description": "Importance score (0-100)"
+    },
+    "is_failure": {
+      "type": "boolean",
+      "description": "Whether this memory contains failure/error information"
+    },
+    "uri": {
+      "type": "string",
+      "description": "Alias for memory_id (OpenClaw compatibility)"
+    },
+    "request_id": {
+      "type": "string",
+      "description": "Request correlation ID for support"
+    },
+    "error_code": {
+      "type": "string",
+      "description": "Structured error code if status=error"
+    },
+    "support": {
+      "type": "object",
+      "description": "OmniMemora support metadata"
+    }
+  }
+}

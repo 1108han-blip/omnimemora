@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "HealthResponse",
+  "type": "object",
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["healthy", "degraded"],
+      "description": "Overall service status"
+    },
+    "viking_url": {
+      "type": "string",
+      "description": "OpenViking backend URL"
+    },
+    "viking_connected": {
+      "type": "boolean",
+      "description": "Whether OpenViking backend is reachable"
+    },
+    "namespace_root": {
+      "type": "string",
+      "description": "Root URI for memory namespaces"
+    },
+    "viking_health_detail": {
+      "type": "object",
+      "properties": {
+        "status_code": {
+          "type": ["integer", "null"]
+        },
+        "error": {
+          "type": ["string", "null"]
+        }
+      }
+    },
+    "dedup_stats": {
+      "type": "object",
+      "properties": {
+        "cache_size": { "type": "integer" },
+        "hit_rate": { "type": "number" }
+      }
+    },
+    "rate_limit": {
+      "type": "object",
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "max_per_minute": { "type": "integer" },
+        "current": { "type": "integer" }
+      }
+    }
+  }
+}

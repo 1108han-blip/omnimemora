@@ -1,0 +1,47 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MemorySearchResponse",
+  "type": "object",
+  "properties": {
+    "memories": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "uri": {
+            "type": "string",
+            "description": "Memory resource URI"
+          },
+          "content": {
+            "type": "string",
+            "description": "Full memory content"
+          },
+          "abstract": {
+            "type": "string",
+            "description": "Short summary (first 240 chars)"
+          },
+          "score": {
+            "type": "number",
+            "description": "Relevance score (0-1)"
+          },
+          "category": {
+            "type": "string",
+            "description": "Memory category"
+          },
+          "level": {
+            "type": "integer",
+            "description": "Memory level (1=L1, 2=L2, 3=L3)"
+          },
+          "metadata": {
+            "type": "object",
+            "description": "Additional memory metadata"
+          }
+        }
+      }
+    },
+    "total": {
+      "type": "integer",
+      "description": "Total number of matching memories"
+    }
+  }
+}

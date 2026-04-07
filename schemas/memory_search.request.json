@@ -1,0 +1,46 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "MemorySearchRequest",
+  "type": "object",
+  "required": ["query"],
+  "properties": {
+    "query": {
+      "type": "string",
+      "description": "Natural language search query"
+    },
+    "uri": {
+      "type": "string",
+      "description": "Direct memory URI lookup (optional)"
+    },
+    "agent": {
+      "type": "string",
+      "description": "Filter by agent namespace"
+    },
+    "memory_type": {
+      "type": "string",
+      "description": "Filter by memory type (long_term or short_term)"
+    },
+    "memory_level": {
+      "type": "string",
+      "description": "Filter by memory level (L1, L2, L3)"
+    },
+    "limit": {
+      "type": "integer",
+      "default": 10,
+      "minimum": 1,
+      "maximum": 100,
+      "description": "Maximum number of results to return"
+    },
+    "scoreThreshold": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Minimum relevance score threshold (0-1)"
+    },
+    "include_expired": {
+      "type": "boolean",
+      "default": false,
+      "description": "Whether to include expired memories in results"
+    }
+  }
+}

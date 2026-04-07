@@ -1,0 +1,332 @@
+openapi: 3.1.0
+info:
+  title: OmniMemora Memory API
+  version: "1.0"
+  description: |
+    Public REST API surface for OmniMemora memory infrastructure.
+    This spec covers public endpoints only. Internal and admin endpoints are excluded.
+  contact:
+    name: OmniMemora Support
+    url: https://doloclaw.com/support
+
+servers:
+  - url: https://api.doloclaw.com
+    description: Production server
+
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Health check
+      tags: [System]
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthResponse"
+
+  /memory/write:
+    post:
+      operationId: writeMemory
+      summary: Write a memory
+      tags: [Memory]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemoryWriteRequest"
+      responses:
+        "200":
+          description: Memory write result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryWriteResponse"
+        "422":
+          description: Validation error
+        "429":
+          description: Rate limited
+
+  /memory/search:
+    post:
+      operationId: searchMemory
+      summary: Search memories
+      tags: [Memory]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemorySearchRequest"
+      responses:
+        "200":
+          description: Search results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemorySearchResponse"
+        "400":
+          description: Bad request
+
+  /memory/read:
+    post:
+      operationId: readMemory
+      summary: Read a memory
+      tags: [Memory]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemoryReadRequest"
+      responses:
+        "200":
+          description: Memory content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryReadResponse"
+
+  /memory/delete:
+    post:
+      operationId: deleteMemory
+      summary: Delete a memory
+      tags: [Memory]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemoryDeleteRequest"
+      responses:
+        "200":
+          description: Delete result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryDeleteResponse"
+        "404":
+          description: Memory not found
+
+  /memory/snapshot:
+    post:
+      operationId: memorySnapshot
+      summary: Generate startup snapshot
+      tags: [Memory]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MemorySnapshotRequest"
+      responses:
+        "200":
+          description: Snapshot generated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemorySnapshotResponse"
+        "500":
+          description: Snapshot generation failed
+
+  /memory/types:
+    get:
+      operationId: getMemoryTypes
+      summary: Get memory type configuration
+      tags: [Memory]
+      responses:
+        "200":
+          description: Memory type configuration
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MemoryTypesResponse"
+
+  /support/error-codes:
+    get:
+      operationId: getErrorCodes
+      summary: Error code catalog
+      tags: [Support]
+      responses:
+        "200":
+          description: Error code catalog
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorCodeCatalog"
+
+components:
+  schemas:
+    MemoryWriteRequest:
+      type: object
+      required: [agent, type, content]
+      properties:
+        agent:
+          type: string
+          description: Agent identifier
+          example: "claude"
+        type:
+          type: string
+          description: Memory category type
+          example: "general"
+        content:
+          type: string
+          description: Memory content to store
+        tags:
+          type: array
+          items: { type: string }
+        memory_type:
+          type: string
+        timestamp:
+          type: integer
+
+    MemoryWriteResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [stored, skipped, duplicate, rate_limited, error]
+        reason: { type: string }
+        memory_id: { type: string }
+        memory_type: { type: string }
+        memory_level: { type: integer }
+        memory_expire_at: { type: integer }
+        score: { type: integer }
+        is_failure: { type: boolean }
+        uri: { type: string }
+        request_id: { type: string }
+        error_code: { type: string }
+        support: { type: object }
+
+    MemorySearchRequest:
+      type: object
+      required: [query]
+      properties:
+        query: { type: string }
+        uri: { type: string }
+        agent: { type: string }
+        memory_type: { type: string }
+        memory_level: { type: string }
+        limit: { type: integer, default: 10 }
+        scoreThreshold: { type: number }
+        include_expired: { type: boolean, default: false }
+
+    MemorySearchResponse:
+      type: object
+      properties:
+        memories:
+          type: array
+          items:
+            type: object
+            properties:
+              uri: { type: string }
+              content: { type: string }
+              abstract: { type: string }
+              score: { type: number }
+              category: { type: string }
+              level: { type: integer }
+              metadata: { type: object }
+        total: { type: integer }
+
+    MemoryReadRequest:
+      type: object
+      properties:
+        uri: { type: string }
+        query: { type: string }
+        agent: { type: string }
+        memory_type: { type: string }
+        memory_level: { type: string }
+        limit: { type: integer, default: 10 }
+        include_expired: { type: boolean, default: false }
+
+    MemoryReadResponse:
+      type: object
+      properties:
+        content: { type: string }
+        memories: { type: array, items: { type: object } }
+        total: { type: integer }
+
+    MemoryDeleteRequest:
+      type: object
+      required: [uri]
+      properties:
+        uri: { type: string, description: Memory URI to delete }
+
+    MemoryDeleteResponse:
+      type: object
+      properties:
+        success: { type: boolean }
+        uri: { type: string }
+        request_id: { type: string }
+        error_code: { type: string }
+        support: { type: object }
+
+    MemorySnapshotRequest:
+      type: object
+      required: [agent]
+      properties:
+        agent: { type: string, description: Agent identifier }
+        limit: { type: integer, default: 200 }
+
+    MemorySnapshotResponse:
+      type: object
+      properties:
+        agent: { type: string }
+        generatedAt: { type: string, format: date-time }
+        sourceCount: { type: integer }
+        markdown: { type: string }
+        sections:
+          type: object
+          properties:
+            identity: { type: integer }
+            projects: { type: integer }
+            preferences: { type: integer }
+            decisions: { type: integer }
+            facts: { type: integer }
+        request_id: { type: string }
+
+    MemoryTypesResponse:
+      type: object
+      properties:
+        memory_types: { type: array, items: { type: string } }
+        memory_levels: { type: object }
+        score_rules: { type: object }
+        ttl_config: { type: object }
+
+    HealthResponse:
+      type: object
+      properties:
+        status: { type: string, enum: [healthy, degraded] }
+        viking_url: { type: string }
+        viking_connected: { type: boolean }
+        namespace_root: { type: string }
+        viking_health_detail: { type: object }
+        dedup_stats: { type: object }
+        rate_limit: { type: object }
+
+    ErrorCodeCatalog:
+      type: object
+      properties:
+        schema_version: { type: string }
+        count: { type: integer }
+        error_codes:
+          type: array
+          items:
+            type: object
+            properties:
+              code: { type: string }
+              category: { type: string }
+              severity: { type: string }
+              retryable: { type: boolean }
+              suggested_action: { type: string }
+
+tags:
+  - name: System
+    description: System and health endpoints
+  - name: Memory
+    description: Core memory operations
+  - name: Support
+    description: Support and error handling
