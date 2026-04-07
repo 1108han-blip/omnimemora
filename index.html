@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OmniMemora — Agent Memory API & Orchestration Platform</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            line-height: 1.6;
+            color: #24292f;
+            background-color: #ffffff;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 0 20px;
+        }
+
+        /* Header */
+        header {
+            padding: 20px 0;
+            border-bottom: 1px solid #eaecef;
+        }
+
+        .header-content {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .logo {
+            font-size: 24px;
+            font-weight: bold;
+            color: #24292f;
+            text-decoration: none;
+        }
+
+        .nav-links {
+            display: flex;
+            gap: 30px;
+            list-style: none;
+        }
+
+        .nav-links a {
+            color: #57606a;
+            text-decoration: none;
+            font-size: 16px;
+        }
+
+        .nav-links a:hover {
+            color: #0969da;
+        }
+
+        /* Hero */
+        .hero {
+            padding: 60px 0;
+            text-align: center;
+        }
+
+        .hero-image {
+            width: 100%;
+            max-width: 1000px;
+            height: auto;
+            margin-bottom: 40px;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+        }
+
+        .hero h1 {
+            font-size: 48px;
+            font-weight: 700;
+            margin-bottom: 20px;
+            line-height: 1.2;
+        }
+
+        .hero p {
+            font-size: 20px;
+            color: #57606a;
+            max-width: 700px;
+            margin: 0 auto 40px;
+        }
+
+        .cta-buttons {
+            display: flex;
+            gap: 16px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        .btn {
+            padding: 14px 28px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            text-decoration: none;
+            display: inline-block;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary {
+            background-color: #238636;
+            color: #ffffff;
+            border: 1px solid #238636;
+        }
+
+        .btn-primary:hover {
+            background-color: #2ea043;
+            border-color: #2ea043;
+        }
+
+        .btn-secondary {
+            background-color: #f6f8fa;
+            color: #24292f;
+            border: 1px solid #d0d7de;
+        }
+
+        .btn-secondary:hover {
+            background-color: #eaeef2;
+        }
+
+        .btn-outline {
+            background-color: #ffffff;
+            color: #0969da;
+            border: 1px solid #0969da;
+        }
+
+        .btn-outline:hover {
+            background-color: #ddf4ff;
+        }
+
+        /* Editions */
+        .editions {
+            padding: 80px 0;
+            background-color: #f6f8fa;
+        }
+
+        .section-title {
+            text-align: center;
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 60px;
+        }
+
+        .editions-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+        }
+
+        .edition-card {
+            background: #ffffff;
+            border-radius: 12px;
+            padding: 40px 30px;
+            border: 1px solid #d0d7de;
+            transition: all 0.2s ease;
+        }
+
+        .edition-card:hover {
+            border-color: #0969da;
+            box-shadow: 0 4px 20px rgba(9, 105, 218, 0.1);
+        }
+
+        .edition-card.featured {
+            border-color: #238636;
+            border-width: 2px;
+            position: relative;
+        }
+
+        .edition-badge {
+            position: absolute;
+            top: -12px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #238636;
+            color: white;
+            padding: 4px 16px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+        }
+
+        .edition-icon {
+            font-size: 48px;
+            margin-bottom: 20px;
+        }
+
+        .edition-title {
+            font-size: 28px;
+            font-weight: 700;
+            margin-bottom: 12px;
+        }
+
+        .edition-subtitle {
+            color: #57606a;
+            font-size: 16px;
+            margin-bottom: 24px;
+        }
+
+        .edition-features {
+            list-style: none;
+            margin-bottom: 30px;
+        }
+
+        .edition-features li {
+            padding: 8px 0;
+            color: #24292f;
+            padding-left: 24px;
+            position: relative;
+        }
+
+        .edition-features li::before {
+            content: "✓";
+            position: absolute;
+            left: 0;
+            color: #238636;
+            font-weight: bold;
+        }
+
+        /* Problem Section */
+        .problem {
+            padding: 80px 0;
+        }
+
+        .problem-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 40px;
+            margin-top: 50px;
+        }
+
+        .problem-item h3 {
+            font-size: 20px;
+            margin-bottom: 12px;
+        }
+
+        .problem-item p {
+            color: #57606a;
+        }
+
+        /* CTA Section */
+        .cta-section {
+            padding: 80px 0;
+            background-color: #0d1117;
+            color: #ffffff;
+            text-align: center;
+        }
+
+        .cta-section h2 {
+            font-size: 36px;
+            margin-bottom: 20px;
+        }
+
+        .cta-section p {
+            font-size: 18px;
+            color: #8b949e;
+            margin-bottom: 40px;
+            max-width: 600px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        /* Footer */
+        footer {
+            padding: 40px 0;
+            border-top: 1px solid #eaecef;
+            text-align: center;
+            color: #57606a;
+        }
+
+        @media (max-width: 768px) {
+            .hero h1 {
+                font-size: 32px;
+            }
+
+            .hero p {
+                font-size: 18px;
+            }
+
+            .section-title {
+                font-size: 28px;
+            }
+
+            .nav-links {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <div class="container">
+            <div class="header-content">
+                <a href="#" class="logo">OmniMemora</a>
+                <nav>
+                    <ul class="nav-links">
+                        <li><a href="#editions">Editions</a></li>
+                        <li><a href="docs/architecture.md">Architecture</a></li>
+                        <li><a href="docs/pricing-and-upgrade.md">Pricing</a></li>
+                    </ul>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <section class="hero">
+        <div class="container">
+            <img src="docs/assets/omnimemora-hero-banner.png" alt="OmniMemora Hero Banner" class="hero-image">
+            <h1>Agent Memory Management — Built for Production</h1>
+            <p>OmniMemora gives your AI agents a reliable memory compilation and orchestration layer — via API or self-hosted deployment. Stop patching fragile memory logic. Start shipping agents you can depend on.</p>
+            <div class="cta-buttons">
+                <a href="docs/quick-start.md" class="btn btn-secondary">Evaluate Free</a>
+                <a href="docs/pricing-and-upgrade.md" class="btn btn-secondary">View Editions</a>
+                <a href="https://doloclaw.com/contact/" class="btn btn-primary">Talk to Sales</a>
+            </div>
+        </div>
+    </section>
+
+    <section class="problem">
+        <div class="container">
+            <h2 class="section-title">Why OmniMemora?</h2>
+            <p style="text-align: center; color: #57606a; max-width: 700px; margin: 0 auto;">OmniMemora doesn't solve "can we store a memory" — it solves "how your agent manages memory reliably in production."</p>
+            <div class="problem-grid">
+                <div class="problem-item">
+                    <h3>Content Filtering</h3>
+                    <p>What content should enter memory, what should be filtered?</p>
+                </div>
+                <div class="problem-item">
+                    <h3>Scope Management</h3>
+                    <p>Which scope should memory be saved to?</p>
+                </div>
+                <div class="problem-item">
+                    <h3>Recall Strategy</h3>
+                    <p>When to recall, how much to recall, how to avoid noise?</p>
+                </div>
+                <div class="problem-item">
+                    <h3>Conflict Handling</h3>
+                    <p>When new and old memories conflict, how to keep results stable?</p>
+                </div>
+                <div class="problem-item">
+                    <h3>Verifiable Behavior</h3>
+                    <p>How to maintain verifiable behavior across different environments and integration methods?</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="editions" id="editions">
+        <div class="container">
+            <h2 class="section-title">Choose the Right Edition</h2>
+            <div class="editions-grid">
+                <div class="edition-card">
+                    <div class="edition-icon">⚡</div>
+                    <h3 class="edition-title">GitHub Edition</h3>
+                    <p class="edition-subtitle">Free — evaluate on your infrastructure</p>
+                    <ul class="edition-features">
+                        <li>Core memory pipeline</li>
+                        <li>Basic integration</li>
+                        <li>Working examples</li>
+                        <li>Architecture docs</li>
+                        <li>Community support</li>
+                    </ul>
+                    <a href="docs/quick-start.md" class="btn btn-secondary" style="width: 100%; text-align: center;">Evaluate Free</a>
+                </div>
+
+                <div class="edition-card featured">
+                    <div class="edition-badge">Most Popular</div>
+                    <div class="edition-icon">🚀</div>
+                    <h3 class="edition-title">Pro Edition</h3>
+                    <p class="edition-subtitle">Reliable deployment, official support</p>
+                    <ul class="edition-features">
+                        <li>Everything in GitHub</li>
+                        <li>Standard installer</li>
+                        <li>Acceptance verification</li>
+                        <li>Upgrade/rollback safety</li>
+                        <li>Basic audit reports</li>
+                        <li>Official support SLAs</li>
+                    </ul>
+                    <a href="https://doloclaw.com/contact/" class="btn btn-primary" style="width: 100%; text-align: center;">Request Pro</a>
+                </div>
+
+                <div class="edition-card">
+                    <div class="edition-icon">🏢</div>
+                    <h3 class="edition-title">Enterprise Edition</h3>
+                    <p class="edition-subtitle">Production governance &amp; auditability</p>
+                    <ul class="edition-features">
+                        <li>Everything in Pro</li>
+                        <li>Offline execution windows</li>
+                        <li>Execute Engine packets</li>
+                        <li>Complete audit chain</li>
+                        <li>Enhanced governance</li>
+                        <li>Enterprise support</li>
+                    </ul>
+                    <a href="https://doloclaw.com/contact/" class="btn btn-outline" style="width: 100%; text-align: center;">Contact Enterprise</a>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <section class="cta-section">
+        <div class="container">
+            <h2>Ready to Build with OmniMemora?</h2>
+            <p>Start with the free GitHub edition to verify the approach. Move to Pro or Enterprise when you need deployment reliability, support SLAs, and production governance.</p>
+            <div class="cta-buttons">
+                <a href="docs/quick-start.md" class="btn btn-secondary">Evaluate Free</a>
+                <a href="https://doloclaw.com/contact/" class="btn btn-primary">Talk to Sales</a>
+            </div>
+        </div>
+    </section>
+
+    <footer>
+        <div class="container">
+            <p>&copy; 2026 OmniMemora. All rights reserved.</p>
+        </div>
+    </footer>
+</body>
+</html>
