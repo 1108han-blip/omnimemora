@@ -1,0 +1,46 @@
+# Dependencies
+node_modules/
+__pycache__/
+.venv/
+venv/
+
+# Build artifacts
+*.exe
+*.dll
+*.so
+*.dylib
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+*.log
+logs/
+
+# Temp files
+*.tmp
+*.temp
+nul
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Data directories (migrate separately)
+4_core/local-runtime/data/
+5_connectors/adapter/data/
+5_connectors/adapter/.pytest_cache/
+
+# Large binary files
+6_console/ui-prototype/node_modules/@cloudflare/workerd-windows-64/
+
+# Environment files (contain secrets)
+.env
+.env.local
+.env.production
+
+# Verification logs (generated)
+tools/verification/logs/
