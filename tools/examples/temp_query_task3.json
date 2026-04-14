@@ -1,0 +1,51 @@
+{
+  "query": "给 run_engine_demo.py 增加 --output 参数，支持把结果保存到文件",
+  "agent": "supervisor",
+  "client": "openclaw",
+  "current_usage": 0,
+  "monthly_quota": null,
+  "candidate_memories": [
+    {
+      "id": "mem_blueprint_1",
+      "content": "SYSTEM_ARCHITECTURE.md 定义了系统架构：tools/ 目录放验证工具，4_core/ 放核心逻辑。",
+      "category": "strategy",
+      "created_at": "2026-04-10T00:00:00Z",
+      "tokens": 100
+    },
+    {
+      "id": "mem_blueprint_2",
+      "content": "EXECUTION_GUARDRAILS.md 的可替换性原则：该能力是否可关闭、可替换、不影响系统存在？否 → 不允许实现。",
+      "category": "strategy",
+      "created_at": "2026-04-10T00:00:00Z",
+      "tokens": 130
+    },
+    {
+      "id": "mem_code_1",
+      "content": "当前 run_engine_demo.py 已有参数：--input（输入 JSON 文件路径）、--format text|json（输出格式，默认 text）。main() 函数调用 print_text_result() 或 print_json_result()。",
+      "category": "knowledge",
+      "created_at": "2026-04-10T00:00:00Z",
+      "tokens": 160
+    },
+    {
+      "id": "mem_code_2",
+      "content": "类似功能的实现模式：新增参数 parser.add_argument('--output', help='Output file path (optional)')；在 main() 中判断 args.output 是否存在；如果存在，打开文件写入结果；否则输出到 stdout。",
+      "category": "knowledge",
+      "created_at": "2026-04-10T00:00:00Z",
+      "tokens": 150
+    },
+    {
+      "id": "mem_code_3",
+      "content": "向后兼容原则：新增参数应该是可选的，不破坏现有功能。--output 应该是可选参数，不传时继续输出到 stdout。",
+      "category": "result",
+      "created_at": "2026-04-10T00:00:00Z",
+      "tokens": 120
+    },
+    {
+      "id": "mem_code_4",
+      "content": "Python 写文件模式：with open(file_path, 'w', encoding='utf-8') as f: f.write(content)。需要支持 text 和 json 两种格式的输出。",
+      "category": "knowledge",
+      "created_at": "2026-04-10T00:00:00Z",
+      "tokens": 140
+    }
+  ]
+}

@@ -1,0 +1,46 @@
+{
+  "query": "如何设计缓存策略？",
+  "agent": "supervisor",
+  "client": "openclaw",
+  "current_usage": 12000,
+  "monthly_quota": 50000,
+  "max_local_cards": 4,
+  "candidate_limit": 16,
+  "candidate_memories": [
+    {
+      "id": "mem_001_strategy",
+      "content": "缓存策略设计：1) 缓存更新策略采用 Cache-Aside（旁路缓存）模式，读请求先查缓存，未命中则查数据库并写入缓存；写请求先更新数据库，再删除缓存；2) 缓存过期策略：LRU（最近最少使用）淘汰算法，记录访问时间戳，内存不足时淘汰最久未访问的数据；3) 缓存穿透防护：布隆过滤器过滤不存在的key，防止请求直接打到数据库；4) 缓存雪崩防护：过期时间增加随机偏移，避免大量key同时过期；5) 缓存击穿防护：热点key使用互斥锁，只允许一个请求去数据库加载数据。",
+      "category": "strategy",
+      "created_at": "2026-04-10T00:00:00Z",
+      "tokens": 220
+    },
+    {
+      "id": "mem_002_knowledge",
+      "content": "缓存技术知识：1) 缓存定义：位于应用和数据库之间的高速存储层，存储热点数据以减少数据库压力；2) 缓存类型：本地缓存（Guava Cache、Caffeine）、分布式缓存（Redis、Memcached）；3) 缓存一致性：最终一致性、强一致性、最终一致性；4) 缓存数据结构：Redis 支持 String、Hash、List、Set、Sorted Set；5) 缓存性能指标：命中率、延迟、吞吐量。",
+      "category": "knowledge",
+      "created_at": "2026-04-10T00:01:00Z",
+      "tokens": 200
+    },
+    {
+      "id": "mem_003_strategy_2",
+      "content": "缓存策略进阶：Read-Through、Write-Through、Write-Behind 模式对比，多级缓存架构（L1本地 + L2分布式）。",
+      "category": "strategy",
+      "created_at": "2026-04-10T00:02:00Z",
+      "tokens": 80
+    },
+    {
+      "id": "mem_004_knowledge_2",
+      "content": "Redis 知识：单线程模型、IO多路复用、持久化机制（RDB、AOF）、集群方案（主从、哨兵、Cluster）。",
+      "category": "knowledge",
+      "created_at": "2026-04-10T00:03:00Z",
+      "tokens": 70
+    },
+    {
+      "id": "mem_005_irrelevant",
+      "content": "今天天气很好，适合出去散步。",
+      "category": "general",
+      "created_at": "2026-04-10T00:04:00Z",
+      "tokens": 40
+    }
+  ]
+}

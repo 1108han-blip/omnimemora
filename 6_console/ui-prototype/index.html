@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OmniMemora | Agent Memory API</title>
+    <link rel="icon" href="data:,">
+    <style>
+        :root {
+            --bg: #07111f;
+            --panel: rgba(14, 20, 33, 0.86);
+            --panel-strong: rgba(11, 18, 31, 0.96);
+            --border: #263248;
+            --text: #e6edf8;
+            --muted: #98a6bf;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: "Segoe UI", system-ui, sans-serif;
+            color: var(--text);
+            background:
+                radial-gradient(circle at top left, rgba(59, 130, 246, 0.16), transparent 24%),
+                radial-gradient(circle at top right, rgba(74, 222, 128, 0.12), transparent 18%),
+                linear-gradient(180deg, #08111f 0%, #0b1322 100%);
+        }
+        a { color: inherit; }
+        .page {
+            max-width: 1180px;
+            margin: 0 auto;
+            padding: 28px 24px 60px;
+        }
+        .nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 18px;
+            margin-bottom: 26px;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+        }
+        .brand-mark {
+            width: 44px;
+            height: 44px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            background: linear-gradient(135deg, #2563eb, #7c3aed);
+        }
+        .brand-copy strong {
+            display: block;
+            font-size: 22px;
+        }
+        .brand-copy span {
+            display: block;
+            color: var(--muted);
+            font-size: 12px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        .nav-links {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .nav-links a {
+            text-decoration: none;
+            color: var(--muted);
+            font-size: 14px;
+            padding: 8px 12px;
+            border-radius: 999px;
+            border: 1px solid transparent;
+        }
+        .nav-links a.active,
+        .nav-links a:hover {
+            color: var(--text);
+            border-color: var(--border);
+            background: rgba(15, 23, 42, 0.72);
+        }
+        .hero {
+            padding: 34px;
+            border-radius: 26px;
+            border: 1px solid var(--border);
+            background:
+                linear-gradient(135deg, rgba(37, 99, 235, 0.16), rgba(124, 58, 237, 0.12)),
+                var(--panel-strong);
+            margin-bottom: 22px;
+        }
+        .eyebrow {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #bfdbfe;
+            font-size: 13px;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+            margin-bottom: 14px;
+        }
+        h1, h2, h3, p { margin: 0; }
+        h1 {
+            font-size: 42px;
+            line-height: 1.05;
+            max-width: 900px;
+            margin-bottom: 14px;
+        }
+        .hero p {
+            max-width: 860px;
+            color: #d2dced;
+            font-size: 16px;
+            line-height: 1.7;
+        }
+        .hero-actions {
+            display: flex;
+            gap: 14px;
+            flex-wrap: wrap;
+            margin: 22px 0 20px;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 18px;
+            border-radius: 999px;
+            text-decoration: none;
+            font-weight: 700;
+            border: 1px solid var(--border);
+        }
+        .btn-primary {
+            color: #04140b;
+            background: linear-gradient(135deg, #4ade80, #22c55e);
+            border-color: rgba(34, 197, 94, 0.4);
+        }
+        .btn-secondary {
+            color: var(--text);
+            background: rgba(10, 19, 34, 0.78);
+        }
+        .hero-badges {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .badge {
+            padding: 8px 10px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: rgba(8, 15, 28, 0.78);
+            color: #dbeafe;
+            font-size: 12px;
+        }
+        .section {
+            margin-top: 18px;
+            padding: 24px;
+            border-radius: 22px;
+            border: 1px solid var(--border);
+            background: var(--panel);
+        }
+        .section h2 {
+            font-size: 24px;
+            margin-bottom: 12px;
+        }
+        .section p {
+            color: var(--muted);
+            line-height: 1.7;
+        }
+        .proof-grid,
+        .feature-grid,
+        .compare-grid,
+        .cta-grid {
+            display: grid;
+            gap: 14px;
+            margin-top: 18px;
+        }
+        .feature-grid,
+        .proof-grid,
+        .cta-grid {
+            grid-template-columns: repeat(3, minmax(0, 1fr));
+        }
+        .compare-grid {
+            grid-template-columns: 1fr 1fr;
+        }
+        .card {
+            padding: 18px;
+            border-radius: 18px;
+            border: 1px solid var(--border);
+            background: rgba(8, 16, 30, 0.84);
+        }
+        .card strong {
+            display: block;
+            font-size: 18px;
+            margin-bottom: 8px;
+        }
+        .card p {
+            font-size: 14px;
+        }
+        .compare-card h3 {
+            font-size: 18px;
+            margin-bottom: 12px;
+        }
+        .compare-card ul {
+            margin: 0;
+            padding-left: 18px;
+            color: var(--muted);
+            line-height: 1.8;
+        }
+        .compare-card.with {
+            border-color: rgba(74, 222, 128, 0.25);
+            background: linear-gradient(135deg, rgba(22, 101, 52, 0.18), rgba(8, 16, 30, 0.88));
+        }
+        .proof-strip {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 12px;
+            margin-top: 18px;
+        }
+        .metric {
+            padding: 16px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            background: rgba(11, 18, 31, 0.92);
+        }
+        .metric strong {
+            display: block;
+            font-size: 24px;
+            margin-bottom: 4px;
+        }
+        .metric span {
+            color: var(--muted);
+            font-size: 13px;
+        }
+        .cta-card {
+            text-decoration: none;
+        }
+        .cta-card strong {
+            color: var(--text);
+        }
+        .footer {
+            margin-top: 26px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            flex-wrap: wrap;
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.7;
+        }
+        .footer a {
+            color: #cbd5e1;
+            text-decoration: none;
+        }
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        @media (max-width: 960px) {
+            .nav,
+            .feature-grid,
+            .proof-grid,
+            .compare-grid,
+            .cta-grid,
+            .proof-strip {
+                grid-template-columns: 1fr;
+            }
+            .nav {
+                display: block;
+            }
+            .nav-links {
+                margin-top: 14px;
+            }
+        }
+        @media (max-width: 640px) {
+            .page {
+                padding: 20px 18px 44px;
+            }
+            .hero {
+                padding: 24px;
+            }
+            h1 {
+                font-size: 34px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        <nav class="nav">
+            <a class="brand" href="./">
+                <div class="brand-mark">M</div>
+                <div class="brand-copy">
+                    <strong>OmniMemora</strong>
+                    <span>Agent Memory API</span>
+                </div>
+            </a>
+            <div class="nav-links">
+                <a class="active" href="./">Home</a>
+                <a href="./demo/">Demo</a>
+                <a href="./docs/api/">API</a>
+                <a href="./docs/system-overview/">System Overview</a>
+                <a href="./contact/">Contact</a>
+            </div>
+        </nav>
+
+        <section class="hero">
+            <div class="eyebrow">Free Trial · No Credit Card</div>
+            <h1>Cut LLM cost by 60-90% with structured memory, not longer context.</h1>
+            <p>
+                    OmniMemora compiles raw conversation into recallable memory so production agents send less context, reuse more signal,
+                and stay stable over long-running workflows. The result is lower token waste, cleaner recall, and evidence you can inspect.
+            </p>
+            <div class="hero-actions">
+                <a class="btn btn-primary" href="./contact/">Start Free Trial</a>
+                <a class="btn btn-secondary" href="./demo/">Try Live Token Savings Demo</a>
+            </div>
+            <div class="hero-badges">
+                <span class="badge">Structured memory orchestration</span>
+                <span class="badge">Token savings visibility</span>
+                <span class="badge">Multi-agent ready</span>
+                <span class="badge">Buyer-facing demo surface</span>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Before vs After</h2>
+                <p>OmniMemora is not about storing more context. It is about selecting the right memory, packing it cleanly, and proving the savings.</p>
+            <div class="compare-grid">
+                <div class="card compare-card">
+                    <h3>Without OmniMemora</h3>
+                    <ul>
+                        <li>High token usage from repeated raw context</li>
+                        <li>Context gets longer every turn</li>
+                        <li>Recall quality drifts across sessions</li>
+                        <li>Cost keeps increasing with agent activity</li>
+                    </ul>
+                </div>
+                <div class="card compare-card with">
+                    <h3>With OmniMemora</h3>
+                    <ul>
+                        <li>Only relevant memory is recalled</li>
+                        <li>Context is reused instead of resent</li>
+                        <li>Response stability improves with structured memory</li>
+                        <li>Cost becomes visible, measurable, and controlled</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Real scenario</h2>
+                <p>A coding agent with long task history usually keeps re-sending its own conversation. OmniMemora turns that repeated context into reusable memory.</p>
+            <div class="feature-grid">
+                <div class="card">
+                    <strong>Before</strong>
+                    <p>Every new request drags along more raw context, pushing up token cost and reducing clarity.</p>
+                </div>
+                <div class="card">
+                    <strong>After</strong>
+                <p>OmniMemora recalls only the memory cards relevant to the current request and packs them into a smaller context surface.</p>
+                </div>
+                <div class="card">
+                    <strong>What you get</strong>
+                    <p>Lower context bloat, clearer recall flow, and request-level savings evidence instead of guesswork.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Proof points already live</h2>
+                <p>The current demo is not a mockup. It already exposes the live shapes that make OmniMemora commercially meaningful.</p>
+            <div class="proof-grid">
+                <div class="card">
+                    <strong>Live recall flow</strong>
+                    <p>Run a query and inspect which memories were selected for the request.</p>
+                </div>
+                <div class="card">
+                    <strong>Packed context</strong>
+                    <p>See the exact compiled memory block that replaces raw repeated context.</p>
+                </div>
+                <div class="card">
+                    <strong>Token savings meter</strong>
+                    <p>Inspect how much context was avoided compared with a raw baseline.</p>
+                </div>
+            </div>
+            <div class="proof-strip">
+                <div class="metric">
+                    <strong>Live</strong>
+                    <span>recall demo surface</span>
+                </div>
+                <div class="metric">
+                    <strong>Packed</strong>
+                    <span>context proof</span>
+                </div>
+                <div class="metric">
+                    <strong>Metered</strong>
+                    <span>request-level evidence</span>
+                </div>
+                <div class="metric">
+                    <strong>Tracked</strong>
+                    <span>usage trend and recent requests</span>
+                </div>
+            </div>
+        </section>
+
+        <section class="section">
+            <h2>Next step</h2>
+            <p>If you are running agents with long memory chains or high token burn, the fastest next step is to see the live demo and tell us your use case.</p>
+            <div class="cta-grid">
+                <a class="card cta-card" href="./contact/">
+                    <strong>Start Free Trial</strong>
+                    <p>Tell us what kind of agent you are building and get immediate API access — no credit card required.</p>
+                </a>
+                <a class="card cta-card" href="./contact/">
+                    <strong>Apply for API Access</strong>
+                    <p>Request early access to the full OmniMemora API with structured memory and token savings visibility.</p>
+                </a>
+                <a class="card cta-card" href="./contact/">
+                    <strong>Talk to the Team</strong>
+                    <p>Reach us with deployment, compliance, or evaluation questions. Billing is frozen for now.</p>
+                </a>
+            </div>
+        </section>
+
+        <footer class="footer">
+            <div>
+                Includes components based on OpenViking (AGPL-3.0). See the <a href="./open-source/">open-source page</a> for details.
+            </div>
+            <div>
+                <a href="./demo/">Demo</a> ·
+                <a href="./docs/api/">API</a> ·
+                <a href="./contact/">Contact</a> ·
+                <a href="./open-source/">Open Source</a> ·
+                <a href="https://github.com/1108han-blip/omnimemora">GitHub</a>
+            </div>
+        </footer>
+    </main>
+</body>
+</html>

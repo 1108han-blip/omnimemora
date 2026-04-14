@@ -1,0 +1,138 @@
+"""
+配置模块 v2.2
+"""
+import os
+from pydantic import BaseModel
+from typing import List, Dict, Any, Optional
+
+
+class MemoryBackendConfig(BaseModel):
+    """Memory Backend 配置"""
+    backend_type: str = os.getenv("MEMORY_BACKEND_TYPE", "omnimemora_runtime")
+    base_url: str = os.getenv("MEMORY_BACKEND_URL", "http://127.0.0.1:8765")
+    api_key: Optional[str] = os.getenv("MEMORY_BACKEND_API_KEY", None)
+    timeout_seconds: float = float(os.getenv("MEMORY_BACKEND_TIMEOUT_SECONDS", "30"))
+    connect_timeout_seconds: float = float(os.getenv("MEMORY_BACKEND_CONNECT_TIMEOUT_SECONDS", "5"))
+
+
+class MemoryLevelConfig(BaseModel):
+    """记忆等级配置"""
+    min_score: int  # 最低分数阈值
+    description: str
+    ttl_days: int = -1  # -1 表示永久
+
+
+def _default_data_dir() -> str:
+    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
+
+
+def _default_access_registry_path() -> str:
+    return os.getenv(
+        "OMNIMEMORA_ACCESS_REGISTRY_PATH",
+        os.path.join(_default_data_dir(), "tenant_access_registry.json"),
+    )
+
+
+def _default_usage_state_path() -> str:
+    return os.getenv(
+        "OMNIMEMORA_USAGE_STATE_PATH",
+        os.path.join(_default_data_dir(), "usage_state.json"),
+    )
+
+
+class RegistrySyncConfig(BaseModel):
+    """Optional remote registry sync configuration."""
+    enabled: bool = False
+    url: str = ""
+    token: str = ""
+    timeout_seconds: float = 10.0
+
+
+class Config(BaseModel):
+    omnimemora_access_registry_path: str = _default_access_registry_path()
+    omnimemora_usage_state_path: str = _default_usage_state_path()
+    omnimemora_require_api_key_for_v2: bool = os.getenv(
+        "OMNIMEMORA_REQUIRE_API_KEY_FOR_V2",
+        "false",
+    ).lower() == "true"
+    registry_sync: RegistrySyncConfig = RegistrySyncConfig(
+        enabled=os.getenv("OMNIMEMORA_REGISTRY_SYNC_ENABLED", "").lower() == "true",
+        url=os.getenv("OMNIMEMORA_REGISTRY_SYNC_URL", ""),
+        token=os.getenv("OMNIMEMORA_REGISTRY_SYNC_TOKEN", ""),
+        timeout_seconds=float(os.getenv("OMNIMEMORA_REGISTRY_SYNC_TIMEOUT", "10.0")),
+    )
+
+    # Trial provisioning config
+    omnimemora_admin_api_token: str = os.getenv("OMNIMEMORA_ADMIN_API_TOKEN", "")
+    omnimemora_trial_days: int = int(os.getenv("OMNIMEMORA_TRIAL_DAYS", "14"))
+    omnimemora_trial_quota_tokens: int = int(os.getenv("OMNIMEMORA_TRIAL_QUOTA_TOKENS", "500000"))
+
+    # OpenViking 配置
+    # DEPRECATED: 仅 openviking backend 需填；omnimemora_runtime 不需要此配置
+    viking_url: Optional[str] = os.getenv("VIKING_URL", None)
+    viking_api_key: str = os.getenv("VIKING_API_KEY", "")
+    viking_memory_namespace_root: str = os.getenv(
+        "VIKING_MEMORY_NAMESPACE_ROOT",
+        "viking://resources/memory-adapter",
+    )
+
+    # Memory Backend 配置
+    memory_backend: MemoryBackendConfig = MemoryBackendConfig()
+
+    # Adapter 配置
+    adapter_host: str = "0.0.0.0"
+    adapter_port: int = int(os.getenv("PORT", "8000"))
+
+    # ========== 超时治理配置 ==========
+    viking_connect_timeout_seconds: float = float(os.getenv("VIKING_CONNECT_TIMEOUT_SECONDS", "5"))
+    viking_health_timeout_seconds: float = float(os.getenv("VIKING_HEALTH_TIMEOUT_SECONDS", "5"))
+    viking_search_timeout_seconds: float = float(os.getenv("VIKING_SEARCH_TIMEOUT_SECONDS", "20"))
+    viking_read_timeout_seconds: float = float(os.getenv("VIKING_READ_TIMEOUT_SECONDS", "20"))
+    viking_delete_timeout_seconds: float = float(os.getenv("VIKING_DELETE_TIMEOUT_SECONDS", "20"))
+    viking_snapshot_timeout_seconds: float = float(os.getenv("VIKING_SNAPSHOT_TIMEOUT_SECONDS", "60"))
+    viking_upload_timeout_seconds: float = float(os.getenv("VIKING_UPLOAD_TIMEOUT_SECONDS", "20"))
+    viking_commit_timeout_seconds: float = float(os.getenv("VIKING_COMMIT_TIMEOUT_SECONDS", "45"))
+    viking_resolve_timeout_seconds: float = float(os.getenv("VIKING_RESOLVE_TIMEOUT_SECONDS", "15"))
+    viking_retry_attempts: int = int(os.getenv("VIKING_RETRY_ATTEMPTS", "1"))
+    viking_retry_backoff_seconds: float = float(os.getenv("VIKING_RETRY_BACKOFF_SECONDS", "0.75"))
+    slow_request_threshold_ms: int = int(os.getenv("SLOW_REQUEST_THRESHOLD_MS", "5000"))
+    search_fallback_scan_limit: int = int(os.getenv("SEARCH_FALLBACK_SCAN_LIMIT", "40"))
+
+    # ========== 过滤器配置 ==========
+    min_content_length: int = 20
+    exclude_keywords: List[str] = []  # v2.2: 移除 error 过滤，改为加分
+    exclude_types: List[str] = ["chat", "thinking", "debug", "log"]  # type 过滤
+
+    # ========== 路由器配置 (评分制) ==========
+    # 长期记忆评分规则
+    route_score_rules: Dict[str, int] = {
+        "length_gt_100": 1,       # 内容 > 100 字符
+        "length_gt_500": 1,       # 内容 > 500 字符
+        "success_keyword": 2,     # 含"成功"/"完成"
+        "strategy_keyword": 2,    # 含"策略"/"规划"
+        "important_keyword": 2,   # 含"重要"/"关键"
+        "knowledge_keyword": 2,   # 含"知识"/"规则"
+        "failure_experience": 2,  # 失败经验（新增：不再过滤，改为加分）
+        "type_strategy": 2,      # metadata.type = strategy
+        "type_result": 1,         # metadata.type = result
+        "type_failure": 2,       # metadata.type = failure_experience
+    }
+    long_term_threshold: int = 2  # 分数 >= 2 进入长期记忆
+
+    # ========== 记忆等级配置 ==========
+    memory_levels: Dict[str, MemoryLevelConfig] = {
+        "L0": MemoryLevelConfig(min_score=0, description="垃圾/不存", ttl_days=0),
+        "L1": MemoryLevelConfig(min_score=1, description="短期缓存", ttl_days=7),
+        "L2": MemoryLevelConfig(min_score=3, description="经验记忆", ttl_days=30),
+        "L3": MemoryLevelConfig(min_score=5, description="核心知识", ttl_days=-1),
+    }
+
+    # ========== 去重配置 ==========
+    enable_deduplication: bool = True
+
+    # ========== 限流配置 ==========
+    enable_rate_limit: bool = True
+    rate_limit_per_minute: int = 100  # 每分钟最大写入数
+
+
+config = Config()

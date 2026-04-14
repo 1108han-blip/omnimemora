@@ -1,0 +1,20 @@
+﻿{
+    "adapter_failures":  0,
+    "saved_tokens_growth":  10304,
+    "final_request_count":  313,
+    "query_failures":  0,
+    "baseline_saved_tokens_total":  3212,
+    "jsonl":  "E:\\AI2\\Vault\\13_OmniMemora\\OmniMemora\\tools\\verification\\logs\\stability_probe_20260413_002429.jsonl",
+    "agent":  "codex",
+    "iterations":  240,
+    "runtime_failures":  0,
+    "last_error":  null,
+    "request_count_growth":  240,
+    "duration_hours_target":  2,
+    "final_saved_tokens_total":  13516,
+    "interval_seconds":  30,
+    "tenant":  "stability-tenant",
+    "ended_at_utc":  "2026-04-12T18:24:47.7414935Z",
+    "baseline_request_count":  73,
+    "started_at_utc":  "2026-04-12T16:24:29.8380235Z"
+}

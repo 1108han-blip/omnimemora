@@ -1,0 +1,55 @@
+# Environment & secrets — NEVER commit these
+.env
+.envrc
+.env.local
+railway-token.txt
+
+# Local data & runtime state
+data/
+meters_*.json
+meters_index.json
+usage_state.json
+tenant_access_registry.json
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+venv/
+*.egg
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*.swn
+.DS_Store
+
+# Docker
+docker-compose*.yml
+Dockerfile.local
+.dockerignore  # note: kept in repo, this line is for reference only
+
+# Backups & temp
+*.bak
+*.tmp
+backup*/
+tmp/
+temp/
+staging*/
+
+# OpenViking server (not adapter)
+openviking-config/
+openviking.Dockerfile
+
+# Ops tooling (internal — contains credentials)
+ops/
+
+# Artifacts & staging
+artifacts/
+*.staging*

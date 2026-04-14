@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OmniMemora | Open Source & Licensing</title>
+    <link rel="icon" href="data:,">
+    <style>
+        :root {
+            --bg: #09111f;
+            --panel: rgba(13, 20, 33, 0.88);
+            --border: #263248;
+            --text: #e6edf8;
+            --muted: #9bacbf;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: "Segoe UI", system-ui, sans-serif;
+            color: var(--text);
+            background: linear-gradient(180deg, #09111f 0%, #0d1424 100%);
+        }
+        a { color: #bfdbfe; }
+        .page { max-width: 980px; margin: 0 auto; padding: 28px 24px 56px; }
+        .nav, .footer {
+            display: flex; justify-content: space-between; gap: 16px; align-items: center; flex-wrap: wrap;
+        }
+        .nav { margin-bottom: 24px; }
+        .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; color: var(--text); }
+        .brand-mark {
+            width: 42px; height: 42px; border-radius: 14px; display: flex; align-items: center; justify-content: center;
+            font-weight: 800; background: linear-gradient(135deg, #2563eb, #7c3aed);
+        }
+        .brand-copy strong { display: block; font-size: 21px; }
+        .brand-copy span { display: block; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+        .nav-links { display: flex; gap: 10px; flex-wrap: wrap; }
+        .nav-links a { text-decoration: none; color: var(--muted); font-size: 14px; padding: 8px 12px; border-radius: 999px; }
+        .nav-links a.active, .nav-links a:hover { color: var(--text); background: rgba(15, 23, 42, 0.76); border: 1px solid var(--border); }
+        .hero, .panel { border: 1px solid var(--border); border-radius: 22px; background: var(--panel); }
+        .hero { padding: 30px; margin-bottom: 18px; }
+        .panel { padding: 24px; margin-top: 18px; }
+        h1, h2, p { margin: 0; }
+        .eyebrow { color: #bfdbfe; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+        h1 { font-size: 34px; margin-bottom: 12px; }
+        p { color: var(--muted); line-height: 1.8; }
+        .footer { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; line-height: 1.7; }
+        .footer a { color: #cbd5e1; text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+        code {
+            background: rgba(15, 23, 42, 0.82);
+            border: 1px solid var(--border);
+            padding: 2px 6px;
+            border-radius: 8px;
+        }
+        @media (max-width: 760px) {
+            .page { padding: 22px 18px 40px; }
+            h1 { font-size: 28px; }
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        <nav class="nav">
+            <a class="brand" href="../">
+                <div class="brand-mark">M</div>
+                <div class="brand-copy">
+                <strong>OmniMemora</strong>
+                    <span>Agent Memory API</span>
+                </div>
+            </a>
+            <div class="nav-links">
+                <a href="../">Home</a>
+                <a href="../demo/">Demo</a>
+                <a href="../docs/api/">API</a>
+                <a href="../docs/system-overview/">System Overview</a>
+                <a href="../contact/">Contact</a>
+                <a class="active" href="./">Open Source</a>
+            </div>
+        </nav>
+
+        <section class="hero">
+            <div class="eyebrow">Compliance</div>
+            <h1>Open Source & Licensing</h1>
+            <p>
+                OmniMemora includes components derived from the OpenViking project. This page is the public disclosure point for
+                licensing context, source references, and open-source compliance requests.
+            </p>
+        </section>
+
+        <section class="panel">
+            <h2>Source project</h2>
+            <p>
+                    OmniMemora includes components based on <strong>OpenViking</strong>, originally published at
+                <a href="https://github.com/volcengine/OpenViking">github.com/volcengine/OpenViking</a>.
+            </p>
+        </section>
+
+        <section class="panel">
+            <h2>License notice</h2>
+            <p>
+                    OpenViking is licensed under <strong>AGPL-3.0</strong>. OmniMemora includes OpenViking-derived components and related
+                integrations as part of the product surface presented on this site.
+            </p>
+        </section>
+
+        <section class="panel">
+            <h2>Corresponding source requests</h2>
+            <p>
+                In accordance with AGPL-3.0, users interacting with this service can request access to the corresponding source code
+                of the OpenViking-based components, including relevant modifications.
+            </p>
+            <p style="margin-top: 12px;">
+                To request access, please use the <a href="../contact/">Contact page</a> and mention
+                <code>Open Source Request</code> in the message.
+            </p>
+        </section>
+
+        <footer class="footer">
+            <div>
+                Includes components based on OpenViking (AGPL-3.0). Source and compliance requests are handled through this page and the <a href="../contact/">contact flow</a>.
+            </div>
+            <div>
+                <a href="../contact/">Contact</a> ·
+                <a href="https://github.com/volcengine/OpenViking">Upstream</a> ·
+                <a href="https://github.com/1108han-blip/omnimemora">GitHub</a>
+            </div>
+        </footer>
+    </main>
+</body>
+</html>

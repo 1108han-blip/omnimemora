@@ -1,0 +1,93 @@
+{
+  "query": "scope 隔离是如何实现的",
+  "agent": "supervisor",
+  "client": "openclaw",
+  "current_usage": 8500,
+  "monthly_quota": 100000,
+  "candidate_memories": [
+    {
+      "id": "mem_001",
+      "content": "Scope 类型包括 user、workspace、agent 和 custom，默认隔离，显式共享。",
+      "category": "scope",
+      "created_at": "2026-04-10T00:10:00Z",
+      "tokens": 90
+    },
+    {
+      "id": "mem_002",
+      "content": "今天中午吃什么？我想吃披萨。",
+      "category": "general",
+      "created_at": "2026-04-10T00:11:00Z",
+      "tokens": 60
+    },
+    {
+      "id": "mem_003",
+      "content": "最新的电影很好看，推荐去看。",
+      "category": "general",
+      "created_at": "2026-04-10T00:12:00Z",
+      "tokens": 55
+    },
+    {
+      "id": "mem_004",
+      "content": "agent scope 下，不同 agent 互不可见，需要完全匹配 agent_id。",
+      "category": "scope",
+      "created_at": "2026-04-10T00:13:00Z",
+      "tokens": 85
+    },
+    {
+      "id": "mem_005",
+      "content": "购物清单：牛奶、面包、鸡蛋、水果。",
+      "category": "general",
+      "created_at": "2026-04-10T00:14:00Z",
+      "tokens": 50
+    },
+    {
+      "id": "mem_006",
+      "content": "workspace scope 下，同一 workspace 内的 agent 可以共享读写。",
+      "category": "scope",
+      "created_at": "2026-04-10T00:15:00Z",
+      "tokens": 80
+    },
+    {
+      "id": "mem_007",
+      "content": "天气预报说明天会下雨，记得带伞。",
+      "category": "general",
+      "created_at": "2026-04-10T00:16:00Z",
+      "tokens": 65
+    },
+    {
+      "id": "mem_008",
+      "content": "scope 解析优先级为 Header > Body > Config，确保租户隔离。",
+      "category": "scope",
+      "created_at": "2026-04-10T00:17:00Z",
+      "tokens": 88
+    },
+    {
+      "id": "mem_009",
+      "content": "今天的会议取消了，时间改到下周。",
+      "category": "general",
+      "created_at": "2026-04-10T00:18:00Z",
+      "tokens": 70
+    },
+    {
+      "id": "mem_010",
+      "content": "user scope 下，跨 workspace 隔离，仅自身可写。",
+      "category": "scope",
+      "created_at": "2026-04-10T00:19:00Z",
+      "tokens": 75
+    },
+    {
+      "id": "mem_011",
+      "content": "周末打算去爬山，需要准备装备。",
+      "category": "general",
+      "created_at": "2026-04-10T00:20:00Z",
+      "tokens": 60
+    },
+    {
+      "id": "mem_012",
+      "content": "sharing mode 包括 isolated、shared、shared_read_only 和 custom。",
+      "category": "scope",
+      "created_at": "2026-04-10T00:21:00Z",
+      "tokens": 92
+    }
+  ]
+}

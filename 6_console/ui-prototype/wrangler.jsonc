@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "openviking-site",
+  "compatibility_date": "2026-04-06",
+  "pages_build_output_dir": ".",
+  "d1_databases": [
+    {
+      "binding": "LEADS_DB",
+      "database_name": "omnimemora-leads",
+      "database_id": "e7481f9d-a1f2-482c-90e6-d56949bd42e2"
+    }
+  ],
+  "vars": {
+    "ADAPTER_API_URL": "https://omnimemora-adapter-production.up.railway.app",
+    "INTERNAL_ADAPTER_TOKEN": "a523334ef0efc056c5b163f88b952e3d85958761f04642d81996fbae6d785cd0"
+  }
+}

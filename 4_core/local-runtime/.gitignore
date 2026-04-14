@@ -1,0 +1,28 @@
+# Binaries
+omnimemora
+omnimemora.exe
+*.exe
+*.out
+
+# Release artifacts
+/release/
+/dist/
+/build/
+
+# Runtime data (local execution)
+/.omnimemora/
+*.log
+
+# OS artifacts
+.DS_Store
+Thumbs.db
+
+# Editor
+*.swp
+*.swo
+*~
+
+# Go
+vendor/
+*.test
+coverage.out

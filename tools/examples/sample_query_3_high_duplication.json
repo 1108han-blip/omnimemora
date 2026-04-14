@@ -1,0 +1,51 @@
+{
+  "query": "PRODUCT_CONSTITUTION.md 的核心原则是什么",
+  "agent": "supervisor",
+  "client": "openclaw",
+  "current_usage": 5000,
+  "monthly_quota": 50000,
+  "candidate_memories": [
+    {
+      "id": "mem_001",
+      "content": "PRODUCT_CONSTITUTION.md 定义了产品的边界和核心原则，包括 Local First 和 Control Plane / Memory Plane 分离。",
+      "category": "blueprint",
+      "created_at": "2026-04-10T00:01:00Z",
+      "tokens": 150
+    },
+    {
+      "id": "mem_002",
+      "content": "PRODUCT_CONSTITUTION.md 定义了产品的边界和核心原则，包括 Local First 和 Control Plane / Memory Plane 分离。",
+      "category": "blueprint",
+      "created_at": "2026-04-10T00:02:00Z",
+      "tokens": 150
+    },
+    {
+      "id": "mem_003",
+      "content": "PRODUCT_CONSTITUTION.md 定义了产品的边界和核心原则，包括 Local First 和 Control Plane / Memory Plane 分离。",
+      "category": "blueprint",
+      "created_at": "2026-04-10T00:03:00Z",
+      "tokens": 150
+    },
+    {
+      "id": "mem_004",
+      "content": "PRODUCT_CONSTITUTION.md 定义了产品的边界和核心原则，包括 Local First 和 Control Plane / Memory Plane 分离。",
+      "category": "blueprint",
+      "created_at": "2026-04-10T00:04:00Z",
+      "tokens": 150
+    },
+    {
+      "id": "mem_005",
+      "content": "PRODUCT_CONSTITUTION.md 定义了产品的边界和核心原则，包括 Local First 和 Control Plane / Memory Plane 分离。",
+      "category": "blueprint",
+      "created_at": "2026-04-10T00:05:00Z",
+      "tokens": 150
+    },
+    {
+      "id": "mem_006",
+      "content": "今天天气很好，适合出去散步。",
+      "category": "general",
+      "created_at": "2026-04-10T00:06:00Z",
+      "tokens": 80
+    }
+  ]
+}

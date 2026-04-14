@@ -1,0 +1,51 @@
+{
+  "query": "继续优化 engine scoring，让 relevance_score 对中文关键词更敏感",
+  "agent": "supervisor",
+  "client": "openclaw",
+  "current_usage": 0,
+  "monthly_quota": null,
+  "candidate_memories": [
+    {
+      "id": "mem_blueprint_1",
+      "content": "OmniMemora 是 Memory Control Plane for AI Agents，是 optional context optimization layer。",
+      "category": "strategy",
+      "created_at": "2026-04-10T00:00:00Z",
+      "tokens": 100
+    },
+    {
+      "id": "mem_blueprint_2",
+      "content": "PRODUCT_CONSTITUTION.md 定义了 6 条核心架构原则：Local First、Cloud Optional、Default Isolated、Single Runtime、Memory Scope Governance、Control Plane / Memory Plane 分离。",
+      "category": "strategy",
+      "created_at": "2026-04-10T00:00:00Z",
+      "tokens": 150
+    },
+    {
+      "id": "mem_scoring_1",
+      "content": "router.py 中的 calculate_memory_score_detailed() 函数：final_score = relevance_score * type_weight - length_penalty。type_weight: strategy=3, failure=3, knowledge=2, result=1, general=1。length_penalty: content_len // 500。",
+      "category": "knowledge",
+      "created_at": "2026-04-10T00:00:00Z",
+      "tokens": 200
+    },
+    {
+      "id": "mem_scoring_2",
+      "content": "DEFAULT_SCORE_RULES: length_gt_100=1, length_gt_500=1, success_keyword=2, strategy_keyword=2, important_keyword=2, knowledge_keyword=2, failure_experience=2, type_strategy=2, type_result=1, type_failure=2。",
+      "category": "knowledge",
+      "created_at": "2026-04-10T00:00:00Z",
+      "tokens": 180
+    },
+    {
+      "id": "mem_round2",
+      "content": "第二轮调参已完成：3 个显式维度、score_per_token 对照实验、3 个冲突样本。平均节省率 90.7%。",
+      "category": "result",
+      "created_at": "2026-04-10T00:00:00Z",
+      "tokens": 120
+    },
+    {
+      "id": "mem_chinese_1",
+      "content": "当前中文关键词：核心、原则、成功、完成、策略、规划、重要、关键、知识、规则。建议增加更多中文关键词，比如：搞定、搞定了、安排、重中之重、规矩、准则。",
+      "category": "result",
+      "created_at": "2026-04-10T00:00:00Z",
+      "tokens": 140
+    }
+  ]
+}

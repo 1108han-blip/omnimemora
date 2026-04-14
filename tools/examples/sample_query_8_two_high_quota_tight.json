@@ -1,0 +1,39 @@
+{
+  "query": "如何优化系统性能？",
+  "agent": "supervisor",
+  "client": "openclaw",
+  "current_usage": 12000,
+  "monthly_quota": 50000,
+  "max_local_cards": 2,
+  "candidate_limit": 16,
+  "candidate_memories": [
+    {
+      "id": "mem_001_high_score_large",
+      "content": "系统性能优化完整指南：1) 架构层面优化：微服务拆分、水平扩展、负载均衡、CDN加速；2) 数据库层面优化：索引优化、SQL优化、读写分离、分库分表、连接池调优；3) 缓存层面优化：多级缓存、缓存预热、缓存更新策略、缓存淘汰算法、缓存穿透/击穿/雪崩防护；4) 代码层面优化：算法优化、数据结构选择、并发控制、异步处理、批量操作、资源复用；5) 网络层面优化：连接复用、数据压缩、协议优化、边缘计算；6) 监控与调优：APM工具、性能基准测试、容量规划、持续优化。每个维度都包含详细的实施步骤、最佳实践和常见陷阱。",
+      "category": "blueprint",
+      "created_at": "2026-04-10T00:00:00Z",
+      "tokens": 450
+    },
+    {
+      "id": "mem_002_high_score_medium",
+      "content": "缓存优化最佳实践：1) 缓存策略选择：根据业务场景选择 Cache-Aside、Read-Through、Write-Through 或 Write-Behind；2) 缓存数据结构：合理使用 String、Hash、List、Set、Sorted Set；3) 缓存键设计：命名规范、前缀隔离、避免大键；4) 缓存过期：合理设置TTL、随机偏移防止雪崩；5) 缓存淘汰：LRU/LFU 算法选择、内存上限设置；6) 缓存监控：命中率、延迟、吞吐量、大键监控。",
+      "category": "blueprint",
+      "created_at": "2026-04-10T00:01:00Z",
+      "tokens": 250
+    },
+    {
+      "id": "mem_003_medium_score_small",
+      "content": "SQL优化技巧：索引、避免SELECT *、LIMIT分页、EXPLAIN分析。",
+      "category": "architecture",
+      "created_at": "2026-04-10T00:02:00Z",
+      "tokens": 40
+    },
+    {
+      "id": "mem_004_low_score",
+      "content": "今天天气不错，适合出去走走。",
+      "category": "general",
+      "created_at": "2026-04-10T00:03:00Z",
+      "tokens": 30
+    }
+  ]
+}

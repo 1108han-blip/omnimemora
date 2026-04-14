@@ -1,0 +1,34 @@
+给 run_engine_demo.py 增加 --output 参数，支持把结果保存到文件
+
+[OmniMemora optimized context (Full)]
+
+Project: OmniMemora
+Source: selected memory cards
+Why selected:
+- high relevance
+- strategy priority
+- low redundancy
+- token-budget optimized
+- blueprint-aligned
+- scoring-enhanced
+
+Context:
+1. PRODUCT_CONSTITUTION.md 定义了 6 条核心架构原则：Local First、Cloud Optional、Default Isolated、Single Runtime、Memory Scope Governance、Control Plane / Memory Plane 分离。
+2. EXECUTION_GUARDRAILS.md 的可替换性原则：新增功能应该可关闭、可替换、不影响系统存在。向后兼容原则：新增参数应该是可选的，不破坏现有功能。
+3. SYSTEM_ARCHITECTURE.md 定义了系统架构：tools/ 目录放验证工具，4_core/ 放核心逻辑。CLI 入口放在 tools/ 目录。
+4. 向后兼容原则：新增参数应该是可选的，不破坏现有功能。--output 应该是可选参数，不传时继续输出到 stdout。
+5. 当前 run_engine_demo.py 已有参数：--input（输入 JSON 文件路径）、--format text|json（输出格式，默认 text）。main() 函数调用 print_text_result() 或 print_json_result()。
+6. router.py 中的 calculate_memory_score_detailed() 函数实现了评分逻辑。print_text_result() 和 print_json_result() 负责输出格式化。
+7. mem_blueprint_memory_plane.md 定义了 memory plane 的设计原则：记忆存储与检索分离。
+8. mem_blueprint_control_plane.md 定义了 control plane 的职责：编排与调度。
+9. mem_scoring_relevance.md 定义了相关性评分策略：多维度加权评分。
+10. mem_chinese_keywords.md 定义了中文关键词库用于内容匹配。
+
+Use this as supporting context, not as unquestionable truth.
+If code reality conflicts with this context, prefer the repository state.
+
+---
+## 观察要求（请每完成一个阶段就反馈一次）
+1. 是否停止关键词优化（这是最关键的）
+2. 是否更"直接输出答案"：不绕、不补背景
+3. 哪些 context 实际没用（特别盯：blueprint、规则类、函数定义）

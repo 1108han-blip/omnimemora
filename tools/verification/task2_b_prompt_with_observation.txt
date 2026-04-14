@@ -1,0 +1,26 @@
+比较 score 和 score_per_token，决定默认排序策略该用哪个
+
+[OmniMemora optimized context]
+
+Project: OmniMemora
+Source: selected memory cards
+Why selected:
+- high relevance
+- strategy priority
+- low redundancy
+- token-budget optimized
+
+Context:
+1. OmniMemora 的核心价值：improve context quality、reduce token usage、enable cross-session consistency。设计原则：Local-first、Weakly intrusive、Replaceable、Observable、Policy-driven。
+2. PRODUCT_CONSTITUTION.md 的核心原则：We do not control memory. We optimize what is selected into context. 核心锚点：唯一允许表达。
+3. 当前两种排序策略：方案 A（按 final_score 排序）更直观反映记忆重要性，方案 B（按 value_density = final_score / tokens 排序）更看重 token 性价比。
+4. 样本 6（短弱 vs 长强）对比结果：两种排序方法都选了相同的 3 条记忆，但顺序不同。value_density 优先选了短记忆（tokens=60, score=1），而 final_score 优先选了长记忆（tokens=320, score=2）。
+
+Use this as supporting context, not as unquestioned truth.
+If code reality conflicts with this context, prefer the repository state.
+
+---
+## 观察要求（请每完成一个阶段就反馈一次）
+1. 是否停止关键词优化（这是最关键的）
+2. 是否更"直接输出答案"：不绕、不补背景
+3. 哪些 context 实际没用（特别盯：blueprint、规则类、函数定义）

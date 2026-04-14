@@ -1,0 +1,12 @@
+﻿{
+    "archive_id":  "archive_20260413_174929_manual-stop-before-probe-off",
+    "created_at_utc":  "2026-04-13T17:49:29.1997016Z",
+    "created_at_local":  "2026-04-14T01:49:29.4069208+08:00",
+    "timezone":  "China Standard Time",
+    "run_label":  "manual-stop-before-probe-off",
+    "project_root":  "E:\\AI2\\Vault\\13_OmniMemora\\OmniMemora",
+    "meter_data_source":  "E:\\AI2\\Vault\\13_OmniMemora\\OmniMemora\\5_connectors\\data",
+    "meter_files_count":  19,
+    "include_raw_logs":  false,
+    "note":  "Immutable archive for experiment evidence."
+}

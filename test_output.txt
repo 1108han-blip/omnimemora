@@ -1,0 +1,63 @@
+============================================================
+Engine Optimization Result
+============================================================
+
+Query: 继续优化 engine scoring，让 relevance_score 对中文关键词更敏感
+Sort By: score
+
+Candidate Memories: 4
+Selected Memories: 4
+
+Packed Context Tokens: 209
+Saved Tokens: 2671
+Savings Percent: 92.7%
+
+Quota:
+  - current_usage: 0
+  - monthly_quota: None
+  - quota_exceeded: False
+  - quota_status: untracked
+
+All Scored Memories (with score breakdown):
+  1. mem3
+     ├─ relevance: 16
+     ├─ type_weight: 3
+     ├─ length_penalty: 0
+     ├─ final_score: 48
+     ├─ tokens: 64
+     └─ value_density: 0.7500
+  2. mem1
+     ├─ relevance: 12
+     ├─ type_weight: 2
+     ├─ length_penalty: 0
+     ├─ final_score: 24
+     ├─ tokens: 34
+     └─ value_density: 0.7059
+  3. mem2
+     ├─ relevance: 18
+     ├─ type_weight: 1
+     ├─ length_penalty: 0
+     ├─ final_score: 18
+     ├─ tokens: 54
+     └─ value_density: 0.3333
+  4. mem4
+     ├─ relevance: 0
+     ├─ type_weight: 2
+     ├─ length_penalty: 0
+     ├─ final_score: 1
+     ├─ tokens: 26
+     └─ value_density: 0.0385
+
+Selected Memories:
+  1. mem3 (score: 48, tokens: 64, value_density: 0.7500)
+  2. mem1 (score: 24, tokens: 34, value_density: 0.7059)
+  3. mem2 (score: 18, tokens: 54, value_density: 0.3333)
+  4. mem4 (score: 1, tokens: 26, value_density: 0.0385)
+
+Packed Context:
+------------------------------------------------------------
+<relevant-memories>
+- [strategy | 0%] 当前关键词列表：success_keywords=["成功", "完成", "success", "完成", "done", "completed"], strategy_keywords=["策略", "规划", "policy", "strategy", "方案"], important_keywords=["重要", "关键", "important", "critical", "核心"], knowledge_keywords=["知识", "规则", "knowledge", "rule", "原则"]
+- [knowledge | 0%] OmniMemora 是 Memory Control Plane for AI Agents，负责优化上下文选择而非存储。核心原则：Local-first, Weakly intrusive, Replaceable, Observable, Policy-driven。
+- [result | 0%] router.py 中的 calculate_memory... (truncated)
+------------------------------------------------------------

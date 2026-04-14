@@ -1,0 +1,44 @@
+{
+  "query": "帮我优化当前项目的架构",
+  "agent": "supervisor",
+  "client": "openclaw",
+  "current_usage": 95000,
+  "monthly_quota": 100000,
+  "candidate_memories": [
+    {
+      "id": "mem_001",
+      "content": "4_core 目录结构包括 adapter-raw、local-runtime 和 logic，需要进一步整理。",
+      "category": "architecture",
+      "created_at": "2026-04-10T00:20:00Z",
+      "tokens": 140
+    },
+    {
+      "id": "mem_002",
+      "content": "0_blueprint 是唯一权威来源，包含了 PRODUCT_CONSTITUTION.md 和 PRODUCT_DEFINITION.md。",
+      "category": "blueprint",
+      "created_at": "2026-04-10T00:21:00Z",
+      "tokens": 160
+    },
+    {
+      "id": "mem_003",
+      "content": "3_governance 包含 EXECUTION_GUARDRAILS.md、REPO_BOUNDARIES.md 和 PR_CHECKLIST.md。",
+      "category": "governance",
+      "created_at": "2026-04-10T00:22:00Z",
+      "tokens": 155
+    },
+    {
+      "id": "mem_004",
+      "content": "tools/run_engine_demo.py 是黑盒验证工具，用于测试 engine.optimize_context()。",
+      "category": "tools",
+      "created_at": "2026-04-10T00:23:00Z",
+      "tokens": 145
+    },
+    {
+      "id": "mem_005",
+      "content": "PRODUCT_CONSTITUTION.md 定义了 Local First 和 Control Plane / Memory Plane 分离。",
+      "category": "blueprint",
+      "created_at": "2026-04-10T00:24:00Z",
+      "tokens": 135
+    }
+  ]
+}

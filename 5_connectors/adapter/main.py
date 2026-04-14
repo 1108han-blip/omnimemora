@@ -1,0 +1,3738 @@
+"""
+Memory Adapter v2.2 - OpenViking 中间层
+功能：标准化 → 过滤 → 路由 → 转换
+
+改进点 v2.2（相比 v2.1）：
+1. 错误内容不再过滤，转换为 failure_experience 类型并加分
+2. 失败经验自动进入 L2（经验记忆）
+3. 支持检测失败内容并标记
+
+处理流程：
+标准化 → 过滤 → 去重 → 限流 → 路由 → 转换 → OpenViking
+"""
+import asyncio
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
+from pydantic import BaseModel
+from typing import Optional, List, Any, Dict, Set
+from datetime import datetime
+from urllib.parse import quote
+from uuid import uuid4
+import httpx
+import loguru
+import sys
+import os
+import re
+import socket
+from pathlib import PurePosixPath
+from collections import deque
+
+from .config import config
+from .cloud import load_policy, load_flags, report_usage_async
+
+# 兼容数字开头包：逐个子模块动态导入（避免语法错误）
+import importlib
+_4_filter   = importlib.import_module("4_core.logic.filter")
+_4_norm     = importlib.import_module("4_core.logic.normalizer")
+_4_router   = importlib.import_module("4_core.logic.router")
+_4_dedup    = importlib.import_module("4_core.logic.dedup")
+_4_v2       = importlib.import_module("4_core.logic.v2_compute")
+_4_engine   = importlib.import_module("4_core.logic.engine")
+_4_rules    = importlib.import_module("4_core.logic.rules")
+_5_adapter  = importlib.import_module("5_connectors.adapter")
+_5_meter    = importlib.import_module("5_connectors.adapter.meter_store")
+_5_tc       = importlib.import_module("5_connectors.adapter.task_classifier")
+_5_trace    = importlib.import_module("5_connectors.adapter.trace_store")
+_5_agent_id = importlib.import_module("5_connectors.adapter.agent_identity")
+_5_ctrl     = importlib.import_module("5_connectors.adapter.control_mode")
+_5_agnet_m  = importlib.import_module("5_connectors.adapter.agent_metrics")
+_5_it       = importlib.import_module("5_connectors.adapter.internal_transport")
+_5_agnet_m.get_agent_metrics_store(
+    events_path=config.agent_events_path,
+    flush_interval_seconds=config.agent_events_flush_interval_seconds,
+    max_file_size_mb=config.agent_events_max_file_size_mb,
+    retention_days=config.agent_events_retention_days,
+)
+
+# ADR-0005 v1.2: Load per-agent control modes from agent_modes.json
+# Keys normalized to canonical_agent_id per ADR-0005 Rule 2.
+_agent_modes_cache: tuple[dict, str] = ({}, "observe")
+
+def _reload_agent_modes():
+    """Reload agent_modes.json from disk (canonicalizes keys)."""
+    global _agent_modes_cache
+    import json as _json_alias
+    try:
+        path = os.path.join(os.path.dirname(__file__), "config", "agent_modes.json")
+        with open(path, "r", encoding="utf-8") as f:
+            cfg = _json_alias.load(f)
+        raw_dict = cfg.get("per_agent_modes", {})
+        canonical_dict = {
+            _5_agent_id.resolve_canonical_agent_id(k): v
+            for k, v in raw_dict.items()
+        }
+        default_mode = cfg.get("default_mode", "observe")
+        _agent_modes_cache = (canonical_dict, default_mode)
+    except Exception:
+        pass  # Keep existing cache on error
+
+_reload_agent_modes()
+
+_adapter_started_at = datetime.utcnow().isoformat() + "Z"
+_adapter_hostname = socket.gethostname()
+
+should_store              = _4_filter.should_store
+detect_failure_content    = _4_filter.detect_failure_content
+normalize                = _4_norm.normalize
+to_viking_format         = _4_norm.to_viking_format
+parse_viking_response     = _4_norm.parse_viking_response
+calculate_expire_at       = _4_norm.calculate_expire_at
+route_memory_type_and_level = _4_router.route_memory_type_and_level
+check_duplicate          = _4_dedup.check_duplicate
+add_to_dedup             = _4_dedup.add_to_dedup
+get_dedup_cache          = _4_dedup.get_dedup_cache
+check_quota_enforcement  = _4_v2.check_quota_enforcement
+TokenSavingsMeter         = _4_v2.TokenSavingsMeter
+CallChain                = _4_v2.CallChain
+OptimizationInput         = _4_engine.OptimizationInput
+optimize_context         = _4_engine.optimize_context
+FilterRules              = _4_rules.FilterRules
+RoutingRules             = _4_rules.RoutingRules
+store_meter              = _5_meter.store_meter
+get_meter                = _5_meter.get_meter
+get_tenant_usage         = _5_meter.get_tenant_usage
+get_trend_data           = _5_meter.get_trend_data
+get_tenant_current_usage = _5_meter.get_tenant_current_usage
+classify_task            = _5_tc.classify_task
+should_bypass_context    = _5_tc.should_bypass_context
+from .access import get_tenant_registry_entry, resolve_query_access
+from .backends.factory import create_backend, get_memory_backend, set_memory_backend
+from .backends.base import MemoryBackend, MemorySearchRequest, MemoryWriteRequest
+
+# Lazy backend initialization
+_initialized_backend: Optional[MemoryBackend] = None
+
+
+def _get_backend() -> MemoryBackend:
+    """Get or create the memory backend instance (lazy initialization)"""
+    global _initialized_backend
+    if _initialized_backend is None:
+        _initialized_backend = create_backend(config.memory_backend)
+    return _initialized_backend
+
+# 日志配置
+loguru.logger.remove()
+loguru.logger.add(
+    sys.stderr,
+    level=os.getenv("LOG_LEVEL", "INFO"),
+    format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>"
+)
+
+# ADR-0006 §6: 启动时预探测内部服务
+# probe 结果写日志，方便排查"为什么 localhost 连不上"
+if config.internal_transport.probe_on_startup:
+    import logging as _logging
+    _it_logger = _logging.getLogger("internal_transport")
+    _probe_services = [
+        ("omnimemora_runtime", config.memory_backend.base_url),
+    ]
+    for _svc_name, _svc_url in _probe_services:
+        try:
+            _resolved, _reason = _5_it.resolve_internal_base_url_sync(
+                _svc_name,
+                _svc_url,
+                config.internal_transport.loopback_candidates,
+            )
+            _it_logger.info(
+                f"[internal_transport] startup probe: "
+                f"service={_svc_name} configured={_svc_url} resolved={_resolved} reason={_reason}"
+            )
+        except Exception as _e:
+            _it_logger.warning(
+                f"[internal_transport] startup probe failed for {_svc_name}: {_e}"
+            )
+
+
+class SupportAPIError(Exception):
+    """统一的售后可追踪错误。"""
+
+    def __init__(self, status_code: int, payload: Dict[str, Any]):
+        self.status_code = status_code
+        self.payload = payload
+        super().__init__(payload.get("message") or payload.get("detail") or "support_api_error")
+
+
+app = FastAPI(
+    title="Memory Adapter v2.2",
+    description="OpenViking 中间层：标准化 → 过滤 → 去重 → 限流 → 路由 → 转换",
+    version="2.2.0"
+)
+
+# CORS 中间件
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+
+@app.middleware("http")
+async def attach_request_id(request: Request, call_next):
+    request.state.request_id = uuid4().hex
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request.state.request_id
+    return response
+
+
+# ==================== MCP Protocol Endpoints (for OpenClaw integration) ====================
+
+import asyncio
+import json as _json
+
+_explicit_adapter_url = os.getenv("OMNIMEMORA_ADAPTER_URL", "").strip().rstrip("/")
+if _explicit_adapter_url:
+    _adapter_http_base = _explicit_adapter_url
+else:
+    # Important: uvicorn port can be overridden by PORT at process start,
+    # while config.adapter_port may still keep its static default.
+    _resolved_port = os.getenv("PORT", "18011").strip() or "18011"
+    _resolved_host = os.getenv("OMNIMEMORA_ADAPTER_HOST", "127.0.0.1").strip() or "127.0.0.1"
+    if _resolved_host in ("0.0.0.0", "::"):
+        _resolved_host = "127.0.0.1"
+    _adapter_http_base = f"http://{_resolved_host}:{_resolved_port}"
+
+# In-memory session store for MCP SSE connections: session_id -> asyncio.Queue
+_mcp_sessions: Dict[str, asyncio.Queue] = {}
+_mcp_sessions_lock: asyncio.Lock = None
+_mcp_bootstrap_done: Set[str] = set()
+_mcp_bootstrap_lock: asyncio.Lock = None
+
+def _get_sessions_lock() -> asyncio.Lock:
+    global _mcp_sessions_lock
+    if _mcp_sessions_lock is None:
+        _mcp_sessions_lock = asyncio.Lock()
+    return _mcp_sessions_lock
+
+
+def _get_bootstrap_lock() -> asyncio.Lock:
+    global _mcp_bootstrap_lock
+    if _mcp_bootstrap_lock is None:
+        _mcp_bootstrap_lock = asyncio.Lock()
+    return _mcp_bootstrap_lock
+
+
+@app.get("/sse")
+async def mcp_sse(request: Request):
+    """
+    MCP SSE endpoint — initiates an SSE stream with endpoint info.
+    OpenClaw MCP client connects here first to get the messages endpoint.
+    """
+    session_id = f"mcp_{uuid4().hex[:8]}"
+
+    async def event_stream():
+        queue: asyncio.Queue = asyncio.Queue()
+        async with _get_sessions_lock():
+            _mcp_sessions[session_id] = queue
+
+        try:
+            # Send the endpoint message (standard MCP handshake)
+            yield f"event: endpoint\ndata: /messages?sessionId={session_id}\n\n"
+            yield f"event: keepalive\ndata: \n\n"
+
+            # Keep-alive ping every 20 seconds (matches Go Runtime behavior)
+            while True:
+                try:
+                    msg = await asyncio.wait_for(queue.get(), timeout=20.0)
+                    yield f"event: message\ndata: {msg}\n\n"
+                except asyncio.TimeoutError:
+                    yield f"event: keepalive\ndata: \n\n"
+        except asyncio.CancelledError:
+            pass
+        finally:
+            async with _get_sessions_lock():
+                _mcp_sessions.pop(session_id, None)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
+
+
+def _mcp_result(msg_id: Any, result: Any) -> Dict[str, Any]:
+    return {"jsonrpc": "2.0", "id": msg_id, "result": result}
+
+
+def _mcp_error(msg_id: Any, code: int, message: str) -> Dict[str, Any]:
+    return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": code, "message": message}}
+
+
+def _mcp_tools_payload() -> Dict[str, Any]:
+    return {
+        "tools": [
+            {
+                "name": "memory.context",
+                "description": "FINAL COMPILE TOOL — Must be called before sending to LLM. Merges candidates from native memory, native compiler, and session context. Returns packed_context + token savings. Never bypass this.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "query": {"type": "string"},
+                        "keyword": {"type": "string"},
+                        "limit": {"type": "integer"},
+                        "native_compiled_context": {"type": "string", "description": "OpenClaw native compiler output — treated as one candidate"},
+                        "current_session_context": {"type": "string", "description": "Current session context — treated as one candidate"},
+                        "raw_candidates": {"type": "array", "description": "Explicit candidate list from caller"},
+                    },
+                    "required": ["query"],
+                },
+            },
+            {
+                "name": "omnimemora_search_memory",
+                "description": "[alias for memory.context] FINAL COMPILE — do not use output directly in LLM without going through memory.context first.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "keyword": {"type": "string"},
+                        "limit": {"type": "integer"},
+                        "native_compiled_context": {"type": "string"},
+                        "current_session_context": {"type": "string"},
+                    },
+                    "required": ["keyword"],
+                },
+            },
+            {
+                "name": "memory.search",
+                "description": "CANDIDATE RETRIEVAL TOOL — Returns raw candidates. Must be fed to memory.context for final compile before LLM. Cannot be used directly as LLM input.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "keyword": {"type": "string"},
+                        "limit": {"type": "integer"},
+                    },
+                    "required": ["keyword"],
+                },
+            },
+            {
+                "name": "memory.write",
+                "description": "Write memory content.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "content": {"type": "string"},
+                        "scope": {"type": "string"},
+                    },
+                    "required": ["content"],
+                },
+            },
+            {
+                "name": "omnimemora_write_memory",
+                "description": "[alias for memory.write] Write a memory item.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "content": {"type": "string"},
+                        "scope": {"type": "string"},
+                    },
+                    "required": ["content"],
+                },
+            },
+        ],
+    }
+
+
+def _mcp_initialize_payload() -> Dict[str, Any]:
+    return {
+        "protocolVersion": "2025-03-26",
+        "capabilities": {
+            "tools": {},
+        },
+        "serverInfo": {
+            "name": "omnimemora-adapter",
+            "version": "2.2.0",
+        },
+    }
+
+
+def _infer_agent_id_for_bootstrap(body: Dict[str, Any], request: Optional[Request]) -> str:
+    """Infer best-effort agent id for MCP initialize bootstrap."""
+    params = body.get("params", {}) if isinstance(body, dict) else {}
+    if isinstance(params, dict):
+        client_info = params.get("clientInfo", {})
+        if isinstance(client_info, dict):
+            name = str(client_info.get("name", "")).strip()
+            if name:
+                return name
+    if request:
+        raw = (request.headers.get("x-agent-id") or "").strip()
+        if raw:
+            return raw
+        ua = (request.headers.get("user-agent") or "").lower()
+        if "codex" in ua:
+            return "codex"
+        if "claude" in ua:
+            return "claude_code"
+        if "openclaw" in ua:
+            return "openclaw-agent"
+    return "mcp-client"
+
+
+def _bootstrap_key(request: Optional[Request], tenant: str, agent: str) -> str:
+    """Stable-ish key to avoid duplicate bootstrap calls for same session/client."""
+    if request:
+        sid = (
+            request.query_params.get("sessionId")
+            or request.headers.get("x-session-id")
+            or request.headers.get("x-conversation-id")
+            or request.headers.get("x-thread-id")
+        )
+        if sid:
+            return f"sid:{sid}"
+        client_ip = request.client.host if request.client else "unknown"
+        return f"client:{client_ip}:{tenant}:{agent}"
+    return f"fallback:{tenant}:{agent}"
+
+
+async def _bootstrap_mcp_initialize(request: Optional[Request], body: Dict[str, Any]) -> None:
+    """
+    Product-level behavior: after MCP initialize, proactively run one OmniMemora
+    context compile call so connected agents are observed by product usage.
+    """
+    if not config.mcp_auto_bootstrap_enabled:
+        return
+
+    tenant = "openclaw"
+    user = "openclaw-user"
+    if request:
+        tenant = (request.headers.get("x-omnimemora-tenant") or request.headers.get("x-openviking-account") or tenant).strip() or tenant
+        user = (request.headers.get("x-openviking-user") or request.headers.get("x-user-id") or user).strip() or user
+    agent = _infer_agent_id_for_bootstrap(body, request)
+    canonical_agent = _5_agent_id.resolve_canonical_agent_id(agent)
+    key = _bootstrap_key(request, tenant, canonical_agent)
+
+    async with _get_bootstrap_lock():
+        if key in _mcp_bootstrap_done:
+            return
+        _mcp_bootstrap_done.add(key)
+
+    payload = {
+        "query": config.mcp_auto_bootstrap_query[:200],
+        "keyword": config.mcp_auto_bootstrap_query[:200],
+        "limit": 4,
+        "tenant": tenant,
+        "user": user,
+        "agent": canonical_agent,
+        "agent_id": canonical_agent,
+        "integration_type": "pre_llm_connector",
+    }
+    if request:
+        session_id = (
+            request.query_params.get("sessionId")
+            or request.headers.get("x-session-id")
+            or request.headers.get("x-conversation-id")
+            or request.headers.get("x-thread-id")
+        )
+        workspace_id = request.headers.get("x-workspace-id")
+        if session_id:
+            payload["session_id"] = session_id
+        if workspace_id:
+            payload["workspace_id"] = workspace_id
+
+    try:
+        async with httpx.AsyncClient(timeout=12.0, trust_env=False) as client:
+            resp = await client.post(f"{_adapter_http_base}/mcp/query", json=payload)
+            if resp.status_code >= 400:
+                loguru.logger.warning(
+                    f"[MCP_BOOTSTRAP] initialize bootstrap failed status={resp.status_code} key={key}"
+                )
+                return
+            data = resp.json()
+            loguru.logger.info(
+                f"[MCP_BOOTSTRAP] initialized key={key} tenant={tenant} agent={canonical_agent} request_id={data.get('request_id')}"
+            )
+    except Exception as exc:
+        loguru.logger.warning(f"[MCP_BOOTSTRAP] initialize bootstrap error key={key}: {exc}")
+
+
+async def _dispatch_mcp_jsonrpc(body: Dict[str, Any], request: Optional[Request] = None) -> Optional[Dict[str, Any]]:
+    method = body.get("method", "")
+    msg_id = body.get("id")
+    if not isinstance(body, dict):
+        return _mcp_error(None, -32600, "invalid request")
+
+    if method == "initialize":
+        # Product-level default: connected agent triggers one proactive OmniMemora call.
+        asyncio.create_task(_bootstrap_mcp_initialize(request, body))
+        return _mcp_result(msg_id, _mcp_initialize_payload())
+
+    if method in ("notifications/initialized",):
+        # JSON-RPC notification: no response body.
+        return None
+
+    if method in ("ping",):
+        return _mcp_result(msg_id, {})
+
+    if method == "tools/list":
+        return _mcp_result(msg_id, _mcp_tools_payload())
+
+    # tools/call — dispatch to MCP tool implementations
+    if method == "tools/call":
+        params = body.get("params", {})
+        tool_name = params.get("name", "")
+        tool_args = params.get("arguments", {})
+
+        try:
+            content_blocks = await _mcp_call_tool(tool_name, tool_args)
+            return _mcp_result(msg_id, {"content": content_blocks})
+        except Exception as e:
+            return _mcp_error(msg_id, -32603, f"tool error: {e}")
+
+    # Unknown method
+    return _mcp_error(msg_id, -32601, f"method not found: {method}")
+
+
+@app.post("/messages")
+async def mcp_messages(request: Request, sessionId: Optional[str] = None):
+    """
+    Legacy MCP JSON-RPC message handler (SSE /messages flow for OpenClaw).
+    """
+    body = await request.json()
+    response = await _dispatch_mcp_jsonrpc(body, request)
+    if response is None:
+        return JSONResponse(status_code=204, content={})
+    return JSONResponse(response)
+
+
+@app.get("/mcp")
+async def mcp_http_health():
+    """
+    Streamable HTTP MCP capability endpoint for clients that probe over HTTP.
+    """
+    return {
+        "status": "ok",
+        "transport": "http-jsonrpc",
+        "message_endpoint": "/mcp",
+        "legacy_sse_endpoint": "/sse",
+    }
+
+
+@app.post("/mcp")
+async def mcp_http_jsonrpc(request: Request):
+    """
+    Streamable HTTP MCP endpoint used by Claude Code and other HTTP MCP clients.
+    """
+    body = await request.json()
+    response = await _dispatch_mcp_jsonrpc(body, request)
+    if response is None:
+        return JSONResponse(status_code=204, content={})
+    return JSONResponse(response)
+
+
+async def _mcp_call_tool(name: str, args: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Dispatch MCP tool call to appropriate handler.
+    Returns MCP content blocks list: [{"type": "text", "text": str}, ...]
+    """
+    if name in ("memory.context", "memory.recall", "omnimemora_search_memory"):
+        # All search-like tools route through Context Compiler for token savings
+        query = args.get("query") or args.get("keyword", "")
+        limit = int(args.get("limit", 8)) or 8
+
+        from httpx import AsyncClient
+        async with AsyncClient(timeout=30.0, trust_env=False) as client:
+            mcp_resp = await client.post(
+                f"{_adapter_http_base}/mcp/query",
+                json={
+                    "query": query[:200],
+                    "keyword": query[:200],
+                    "limit": limit,
+                    "tenant": "openclaw",
+                    "user": "openclaw-user",
+                    "agent": "openclaw-agent",
+                    # Multi-source final compile gate (Phase 4)
+                    "native_compiled_context": args.get("native_compiled_context"),
+                    "current_session_context": args.get("current_session_context"),
+                    "raw_candidates": args.get("raw_candidates"),
+                },
+            )
+            if mcp_resp.status_code >= 400:
+                return [{"type": "text", "text": f"error: mcp query failed ({mcp_resp.status_code}) url={_adapter_http_base}/mcp/query"}]
+
+            data = mcp_resp.json()
+            saved = data.get("usage", {}).get("saved_tokens_estimate", 0)
+            ratio = data.get("usage", {}).get("savings_ratio", 0)
+            count = len(data.get("selected_memories", []))
+            packed = data.get("packed_context", "")
+
+            # Human-readable summary (first content block)
+            summary = f"OmniMemora: saved {saved} tokens ({ratio:.0%} reduction), {count} memories selected"
+            if packed:
+                summary += f"\n\n{packed}"
+
+            # Machine-parseable metadata (second content block, JSON string)
+            import json as _json
+            meta = {
+                "saved_tokens": saved,
+                "ratio": round(ratio, 3),
+                "memory_count": count,
+                "selected_memories": data.get("selected_memories", []),
+            }
+
+            return [
+                {"type": "text", "text": summary},
+                {"type": "text", "text": _json.dumps(meta, ensure_ascii=False)},
+            ]
+
+    if name in ("memory.search",):
+        keyword = args.get("keyword", "")
+        limit = int(args.get("limit", 8)) or 8
+
+        from httpx import AsyncClient
+        async with AsyncClient(timeout=30.0, trust_env=False) as client:
+            sr = await client.post(
+                f"{_adapter_http_base}/memory/search",
+                json={"query": keyword, "keyword": keyword, "limit": limit, "agent": "openclaw-agent"},
+                headers={"X-OpenViking-Account": "openclaw", "X-OpenViking-User": "openclaw-user"},
+            )
+            if sr.status_code >= 400:
+                return [{"type": "text", "text": f"error: search failed ({sr.status_code})"}]
+            search_result = sr.json()
+
+        memories = search_result.get("memories", [])
+        total = search_result.get("total", 0)
+        lines = [f"Found {total} memories:"]
+        for m in memories[:limit]:
+            lines.append(f"- [{m.get('category','memory')} | score={m.get('score',0):.2f}] {m.get('abstract', m.get('content',''))[:80]}")
+        return [{"type": "text", "text": "\n".join(lines)}]
+
+    if name in ("memory.write", "memory.store", "omnimemora_write_memory"):
+        content = args.get("content", "")
+        if not content:
+            return [{"type": "text", "text": "error: content required"}]
+        write_req = MemoryRequest(content=content, agent="openclaw-agent")
+        write_result = await write_memory(write_req, Request(scope={"type": "http"}))
+        uri = write_result.uri or write_result.memory_id or "unknown"
+        return [{"type": "text", "text": f"memory stored: {uri}"}]
+
+    return [{"type": "text", "text": f"error: unknown tool: {name}"}]
+
+
+@app.exception_handler(SupportAPIError)
+async def support_api_error_handler(request: Request, exc: SupportAPIError):
+    return JSONResponse(
+        status_code=exc.status_code,
+        content=exc.payload,
+        headers={"X-Request-ID": get_request_id(request) or ""},
+    )
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError):
+    payload = build_support_payload(
+        request,
+        "ADAPTER_REQUEST_VALIDATION_FAILED",
+        "Request validation failed",
+        operation="request_validation",
+        detail=str(exc),
+        retryable=False,
+    )
+    return JSONResponse(
+        status_code=422,
+        content=payload,
+        headers={"X-Request-ID": get_request_id(request) or ""},
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception):
+    payload = build_support_payload(
+        request,
+        "ADAPTER_INTERNAL_ERROR",
+        "Unhandled adapter error",
+        operation="unhandled_exception",
+        detail=f"{type(exc).__name__}: {exc}",
+        retryable=False,
+    )
+    log_error("Unhandled adapter exception", payload["detail"])
+    return JSONResponse(
+        status_code=500,
+        content=payload,
+        headers={"X-Request-ID": get_request_id(request) or ""},
+    )
+
+
+# ==================== 限流器 ====================
+
+class RateLimiter:
+    """滑动窗口限流器"""
+
+    def __init__(self, max_per_minute: int = 100):
+        self.max_per_minute = max_per_minute
+        self.requests = deque()
+
+    def is_allowed(self) -> bool:
+        """检查是否允许写入"""
+        now = datetime.now().timestamp()
+        one_minute_ago = now - 60
+
+        # 清理超过 1 分钟的请求
+        while self.requests and self.requests[0] < one_minute_ago:
+            self.requests.popleft()
+
+        # 检查是否超过限制
+        if len(self.requests) >= self.max_per_minute:
+            return False
+
+        # 记录本次请求
+        self.requests.append(now)
+        return True
+
+    def get_current_count(self) -> int:
+        """获取当前分钟内的请求数"""
+        now = datetime.now().timestamp()
+        one_minute_ago = now - 60
+
+        # 清理超过 1 分钟的请求
+        while self.requests and self.requests[0] < one_minute_ago:
+            self.requests.popleft()
+
+        return len(self.requests)
+
+
+# 全局限流器
+_rate_limiter = RateLimiter(max_per_minute=config.rate_limit_per_minute)
+
+
+# ==================== 请求/响应模型 ====================
+
+class MemoryRequest(BaseModel):
+    """记忆写入请求"""
+    agent: str = "unknown"
+    type: str = "general"
+    content: str
+    tags: List[str] = []
+    memory_type: Optional[str] = None  # 可显式指定
+    timestamp: Optional[int] = None
+
+
+class MemoryResponse(BaseModel):
+    """记忆写入响应"""
+    status: str  # "stored", "skipped", "duplicate", "rate_limited", "error"
+    reason: Optional[str] = None
+    memory_id: Optional[str] = None
+    memory_type: Optional[str] = None
+    memory_level: Optional[str] = None
+    memory_expire_at: Optional[int] = None
+    score: Optional[int] = None
+    is_failure: Optional[bool] = None  # 新增：是否失败经验
+    uri: Optional[str] = None  # 兼容 OpenClaw 插件期望字段
+    request_id: Optional[str] = None
+    error_code: Optional[str] = None
+    support: Optional[Dict[str, Any]] = None
+
+
+class RetrieveRequest(BaseModel):
+    """记忆查询请求"""
+    query: Optional[str] = None
+    uri: Optional[str] = None
+    agent: Optional[str] = None  # Agent 隔离
+    memory_type: Optional[str] = None  # 记忆类型过滤
+    memory_level: Optional[str] = None  # 记忆等级过滤
+    include_expired: bool = False  # 是否包含过期记忆
+    limit: int = 10
+    scoreThreshold: Optional[float] = None
+
+
+class DeleteRequest(BaseModel):
+    """按 URI 删除记忆"""
+    uri: str
+
+
+class SnapshotRequest(BaseModel):
+    """生成 MEMORY.md 启动快照"""
+    agent: str = "supervisor"
+    limit: int = 200
+
+
+class MemoryQueryRequest(BaseModel):
+    """V2: Unified memory query request with optimization."""
+    tenant: str
+    user: str
+    agent: str = "supervisor"
+    query: str
+    context: Optional[Dict[str, Any]] = None
+    options: Optional[Dict[str, Any]] = None
+    # Decision Log identity binding
+    agent_id: str = "unknown"
+    workspace_id: str = "unknown"
+    scope: str = "workspace"
+
+
+class MemoryQueryResponse(BaseModel):
+    """V2: Unified memory query response with token savings."""
+    request_id: str
+    selected_memories: List[Dict[str, Any]]
+    packed_context: str
+    memory_tokens_injected: int
+    tokens_saved_estimate: int
+    savings_ratio: float
+    explanation: Dict[str, Any]
+    meter_artifact: Dict[str, Any]
+    # Policy v1: Task classification & context bypass observability
+    task_type: str = "continuation"
+    context_bypass: bool = False
+    matched_keywords: List[str] = []
+
+
+# ==================== 工具函数 ====================
+
+SUPPORT_SCHEMA_VERSION = "ov-support/v1"
+SUPPORT_ERROR_CATALOG: Dict[str, Dict[str, Any]] = {
+    "ADAPTER_BAD_REQUEST": {
+        "category": "input",
+        "severity": "low",
+        "retryable": False,
+        "suggested_action": "修正请求参数后重试。",
+    },
+    "ADAPTER_REQUEST_VALIDATION_FAILED": {
+        "category": "input",
+        "severity": "low",
+        "retryable": False,
+        "suggested_action": "按接口要求补齐必填字段并修正字段类型。",
+    },
+    "ADAPTER_SEARCH_FAILED": {
+        "category": "dependency",
+        "severity": "medium",
+        "retryable": True,
+        "suggested_action": "检查 OpenViking 搜索状态、索引窗口与 Adapter health。",
+    },
+    "ADAPTER_READ_FAILED": {
+        "category": "dependency",
+        "severity": "medium",
+        "retryable": True,
+        "suggested_action": "检查下游读取接口与目标 URI 是否仍存在。",
+    },
+    "ADAPTER_DELETE_FAILED": {
+        "category": "dependency",
+        "severity": "medium",
+        "retryable": True,
+        "suggested_action": "检查下游删除接口、URI 正确性与命名空间状态。",
+    },
+    "ADAPTER_SNAPSHOT_FAILED": {
+        "category": "dependency",
+        "severity": "medium",
+        "retryable": True,
+        "suggested_action": "检查 OpenViking 文件系统可用性与命名空间遍历状态。",
+    },
+    "ADAPTER_NAMESPACE_PREPARE_FAILED": {
+        "category": "runtime",
+        "severity": "high",
+        "retryable": True,
+        "suggested_action": "检查命名空间根路径配置与 OpenViking 文件系统写权限。",
+    },
+    "ADAPTER_VIKING_UPLOAD_FAILED": {
+        "category": "dependency",
+        "severity": "high",
+        "retryable": True,
+        "suggested_action": "检查 OpenViking 上传接口与临时存储状态。",
+    },
+    "ADAPTER_VIKING_COMMIT_FAILED": {
+        "category": "dependency",
+        "severity": "high",
+        "retryable": True,
+        "suggested_action": "检查 OpenViking 提交链路、commit timeout 与上游负载。",
+    },
+    "ADAPTER_VIKING_UNAVAILABLE": {
+        "category": "dependency",
+        "severity": "high",
+        "retryable": True,
+        "suggested_action": "确认 OpenViking 服务在线且网络可达。",
+    },
+    "ADAPTER_VIKING_TIMEOUT": {
+        "category": "dependency",
+        "severity": "high",
+        "retryable": True,
+        "suggested_action": "提升相关 timeout 或排查 OpenViking 提交/索引时延。",
+    },
+    "ADAPTER_INTERNAL_ERROR": {
+        "category": "runtime",
+        "severity": "high",
+        "retryable": False,
+        "suggested_action": "记录 request_id 并结合 Adapter 日志做进一步排障。",
+    },
+    "ADAPTER_QUOTA_EXCEEDED": {
+        "category": "quota",
+        "severity": "high",
+        "retryable": False,
+        "suggested_action": "升级订阅计划或等待下个计费周期重置配额。",
+    },
+}
+
+
+def get_request_id(request: Optional[Request]) -> Optional[str]:
+    if request is None:
+        return None
+    return getattr(getattr(request, "state", None), "request_id", None)
+
+
+def build_support_payload(
+    request: Optional[Request],
+    code: str,
+    message: str,
+    *,
+    operation: str,
+    detail: Optional[str] = None,
+    upstream_status: Optional[int] = None,
+    retryable: Optional[bool] = None,
+    suggested_action: Optional[str] = None,
+    extra: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
+    catalog = SUPPORT_ERROR_CATALOG.get(code, SUPPORT_ERROR_CATALOG["ADAPTER_INTERNAL_ERROR"])
+    effective_retryable = catalog["retryable"] if retryable is None else retryable
+    effective_suggested_action = suggested_action or catalog["suggested_action"]
+    payload: Dict[str, Any] = {
+        "schema_version": SUPPORT_SCHEMA_VERSION,
+        "status": "error",
+        "message": message,
+        "detail": detail or message,
+        "error_code": code,
+        "request_id": get_request_id(request),
+        "support": {
+            "category": catalog["category"],
+            "severity": catalog["severity"],
+            "retryable": effective_retryable,
+            "operation": operation,
+            "suggested_action": effective_suggested_action,
+        },
+    }
+    if upstream_status is not None:
+        payload["support"]["upstream_status"] = upstream_status
+    if extra:
+        payload["support"]["context"] = extra
+    return payload
+
+
+def build_memory_error_response(
+    request: Optional[Request],
+    code: str,
+    reason: str,
+    *,
+    operation: str,
+    detail: Optional[str] = None,
+    suggested_action: Optional[str] = None,
+    upstream_status: Optional[int] = None,
+) -> MemoryResponse:
+    support_payload = build_support_payload(
+        request,
+        code,
+        detail or reason,
+        operation=operation,
+        detail=detail or reason,
+        upstream_status=upstream_status,
+        suggested_action=suggested_action,
+    )
+    return MemoryResponse(
+        status="error",
+        reason=reason,
+        request_id=get_request_id(request),
+        error_code=code,
+        support=support_payload["support"],
+    )
+
+
+def raise_support_api_error(
+    request: Optional[Request],
+    status_code: int,
+    code: str,
+    message: str,
+    *,
+    operation: str,
+    detail: Optional[str] = None,
+    upstream_status: Optional[int] = None,
+    retryable: Optional[bool] = None,
+    suggested_action: Optional[str] = None,
+    extra: Optional[Dict[str, Any]] = None,
+) -> None:
+    payload = build_support_payload(
+        request,
+        code,
+        message,
+        operation=operation,
+        detail=detail,
+        upstream_status=upstream_status,
+        retryable=retryable,
+        suggested_action=suggested_action,
+        extra=extra,
+    )
+    raise SupportAPIError(status_code=status_code, payload=payload)
+
+def log_stored(Agent: str, memory_type: str, memory_level: str, score: int, is_failure: bool = False):
+    """记录存储成功"""
+    failure_tag = " [FAILURE_EXPERIENCE]" if is_failure else ""
+    loguru.logger.info(f"[STORED]{failure_tag} agent={Agent}, type={memory_type}, level={memory_level}, score={score}")
+
+
+def log_filtered(reason: str, content_preview: str = ""):
+    """记录过滤原因"""
+    preview = content_preview[:50] + "..." if len(content_preview) > 50 else content_preview
+    loguru.logger.warning(f"[FILTERED] reason={reason}, preview={preview}")
+
+
+def log_error(error: str, detail: str = ""):
+    """记录错误"""
+    loguru.logger.error(f"[ERROR] {error}: {detail}")
+
+
+def build_timeout(total_seconds: float) -> httpx.Timeout:
+    """统一构建下游请求 timeout，避免散落的硬编码常量。"""
+    total = max(total_seconds, config.viking_connect_timeout_seconds)
+    return httpx.Timeout(
+        timeout=total,
+        connect=min(config.viking_connect_timeout_seconds, total),
+        read=total,
+        write=total,
+        pool=min(config.viking_connect_timeout_seconds, total),
+    )
+
+
+def log_slow_request(operation: str, elapsed_ms: float, timeout_seconds: float):
+    """记录慢请求，帮助后续收敛 timeout 与索引延迟。"""
+    if elapsed_ms >= config.slow_request_threshold_ms:
+        loguru.logger.warning(
+            f"[SLOW_REQUEST] op={operation}, elapsed_ms={elapsed_ms:.0f}, timeout_s={timeout_seconds}"
+        )
+
+
+def emit_decision_log(
+    query: str,
+    task_type: str,
+    context_bypass: bool,
+    packed_context: str,
+    memory_tokens_injected: int,
+    baseline_tokens_estimate: int,
+    actual_tokens_estimate: int,
+    saved_tokens_estimate: float,
+    savings_ratio: float,
+    matched_keywords: List[str],
+    selected_memory_count: int,
+    request_id: str,
+    agent: str,
+    tenant: str,
+    agent_id: str = "unknown",
+    workspace_id: str = "unknown",
+    scope: str = "workspace",
+):
+    """
+    Memora Decision Log / Context Decision Event
+    --------------------------------------------
+    记录 OmniMemora 服务端的判断与计量结果。
+
+    定位：
+    - 这是"服务端决策日志"，不是完整的"真实使用日志"
+    - 表示 OmniMemora adapter 做了什么判断、节省了多少
+    - 完整的 Real Usage Log（含用户主观评价）由 wrapper 层（memrun/ccm/ocm）补充
+
+    输出到 stdout，每条独立一行，无前缀后缀。
+    """
+    import json
+
+    log_entry = {
+        # --- 核心判断 ---
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "query": query[:200] if query else "",
+        "task_type": task_type,
+        "context_bypass": context_bypass,
+
+        # --- 服务端计量 ---
+        "context_stats": {
+            "packed_context_length": len(packed_context),
+            "memory_tokens_injected": memory_tokens_injected,
+            "baseline_tokens_estimate": baseline_tokens_estimate,
+            "actual_tokens_estimate": actual_tokens_estimate,
+            "saved_tokens_estimate": int(saved_tokens_estimate),
+            "savings_ratio": round(savings_ratio, 3),
+        },
+
+        # --- 主观字段：adapter 层留空，由 wrapper 补 ---
+        "execution_feedback": None,    # ← wrapper 层填充
+        "subjective_score": None,       # ← wrapper 层填充（用户反馈）
+
+        # --- 服务端元信息（身份绑定：来自 API 入参）---
+        "_meta": {
+            "request_id": request_id,
+            "agent": agent,
+            "tenant": tenant,
+            "agent_id": agent_id,
+            "workspace_id": workspace_id,
+            "scope": scope,
+            "matched_keywords": matched_keywords,
+        },
+    }
+
+    # 直接打印 JSON，不加任何前缀/后缀
+    print(json.dumps(log_entry, ensure_ascii=False))
+
+
+async def viking_request(
+    method: str,
+    path: str,
+    *,
+    operation: str,
+    timeout_seconds: float,
+    retryable: bool = True,
+    tenant_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    **kwargs,
+) -> httpx.Response:
+    """统一封装对 OpenViking 的下游调用，提供分层超时与有限重试。"""
+    attempts = 1 + max(0, config.viking_retry_attempts if retryable else 0)
+    backoff = max(0.0, config.viking_retry_backoff_seconds)
+    last_exc: Exception | None = None
+    request_headers = build_headers_with_tenant(tenant_id, user_id) if tenant_id and user_id else build_headers()
+
+    for attempt in range(1, attempts + 1):
+        started = datetime.now().timestamp()
+        try:
+            async with httpx.AsyncClient(timeout=build_timeout(timeout_seconds)) as client:
+                response = await client.request(
+                    method,
+                    f"{config.viking_url}{path}",
+                    headers=request_headers,
+                    **kwargs,
+                )
+            elapsed_ms = (datetime.now().timestamp() - started) * 1000
+            log_slow_request(operation, elapsed_ms, timeout_seconds)
+
+            if retryable and response.status_code in {502, 503, 504} and attempt < attempts:
+                loguru.logger.warning(
+                    f"[RETRYABLE_STATUS] op={operation}, attempt={attempt}/{attempts}, status={response.status_code}"
+                )
+                await asyncio.sleep(backoff * attempt)
+                continue
+            return response
+        except (httpx.TimeoutException, httpx.ConnectError, httpx.NetworkError, httpx.RemoteProtocolError) as exc:
+            last_exc = exc
+            loguru.logger.warning(
+                f"[RETRYABLE_ERROR] op={operation}, attempt={attempt}/{attempts}, error={type(exc).__name__}: {exc}"
+            )
+            if attempt < attempts:
+                await asyncio.sleep(backoff * attempt)
+                continue
+            raise
+
+    if last_exc:
+        raise last_exc
+    raise RuntimeError(f"unreachable_viking_request_state:{operation}")
+
+
+def build_headers() -> Dict[str, str]:
+    headers: Dict[str, str] = {}
+    if config.viking_api_key:
+        headers["X-API-Key"] = config.viking_api_key
+    return headers
+
+
+def build_headers_with_tenant(tenant_id: str, user_id: str) -> Dict[str, str]:
+    headers = build_headers()
+    headers["X-OpenViking-Account"] = tenant_id
+    headers["X-OpenViking-User"] = user_id
+    return headers
+
+
+def resolve_tenant_identity(request: Request) -> tuple[Optional[str], Optional[str]]:
+    state = getattr(request, "state", None)
+    override_tenant = getattr(state, "v2_tenant_override", None) if state else None
+    override_user = getattr(state, "v2_user_override", None) if state else None
+    if override_tenant and override_user:
+        return override_tenant, override_user
+
+    header_tenant = request.headers.get("X-OpenViking-Account")
+    header_user = request.headers.get("X-OpenViking-User")
+    if header_tenant and header_user:
+        return header_tenant, header_user
+
+    return None, None
+
+
+def normalize_viking_uri(uri: str) -> str:
+    normalized = (uri or "").strip()
+    if normalized == "viking://":
+        return normalized
+    return normalized.rstrip("/")
+
+
+def split_viking_uri(uri: str) -> List[str]:
+    normalized = normalize_viking_uri(uri)
+    if not normalized.startswith("viking://"):
+        return []
+    suffix = normalized[len("viking://") :]
+    return [segment for segment in suffix.split("/") if segment]
+
+
+def join_viking_uri(segments: List[str]) -> str:
+    if not segments:
+        return "viking://"
+    return "viking://" + "/".join(segments)
+
+
+def sanitize_path_segment(value: str) -> str:
+    safe = "".join(ch if ch.isalnum() or ch in ("-", "_") else "-" for ch in (value or "").strip())
+    safe = safe.strip("-_")
+    return safe or "unknown"
+
+
+def build_memory_root_prefix() -> str:
+    return normalize_viking_uri(config.viking_memory_namespace_root)
+
+
+def build_agent_memory_prefix(agent: str) -> str:
+    agent_segment = sanitize_path_segment(agent)
+    return f"{build_memory_root_prefix()}/{agent_segment}"
+
+
+def build_memory_type_prefix(agent: str, memory_type: str) -> str:
+    prefix = build_agent_memory_prefix(agent)
+    type_segment = sanitize_path_segment(memory_type or "general")
+    return f"{prefix}/{type_segment}"
+
+
+def build_memory_resource_uri(agent: str, memory_type: str) -> str:
+    prefix = build_memory_type_prefix(agent, memory_type)
+    return f"{prefix}/mem-{uuid4().hex}.md"
+
+
+def map_memory_level(level: Any) -> Optional[int]:
+    """统一将 L1/L2/L3 或数字层级映射为插件可用的 1/2/3。"""
+    if level is None:
+        return None
+    if isinstance(level, int):
+        return level
+    if isinstance(level, float):
+        return int(level)
+    if isinstance(level, str):
+        normalized = level.strip().upper()
+        if normalized.startswith("L") and normalized[1:].isdigit():
+            return int(normalized[1:])
+        if normalized.isdigit():
+            return int(normalized)
+    return None
+
+
+def get_nested(data: Dict[str, Any], *paths: str) -> Any:
+    for path in paths:
+        value: Any = data
+        ok = True
+        for part in path.split("."):
+            if isinstance(value, dict) and part in value:
+                value = value[part]
+            else:
+                ok = False
+                break
+        if ok:
+            return value
+    return None
+
+
+def extract_response_error_detail(response: httpx.Response) -> str:
+    try:
+        payload = response.json()
+    except Exception:
+        return (response.text or "").strip()
+
+    if isinstance(payload, dict):
+        candidates = [
+            payload.get("detail"),
+            payload.get("error"),
+            payload.get("message"),
+            get_nested(payload, "result.error"),
+            get_nested(payload, "result.message"),
+        ]
+        for candidate in candidates:
+            if isinstance(candidate, str) and candidate.strip():
+                return candidate.strip()
+
+    return (response.text or "").strip()
+
+
+def is_missing_namespace_error(status_code: int, detail: str) -> bool:
+    normalized = (detail or "").lower()
+    if status_code == 404:
+        return True
+    patterns = (
+        "no such directory",
+        "no such file or directory",
+        "not found",
+    )
+    return any(pattern in normalized for pattern in patterns)
+
+
+def extract_memory_items(payload: Any) -> List[Dict[str, Any]]:
+    """兼容多种 Viking 返回结构，提取记忆列表。"""
+    if isinstance(payload, list):
+        return [item for item in payload if isinstance(item, dict)]
+    if not isinstance(payload, dict):
+        return []
+
+    collected: List[Dict[str, Any]] = []
+    candidates = [
+        payload.get("memories"),
+        get_nested(payload, "result.memories"),
+        payload.get("resources"),
+        get_nested(payload, "result.resources"),
+        payload.get("items"),
+        get_nested(payload, "result.items"),
+        payload.get("results"),
+        get_nested(payload, "result.results"),
+    ]
+    for candidate in candidates:
+        if isinstance(candidate, list):
+            collected.extend(item for item in candidate if isinstance(item, dict))
+    return collected
+
+
+def to_plugin_memory(item: Dict[str, Any]) -> Dict[str, Any]:
+    """把底层返回统一成 OpenClaw 插件当前消费的数据形状。"""
+    metadata = item.get("metadata", {}) if isinstance(item.get("metadata"), dict) else {}
+    uri = (
+        item.get("uri")
+        or item.get("id")
+        or metadata.get("uri")
+        or metadata.get("memory_id")
+        or ""
+    )
+    category = (
+        item.get("category")
+        or metadata.get("type")
+        or metadata.get("memory_type")
+        or item.get("context_type")
+        or "memory"
+    )
+    raw_abstract = (
+        item.get("abstract")
+        or item.get("summary")
+        or item.get("content")
+        or item.get("text")
+        or ""
+    )
+    raw_content = item.get("content") or item.get("text") or raw_abstract
+    abstract = extract_memory_body(raw_abstract) or raw_abstract
+    content = extract_memory_body(raw_content) or raw_content
+    score = item.get("score")
+    if score is None:
+        score = item.get("similarity")
+    level = (
+        map_memory_level(item.get("level"))
+        or map_memory_level(item.get("memory_level"))
+        or map_memory_level(metadata.get("memory_level"))
+        or (2 if item.get("is_leaf") else 1)
+    )
+
+    return {
+        "uri": uri,
+        "content": content,
+        "abstract": abstract,
+        "score": score,
+        "category": category,
+        "level": level,
+        "metadata": metadata,
+    }
+
+
+def content_matches_query(content: str, query: str) -> bool:
+    normalized_content = normalize_fact_text(content).lower()
+    normalized_query = normalize_fact_text(query).lower()
+    return bool(normalized_query) and normalized_query in normalized_content
+
+
+async def list_directory_entries(
+    uri: str,
+    tenant_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    encoded_uri = quote(uri, safe="")
+    try:
+        response = await viking_request(
+            "GET",
+            f"/api/v1/fs/ls?uri={encoded_uri}",
+            operation="list_directory_entries",
+            timeout_seconds=config.viking_snapshot_timeout_seconds,
+            retryable=True,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
+    except Exception as exc:
+        loguru.logger.warning(f"[LIST_DIRECTORY_ERROR] uri={uri}, error={type(exc).__name__}: {exc}")
+        return []
+
+    if not response.is_success:
+        detail = extract_response_error_detail(response)
+        if is_missing_namespace_error(response.status_code, detail):
+            loguru.logger.info(f"[NAMESPACE_MISSING] uri={uri}, op=list_directory_entries")
+            return []
+        loguru.logger.warning(
+            f"[LIST_DIRECTORY_FAILED] uri={uri}, status={response.status_code}, detail={compact_fact_text(detail, 120)}"
+        )
+        return []
+
+    payload = response.json()
+    result = get_nested(payload, "result")
+    if not isinstance(result, list):
+        return []
+    return [item for item in result if isinstance(item, dict)]
+
+
+async def namespace_exists(
+    uri: str,
+    tenant_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> bool:
+    normalized = normalize_viking_uri(uri)
+    segments = split_viking_uri(normalized)
+    if not segments:
+        return False
+    if normalized == "viking://resources":
+        return True
+
+    current_parent = "viking://resources"
+    for index in range(2, len(segments) + 1):
+        current_uri = join_viking_uri(segments[:index])
+        entries = await list_directory_entries(current_parent, tenant_id=tenant_id, user_id=user_id)
+        if not any(
+            normalize_viking_uri(str(item.get("uri", ""))) == current_uri
+            for item in entries
+        ):
+            return False
+        current_parent = current_uri
+    return True
+
+
+async def mkdir_uri(uri: str, tenant_id: Optional[str] = None, user_id: Optional[str] = None) -> bool:
+    try:
+        response = await viking_request(
+            "POST",
+            "/api/v1/fs/mkdir",
+            operation="mkdir_uri",
+            timeout_seconds=config.viking_resolve_timeout_seconds,
+            retryable=False,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            json={"uri": uri},
+        )
+    except Exception as exc:
+        loguru.logger.warning(f"[MKDIR_ERROR] uri={uri}, error={type(exc).__name__}: {exc}")
+        return False
+
+    if response.is_success:
+        loguru.logger.info(f"[NAMESPACE_CREATED] uri={uri}")
+        return True
+
+    detail = extract_response_error_detail(response)
+    if "exist" in detail.lower():
+        return True
+
+    loguru.logger.warning(
+        f"[MKDIR_FAILED] uri={uri}, status={response.status_code}, detail={compact_fact_text(detail, 120)}"
+    )
+    return False
+
+
+async def ensure_namespace_tree(
+    uri: str,
+    tenant_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> bool:
+    normalized = normalize_viking_uri(uri)
+    segments = split_viking_uri(normalized)
+    if len(segments) < 2:
+        return False
+
+    current_parent = "viking://resources"
+    for index in range(2, len(segments) + 1):
+        current_uri = join_viking_uri(segments[:index])
+        entries = await list_directory_entries(current_parent, tenant_id=tenant_id, user_id=user_id)
+        if any(
+            normalize_viking_uri(str(item.get("uri", ""))) == current_uri
+            for item in entries
+        ):
+            current_parent = current_uri
+            continue
+        if not await mkdir_uri(current_uri, tenant_id=tenant_id, user_id=user_id):
+            return False
+        current_parent = current_uri
+    return True
+
+
+async def fallback_scan_memories(
+    agent: str,
+    query: str,
+    limit: int,
+    tenant_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """当上游搜索结果不稳定时，扫描最近资源做内容匹配降级。"""
+    root_uri = build_agent_memory_prefix(agent or "unknown")
+    if not await namespace_exists(root_uri, tenant_id=tenant_id, user_id=user_id):
+        return []
+    leaf_uris = await collect_memory_leaf_uris(
+        root_uri,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        max_files=max(limit, config.search_fallback_scan_limit),
+    )
+    matches: List[Dict[str, Any]] = []
+
+    for uri in leaf_uris:
+        content = await read_clean_resource_content(uri, tenant_id=tenant_id, user_id=user_id)
+        if not content or not content_matches_query(content, query):
+            continue
+        matches.append(
+            {
+                "uri": uri,
+                "content": content,
+                "abstract": compact_fact_text(content, max_len=240),
+                "score": 1.0,
+                "category": "resource",
+                "level": 2 if PurePosixPath(uri).name.startswith("upload_") else 1,
+                "metadata": {"fallback": "content_scan", "agent": agent, "tenant_id": tenant_id},
+            }
+        )
+        if len(matches) >= limit:
+            break
+
+    if matches:
+        loguru.logger.warning(
+            f"[SEARCH_FALLBACK] agent={agent}, query={compact_fact_text(query, 80)}, matches={len(matches)}"
+        )
+    return matches
+
+
+async def resolve_leaf_uri(
+    root_uri: str,
+    tenant_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> str:
+    """尝试从资源根目录解析真正可读的叶子文件 URI。"""
+    try:
+        if root_uri.startswith(build_memory_root_prefix()) and not await namespace_exists(
+            root_uri,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        ):
+            return root_uri
+        encoded_uri = quote(root_uri, safe="")
+        response = await viking_request(
+            "GET",
+            f"/api/v1/fs/tree?uri={encoded_uri}",
+            operation="resolve_leaf_uri",
+            timeout_seconds=config.viking_resolve_timeout_seconds,
+            retryable=True,
+            tenant_id=tenant_id,
+            user_id=user_id,
+        )
+        if not response.is_success:
+            return root_uri
+        payload = response.json()
+        result = get_nested(payload, "result")
+        if not isinstance(result, list):
+            return root_uri
+        leaf_candidates = [
+            item.get("uri")
+            for item in result
+            if isinstance(item, dict) and not item.get("isDir") and item.get("uri")
+        ]
+        if leaf_candidates:
+            return leaf_candidates[0]
+    except Exception:
+        pass
+    return root_uri
+
+
+def extract_memory_body(content: Optional[str]) -> Optional[str]:
+    """从资源包装文档中提取纯记忆正文。"""
+    if not isinstance(content, str):
+        return None
+
+    text = content.strip()
+    if not text:
+        return None
+
+    if text.startswith("# Memory"):
+        lines = text.splitlines()
+        if lines and lines[0].strip() == "# Memory":
+            text = "\n".join(lines[1:]).lstrip()
+
+        for delimiter in ("\n\n---\n", "\n---\n"):
+            if delimiter in text:
+                text = text.split(delimiter, 1)[0].rstrip()
+                break
+
+    return text.strip() or None
+
+
+def is_derived_resource_uri(uri: str) -> bool:
+    """过滤 OpenViking 自动生成的摘要/概览资源，避免污染召回。"""
+    if not isinstance(uri, str) or not uri:
+        return False
+
+    name = PurePosixPath(uri).name
+    return name.startswith(".") or name in {".overview.md", ".abstract.md"}
+
+
+def normalize_fact_text(text: str) -> str:
+    return re.sub(r"\s+", " ", (text or "").strip())
+
+
+def compact_fact_text(text: str, max_len: int = 180) -> str:
+    normalized = normalize_fact_text(text)
+    if len(normalized) <= max_len:
+        return normalized
+    return normalized[: max_len - 3].rstrip() + "..."
+
+
+def classify_snapshot_fact(text: str) -> str:
+    lowered = text.lower()
+    if any(pattern in text for pattern in ("是用户", "用户是", "称呼", "叫做")) or "user is" in lowered:
+        return "identity"
+    if any(pattern in text for pattern in ("项目", "project", "创业", "赚钱系统", "自动化赚钱")):
+        return "projects"
+    if any(pattern in text for pattern in ("偏好", "期望", "希望", "协作", "风格", "启发", "务实", "高质量")):
+        return "preferences"
+    if any(pattern in text for pattern in ("决定", "约束", "规则", "必须", "不要", "应当", "以后")):
+        return "decisions"
+    return "facts"
+
+
+def should_include_snapshot_fact(text: str) -> bool:
+    lowered = text.lower()
+    noisy_patterns = [
+        "sender (untrusted metadata)",
+        "a new session was started",
+        "memory adapter should return only",
+        "clean readback test",
+        "formatting optimization test",
+        "codex????",
+        "request timeout after",
+        "memory/read",
+    ]
+    if any(pattern in lowered for pattern in noisy_patterns):
+        return False
+
+    if "测试" in text and not any(keyword in text for keyword in ("用户", "项目", "偏好", "期望", "协作")):
+        return False
+
+    return True
+
+
+def dedupe_facts(facts: List[str], limit: int) -> List[str]:
+    seen = set()
+    result: List[str] = []
+    for fact in facts:
+        normalized = normalize_fact_text(fact).lower()
+        if not normalized or normalized in seen:
+            continue
+        seen.add(normalized)
+        result.append(compact_fact_text(fact))
+        if len(result) >= limit:
+            break
+    return result
+
+
+def render_snapshot_markdown(agent: str, grouped_facts: Dict[str, List[str]], source_count: int) -> str:
+    generated_at = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    def render_section(title: str, items: List[str], empty_text: str) -> List[str]:
+        lines = [f"### {title}"]
+        if items:
+            lines.extend(f"- {item}" for item in items)
+        else:
+            lines.append(f"- {empty_text}")
+        lines.append("")
+        return lines
+
+    lines: List[str] = [
+        "## 启动必读摘要（自动生成）",
+        f"- agent: {agent}",
+        f"- generated_at: {generated_at}",
+        f"- source_memories: {source_count}",
+        "",
+    ]
+    lines.extend(render_section("用户身份与关系", grouped_facts["identity"], "暂无稳定身份事实"))
+    lines.extend(render_section("当前项目", grouped_facts["projects"], "暂无高置信项目事实"))
+    lines.extend(render_section("协作偏好", grouped_facts["preferences"], "暂无稳定协作偏好"))
+    lines.extend(render_section("最近重要决策", grouped_facts["decisions"], "暂无高优先级决策"))
+    lines.extend(render_section("其他关键事实", grouped_facts["facts"], "暂无补充关键事实"))
+    return "\n".join(lines).strip() + "\n"
+
+
+async def read_clean_resource_content(
+    uri: str,
+    tenant_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+) -> Optional[str]:
+    """按 URI 读取资源正文，并去掉包装元数据。"""
+    if not uri:
+        return None
+
+    encoded_uri = quote(uri, safe="")
+    response = await viking_request(
+        "GET",
+        f"/api/v1/content/read?uri={encoded_uri}",
+        operation="read_clean_resource_content",
+        timeout_seconds=config.viking_read_timeout_seconds,
+        retryable=True,
+        tenant_id=tenant_id,
+        user_id=user_id,
+    )
+    if not response.is_success:
+        detail = extract_response_error_detail(response)
+        if is_missing_namespace_error(response.status_code, detail):
+            loguru.logger.info(f"[READ_MISSING] uri={uri}")
+            return None
+        loguru.logger.warning(
+            f"[READ_FAILED] uri={uri}, status={response.status_code}, detail={compact_fact_text(detail, 120)}"
+        )
+        return None
+
+    result = response.json()
+    if not isinstance(result, dict):
+        return None
+
+    return extract_memory_body(result.get("result"))
+
+
+async def collect_memory_leaf_uris(
+    root_uri: str,
+    tenant_id: Optional[str] = None,
+    user_id: Optional[str] = None,
+    max_files: int = 200,
+) -> List[str]:
+    collected: List[str] = []
+    seen_dirs = set()
+    stack = [root_uri]
+
+    while stack and len(collected) < max_files:
+        current = stack.pop()
+        if current in seen_dirs:
+            continue
+        seen_dirs.add(current)
+
+        for item in await list_directory_entries(current, tenant_id=tenant_id, user_id=user_id):
+            uri = item.get("uri")
+            if not isinstance(uri, str) or not uri:
+                continue
+            name = PurePosixPath(uri).name
+            if item.get("isDir"):
+                if not name.startswith("."):
+                    stack.append(uri)
+                continue
+            if is_derived_resource_uri(uri):
+                continue
+            if name.startswith("upload_") and uri not in collected:
+                collected.append(uri)
+                if len(collected) >= max_files:
+                    break
+
+    return collected
+
+
+def filter_expired_memories(memories: list, current_time: int = None) -> list:
+    """
+    过滤过期记忆
+    在 read 接口调用
+    """
+    if current_time is None:
+        current_time = int(datetime.now().timestamp())
+
+    filtered = []
+    for memory in memories:
+        metadata = memory.get("metadata", {})
+        expire_at = metadata.get("expire_at", -1)
+
+        # -1 表示永久不过期
+        if expire_at == -1:
+            filtered.append(memory)
+        # 0 表示已过期
+        elif expire_at == 0:
+            continue
+        # 检查是否过期
+        elif expire_at > current_time:
+            filtered.append(memory)
+        # 已过期
+        else:
+            loguru.logger.debug(f"[EXPIRED] memory_id={memory.get('id', 'unknown')}")
+
+    return filtered
+
+
+# ==================== 路由 ====================
+
+@app.get("/")
+async def root():
+    """根路径"""
+    result = {
+        "service": "Memory Adapter v2.2",
+        "version": "2.2.0",
+        "support_schema_version": SUPPORT_SCHEMA_VERSION,
+        "dedup_stats": get_dedup_cache().get_stats(),
+        "rate_limit": {
+            "max_per_minute": config.rate_limit_per_minute,
+            "current": _rate_limiter.get_current_count()
+        }
+    }
+    # Only include viking_url when using openviking backend (compatibility)
+    if config.viking_url:
+        result["viking_url"] = config.viking_url
+    return result
+
+
+@app.get("/health")
+async def health(mode: str = "full"):
+    """
+    健康检查。
+
+    ?mode=local  — 本地快速检查，仅验证 adapter 进程存活，不探测 viking。
+                   用于 wrapper / 自动化探测。
+    ?mode=full   — 完整检查，含 viking 连通性（默认，保持向后兼容）。
+    """
+    if mode == "local":
+        return {
+            "status": "healthy",
+            "mode": "local",
+            "interface_policy": {
+                "product_entry_port": 18011,
+                "mcp_endpoint": "/mcp",
+                "internal_backend_port": 8765,
+                "note": "External agents must connect to 18011. Port 8765 is internal only.",
+            },
+            "dedup_stats": get_dedup_cache().get_stats(),
+            "rate_limit": {
+                "enabled": config.enable_rate_limit,
+                "max_per_minute": config.rate_limit_per_minute,
+                "current": _rate_limiter.get_current_count(),
+            },
+        }
+
+    # mode == "full": 完整健康检查（通过 backend interface）
+    backend_health = await _get_backend().health()
+
+    return {
+        "status": "healthy" if backend_health.healthy else "degraded",
+        "mode": "full",
+        "interface_policy": {
+            "product_entry_port": 18011,
+            "mcp_endpoint": "/mcp",
+            "internal_backend_port": 8765,
+            "note": "External agents must connect to 18011. Port 8765 is internal only.",
+        },
+        "memory_backend": {
+            "type": backend_health.backend_type,
+            "healthy": backend_health.healthy,
+            "details": backend_health.details,
+        },
+        "timeout_profile": {
+            "connect_seconds": config.viking_connect_timeout_seconds,
+            "health_seconds": config.viking_health_timeout_seconds,
+            "search_seconds": config.viking_search_timeout_seconds,
+            "read_seconds": config.viking_read_timeout_seconds,
+            "delete_seconds": config.viking_delete_timeout_seconds,
+            "snapshot_seconds": config.viking_snapshot_timeout_seconds,
+            "upload_seconds": config.viking_upload_timeout_seconds,
+            "commit_seconds": config.viking_commit_timeout_seconds,
+            "resolve_seconds": config.viking_resolve_timeout_seconds,
+            "retry_attempts": config.viking_retry_attempts,
+            "retry_backoff_seconds": config.viking_retry_backoff_seconds,
+            "slow_request_threshold_ms": config.slow_request_threshold_ms,
+        },
+        "path_policy": {
+            "agent_segment_sanitized": True,
+            "namespace_prepare_on_write": True,
+            "missing_namespace_returns_empty": True,
+        },
+        "error_policy": {
+            "schema_version": SUPPORT_SCHEMA_VERSION,
+            "request_id_header": "X-Request-ID",
+            "catalog_endpoint": "/support/error-codes",
+            "structured_http_errors": True,
+            "write_error_fields": ["reason", "error_code", "request_id", "support"],
+        },
+        "dedup_stats": get_dedup_cache().get_stats(),
+        "rate_limit": {
+            "enabled": config.enable_rate_limit,
+            "max_per_minute": config.rate_limit_per_minute,
+            "current": _rate_limiter.get_current_count(),
+        },
+    }
+
+
+@app.get("/debug/runtime_fingerprint")
+async def runtime_fingerprint():
+    """
+    Runtime fingerprint for fast operator verification.
+    Helps confirm whether dashboard and clients are hitting the same adapter instance.
+    """
+    live_5m = _5_agnet_m.get_live_agents(window_minutes=5)
+    live_24h = _5_agnet_m.get_live_agents(window_minutes=1440)
+    return {
+        "service": "Memory Adapter v2.2",
+        "version": "2.2.0",
+        "pid": os.getpid(),
+        "hostname": _adapter_hostname,
+        "started_at": _adapter_started_at,
+        "python": sys.version.split(" ")[0],
+        "config": {
+            "adapter_host": config.adapter_host,
+            "adapter_port": config.adapter_port,
+            "memory_backend_type": config.memory_backend.backend_type,
+            "memory_backend_url": config.memory_backend.base_url,
+            "agent_events_path": config.agent_events_path,
+        },
+        "live_counts": {
+            "window_5m": len(live_5m),
+            "window_24h": len(live_24h),
+        },
+        "interface_policy": {
+            "product_entry_port": 18011,
+            "mcp_endpoint": "/mcp",
+            "internal_backend_port": 8765,
+            "note": "External agents must connect to 18011. Port 8765 is internal only.",
+        },
+    }
+
+
+@app.get("/support/error-codes")
+async def support_error_codes():
+    """售后错误码目录。"""
+    return {
+        "schema_version": SUPPORT_SCHEMA_VERSION,
+        "count": len(SUPPORT_ERROR_CATALOG),
+        "error_codes": [
+            {
+                "code": code,
+                "category": meta["category"],
+                "severity": meta["severity"],
+                "retryable": meta["retryable"],
+                "suggested_action": meta["suggested_action"],
+            }
+            for code, meta in sorted(SUPPORT_ERROR_CATALOG.items())
+        ],
+    }
+
+
+@app.post("/memory/write", response_model=MemoryResponse)
+async def write_memory(request: MemoryRequest, http_request: Request):
+    """
+    主接口：写入记忆
+
+    处理流程：
+    1. 标准化 - 统一数据格式
+    2. 过滤 - 判断是否需要存储
+    3. 去重 - 检查内容是否重复
+    4. 限流 - 检查写入频率
+    5. 路由 - 决定记忆类型和等级（含失败经验检测）
+    6. 转换 - 转换为 OpenViking 格式（含 expire_at）
+    7. 转发 - 发送到 OpenViking
+    """
+    loguru.logger.info(f"[WRITE] Received from agent={request.agent}, type={request.type}, len={len(request.content)}")
+
+    # ========== 1. 标准化 ==========
+    data = normalize(request.dict())
+
+    # ========== 2. 过滤 ==========
+    should_store_result, reason = should_store(request.content, request.type)
+    if not should_store_result:
+        log_filtered(reason, request.content)
+        return MemoryResponse(
+            status="skipped",
+            reason=reason,
+            request_id=get_request_id(http_request),
+        )
+
+    # ========== 3. 去重 ==========
+    if config.enable_deduplication:
+        is_dup, content_id = check_duplicate(request.content)
+        if is_dup:
+            loguru.logger.info(f"[DUPLICATE] content_id={content_id[:8]}...")
+            return MemoryResponse(
+                status="duplicate",
+                reason="content_already_exists",
+                memory_id=content_id,
+                request_id=get_request_id(http_request),
+            )
+    else:
+        content_id = ""
+
+    # ========== 4. 限流 ==========
+    if config.enable_rate_limit:
+        if not _rate_limiter.is_allowed():
+            current = _rate_limiter.get_current_count()
+            loguru.logger.warning(f"[RATE_LIMITED] current={current}, limit={config.rate_limit_per_minute}")
+            return MemoryResponse(
+                status="rate_limited",
+                reason=f"rate_limit_exceeded: {current}/{config.rate_limit_per_minute}",
+                request_id=get_request_id(http_request),
+            )
+
+    # ========== 5. 路由（含失败经验检测） ==========
+    # 检测失败内容
+    is_failure, failure_type = detect_failure_content(request.content)
+
+    # 如果是失败内容，更新 type
+    if is_failure:
+        data["type"] = failure_type
+        loguru.logger.info(f"[FAILURE_DETECTED] content contains error/failure, type={failure_type}")
+
+    memory_type, memory_level, score = route_memory_type_and_level(request.content, data)
+    loguru.logger.info(f"[ROUTE] type={memory_type}, level={memory_level}, score={score}")
+
+    # 计算过期时间
+    expire_at = calculate_expire_at(memory_level, request.timestamp)
+
+    # ========== 6. 转换 ==========
+    viking_payload = to_viking_format(
+        data,
+        memory_type=memory_type,
+        memory_level=memory_level,
+        score=score,
+        content_id=content_id
+    )
+    resource_markdown = (
+        f"# Memory\n\n"
+        f"{request.content.strip()}\n\n"
+        f"---\n"
+        f"- agent: {request.agent}\n"
+        f"- type: {data.get('type', request.type)}\n"
+        f"- memory_type: {memory_type}\n"
+        f"- memory_level: {memory_level}\n"
+        f"- score: {score}\n"
+        f"- expire_at: {expire_at}\n"
+        f"- content_id: {content_id}\n"
+        f"- adapter_version: 2.2.0\n"
+    )
+
+    # ========== 7. 转发 via backend interface ==========
+    try:
+        # Namespace prep via backend interface
+        if not await _get_backend().prepare_namespace("agent", request.agent or "default"):
+            return build_memory_error_response(
+                http_request,
+                "ADAPTER_NAMESPACE_PREPARE_FAILED",
+                "viking_namespace_prepare_failed",
+                operation="write_memory",
+                detail="Failed to prepare the target agent namespace before commit.",
+            )
+
+        # Use backend interface for write (handles temp_upload + commit internally)
+        write_request = MemoryWriteRequest(
+            content=resource_markdown,
+            scope="agent",
+            scope_ref=request.agent or "default",
+            metadata={
+                "memory_type": memory_type,
+                "memory_level": memory_level,
+                "score": score,
+                "expire_at": expire_at,
+                "content_id": content_id,
+                "agent": request.agent,
+                "type": data.get("type", request.type),
+            },
+            overwrite=False,
+        )
+        record = await _get_backend().write(write_request)
+
+        if config.enable_deduplication:
+            add_to_dedup(request.content)
+
+        # Backend returns memory_id
+        stored_uri = record.memory_id or "unknown"
+
+        log_stored(request.agent, memory_type, memory_level, score, is_failure)
+
+        return MemoryResponse(
+            status="stored",
+            memory_id=stored_uri,
+            uri=stored_uri,
+            memory_type=memory_type,
+            memory_level=memory_level,
+            memory_expire_at=expire_at,
+            score=score,
+            is_failure=is_failure,
+            request_id=get_request_id(http_request),
+        )
+
+    except httpx.ConnectError as e:
+        log_error("OpenViking unavailable", str(e))
+        return build_memory_error_response(
+            http_request,
+            "ADAPTER_VIKING_UNAVAILABLE",
+            "viking_unavailable",
+            operation="write_memory",
+            detail=str(e),
+        )
+    except httpx.TimeoutException as e:
+        log_error("OpenViking timeout", f"{type(e).__name__}: {e}")
+        return build_memory_error_response(
+            http_request,
+            "ADAPTER_VIKING_TIMEOUT",
+            "viking_timeout",
+            operation="write_memory",
+            detail=f"{type(e).__name__}: {e}",
+        )
+    except Exception as e:
+        import traceback
+        log_error("Unexpected error", f"{str(e)}\nStack trace:\n{traceback.format_exc()}")
+        return build_memory_error_response(
+            http_request,
+            "ADAPTER_INTERNAL_ERROR",
+            f"internal_error:{str(e)}",
+            operation="write_memory",
+            detail=str(e),
+            suggested_action="记录 request_id 并检查 Adapter 运行日志中的对应堆栈。",
+        )
+
+
+@app.post("/memory/search")
+async def search_memory(request: RetrieveRequest, http_request: Request):
+    """
+    搜索记忆，返回与 OpenClaw 插件兼容的 memories[] 结构。
+    """
+    if not request.query:
+        raise_support_api_error(
+            http_request,
+            400,
+            "ADAPTER_BAD_REQUEST",
+            "query is required",
+            operation="search_memory",
+            detail="query is required",
+            retryable=False,
+        )
+
+    tenant_id, user_id = resolve_tenant_identity(http_request)
+
+    # Use backend interface for search
+    search_result = await _get_backend().search(
+        MemorySearchRequest(
+            query=request.query,
+            limit=request.limit,
+            scope="agent",
+            scope_ref=request.agent or "default",
+            score_threshold=request.scoreThreshold or 0.0,
+        )
+    )
+
+    # Convert MemorySearchResult to plugin memory format
+    # Backend returns MemoryRecord items; convert to dict format for to_plugin_memory
+    raw_items = []
+    for record in search_result.memories:
+        raw_items.append({
+            "uri": record.memory_id,
+            "content": record.content,
+            "metadata": record.metadata or {},
+            "score": record.score,
+            "created_at": record.created_at if isinstance(record.created_at, str) else (record.created_at.isoformat() if record.created_at else None),
+        })
+
+    memories = [
+        to_plugin_memory(item)
+        for item in raw_items
+        if not is_derived_resource_uri(
+            item.get("uri")
+            or item.get("id")
+            or (item.get("metadata", {}) if isinstance(item.get("metadata"), dict) else {}).get("uri")
+            or ""
+        )
+    ]
+
+    if request.agent:
+        memories = [
+            item for item in memories
+            if not item.get("metadata") or item["metadata"].get("agent") in (None, request.agent)
+        ]
+    if request.memory_type:
+        memories = [
+            item for item in memories
+            if item.get("category") == request.memory_type
+            or item.get("metadata", {}).get("memory_type") == request.memory_type
+        ]
+    if request.memory_level:
+        requested_level = map_memory_level(request.memory_level)
+        if requested_level is not None:
+            memories = [item for item in memories if item.get("level") == requested_level]
+
+    if not request.include_expired:
+        current_time = int(datetime.now().timestamp())
+        memories = [
+            item for item in memories
+            if (
+                item.get("metadata", {}).get("expire_at", -1) == -1
+                or item.get("metadata", {}).get("expire_at", -1) > current_time
+            )
+        ]
+
+    # Note: Backend.search() returns full content - no need for additional content loading
+    # Fallback search is handled by backend.fallback_search() if needed
+
+    return {
+        "memories": memories[: request.limit],
+        "total": len(memories),
+    }
+
+
+@app.post("/memory/read")
+async def read_memory(request: RetrieveRequest, http_request: Request):
+    """
+    读取记忆内容。
+
+    优先按 uri 读取单条内容；如果没有 uri，则回退到 query 检索行为。
+    """
+    try:
+        tenant_id, user_id = resolve_tenant_identity(http_request)
+
+        # Case 1: uri-based read via backend.read()
+        if request.uri:
+            try:
+                record = await _get_backend().read(request.uri)
+            except httpx.HTTPStatusError as e:
+                if e.response.status_code == 405:
+                    raise_support_api_error(
+                        http_request,
+                        501,
+                        "UNSUPPORTED_OPERATION",
+                        "read not supported by current backend",
+                        operation="read_memory",
+                        detail="omnimemora_runtime backend does not support read",
+                        retryable=False,
+                    )
+                raise
+            if record is not None:
+                return {"content": record.content}
+            raise_support_api_error(
+                http_request,
+                404,
+                "ADAPTER_NOT_FOUND",
+                "memory not found",
+                operation="read_memory",
+                detail=f"uri={request.uri}",
+                retryable=False,
+            )
+
+        # Case 2: query-based search via backend.search()
+        if not request.query:
+            raise_support_api_error(
+                http_request,
+                400,
+                "ADAPTER_BAD_REQUEST",
+                "uri or query is required",
+                operation="read_memory",
+                detail="uri or query is required",
+                retryable=False,
+            )
+
+        search_result = await _get_backend().search(
+            MemorySearchRequest(
+                query=request.query,
+                limit=request.limit,
+                scope="agent",
+                scope_ref=request.agent or "default",
+                score_threshold=0.0,
+            )
+        )
+
+        # Convert MemorySearchResult to dict format for backward compatibility
+        raw_items = []
+        for record in search_result.memories:
+            raw_items.append({
+                "uri": record.memory_id,
+                "content": record.content,
+                "metadata": record.metadata or {},
+                "score": record.score,
+                "created_at": record.created_at if isinstance(record.created_at, str) else (record.created_at.isoformat() if record.created_at else None),
+            })
+
+        memories = [
+            to_plugin_memory(item)
+            for item in raw_items
+            if not is_derived_resource_uri(
+                item.get("uri")
+                or item.get("id")
+                or (item.get("metadata", {}) if isinstance(item.get("metadata"), dict) else {}).get("uri")
+                or ""
+            )
+        ]
+
+        if request.agent:
+            memories = [
+                item for item in memories
+                if not item.get("metadata") or item["metadata"].get("agent") in (None, request.agent)
+            ]
+        if request.memory_type:
+            memories = [
+                item for item in memories
+                if item.get("category") == request.memory_type
+                or item.get("metadata", {}).get("memory_type") == request.memory_type
+            ]
+        if request.memory_level:
+            requested_level = map_memory_level(request.memory_level)
+            if requested_level is not None:
+                memories = [item for item in memories if item.get("level") == requested_level]
+
+        if not request.include_expired:
+            current_time = int(datetime.now().timestamp())
+            memories = [
+                item for item in memories
+                if (
+                    item.get("metadata", {}).get("expire_at", -1) == -1
+                    or item.get("metadata", {}).get("expire_at", -1) > current_time
+                )
+            ]
+
+        return {"memories": memories[: request.limit], "total": len(memories)}
+
+    except HTTPException:
+        raise
+    except SupportAPIError:
+        raise
+    except Exception as e:
+        log_error("Error reading memory", str(e))
+        raise_support_api_error(
+            http_request,
+            500,
+            "ADAPTER_READ_FAILED",
+            "Read request failed",
+            operation="read_memory",
+            detail=str(e),
+            retryable=True,
+        )
+
+
+@app.post("/memory/delete")
+async def delete_memory(request: DeleteRequest, http_request: Request):
+    """按 URI 删除记忆。"""
+    try:
+        # Use backend interface (backend handles OpenViking protocol encoding)
+        success = await _get_backend().delete(request.uri)
+        if success:
+            return {"success": True, "uri": request.uri, "request_id": get_request_id(http_request)}
+        # Backend returns False = not found
+        return {
+            "success": False,
+            "uri": request.uri,
+            "status": 404,
+            "reason": "not_found",
+            "request_id": get_request_id(http_request),
+            "error_code": "ADAPTER_DELETE_FAILED",
+            "support": build_support_payload(
+                http_request,
+                "ADAPTER_DELETE_FAILED",
+                "Delete target was not found",
+                operation="delete_memory",
+                detail="not_found",
+                upstream_status=404,
+                retryable=False,
+            )["support"],
+        }
+    except httpx.HTTPStatusError as e:
+        if e.response.status_code == 405:
+            raise_support_api_error(
+                http_request,
+                501,
+                "UNSUPPORTED_OPERATION",
+                "delete not supported by current backend",
+                operation="delete_memory",
+                detail="omnimemora_runtime backend does not support delete",
+                retryable=False,
+            )
+        if e.response.status_code == 404:
+            return {
+                "success": False,
+                "uri": request.uri,
+                "status": 404,
+                "reason": "not_found",
+                "request_id": get_request_id(http_request),
+                "error_code": "ADAPTER_DELETE_FAILED",
+                "support": build_support_payload(
+                    http_request,
+                    "ADAPTER_DELETE_FAILED",
+                    "Delete target was not found",
+                    operation="delete_memory",
+                    detail="not_found",
+                    upstream_status=404,
+                    retryable=False,
+                )["support"],
+            }
+        raise
+    except HTTPException:
+        raise
+    except SupportAPIError:
+        raise
+    except Exception as e:
+        log_error("Error deleting memory", str(e))
+        raise_support_api_error(
+            http_request,
+            500,
+            "ADAPTER_DELETE_FAILED",
+            "Delete request failed",
+            operation="delete_memory",
+            detail=str(e),
+            retryable=True,
+        )
+
+
+@app.post("/memory/snapshot")
+async def build_memory_snapshot(request: SnapshotRequest, http_request: Request):
+    """
+    从 OpenViking 主库生成 MEMORY.md 自动摘要区。
+
+    NOTE: This endpoint only works with the OpenViking backend.
+    For other backends, use the backend's native snapshot capability.
+    """
+    try:
+        tenant_id, user_id = resolve_tenant_identity(http_request)
+        root_uri = build_agent_memory_prefix(request.agent)
+        if not await namespace_exists(root_uri, tenant_id=tenant_id, user_id=user_id):
+            markdown = render_snapshot_markdown(
+                request.agent,
+                {
+                    "identity": [],
+                    "projects": [],
+                    "preferences": [],
+                    "decisions": [],
+                    "facts": [],
+                },
+                0,
+            )
+            return {
+                "agent": request.agent,
+                "generatedAt": datetime.now().isoformat(),
+                "sourceCount": 0,
+                "markdown": markdown,
+                "sections": {"identity": 0, "projects": 0, "preferences": 0, "decisions": 0, "facts": 0},
+                "request_id": get_request_id(http_request),
+            }
+        leaf_uris = await collect_memory_leaf_uris(
+            root_uri,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            max_files=max(20, request.limit),
+        )
+
+        grouped: Dict[str, List[str]] = {
+            "identity": [],
+            "projects": [],
+            "preferences": [],
+            "decisions": [],
+            "facts": [],
+        }
+
+        for uri in leaf_uris:
+            content = await read_clean_resource_content(uri, tenant_id=tenant_id, user_id=user_id)
+            if not content:
+                continue
+            if not should_include_snapshot_fact(content):
+                continue
+            group = classify_snapshot_fact(content)
+            grouped[group].append(content)
+
+        deduped = {
+            "identity": dedupe_facts(grouped["identity"], 6),
+            "projects": dedupe_facts(grouped["projects"], 8),
+            "preferences": dedupe_facts(grouped["preferences"], 8),
+            "decisions": dedupe_facts(grouped["decisions"], 8),
+            "facts": dedupe_facts(grouped["facts"], 10),
+        }
+
+        markdown = render_snapshot_markdown(request.agent, deduped, len(leaf_uris))
+
+        return {
+            "agent": request.agent,
+            "generatedAt": datetime.now().isoformat(),
+            "sourceCount": len(leaf_uris),
+            "markdown": markdown,
+            "sections": {key: len(value) for key, value in deduped.items()},
+            "request_id": get_request_id(http_request),
+        }
+    except HTTPException:
+        raise
+    except SupportAPIError:
+        raise
+    except Exception as e:
+        log_error("Error building memory snapshot", str(e))
+        raise_support_api_error(
+            http_request,
+            500,
+            "ADAPTER_SNAPSHOT_FAILED",
+            "Snapshot generation failed",
+            operation="build_memory_snapshot",
+            detail=str(e),
+            retryable=True,
+        )
+
+
+@app.get("/memory/types")
+async def get_memory_types():
+    """获取记忆类型和等级配置"""
+    return {
+        "memory_types": ["long_term", "short_term"],
+        "memory_levels": {
+            "L0": "垃圾/不存",
+            "L1": "短期缓存 (7天)",
+            "L2": "经验记忆 (30天)",
+            "L3": "核心知识 (永久)"
+        },
+        "score_rules": config.route_score_rules,
+        "long_term_threshold": config.long_term_threshold,
+        "exclude_types": config.exclude_types,
+        "ttl_config": {
+            "L1": "7 days",
+            "L2": "30 days",
+            "L3": "permanent"
+        },
+        "failure_detection": {
+            "enabled": True,
+            "keywords": ["错误", "error", "失败", "fail", "异常", "exception"]
+        }
+    }
+
+
+@app.get("/memory/dedup/stats")
+async def get_dedup_stats():
+    """获取去重缓存状态"""
+    return get_dedup_cache().get_stats()
+
+
+@app.get("/memory/rate_limit/stats")
+async def get_rate_limit_stats():
+    """获取限流状态"""
+    return {
+        "enabled": config.enable_rate_limit,
+        "max_per_minute": config.rate_limit_per_minute,
+        "current": _rate_limiter.get_current_count()
+    }
+
+
+# ==================== V2 Platform Endpoints ====================
+
+@app.post("/memory/query", response_model=MemoryQueryResponse)
+async def query_memory_v2(request: MemoryQueryRequest, http_request: Request):
+    """
+    V2: Unified memory query via engine.optimize_context().
+    Adapter only handles: access, data fetch, input assembly, store meter, response.
+    """
+    access = resolve_query_access(
+        http_request,
+        requested_tenant=request.tenant,
+        requested_user=request.user,
+        registry_path=config.omnimemora_access_registry_path,
+        require_key=config.omnimemora_require_api_key_for_v2,
+        registry_sync=config.registry_sync.model_dump() if config.registry_sync else None,
+    )
+    http_request.state.omnimemora_access = access.to_dict()
+
+    request_id = f"req-{uuid4().hex[:8]}"
+    loguru.logger.info(
+        f"[QUERY_V2] request_id={request_id}, tenant={access.tenant_id}, auth_mode={access.auth_mode}, query={request.query[:50]}..."
+    )
+
+    # ---- Agent Observability: identity + control mode ----
+    req_ctx = request.context or {}
+    raw_agent_id = request.agent_id if request.agent_id and request.agent_id != "unknown" else (request.agent or "unknown")
+    identity = _5_agent_id.AgentIdentity(
+        canonical_agent_id=_5_agent_id.resolve_canonical_agent_id(raw_agent_id),
+        raw_agent_id=raw_agent_id,
+        session_id=req_ctx.get("session_id") or req_ctx.get("conversation_id") or req_ctx.get("thread_id"),
+        workspace_id=request.workspace_id,
+        user_id=access.user_id,
+        integration_type="wrapper",
+        source="body",
+    )
+    per_agent_dict, default_mode = _agent_modes_cache
+    control_mode = _5_ctrl.load_control_mode(
+        identity.canonical_agent_id, identity.integration_type, per_agent_dict, default_mode
+    )
+    _5_agnet_m.record_agent_request(identity, control_mode.mode)
+
+    # --- Cloud Integration: Load policy & flags ---
+    policy = load_policy()
+    flags = load_flags()
+    loguru.logger.info(
+        f"[CLOUD_INTEGRATION] request_id={request_id}, policy_version={policy.version}, "
+        f"optimization_enabled={flags.optimization_enabled}"
+    )
+
+    # If optimization is disabled, still go through unified path but skip optimization
+    if not flags.optimization_enabled:
+        loguru.logger.info(
+            f"[OPTIMIZATION_DISABLED] request_id={request_id}, skipping optimize_context() but preserving metrics/trace"
+        )
+        # Still load candidates for metrics, but bypass optimization
+        # (Continue with unified path - just skip the optimize_context call later)
+        pass
+
+    # Parse options
+    options = request.options or {}
+    max_local_cards = options.get("max_local_cards", 4)
+    packing_enabled = options.get("enable_packing", True)
+
+    # Get client identifier
+    client = (request.context or {}).get("client")
+    if not client:
+        client = "omnimemora-api" if access.key_present else "openclaw"
+
+    # --- Assemble rules from config (adapter reads world) ---
+    filter_rules = FilterRules(
+        min_content_length=config.min_content_length,
+        exclude_types=config.exclude_types,
+        route_score_rules=config.route_score_rules,
+        long_term_threshold=config.long_term_threshold,
+    )
+    routing_rules = RoutingRules(
+        route_score_rules=config.route_score_rules,
+        long_term_threshold=config.long_term_threshold,
+    )
+
+    # --- Get quota context from meter_store ---
+    registry_entry = get_tenant_registry_entry(
+        config.omnimemora_access_registry_path,
+        access.tenant_id,
+    ) if access.auth_mode == "omnimemora_key" else None
+    current_usage = get_tenant_current_usage(access.tenant_id)
+    raw_quota = registry_entry.get("monthly_quota_tokens") if registry_entry else None
+    monthly_quota = int(raw_quota) if raw_quota not in (None, "") else None
+
+    # --- Fetch candidate memories from backend ---
+    retrieve_req = RetrieveRequest(
+        query=request.query,
+        agent=request.agent,
+        limit=max_local_cards * 2,
+        scoreThreshold=0.01
+    )
+    http_request.state.v2_tenant_override = access.tenant_id
+    http_request.state.v2_user_override = access.user_id
+    try:
+        search_result = await search_memory(retrieve_req, http_request)
+    finally:
+        http_request.state.v2_tenant_override = None
+        http_request.state.v2_user_override = None
+
+    candidate_memories = search_result.get("memories", [])
+
+    # --- Policy v1: Task Classification ---
+    # Classify task BEFORE deciding whether to call optimize_context
+    bypass_context, classification = should_bypass_context(request.query)
+    task_type = classification.task_type
+    matched_keywords = classification.matched_keywords
+    context_bypass = False  # default
+    bypassed_context_tokens = 0  # default
+
+    if bypass_context:
+        # Implementation task: SHORT-CIRCUIT context injection
+        # Estimate bypassed tokens based on what would have been injected
+        # Use max_local_cards as proxy for how many memories would have been selected
+        estimated_memories_count = min(len(candidate_memories), max_local_cards)
+        if packing_enabled and estimated_memories_count > 0:
+            # Rough estimate: avg 200 chars per memory, 4 chars per token
+            bypassed_context_tokens = (estimated_memories_count * 200) // 4
+        else:
+            bypassed_context_tokens = 0
+
+        loguru.logger.info(
+            f"[POLICY_V1_BYPASS] request_id={request_id}, task_type={task_type}, "
+            f"matched_keywords={matched_keywords}, bypassed_tokens={bypassed_context_tokens}"
+        )
+
+        # Create synthetic result for bypass case
+        # (TokenSavingsMeter already available via module-level importlib shim)
+        from datetime import datetime as dt
+
+        meter_for_bypass = TokenSavingsMeter(
+            request_id="engine-local",
+            tenant="engine",
+            user="engine",
+            agent=request.agent,
+            client=client,
+            timestamp=dt.utcnow().isoformat() + "Z",
+            query_shape="mixed",
+            query_chars=len(request.query),
+            query=request.query[:100],
+            baseline_chars=bypassed_context_tokens * 4,
+            actual_chars=0,
+            saved_chars=bypassed_context_tokens * 4,
+            baseline_tokens_estimate=bypassed_context_tokens,
+            actual_tokens_estimate=0,
+            saved_tokens_estimate=bypassed_context_tokens,
+            savings_ratio=1.0,
+            packed_memory_count=0,
+            local_cards_used=0,
+            remote_candidates_considered=0,
+            remote_candidates_skipped=0,
+            remote_used_count=0,
+            skipped_remote_reason="implementation_task_bypass",
+            coverage_satisfied=True,
+            packing_enabled=False,
+            abstract_preferred=False,
+            dedup_applied=False,
+            task_type=task_type,
+            context_bypass=True,
+            bypassed_context_tokens=bypassed_context_tokens,
+        )
+
+        # Create synthetic OptimizationResult-like structure
+        class BypassResult:
+            def __init__(self, meter):
+                self.selected_memories = []
+                self.packed_context = ""  # Empty - bypassed!
+                self.token_savings = meter
+                self.quota_result = check_quota_enforcement(current_usage, monthly_quota)
+                self.meter_artifact = meter.to_dict()
+                self.candidate_count = 0
+                self.selected_count = 0
+
+        result = BypassResult(meter_for_bypass)
+        context_bypass = True
+    elif not flags.optimization_enabled:
+        # Feature flag: optimization disabled, but still go through unified path
+        loguru.logger.info(
+            f"[OPTIMIZATION_PASSTHROUGH] request_id={request_id}, optimization_enabled=false, preserving metrics/trace"
+        )
+        # Create passthrough result (no optimization, but preserve all metadata/trace)
+        from datetime import datetime as dt
+        passthrough_meter = TokenSavingsMeter(
+            request_id=request_id,
+            tenant=access.tenant_id,
+            user=access.user_id,
+            agent=request.agent,
+            client=client,
+            timestamp=dt.utcnow().isoformat() + "Z",
+            query_shape="mixed",
+            query_chars=len(request.query),
+            query=request.query[:100],
+            baseline_chars=0,
+            actual_chars=0,
+            saved_chars=0,
+            baseline_tokens_estimate=0,
+            actual_tokens_estimate=0,
+            saved_tokens_estimate=0,
+            savings_ratio=0.0,
+            packed_memory_count=0,
+            local_cards_used=0,
+            remote_candidates_considered=len(candidate_memories),
+            remote_candidates_skipped=0,
+            remote_used_count=0,
+            skipped_remote_reason="optimization_disabled",
+            coverage_satisfied=True,
+            packing_enabled=False,
+            abstract_preferred=False,
+            dedup_applied=False,
+            task_type=task_type,
+            context_bypass=False,
+            bypassed_context_tokens=0,
+        )
+        class PassthroughResult:
+            def __init__(self, meter, candidates):
+                self.selected_memories = candidates  # Pass through all candidates
+                self.packed_context = ""  # No packing when optimization is disabled
+                self.token_savings = meter
+                self.quota_result = check_quota_enforcement(current_usage, monthly_quota)
+                self.meter_artifact = meter.to_dict()
+                self.candidate_count = len(candidates)
+                self.selected_count = len(candidates)
+                # For trace compatibility
+                self.call_chain = None
+        result = PassthroughResult(passthrough_meter, candidate_memories)
+    else:
+        # Decision or continuation: proceed with normal optimize_context flow
+        input_data = OptimizationInput(
+            query=request.query,
+            candidate_memories=candidate_memories,
+            filter_rules=filter_rules,
+            routing_rules=routing_rules,
+            agent=request.agent,
+            client=client,
+            current_usage=current_usage,
+            monthly_quota=monthly_quota,
+            packing_enabled=packing_enabled,
+            max_local_cards=max_local_cards,
+            candidate_limit=16,
+            task_type=task_type,
+            context_bypass=False,
+            bypassed_context_tokens=0,
+        )
+        result = optimize_context(input_data)
+
+    # --- Quota enforcement (SaaS-key path) ---
+    if access.auth_mode == "omnimemora_key" and result.quota_result.quota_exceeded:
+        loguru.logger.warning(
+            f"[QUOTA_EXCEEDED] tenant={access.tenant_id}, "
+            f"current_usage={result.quota_result.current_usage}, "
+            f"monthly_quota={result.quota_result.monthly_quota}"
+        )
+        raise_support_api_error(
+            http_request,
+            429,
+            "ADAPTER_QUOTA_EXCEEDED",
+            f"Monthly token quota exceeded ({result.quota_result.current_usage}/{result.quota_result.monthly_quota})",
+            operation="memory_query_quota_check",
+            detail=(
+                f"Tenant {access.tenant_id} has exceeded monthly token quota. "
+                f"Current usage: {result.quota_result.current_usage} tokens. "
+                f"Monthly quota: {result.quota_result.monthly_quota} tokens. "
+                f"Upgrade plan or wait for billing cycle reset."
+            ),
+            retryable=False,
+            extra={
+                "tenant_id": access.tenant_id,
+                "current_usage": result.quota_result.current_usage,
+                "monthly_quota": result.quota_result.monthly_quota,
+                "quota_status": result.quota_result.quota_status,
+            },
+        )
+
+    # --- Persist meter artifact (adapter responsibility) ---
+    result.meter_artifact["request_id"] = request_id
+    result.meter_artifact["tenant"] = access.tenant_id  # Use real tenant from access, not hardcoded "engine"
+    result.meter_artifact["matched_keywords"] = matched_keywords  # Policy v1 observability
+    store_meter(result.meter_artifact)
+
+    # ---- Agent Observability: record result ----
+    optimization_applied = bool(flags.optimization_enabled and not context_bypass)
+    bypass_detected = context_bypass or (result.packed_context == "" and len(candidate_memories) > 0)
+    raw_tokens = result.token_savings.baseline_tokens_estimate
+    compressed_tokens = result.token_savings.actual_tokens_estimate
+    quality_delta_pct = (
+        0.5 * ((raw_tokens - compressed_tokens) / raw_tokens if raw_tokens > 0 else 0)
+        + 0.3 * (result.selected_count / result.candidate_count if result.candidate_count > 0 else 0)
+        + 0.2 * (1.0 - len(result.selected_memories) / result.candidate_count if result.candidate_count > 0 else 0)
+    ) * 100
+    _5_agnet_m.record_agent_result(
+        identity=identity,
+        mode=control_mode.mode,
+        optimized=optimization_applied,
+        bypassed=bypass_detected,
+        meter_artifact=result.meter_artifact,
+        quality_delta_pct=quality_delta_pct,
+    )
+
+    # --- Cloud Integration: Report usage async ---
+    report_usage_async(
+        request_id=request_id,
+        tenant=access.tenant_id,
+        saved_tokens=result.token_savings.saved_tokens_estimate,
+        savings_ratio=result.token_savings.savings_ratio,
+        request_count=1
+    )
+
+    # --- Store call chain trace ---
+    if hasattr(result, "call_chain") and result.call_chain:
+        result.call_chain.trace_id = request_id
+        _5_trace.store_trace(request_id, result.call_chain)
+
+    # --- Format response ---
+    selected_memories = [
+        {
+            "id": mem.get("uri", f"mem-{i:03d}"),
+            "type": mem.get("category", "memory"),
+            "score": mem.get("score", 0.5),
+            "content": mem.get("content", mem.get("abstract", "")),
+            "source": "local"
+        }
+        for i, mem in enumerate(result.selected_memories)
+    ]
+
+    explanation = {
+        "local_cards_used": result.selected_count,
+        "remote_candidates_skipped": 16,
+        "skip_remote_reason": "local-first coverage satisfied",
+        "packing_enabled": packing_enabled,
+        "abstract_preferred": False,
+        "auth_mode": access.auth_mode,
+        "tenant_status": access.status,
+        "candidate_count": result.candidate_count,
+    }
+
+    # --- Decision Log (auto-generated) ---
+    emit_decision_log(
+        query=request.query,
+        task_type=task_type,
+        context_bypass=context_bypass,
+        packed_context=result.packed_context,
+        memory_tokens_injected=result.token_savings.actual_tokens_estimate,
+        baseline_tokens_estimate=result.token_savings.baseline_tokens_estimate,
+        actual_tokens_estimate=result.token_savings.actual_tokens_estimate,
+        saved_tokens_estimate=result.token_savings.saved_tokens_estimate,
+        savings_ratio=result.token_savings.savings_ratio,
+        matched_keywords=matched_keywords,
+        selected_memory_count=len(result.selected_memories),
+        request_id=request_id,
+        agent=request.agent,
+        tenant=access.tenant_id,
+        agent_id=request.agent_id,
+        workspace_id=request.workspace_id,
+        scope=request.scope,
+    )
+
+    return MemoryQueryResponse(
+        request_id=request_id,
+        selected_memories=selected_memories,
+        packed_context=result.packed_context,
+        memory_tokens_injected=result.token_savings.actual_tokens_estimate,
+        tokens_saved_estimate=result.token_savings.saved_tokens_estimate,
+        savings_ratio=result.token_savings.savings_ratio,
+        explanation=explanation,
+        meter_artifact={"$ref": f"/requests/{request_id}/meter"},
+        # Policy v1 observability
+        task_type=task_type,
+        context_bypass=context_bypass,
+        matched_keywords=matched_keywords,
+    )
+
+
+@app.get("/usage/token-savings")
+async def get_token_savings(
+    tenant: str,
+    agent: Optional[str] = None,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None
+):
+    """Get aggregated token savings for a tenant/agent."""
+    from datetime import datetime
+
+    start_dt = datetime.fromisoformat(start_time) if start_time else None
+    end_dt = datetime.fromisoformat(end_time) if end_time else None
+
+    usage = get_tenant_usage(tenant, agent=agent, start_time=start_dt, end_time=end_dt)
+    registry_entry = get_tenant_registry_entry(config.omnimemora_access_registry_path, tenant)
+    monthly_quota_tokens = None
+    plan = None
+    status = None
+    quota_status = "untracked"
+    if registry_entry:
+        plan = registry_entry.get("plan")
+        status = registry_entry.get("status")
+        raw_quota = registry_entry.get("monthly_quota_tokens")
+        if raw_quota not in (None, ""):
+            try:
+                monthly_quota_tokens = int(raw_quota)
+            except (TypeError, ValueError):
+                monthly_quota_tokens = None
+
+    current_period_usage = usage.get("current_period_usage", 0)
+    if monthly_quota_tokens is not None:
+        quota_status = "over_quota" if current_period_usage > monthly_quota_tokens else "within_quota"
+
+    usage["plan"] = plan
+    usage["status"] = status
+    usage["monthly_quota_tokens"] = monthly_quota_tokens
+    usage["quota_status"] = quota_status
+    return usage
+
+
+@app.get("/usage/token-savings/trend")
+async def get_token_savings_trend(tenant: str, agent: Optional[str] = None, days: int = 7):
+    """Get token savings trend data for the last N days."""
+    trend_data = get_trend_data(tenant, days)
+    trend_data["agent"] = agent
+    return trend_data
+
+
+@app.get("/requests/{request_id}/meter")
+async def get_request_meter(request_id: str):
+    """Get full meter artifact for a specific request."""
+    meter = get_meter(request_id)
+    if not meter:
+        raise HTTPException(status_code=404, detail=f"Meter not found for request_id={request_id}")
+    return meter.to_dict()
+
+
+# ==================== Demo UI Dashboard Endpoints ====================
+
+@app.post("/mcp/query")
+async def mcp_query(request: Request):
+    """
+    Internal MCP query endpoint — called by _mcp_call_tool when OpenClaw MCP
+    client calls memory.context / memory.recall.
+    Bypasses resolve_query_access (openclaw tenant is hardcoded).
+    Directly calls engine.optimize_context() with openclaw defaults.
+    """
+    body = await request.json()
+    request.state._body_cache = body
+    query = (body.get("query") or body.get("keyword", ""))[:200]
+    limit = int(body.get("limit", 8)) or 8
+    tenant = body.get("tenant", "openclaw")
+    user = body.get("user", "openclaw-user")
+    agent = body.get("agent", "openclaw-agent")
+
+    if not query:
+        return JSONResponse(
+            status_code=400,
+            content={"error": "query or keyword required"},
+        )
+
+    request_id = f"mcp-{uuid4().hex[:8]}"
+
+    # Set tenant context for search
+    request.state.v2_tenant_override = tenant
+    request.state.v2_user_override = user
+
+    try:
+        # ---- Agent Observability: identity + control mode ----
+        raw_agent_id = (
+            body.get("agent_id")
+            or body.get("agent")
+            or request.headers.get("x-agent-id")
+            or "unknown"
+        )
+        session_id = (
+            body.get("session_id")
+            or body.get("conversation_id")
+            or body.get("thread_id")
+            or request.headers.get("x-session-id")
+        )
+        workspace_id = body.get("workspace_id") or request.headers.get("x-workspace-id")
+        integration_type = body.get("integration_type") or request.headers.get("x-integration-type") or "unknown"
+        if integration_type not in ("tool_caller", "pre_llm_connector", "wrapper"):
+            integration_type = "unknown"
+        identity = _5_agent_id.AgentIdentity(
+            canonical_agent_id=_5_agent_id.resolve_canonical_agent_id(raw_agent_id),
+            raw_agent_id=raw_agent_id,
+            session_id=session_id,
+            workspace_id=workspace_id,
+            user_id=body.get("user_id") or request.headers.get("x-user-id"),
+            integration_type=integration_type,
+            source="body",
+        )
+        # ADR-0005 v1.2: use cached per-agent modes with canonical key lookup
+        per_agent_dict, default_mode = _agent_modes_cache
+        control_mode = _5_ctrl.load_control_mode(
+            identity.canonical_agent_id, identity.integration_type, per_agent_dict, default_mode
+        )
+        _5_agnet_m.record_agent_request(identity, control_mode.mode)
+
+        optimization_attempted = False
+        optimization_applied = False
+        bypass_detected = False
+
+        # Assemble rules
+        filter_rules = FilterRules(
+            min_content_length=config.min_content_length,
+            exclude_types=config.exclude_types,
+            route_score_rules=config.route_score_rules,
+            long_term_threshold=config.long_term_threshold,
+        )
+        routing_rules = RoutingRules(
+            route_score_rules=config.route_score_rules,
+            long_term_threshold=config.long_term_threshold,
+        )
+
+        # Get quota context
+        registry_entry = get_tenant_registry_entry(
+            config.omnimemora_access_registry_path, tenant
+        ) if tenant == "openclaw" else None
+        current_usage = get_tenant_current_usage(tenant)
+        raw_quota = registry_entry.get("monthly_quota_tokens") if registry_entry else None
+        monthly_quota = int(raw_quota) if raw_quota not in (None, "") else None
+
+        # Fetch candidates
+        retrieve_req = RetrieveRequest(
+            query=query,
+            agent=agent,
+            limit=limit * 2,
+            scoreThreshold=0.01,
+        )
+        search_result = await search_memory(retrieve_req, request)
+        candidate_memories = search_result.get("memories", [])
+
+        # Policy v1: task classification
+        bypass_context, classification = should_bypass_context(query)
+        task_type = classification.task_type
+        matched_keywords = classification.matched_keywords
+        context_bypass = False
+        bypassed_context_tokens = 0
+
+        if bypass_context:
+            estimated_memories_count = min(len(candidate_memories), limit)
+            bypassed_context_tokens = (estimated_memories_count * 200) // 4 if estimated_memories_count > 0 else 0
+            meter_for_bypass = TokenSavingsMeter(
+                request_id="engine-local",
+                tenant="engine",
+                user="engine",
+                agent=agent,
+                client="openclaw-mcp",
+                timestamp=datetime.utcnow().isoformat() + "Z",
+                query_shape="mixed",
+                query_chars=len(query),
+                query=query[:100],
+                baseline_chars=bypassed_context_tokens * 4,
+                actual_chars=0,
+                saved_chars=bypassed_context_tokens * 4,
+                baseline_tokens_estimate=bypassed_context_tokens,
+                actual_tokens_estimate=0,
+                saved_tokens_estimate=bypassed_context_tokens,
+                savings_ratio=1.0,
+                packed_memory_count=0,
+                local_cards_used=0,
+                remote_candidates_considered=0,
+                remote_candidates_skipped=0,
+                remote_used_count=0,
+                skipped_remote_reason="implementation_task_bypass",
+                coverage_satisfied=True,
+                packing_enabled=False,
+                abstract_preferred=False,
+                dedup_applied=False,
+                task_type=task_type,
+                context_bypass=True,
+                bypassed_context_tokens=bypassed_context_tokens,
+            )
+            class BypassResult:
+                def __init__(self, meter):
+                    self.selected_memories = []
+                    self.packed_context = ""
+                    self.token_savings = meter
+                    self.quota_result = check_quota_enforcement(current_usage, monthly_quota)
+                    self.meter_artifact = meter.to_dict()
+                    self.candidate_count = 0
+                    self.selected_count = 0
+            result = BypassResult(meter_for_bypass)
+            context_bypass = True
+        else:
+            input_data = OptimizationInput(
+                query=query,
+                candidate_memories=candidate_memories,
+                filter_rules=filter_rules,
+                routing_rules=routing_rules,
+                agent=agent,
+                client="openclaw-mcp",
+                current_usage=current_usage,
+                monthly_quota=monthly_quota,
+                packing_enabled=True,
+                max_local_cards=limit,
+                candidate_limit=16,
+                task_type=task_type,
+                context_bypass=False,
+                bypassed_context_tokens=0,
+                # Multi-source final compile gate (Phase 4)
+                native_compiled_context=body.get("native_compiled_context"),
+                current_session_context=body.get("current_session_context"),
+                raw_candidates=body.get("raw_candidates"),
+            )
+            result = optimize_context(input_data)
+
+        # Persist meter artifact
+        result.meter_artifact["request_id"] = request_id
+        result.meter_artifact["tenant"] = tenant
+        result.meter_artifact["matched_keywords"] = matched_keywords
+        store_meter(result.meter_artifact)
+
+        # ---- Agent Observability: record result ----
+        optimization_applied = not context_bypass
+        bypass_detected = context_bypass or (result.packed_context == "" and len(candidate_memories) > 0)
+        raw_tokens = result.token_savings.baseline_tokens_estimate
+        compressed_tokens = result.token_savings.actual_tokens_estimate
+        quality_delta_pct = (
+            0.5 * ((raw_tokens - compressed_tokens) / raw_tokens if raw_tokens > 0 else 0)
+            + 0.3 * (result.selected_count / result.candidate_count if result.candidate_count > 0 else 0)
+            + 0.2 * (1.0 - len(result.selected_memories) / result.candidate_count if result.candidate_count > 0 else 0)
+        ) * 100
+        _5_agnet_m.record_agent_result(
+            identity=identity,
+            mode=control_mode.mode,
+            optimized=optimization_applied,
+            bypassed=bypass_detected,
+            meter_artifact=result.meter_artifact,
+            quality_delta_pct=quality_delta_pct,
+        )
+
+        # Store call chain trace
+        if hasattr(result, "call_chain") and result.call_chain:
+            result.call_chain.trace_id = request_id
+            _5_trace.store_trace(request_id, result.call_chain)
+
+        # Decision log
+        emit_decision_log(
+            query=query,
+            task_type=task_type,
+            context_bypass=context_bypass,
+            packed_context=result.packed_context,
+            memory_tokens_injected=result.token_savings.actual_tokens_estimate,
+            baseline_tokens_estimate=result.token_savings.baseline_tokens_estimate,
+            actual_tokens_estimate=result.token_savings.actual_tokens_estimate,
+            saved_tokens_estimate=result.token_savings.saved_tokens_estimate,
+            savings_ratio=result.token_savings.savings_ratio,
+            matched_keywords=matched_keywords,
+            selected_memory_count=len(result.selected_memories),
+            request_id=request_id,
+            agent=agent,
+            tenant=tenant,
+        )
+
+        return {
+            "request_id": request_id,
+            "packed_context": result.packed_context,
+            "selected_memories": result.selected_memories,
+            "usage": {
+                "saved_tokens_estimate": result.token_savings.saved_tokens_estimate,
+                "savings_ratio": result.token_savings.savings_ratio,
+                "actual_tokens_estimate": result.token_savings.actual_tokens_estimate,
+                "baseline_tokens_estimate": result.token_savings.baseline_tokens_estimate,
+            },
+            "task_type": task_type,
+            "context_bypass": context_bypass,
+            "matched_keywords": matched_keywords,
+        }
+
+    finally:
+        request.state.v2_tenant_override = None
+        request.state.v2_user_override = None
+
+
+@app.get("/metrics/summary")
+async def get_metrics_summary(tenant: str = "default"):
+    """
+    Hero metrics: token saving ratio, tokens saved, request count, avg context reduction.
+    Data from real meter_store aggregation — no mocks.
+    """
+    import importlib
+    _5_ms = importlib.import_module("5_connectors.adapter.metrics_service")
+    summary = _5_ms.compute_metrics_summary(tenant)
+    return summary
+
+
+@app.get("/metrics/recent_requests")
+async def get_recent_requests(tenant: str = "default", limit: int = 20):
+    """
+    Recent request log for Live Flow module.
+    Returns last N requests with key fields.
+    """
+    import importlib
+    _5_ms = importlib.import_module("5_connectors.adapter.metrics_service")
+    requests = _5_ms.get_recent_requests(tenant, limit)
+    return {"tenant": tenant, "requests": requests}
+
+
+@app.get("/metrics/tenants")
+async def get_metric_tenants():
+    """Return known tenants that have persisted meter data."""
+    import importlib
+    _5_ms = importlib.import_module("5_connectors.adapter.metrics_service")
+    return {"tenants": _5_ms.list_tenants()}
+
+
+@app.get("/debug/context_diff")
+async def get_context_diff(request_id: str):
+    """
+    Before/After context comparison for a specific request.
+    Shows candidate_memories (before filtering) vs selected_memories (after).
+
+    Returns:
+        {
+          "request_id": str,
+          "before_tokens": int,
+          "after_tokens": int,
+          "selected_memories": [...],
+          "dropped_memories": [...]
+        }
+    """
+    meter = get_meter(request_id)
+    if not meter:
+        raise HTTPException(status_code=404, detail=f"Meter not found for request_id={request_id}")
+
+    meter_dict = meter.to_dict()
+    candidate_memories = meter_dict.get("candidate_memories", [])
+    dropped_memories = meter_dict.get("dropped_memories", [])
+
+    # Compute selected_memories: candidates minus dropped
+    dropped_content_set = {m.get("content", "").strip() for m in dropped_memories}
+    selected_memories = [m for m in candidate_memories if m.get("content", "").strip() not in dropped_content_set]
+
+    return {
+        "request_id": request_id,
+        "before_tokens": meter_dict.get("baseline_tokens_estimate", 0),
+        "after_tokens": meter_dict.get("actual_tokens_estimate", 0),
+        "selected_memories": selected_memories,
+        "dropped_memories": dropped_memories,
+    }
+
+
+@app.get("/debug/call_chain")
+async def get_call_chain(request_id: str):
+    """
+    Call chain trace for a specific request.
+    Shows timing per stage: policy_eval, backend_search, engine_optimize, meter_persist.
+
+    Returns:
+        {
+          "trace_id": str,
+          "stages": [{"name": str, "duration_ms": float}, ...]
+        }
+    """
+    import importlib
+    _5_trace = importlib.import_module("5_connectors.adapter.trace_store")
+    chain_dict = _5_trace.get_trace_dict(request_id)
+    if not chain_dict:
+        raise HTTPException(status_code=404, detail=f"Trace not found for request_id={request_id}")
+    return chain_dict
+
+
+# ==================== Agent Observability Endpoints ====================
+
+@app.get("/agents/live")
+async def get_agents_live(window_minutes: int = 30):
+    """
+    Return list of active agents with recent activity.
+    Active = last_seen_at within window_minutes.
+    """
+    live = _5_agnet_m.get_live_agents(window_minutes=window_minutes)
+    return {"agents": live, "count": len(live)}
+
+
+@app.get("/agents/metrics")
+async def get_agent_metrics_get(
+    agent_id: Optional[str] = None,
+    session_id: Optional[str] = None,
+):
+    """
+    Query agent metrics, optionally filtered by agent_id / session_id.
+
+    Note: agent_id is normalized to canonical form before query
+    (per ADR-0005: adapter only maps, does not redefine).
+    """
+    # ADR-0005: normalize incoming agent_id to canonical
+    canonical_id = None
+    if agent_id:
+        canonical_id = _5_agent_id.resolve_canonical_agent_id(agent_id)
+    metrics = _5_agnet_m.get_agent_metrics(agent_id=canonical_id, session_id=session_id)
+    return {"metrics": [m.dict() for m in metrics], "count": len(metrics)}
+
+
+# ==================== Trial Provisioning (Protected Admin) ====================
+
+from .access import hash_api_key, atomic_write_registry, load_registry
+
+
+class TrialProvisionRequest(BaseModel):
+    """Request body for trial provisioning endpoint."""
+    contact_email: Optional[str] = None
+    display_name: Optional[str] = None
+    source: Optional[str] = None
+
+
+class TrialProvisionResponse(BaseModel):
+    """Response body for successful trial provisioning."""
+    tenant_id: str
+    api_key: str          # plaintext — shown only once here
+    plan: str
+    status: str
+    monthly_quota_tokens: int
+    trial_expires_at: Optional[int] = None
+    created_at: str
+
+
+@app.post("/api/admin/trials/provision", response_model=TrialProvisionResponse)
+async def provision_trial(request: TrialProvisionRequest, http_request: Request):
+    """
+    Minimal protected trial provisioning endpoint.
+
+    Protected by: OMNIMEMORA_ADMIN_API_TOKEN sent as X-OmniMemora-Admin-Token header.
+
+    Responsibilities:
+    - Validate admin token
+    - Generate tenant_id and a one-time plaintext API key
+    - Write api_key_hash (never plaintext) to tenant_access_registry.json
+    - Default plan=starter, status=active, quota from config
+    - Return plaintext API key once (never stored or retrievable after)
+    """
+    # ---- Admin token check ----
+    admin_token = http_request.headers.get("X-OmniMemora-Admin-Token", "")
+    if not admin_token:
+        raise HTTPException(status_code=401, detail="Missing X-OmniMemora-Admin-Token header.")
+    if admin_token != config.omnimemora_admin_api_token:
+        raise HTTPException(status_code=403, detail="Invalid admin token.")
+
+    # ---- Generate identifiers ----
+    tenant_id = f"trial-{uuid4().hex[:12]}"
+    raw_api_key = f"omni-{uuid4().hex}-{uuid4().hex[:8]}"
+    api_key_hash = hash_api_key(raw_api_key)
+    token_id = f"tk-{uuid4().hex[:12]}"
+
+    # ---- Build tenant entry (hash only, never plaintext) ----
+    now_ts = int(datetime.now().timestamp())
+    trial_seconds = config.omnimemora_trial_days * 86400
+    trial_expires_at = now_ts + trial_seconds if config.omnimemora_trial_days > 0 else None
+
+    now_iso = datetime.now().isoformat()
+    new_entry: Dict[str, Any] = {
+        "tenant_id": tenant_id,
+        "api_key_hash": api_key_hash,
+        "token_id": token_id,
+        "plan": "starter",
+        "status": "active",
+        "monthly_quota_tokens": config.omnimemora_trial_quota_tokens,
+        "default_user": "trial-user",
+        "trial_expires_at": trial_expires_at,
+        "created_at": now_iso,
+        "source": request.source or "trial-provisioning",
+    }
+    if request.contact_email:
+        new_entry["contact_email"] = request.contact_email
+    if request.display_name:
+        new_entry["display_name"] = request.display_name
+
+    # ---- Atomic write to registry ----
+    registry = load_registry(config.omnimemora_access_registry_path)
+    registry.append(new_entry)
+    atomic_write_registry(config.omnimemora_access_registry_path, registry)
+
+    loguru.logger.info(
+        f"[TRIAL_PROVISIONED] tenant={tenant_id}, plan=starter, quota={config.omnimemora_trial_quota_tokens}, "
+        f"expires_at={trial_expires_at}, source={request.source or 'direct'}"
+    )
+
+    return TrialProvisionResponse(
+        tenant_id=tenant_id,
+        api_key=raw_api_key,
+        plan="starter",
+        status="active",
+        monthly_quota_tokens=config.omnimemora_trial_quota_tokens,
+        trial_expires_at=trial_expires_at,
+        created_at=now_iso,
+    )
+
+
+# ==================== Internal Service Endpoints ====================
+
+class InternalTrialQueryRequest(BaseModel):
+    """Request body for internal trial query proxy."""
+    tenant: str
+    user: str
+    agent: str = "omnimemora-trial"
+    query: str
+    limit: int = 10
+    context: Optional[Dict[str, Any]] = None
+    options: Optional[Dict[str, Any]] = None
+    # Decision Log identity binding
+    agent_id: str = "unknown"
+    workspace_id: str = "unknown"
+    scope: str = "workspace"
+
+
+class InternalTrialQueryResponse(BaseModel):
+    """Response shape returned to Cloudflare trial/query proxy."""
+    selected_memories: List[Dict[str, Any]]
+    packed_context: str
+    memory_tokens_injected: int
+    tokens_saved_estimate: int
+    savings_ratio: float
+    explanation: Dict[str, Any]
+    meter_artifact: Optional[Dict[str, Any]] = None
+    # Policy v1 observability
+    task_type: str = "continuation"
+    context_bypass: bool = False
+    matched_keywords: List[str] = []
+
+
+@app.post("/internal/trial-query", response_model=InternalTrialQueryResponse)
+async def internal_trial_query(request: InternalTrialQueryRequest, http_request: Request):
+    """
+    Internal trial query endpoint — called ONLY by Cloudflare Pages Functions
+    (query.ts) after it has already validated the API key against D1.
+
+    Trust is established via X-Internal-Token header matching
+    OMNIMEMORA_INTERNAL_API_TOKEN env var.
+
+    This endpoint bypasses the normal OmniMemora API key auth flow and
+    uses the tenant context passed directly from the validated Cloudflare layer.
+    """
+    import os as _os
+
+    # ---- Verify internal service token ----
+    internal_token = http_request.headers.get("X-Internal-Token", "")
+    expected_token = _os.getenv("OMNIMEMORA_INTERNAL_API_TOKEN", "")
+    if not expected_token:
+        loguru.logger.warning("[INTERNAL] OMNIMEMORA_INTERNAL_API_TOKEN not set — rejecting internal call")
+        raise HTTPException(status_code=500, detail="Internal API token not configured on adapter.")
+    if not internal_token or internal_token != expected_token:
+        loguru.logger.warning(f"[INTERNAL] Invalid internal token from {http_request.client}")
+        raise HTTPException(status_code=403, detail="Invalid internal service token.")
+
+    # ---- Also verify tenant came from X-OmniMemora-Tenant header ----
+    validated_tenant = http_request.headers.get("X-OmniMemora-Tenant", "")
+    if not validated_tenant:
+        raise HTTPException(status_code=400, detail="Missing X-OmniMemora-Tenant header.")
+    if validated_tenant != request.tenant:
+        raise HTTPException(status_code=400, detail="Tenant mismatch between header and body.")
+
+    loguru.logger.info(
+        f"[INTERNAL_TRIAL_QUERY] tenant={request.tenant}, user={request.user}, "
+        f"agent={request.agent}, query={request.query[:50]}..."
+    )
+
+    # ---- Agent Observability: identity + control mode ----
+    req_ctx = request.context or {}
+    raw_agent_id = request.agent_id if request.agent_id and request.agent_id != "unknown" else (request.agent or "unknown")
+    identity = _5_agent_id.AgentIdentity(
+        canonical_agent_id=_5_agent_id.resolve_canonical_agent_id(raw_agent_id),
+        raw_agent_id=raw_agent_id,
+        session_id=req_ctx.get("session_id") or req_ctx.get("conversation_id") or req_ctx.get("thread_id"),
+        workspace_id=request.workspace_id,
+        user_id=request.user,
+        integration_type="wrapper",
+        source="body",
+    )
+    per_agent_dict, default_mode = _agent_modes_cache
+    control_mode = _5_ctrl.load_control_mode(
+        identity.canonical_agent_id, identity.integration_type, per_agent_dict, default_mode
+    )
+    _5_agnet_m.record_agent_request(identity, control_mode.mode)
+
+    # ---- Set tenant context for search ----
+    http_request.state.v2_tenant_override = request.tenant
+    http_request.state.v2_user_override = request.user
+
+    try:
+        # ---- Parse options ----
+        options = request.options or {}
+        max_local_cards = options.get("max_local_cards", 4)
+        packing_enabled = options.get("enable_packing", True)
+        client = (request.context or {}).get("client", "omnimemora-trial")
+
+        # ---- Assemble rules from config ----
+        filter_rules = FilterRules(
+            min_content_length=config.min_content_length,
+            exclude_types=config.exclude_types,
+            route_score_rules=config.route_score_rules,
+            long_term_threshold=config.long_term_threshold,
+        )
+        routing_rules = RoutingRules(
+            route_score_rules=config.route_score_rules,
+            long_term_threshold=config.long_term_threshold,
+        )
+
+        # ---- Get quota context ----
+        registry_entry = get_tenant_registry_entry(
+            config.omnimemora_access_registry_path,
+            request.tenant,
+        )
+        trial_usage = get_tenant_current_usage(request.tenant)
+        trial_quota = int(registry_entry.get("monthly_quota_tokens")) if registry_entry and registry_entry.get("monthly_quota_tokens") not in (None, "") else None
+
+        # ---- Fetch candidate memories ----
+        retrieve_req = RetrieveRequest(
+            query=request.query,
+            agent=request.agent,
+            limit=max_local_cards * 2,
+            scoreThreshold=0.01,
+        )
+        search_result = await search_memory(retrieve_req, http_request)
+        candidate_memories = search_result.get("memories", [])
+
+        # ---- Policy v1: Task Classification ----
+        bypass_context, classification = should_bypass_context(request.query)
+        task_type = classification.task_type
+        matched_keywords = classification.matched_keywords
+        context_bypass = False
+        bypassed_context_tokens = 0
+
+        request_id = f"trial-{uuid4().hex[:8]}"
+
+        if bypass_context:
+            # Implementation task: SHORT-CIRCUIT context injection
+            estimated_memories_count = min(len(candidate_memories), max_local_cards)
+            if packing_enabled and estimated_memories_count > 0:
+                bypassed_context_tokens = (estimated_memories_count * 200) // 4
+            else:
+                bypassed_context_tokens = 0
+
+            loguru.logger.info(
+                f"[POLICY_V1_BYPASS] request_id={request_id}, task_type={task_type}, "
+                f"matched_keywords={matched_keywords}, bypassed_tokens={bypassed_context_tokens}"
+            )
+
+            # (TokenSavingsMeter already available via module-level importlib shim)
+            from datetime import datetime as dt
+
+            meter_for_bypass = TokenSavingsMeter(
+                request_id="engine-local",
+                tenant="engine",
+                user="engine",
+                agent=request.agent,
+                client=client,
+                timestamp=dt.utcnow().isoformat() + "Z",
+                query_shape="mixed",
+                query_chars=len(request.query),
+                query=request.query[:100],
+                baseline_chars=0,
+                actual_chars=0,
+                saved_chars=0,
+                baseline_tokens_estimate=bypassed_context_tokens,
+                actual_tokens_estimate=0,
+                saved_tokens_estimate=bypassed_context_tokens,
+                savings_ratio=1.0,
+                packed_memory_count=0,
+                local_cards_used=0,
+                remote_candidates_considered=0,
+                remote_candidates_skipped=0,
+                remote_used_count=0,
+                skipped_remote_reason="implementation_task_bypass",
+                coverage_satisfied=True,
+                packing_enabled=False,
+                abstract_preferred=False,
+                dedup_applied=False,
+                task_type=task_type,
+                context_bypass=True,
+                bypassed_context_tokens=bypassed_context_tokens,
+            )
+
+            class BypassResult:
+                def __init__(self, meter):
+                    self.selected_memories = []
+                    self.packed_context = ""
+                    self.token_savings = meter
+                    self.quota_result = check_quota_enforcement(trial_usage, trial_quota)
+                    self.meter_artifact = meter.to_dict()
+                    self.candidate_count = 0
+                    self.selected_count = 0
+
+            result = BypassResult(meter_for_bypass)
+            context_bypass = True
+        else:
+            # Decision or continuation: proceed with normal optimize_context flow
+            input_data = OptimizationInput(
+                query=request.query,
+                candidate_memories=candidate_memories,
+                filter_rules=filter_rules,
+                routing_rules=routing_rules,
+                agent=request.agent,
+                client=client,
+                current_usage=trial_usage,
+                monthly_quota=trial_quota,
+                packing_enabled=packing_enabled,
+                max_local_cards=max_local_cards,
+                candidate_limit=16,
+                task_type=task_type,
+                context_bypass=False,
+                bypassed_context_tokens=0,
+            )
+            result = optimize_context(input_data)
+
+        # ---- Quota enforcement ----
+        if result.quota_result.quota_exceeded:
+            raise_support_api_error(
+                http_request,
+                429,
+                "ADAPTER_QUOTA_EXCEEDED",
+                f"Monthly token quota exceeded ({result.quota_result.current_usage}/{result.quota_result.monthly_quota})",
+                operation="internal_trial_query_quota",
+                detail=(
+                    f"Tenant {request.tenant} has exceeded monthly token quota. "
+                    f"Current usage: {result.quota_result.current_usage} tokens. "
+                    f"Monthly quota: {result.quota_result.monthly_quota} tokens."
+                ),
+                retryable=False,
+                extra={
+                    "tenant_id": request.tenant,
+                    "current_usage": result.quota_result.current_usage,
+                    "monthly_quota": result.quota_result.monthly_quota,
+                    "quota_status": result.quota_result.quota_status,
+                },
+            )
+
+        # ---- Persist meter artifact ----
+        result.meter_artifact["request_id"] = request_id
+        result.meter_artifact["matched_keywords"] = matched_keywords  # Policy v1 observability
+        store_meter(result.meter_artifact)
+
+        # ---- Agent Observability: record result ----
+        optimization_applied = not context_bypass
+        bypass_detected = context_bypass or (result.packed_context == "" and len(candidate_memories) > 0)
+        raw_tokens = result.token_savings.baseline_tokens_estimate
+        compressed_tokens = result.token_savings.actual_tokens_estimate
+        quality_delta_pct = (
+            0.5 * ((raw_tokens - compressed_tokens) / raw_tokens if raw_tokens > 0 else 0)
+            + 0.3 * (result.selected_count / result.candidate_count if result.candidate_count > 0 else 0)
+            + 0.2 * (1.0 - len(result.selected_memories) / result.candidate_count if result.candidate_count > 0 else 0)
+        ) * 100
+        _5_agnet_m.record_agent_result(
+            identity=identity,
+            mode=control_mode.mode,
+            optimized=optimization_applied,
+            bypassed=bypass_detected,
+            meter_artifact=result.meter_artifact,
+            quality_delta_pct=quality_delta_pct,
+        )
+
+        # ---- Format response ----
+        selected_memories = [
+            {
+                "id": mem.get("uri", f"mem-{i:03d}"),
+                "type": mem.get("category", "memory"),
+                "score": mem.get("score", 0.5),
+                "content": mem.get("content", mem.get("abstract", "")),
+                "source": "local",
+            }
+            for i, mem in enumerate(result.selected_memories)
+        ]
+
+        explanation = {
+            "local_cards_used": result.selected_count,
+            "remote_candidates_skipped": 16,
+            "skip_remote_reason": "local-first coverage satisfied",
+            "packing_enabled": packing_enabled,
+            "abstract_preferred": False,
+            "auth_mode": "internal_trial",
+            "tenant_status": "active",
+        }
+
+        # --- Decision Log (auto-generated) ---
+        emit_decision_log(
+            query=request.query,
+            task_type=task_type,
+            context_bypass=context_bypass,
+            packed_context=result.packed_context,
+            memory_tokens_injected=result.token_savings.actual_tokens_estimate,
+            baseline_tokens_estimate=result.token_savings.baseline_tokens_estimate,
+            actual_tokens_estimate=result.token_savings.actual_tokens_estimate,
+            saved_tokens_estimate=result.token_savings.saved_tokens_estimate,
+            savings_ratio=result.token_savings.savings_ratio,
+            matched_keywords=matched_keywords,
+            selected_memory_count=len(result.selected_memories),
+            request_id=request_id,
+            agent=request.agent,
+            tenant=request.tenant,
+            agent_id=request.agent_id,
+            workspace_id=request.workspace_id,
+            scope=request.scope,
+        )
+
+        return InternalTrialQueryResponse(
+            selected_memories=selected_memories,
+            packed_context=result.packed_context,
+            memory_tokens_injected=result.token_savings.actual_tokens_estimate,
+            tokens_saved_estimate=result.token_savings.saved_tokens_estimate,
+            savings_ratio=result.token_savings.savings_ratio,
+            explanation=explanation,
+            meter_artifact=result.meter_artifact,
+            task_type=task_type,
+            context_bypass=context_bypass,
+            matched_keywords=matched_keywords,
+        )
+
+    finally:
+        http_request.state.v2_tenant_override = None
+        http_request.state.v2_user_override = None
+
+
+# ==================== 启动 ====================
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(
+        app,
+        host=config.adapter_host,
+        port=config.adapter_port,
+        log_level="info"
+    )

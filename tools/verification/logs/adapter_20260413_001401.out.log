@@ -1,0 +1,4 @@
+INFO:     127.0.0.1:64598 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:64598 - "GET /usage/token-savings?tenant=phase1-tenant&agent=codex HTTP/1.1" 200 OK
+{"timestamp": "2026-04-12T16:15:03.555446Z", "query": "phase1 adapter check debug", "task_type": "implementation", "context_bypass": true, "context_stats": {"packed_context_length": 0, "memory_tokens_injected": 0, "baseline_tokens_estimate": 200, "actual_tokens_estimate": 0, "saved_tokens_estimate": 200, "savings_ratio": 1.0}, "execution_feedback": null, "subjective_score": null, "_meta": {"request_id": "req-204dddc7", "agent": "codex", "tenant": "phase1-tenant", "agent_id": "codex", "workspace_id": "phase1-ws", "scope": "workspace", "matched_keywords": ["debug"]}}
+INFO:     127.0.0.1:64647 - "POST /memory/query HTTP/1.1" 200 OK

@@ -1,0 +1,151 @@
+"""
+路由器模块：基于评分决定记忆类型和等级
+规则从外部注入，不读世界
+"""
+from .rules import RoutingRules
+from .filter import detect_failure_content
+
+
+def calculate_memory_score_detailed(content: str, metadata: dict = None, rules: RoutingRules = None) -> tuple[int, int, int, int]:
+    """
+    计算记忆评分（详细维度版本）
+    
+    返回: (relevance_score, type_weight, length_penalty, final_score)
+    
+    公式：final_score = relevance_score * type_weight - length_penalty
+    
+    维度定义：
+    - relevance_score：关键词命中数 × 命中权重（使用现有 DEFAULT_SCORE_RULES）
+    - type_weight：strategy=3, failure=3, knowledge=2, result=1, general=1
+    - length_penalty：轻微扣分（content_len // 500）
+    """
+    if rules is None:
+        rules = RoutingRules()
+
+    score_rules = rules.route_score_rules
+    content_lower = content.lower()
+
+    # ========== 维度1: relevance_score（关键词命中） ==========
+    relevance_score = 0
+
+    # 成功/完成关键词
+    success_keywords = ["成功", "完成", "success", "完成", "done", "completed"]
+    for kw in success_keywords:
+        if kw in content_lower:
+            relevance_score += score_rules.get("success_keyword", 0)
+            break
+
+    # 策略/规划关键词
+    strategy_keywords = ["策略", "规划", "policy", "strategy", "方案"]
+    for kw in strategy_keywords:
+        if kw in content_lower:
+            relevance_score += score_rules.get("strategy_keyword", 0)
+            break
+
+    # 重要/关键关键词
+    important_keywords = ["重要", "关键", "important", "critical", "核心"]
+    for kw in important_keywords:
+        if kw in content_lower:
+            relevance_score += score_rules.get("important_keyword", 0)
+            break
+
+    # 知识/规则关键词
+    knowledge_keywords = ["知识", "规则", "knowledge", "rule", "原则"]
+    for kw in knowledge_keywords:
+        if kw in content_lower:
+            relevance_score += score_rules.get("knowledge_keyword", 0)
+            break
+
+    # 失败经验评分
+    is_failure, failure_type = detect_failure_content(content)
+    if is_failure:
+        relevance_score += score_rules.get("failure_experience", 0)
+
+    # ========== 维度2: type_weight（类型权重） ==========
+    content_type = "general"
+    if metadata:
+        content_type = metadata.get("type", "general")
+
+    type_weight = 1
+    if content_type in ["strategy", "failure", "failure_experience"]:
+        type_weight = 3
+    elif content_type == "knowledge":
+        type_weight = 2
+    elif content_type == "result":
+        type_weight = 1
+
+    # ========== 维度3: length_penalty（长度惩罚） ==========
+    content_len = len(content)
+    length_penalty = content_len // 500
+
+    # ========== 计算 final_score ==========
+    final_score = relevance_score * type_weight - length_penalty
+
+    # 确保至少有1分（向后兼容）
+    if final_score <= 0:
+        final_score = 1
+
+    return relevance_score, type_weight, length_penalty, final_score
+
+
+def calculate_memory_score(content: str, metadata: dict = None, rules: RoutingRules = None) -> int:
+    """
+    计算记忆评分（兼容封装）
+    评分越高，内容越重要
+    
+    向后兼容：调用 calculate_memory_score_detailed() 并只返回 final_score
+    """
+    _, _, _, final_score = calculate_memory_score_detailed(content, metadata, rules)
+    return final_score
+
+
+def get_memory_level(score: int) -> str:
+    """
+    根据评分获取记忆等级
+
+    L0: 0分 - 垃圾/不存
+    L1: 1-2分 - 短期缓存
+    L2: 3-4分 - 经验记忆
+    L3: 5+分 - 核心知识
+    """
+    if score <= 0:
+        return "L0"
+    elif score <= 2:
+        return "L1"
+    elif score <= 4:
+        return "L2"
+    else:
+        return "L3"
+
+
+def route_memory_type_and_level(content: str, metadata: dict = None, rules: RoutingRules = None) -> tuple[str, str, int]:
+    """
+    路由：决定记忆类型和等级
+
+    返回: (memory_type, memory_level, score)
+    - memory_type: "long_term" 或 "short_term"
+    - memory_level: "L0", "L1", "L2", "L3"
+    - score: 计算出的评分
+
+    改进：失败经验自动进入长期记忆
+    """
+    if rules is None:
+        rules = RoutingRules()
+
+    # 计算评分
+    score = calculate_memory_score(content, metadata, rules)
+
+    # 检测失败内容
+    is_failure, failure_type = detect_failure_content(content)
+
+    # 如果是失败经验，强制提高评分确保进入 L2
+    if is_failure and score < 3:
+        score = 3
+
+    # 决定记忆类型
+    memory_type = "long_term" if score >= rules.long_term_threshold else "short_term"
+
+    # 决定记忆等级
+    memory_level = get_memory_level(score)
+
+    return memory_type, memory_level, score

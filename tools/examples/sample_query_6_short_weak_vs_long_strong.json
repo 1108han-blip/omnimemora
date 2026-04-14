@@ -1,0 +1,53 @@
+{
+  "query": "我需要设计一个高可用的分布式缓存系统，要求支持数据分片、副本同步和一致性哈希",
+  "agent": "supervisor",
+  "client": "openclaw",
+  "current_usage": 12000,
+  "monthly_quota": 50000,
+  "max_local_cards": 4,
+  "candidate_limit": 16,
+  "candidate_memories": [
+    {
+      "id": "mem_001_short_weak",
+      "content": "缓存设计要点。",
+      "category": "architecture",
+      "created_at": "2026-04-10T00:00:00Z",
+      "tokens": 10
+    },
+    {
+      "id": "mem_002_long_strong",
+      "content": "分布式缓存系统设计：1) 数据分片策略：采用一致性哈希算法，将键空间映射到 0-2^32-1 的圆环上，每个物理节点负责环上的一段区间，新增/删除节点只影响相邻节点的数据迁移；2) 副本同步机制：主从复制模式，写操作先写入主节点，主节点同步到从节点，支持异步和半同步两种模式，异步模式性能高但可能丢数据，半同步模式保证至少一个从节点确认后才返回客户端；3) 高可用方案：哨兵模式监控主节点状态，主节点故障时自动从从节点中选举新主节点；4) 一致性保证：最终一致性通过版本号和向量时钟解决冲突，强一致性通过 Raft 或 Paxos 共识算法实现。",
+      "category": "architecture",
+      "created_at": "2026-04-10T00:01:00Z",
+      "tokens": 320
+    },
+    {
+      "id": "mem_003_short_weak_2",
+      "content": "缓存要快。",
+      "category": "general",
+      "created_at": "2026-04-10T00:02:00Z",
+      "tokens": 8
+    },
+    {
+      "id": "mem_004_long_strong_2",
+      "content": "一致性哈希详细实现：虚拟节点解决数据倾斜问题，每个物理节点映射 150-200 个虚拟节点均匀分布在环上；数据迁移策略：节点加入时从后继节点拉取数据，节点退出时将数据转移给后继节点；热点key处理：本地缓存 + 分布式锁防止缓存击穿，随机过期时间防止缓存雪崩。",
+      "category": "blueprint",
+      "created_at": "2026-04-10T00:03:00Z",
+      "tokens": 180
+    },
+    {
+      "id": "mem_005_irrelevant",
+      "content": "今天中午吃什么好呢？看起来天气不错。",
+      "category": "general",
+      "created_at": "2026-04-10T00:04:00Z",
+      "tokens": 50
+    },
+    {
+      "id": "mem_006_medium",
+      "content": "Redis 集群模式：Cluster 架构去中心化，每个节点负责部分槽位，gossip 协议传播节点状态。",
+      "category": "architecture",
+      "created_at": "2026-04-10T00:05:00Z",
+      "tokens": 60
+    }
+  ]
+}

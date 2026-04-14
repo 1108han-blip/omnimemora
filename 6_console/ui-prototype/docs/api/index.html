@@ -1,0 +1,453 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OmniMemora | API Reference</title>
+    <link rel="icon" href="data:,">
+    <style>
+        :root {
+            --bg: #0b1020;
+            --panel: #121a2d;
+            --panel-2: #17223a;
+            --border: #2a3550;
+            --text: #e5edf8;
+            --muted: #96a3ba;
+            --green: #4ade80;
+            --blue: #60a5fa;
+            --amber: #fbbf24;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: "Segoe UI", system-ui, sans-serif;
+            background: radial-gradient(circle at top, #17223a 0%, var(--bg) 45%);
+            color: var(--text);
+        }
+        a { color: inherit; }
+        .page {
+            max-width: 1100px;
+            margin: 0 auto;
+            padding: 32px 24px 48px;
+        }
+        .nav, .footer {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .nav {
+            margin-bottom: 22px;
+        }
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            text-decoration: none;
+        }
+        .brand-mark {
+            width: 42px;
+            height: 42px;
+            border-radius: 14px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            background: linear-gradient(135deg, #2563eb, #7c3aed);
+        }
+        .brand-copy strong {
+            display: block;
+            font-size: 21px;
+        }
+        .brand-copy span {
+            display: block;
+            color: var(--muted);
+            font-size: 12px;
+            letter-spacing: 0.06em;
+            text-transform: uppercase;
+        }
+        .nav-links {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        .nav-links a {
+            text-decoration: none;
+            color: var(--muted);
+            font-size: 14px;
+            padding: 8px 12px;
+            border-radius: 999px;
+        }
+        .nav-links a.active,
+        .nav-links a:hover {
+            color: var(--text);
+            background: rgba(15, 23, 42, 0.76);
+            border: 1px solid var(--border);
+        }
+        .hero {
+            margin-bottom: 28px;
+            padding: 28px;
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            background: linear-gradient(135deg, rgba(96,165,250,0.14), rgba(74,222,128,0.08));
+        }
+        .eyebrow {
+            color: var(--green);
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            margin-bottom: 10px;
+        }
+        h1, h2, h3, p { margin: 0; }
+        h1 { font-size: 34px; margin-bottom: 10px; }
+        .hero p { color: var(--muted); max-width: 760px; line-height: 1.6; }
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(4, minmax(0, 1fr));
+            gap: 14px;
+            margin: 22px 0 0;
+        }
+        .summary-card {
+            padding: 16px;
+            border-radius: 14px;
+            border: 1px solid var(--border);
+            background: rgba(11, 16, 32, 0.58);
+        }
+        .summary-card strong {
+            display: block;
+            font-size: 20px;
+            margin-bottom: 4px;
+        }
+        .summary-card span { color: var(--muted); font-size: 13px; }
+        .commercial-line {
+            margin-top: 14px;
+            padding: 14px 16px;
+            border-radius: 14px;
+            border: 1px solid var(--border);
+            background: rgba(96, 165, 250, 0.08);
+            color: #dbeafe;
+            line-height: 1.65;
+        }
+        .endpoint {
+            margin-top: 18px;
+            padding: 22px;
+            border: 1px solid var(--border);
+            border-radius: 18px;
+            background: var(--panel);
+        }
+        .endpoint-header {
+            display: flex;
+            justify-content: space-between;
+            gap: 18px;
+            align-items: flex-start;
+            margin-bottom: 16px;
+        }
+        .method {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 0.05em;
+        }
+        .post { background: rgba(74, 222, 128, 0.12); color: var(--green); }
+        .get { background: rgba(96, 165, 250, 0.12); color: var(--blue); }
+        .status {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #111827;
+            background: var(--green);
+        }
+        .status.estimate { background: var(--amber); }
+        .path {
+            font-family: Consolas, Monaco, monospace;
+            font-size: 20px;
+            margin: 10px 0 6px;
+        }
+        .purpose {
+            color: var(--muted);
+            line-height: 1.65;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin-top: 18px;
+        }
+        .box {
+            padding: 16px;
+            border-radius: 14px;
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+        }
+        .box h3 {
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--muted);
+            margin-bottom: 10px;
+        }
+        ul {
+            margin: 0;
+            padding-left: 18px;
+            color: var(--text);
+            line-height: 1.65;
+        }
+        code, pre {
+            font-family: Consolas, Monaco, monospace;
+            font-size: 13px;
+        }
+        pre {
+            margin: 14px 0 0;
+            overflow-x: auto;
+            padding: 14px;
+            border-radius: 12px;
+            background: #09101f;
+            border: 1px solid var(--border);
+            color: #d7e3f5;
+        }
+        .cta {
+            margin-top: 24px;
+            padding: 18px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            background: rgba(74, 222, 128, 0.08);
+        }
+        .cta a {
+            display: inline-flex;
+            margin-top: 10px;
+            padding: 10px 16px;
+            border-radius: 999px;
+            text-decoration: none;
+            font-weight: 700;
+            color: #04140b;
+            background: linear-gradient(135deg, #4ade80, #22c55e);
+        }
+        .note {
+            margin-top: 24px;
+            padding: 18px;
+            border-radius: 16px;
+            border: 1px solid var(--border);
+            background: rgba(96, 165, 250, 0.08);
+            color: var(--muted);
+            line-height: 1.65;
+        }
+        .footer {
+            margin-top: 24px;
+            padding-top: 16px;
+            border-top: 1px solid var(--border);
+            color: var(--muted);
+            font-size: 13px;
+            line-height: 1.7;
+        }
+        .footer a {
+            color: #cbd5e1;
+            text-decoration: none;
+        }
+        .footer a:hover {
+            text-decoration: underline;
+        }
+        @media (max-width: 900px) {
+            .summary, .grid { grid-template-columns: 1fr; }
+            .endpoint-header { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        <nav class="nav">
+            <a class="brand" href="../../">
+                <div class="brand-mark">M</div>
+                <div class="brand-copy">
+                <strong>OmniMemora</strong>
+                    <span>Agent Memory API</span>
+                </div>
+            </a>
+            <div class="nav-links">
+                <a href="../../">Home</a>
+                <a href="../../demo/">Demo</a>
+                <a class="active" href="./">API</a>
+                <a href="../system-overview/">System Overview</a>
+                <a href="../../contact/">Contact</a>
+            </div>
+        </nav>
+
+        <section class="hero">
+            <div class="eyebrow">OmniMemora</div>
+            <h1>API Reference</h1>
+            <p>This page documents the current minimal Agent Memory API surface that is already wired into the live demo. It is intentionally small: one unified query endpoint, one request-level meter endpoint, and two tenant-level usage endpoints.</p>
+            <div class="commercial-line">
+                OmniMemora API is designed for production agents with high token cost and long memory chains. The billing path is currently frozen; the active path is free trial first.
+            </div>
+            <div class="summary">
+                <div class="summary-card"><strong>4</strong><span>documented endpoints</span></div>
+                <div class="summary-card"><strong>Live</strong><span>backed by adapter :8000</span></div>
+                <div class="summary-card"><strong>Metered</strong><span>request + tenant usage views</span></div>
+                <div class="summary-card"><strong>Estimate</strong><span>token savings are heuristic, not billing-grade</span></div>
+            </div>
+        </section>
+
+        <section class="endpoint">
+            <div class="endpoint-header">
+                <div>
+                    <span class="method post">POST</span>
+                    <div class="path">/memory/query</div>
+                    <p class="purpose">Unified recall entrypoint for OmniMemora. Selects memories, builds packed context, and emits a request-scoped meter reference for the current query.</p>
+                </div>
+                <span class="status">real</span>
+            </div>
+            <div class="grid">
+                <div class="box">
+                    <h3>Request Shape</h3>
+                    <ul>
+                        <li><code>tenant</code>, <code>user</code>, <code>agent</code>, <code>query</code></li>
+                        <li><code>context.client</code> may identify caller channel</li>
+                        <li><code>options.max_local_cards</code> and <code>options.enable_packing</code> are optional</li>
+                    </ul>
+                </div>
+                <div class="box">
+                    <h3>Response Shape</h3>
+                    <ul>
+                        <li><code>request_id</code></li>
+                        <li><code>selected_memories[]</code></li>
+                        <li><code>packed_context</code></li>
+                        <li><code>memory_tokens_injected</code></li>
+                        <li><code>tokens_saved_estimate</code>, <code>savings_ratio</code></li>
+                        <li><code>meter_artifact.$ref</code></li>
+                    </ul>
+                </div>
+            </div>
+<pre>{
+  "tenant": "18790-account",
+  "user": "18790-user",
+  "agent": "supervisor",
+  "query": "V2 smoke memory ov-v2-smoke-92329c5d",
+  "context": { "client": "openclaw" },
+  "options": { "max_local_cards": 4, "enable_packing": true }
+}</pre>
+        </section>
+
+        <section class="endpoint">
+            <div class="endpoint-header">
+                <div>
+                    <span class="method get">GET</span>
+                    <div class="path">/requests/{id}/meter</div>
+                    <p class="purpose">Fetches the full per-request Token Savings Meter artifact for one OmniMemora query.</p>
+                </div>
+                <span class="status estimate">estimate</span>
+            </div>
+            <div class="grid">
+                <div class="box">
+                    <h3>Request Shape</h3>
+                    <ul>
+                        <li>Path parameter: <code>request_id</code></li>
+                        <li>No request body</li>
+                    </ul>
+                </div>
+                <div class="box">
+                    <h3>Response Shape</h3>
+                    <ul>
+                        <li>Identity: <code>tenant</code>, <code>user</code>, <code>agent</code></li>
+                        <li>Token estimates: <code>baseline_tokens_estimate</code>, <code>actual_tokens_estimate</code>, <code>saved_tokens_estimate</code></li>
+                        <li>Explanation fields: local cards, remote skipped, packing, dedup</li>
+                    </ul>
+                </div>
+            </div>
+<pre>{
+  "request_id": "req-50155a03",
+  "tenant": "18790-account",
+  "baseline_tokens_estimate": 418,
+  "actual_tokens_estimate": 72,
+  "saved_tokens_estimate": 346,
+  "savings_ratio": 0.828
+}</pre>
+        </section>
+
+        <section class="endpoint">
+            <div class="endpoint-header">
+                <div>
+                    <span class="method get">GET</span>
+                    <div class="path">/usage/token-savings</div>
+                    <p class="purpose">Returns aggregated savings totals for a tenant, including recent requests and by-agent breakdown.</p>
+                </div>
+                <span class="status estimate">estimate</span>
+            </div>
+            <div class="grid">
+                <div class="box">
+                    <h3>Request Shape</h3>
+                    <ul>
+                        <li>Required query: <code>tenant</code></li>
+                        <li>Optional: <code>agent</code>, <code>start_time</code>, <code>end_time</code></li>
+                    </ul>
+                </div>
+                <div class="box">
+                    <h3>Response Shape</h3>
+                    <ul>
+                        <li><code>total_requests</code></li>
+                        <li><code>baseline_tokens_total</code>, <code>actual_tokens_total</code>, <code>saved_tokens_total</code></li>
+                        <li><code>average_savings_ratio</code></li>
+                        <li><code>by_agent[]</code> and <code>recent_requests[]</code></li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section class="endpoint">
+            <div class="endpoint-header">
+                <div>
+                    <span class="method get">GET</span>
+                    <div class="path">/usage/token-savings/trend</div>
+                    <p class="purpose">Returns a lightweight tenant trend series for the last N days. Used by the current OmniMemora demo chart.</p>
+                </div>
+                <span class="status">real</span>
+            </div>
+            <div class="grid">
+                <div class="box">
+                    <h3>Request Shape</h3>
+                    <ul>
+                        <li>Required query: <code>tenant</code></li>
+                        <li>Optional: <code>agent</code>, <code>days</code></li>
+                    </ul>
+                </div>
+                <div class="box">
+                    <h3>Response Shape</h3>
+                    <ul>
+                        <li><code>tenant</code>, <code>days</code></li>
+                        <li><code>trend[]</code> with <code>date</code>, <code>requests</code>, <code>saved_tokens</code>, <code>savings_ratio</code></li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <div class="cta">
+            Apply for free trial API access — no credit card required. If trial provisioning is not yet configured, your inquiry is stored and we will follow up.
+            <br>
+            <a href="../../contact/">Start Free Trial</a>
+        </div>
+
+        <div class="note">
+            Status semantics used on this page:
+            <br>
+            <strong>real</strong> = endpoint is live on the current adapter and has been smoke-tested.
+            <br>
+            <strong>estimate</strong> = endpoint is live, but the token math is intentionally heuristic and should not yet be treated as billing-grade metering.
+        </div>
+
+        <footer class="footer">
+            <div>
+                Includes components based on OpenViking (AGPL-3.0). See the <a href="../../open-source/">open-source page</a> for details.
+            </div>
+            <div>
+                <a href="../../demo/">Demo</a> ·
+                <a href="../system-overview/">System Overview</a> ·
+                <a href="../../contact/">Contact</a> ·
+                <a href="../../open-source/">Open Source</a>
+            </div>
+        </footer>
+    </main>
+</body>
+</html>

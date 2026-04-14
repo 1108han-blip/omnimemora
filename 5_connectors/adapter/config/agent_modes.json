@@ -1,0 +1,8 @@
+{
+  "_comment": "Per-agent control mode configuration (ADR-0005). Keys must be canonical_agent_id.",
+  "per_agent_modes": {
+    "claude_code": "guided",
+    "openclaw": "observe"
+  },
+  "default_mode": "observe"
+}

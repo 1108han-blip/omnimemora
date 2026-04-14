@@ -1,0 +1,12 @@
+﻿{
+    "archive_id":  "archive_20260414_094349_session-start",
+    "created_at_utc":  "2026-04-14T09:43:49.2867733Z",
+    "created_at_local":  "2026-04-14T17:43:49.5304919+08:00",
+    "timezone":  "China Standard Time",
+    "run_label":  "session-start",
+    "project_root":  "E:\\AI2\\Vault\\13_OmniMemora\\OmniMemora",
+    "meter_data_source":  "E:\\AI2\\Vault\\13_OmniMemora\\OmniMemora\\5_connectors\\data",
+    "meter_files_count":  20,
+    "include_raw_logs":  false,
+    "note":  "Immutable archive for experiment evidence."
+}

@@ -1,0 +1,110 @@
+﻿[
+    {
+        "file":  "meters_engine.json",
+        "bytes":  1962,
+        "sha256":  "5aa8d2a7f05c2d75bf2cbbc90467687595598410cd57b30f09963d315a021430",
+        "last_write_utc":  "2026-04-12T14:47:00.6178393Z"
+    },
+    {
+        "file":  "meters_final-24h-tenant.json",
+        "bytes":  4495133,
+        "sha256":  "d7f1f4337c65f47e1a84ffaa9f3be9c417caf6b32e7b99ee082a1b7e68b5c9c7",
+        "last_write_utc":  "2026-04-13T14:43:57.7616514Z"
+    },
+    {
+        "file":  "meters_index.json",
+        "bytes":  5664968,
+        "sha256":  "eaae27614c91536a5c5cc1ee0da054fe2644a797faede751559e23b3638474f2",
+        "last_write_utc":  "2026-04-13T14:43:57.6225153Z"
+    },
+    {
+        "file":  "meters_migration-tenant.json",
+        "bytes":  4259,
+        "sha256":  "84c383bc17b3b2afe1ad7205935f64aca6ed07bb1017c556e19322ea060f2287",
+        "last_write_utc":  "2026-04-13T02:53:03.3485960Z"
+    },
+    {
+        "file":  "meters_openclaw.json",
+        "bytes":  94346,
+        "sha256":  "92527662b94ba3de5f051437d0714578b061a57936e6f8cca9376550ba65985b",
+        "last_write_utc":  "2026-04-13T14:41:57.7551310Z"
+    },
+    {
+        "file":  "meters_phase1-step2.json",
+        "bytes":  1008,
+        "sha256":  "25903d0d793b6b3fcdca3b42bbf72df21084cd8e82f13fcfd08368ce4d5d7237",
+        "last_write_utc":  "2026-04-12T19:01:31.5552178Z"
+    },
+    {
+        "file":  "meters_phase1-step3.json",
+        "bytes":  2123,
+        "sha256":  "48cb04ef82577c7fa273d94bd2a58c7d3b2ba87855fdfac5e7dd89a7d1922cff",
+        "last_write_utc":  "2026-04-12T19:01:37.5494924Z"
+    },
+    {
+        "file":  "meters_phase1-tenant.json",
+        "bytes":  11115,
+        "sha256":  "076c637fb076e06b12dd4e8de563833009089d0497243115d4e903269061e2d2",
+        "last_write_utc":  "2026-04-12T16:17:57.1731883Z"
+    },
+    {
+        "file":  "meters_phase2-meter-dir.json",
+        "bytes":  1000,
+        "sha256":  "59282be9f18dbdee8650c9f37683c4389d0bff9d916da516553205008c424d7b",
+        "last_write_utc":  "2026-04-12T19:38:57.4951432Z"
+    },
+    {
+        "file":  "meters_phase2-meter-test.json",
+        "bytes":  2007,
+        "sha256":  "883f9e5335dd86a1c6058ce075eb4613ad9cbd62a37632831625927b7a0ee30b",
+        "last_write_utc":  "2026-04-12T19:37:51.0955473Z"
+    },
+    {
+        "file":  "meters_phase3-integration.json",
+        "bytes":  1005,
+        "sha256":  "a3178e74ce0b384e899061df739eb2f8095406d9ddeedd082e18513fddf24e5a",
+        "last_write_utc":  "2026-04-13T04:09:58.1685178Z"
+    },
+    {
+        "file":  "meters_phase3-memleak.json",
+        "bytes":  281721,
+        "sha256":  "dec393701800b0eafac6b617cef38a66a7802d0fef086c030304344d7eec6681",
+        "last_write_utc":  "2026-04-13T04:20:41.3215759Z"
+    },
+    {
+        "file":  "meters_phase3-perf.json",
+        "bytes":  400966,
+        "sha256":  "c69042b00f336c92561fd3535424ab445696d81b7b7ba744bb305e41a5b64ab8",
+        "last_write_utc":  "2026-04-13T03:03:23.8572511Z"
+    },
+    {
+        "file":  "meters_phase3-regression.json",
+        "bytes":  1006,
+        "sha256":  "1cfc7a2c6800631aabf5ca03941d934217a2452a03dd271d26a74d3246f27b91",
+        "last_write_utc":  "2026-04-13T04:09:58.3415928Z"
+    },
+    {
+        "file":  "meters_prod.json",
+        "bytes":  2982,
+        "sha256":  "782c6675abf565c71b40f7679e3fec1208e232bc75415b788fc8ba0044e577a9",
+        "last_write_utc":  "2026-04-12T14:49:08.3516462Z"
+    },
+    {
+        "file":  "meters_stability-tenant.json",
+        "bytes":  314407,
+        "sha256":  "d7861a7c50c61f03342f5716591b5f8157222bf8f17785f376b4528a973e5510",
+        "last_write_utc":  "2026-04-12T18:24:17.7134714Z"
+    },
+    {
+        "file":  "meters_test.json",
+        "bytes":  12587,
+        "sha256":  "82b38ac21d3c5f9f4f0498d2c2b421fc818601df841bd8eb7a18c4432ed51442",
+        "last_write_utc":  "2026-04-13T11:46:10.2377604Z"
+    },
+    {
+        "file":  "meters_test-tenant.json",
+        "bytes":  913,
+        "sha256":  "0de5c5740fb500be9b92763d1fcf8871145545b3207feda448c3addfabeeb79f",
+        "last_write_utc":  "2026-04-12T14:44:47.5852995Z"
+    }
+]

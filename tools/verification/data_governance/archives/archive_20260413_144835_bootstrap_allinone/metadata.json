@@ -1,0 +1,12 @@
+﻿{
+    "archive_id":  "archive_20260413_144835_bootstrap_allinone",
+    "created_at_utc":  "2026-04-13T14:48:35.8387841Z",
+    "created_at_local":  "2026-04-13T22:48:36.0262058+08:00",
+    "timezone":  "China Standard Time",
+    "run_label":  "bootstrap_allinone",
+    "project_root":  "E:\\AI2\\Vault\\13_OmniMemora\\OmniMemora",
+    "meter_data_source":  "E:\\AI2\\Vault\\13_OmniMemora\\OmniMemora\\5_connectors\\data",
+    "meter_files_count":  18,
+    "include_raw_logs":  false,
+    "note":  "Immutable archive for experiment evidence."
+}

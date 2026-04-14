@@ -1,0 +1,20 @@
+给 run_engine_demo.py 增加 --output 参数，支持把结果保存到文件
+
+[OmniMemora optimized context (lite)]
+
+Project: OmniMemora
+Source: selected memory cards
+Why selected:
+- high relevance
+- code-focused
+- low redundancy
+- token-budget optimized
+
+Context:
+1. EXECUTION_GUARDRAILS.md 的可替换性原则：新增功能应该可关闭、可替换、不影响系统存在。向后兼容原则：新增参数应该是可选的，不破坏现有功能。
+2. SYSTEM_ARCHITECTURE.md 定义了系统架构：tools/ 目录放验证工具，4_core/ 放核心逻辑。
+3. 向后兼容原则：新增参数应该是可选的，不破坏现有功能。--output 应该是可选参数，不传时继续输出到 stdout。
+4. 当前 run_engine_demo.py 已有参数：--input（输入 JSON 文件路径）、--format text|json（输出格式，默认 text）。main() 函数调用 print_text_result() 或 print_json_result()。
+
+Use this as supporting context, not as unquestioned truth.
+If code reality conflicts with this context, prefer the repository state.

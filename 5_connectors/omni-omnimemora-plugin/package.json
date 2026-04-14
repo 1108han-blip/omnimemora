@@ -1,0 +1,11 @@
+{
+  "name": "@openclaw/memory-openviking",
+  "version": "1.0.0",
+  "description": "OpenViking-backed memory via Memory Adapter layer",
+  "type": "module",
+  "openclaw": {
+    "extensions": [
+      "./index.ts"
+    ]
+  }
+}

@@ -1,0 +1,141 @@
+name: Docs Governance Gate
+
+on:
+  pull_request:
+    paths:
+      - '**.md'
+      - '.github/workflows/docs-governance.yml'
+  push:
+    paths:
+      - '**.md'
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: 'CI Phase (0=warn only, 1=block)'
+        required: false
+        default: '1'
+        type: choice
+        options:
+          - '0'
+          - '1'
+
+env:
+  # Phase 0: warn only (no blocking). Switch to '1' after 1-week observation.
+  CI_PHASE: ${{ github.event.inputs.phase || '1' }}
+
+jobs:
+  doc-consistency:
+    runs-on: ubuntu-latest
+    # Phase 0: continue-on-error (warn). Phase 1: fail-fast (block).
+    continue-on-error: ${{ env.CI_PHASE == '0' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install pyyaml
+
+      - name: Check for duplicate doc_ids
+        run: python .github/workflows/check_doc_ids.py
+        continue-on-error: ${{ env.CI_PHASE == '0' }}
+
+      - name: Check depends_on references exist
+        run: python .github/workflows/check_depends_on.py
+        continue-on-error: ${{ env.CI_PHASE == '0' }}
+
+      - name: Check deprecated docs have supersedes
+        run: python .github/workflows/check_deprecated.py
+        continue-on-error: ${{ env.CI_PHASE == '0' }}
+
+      - name: Check markdown links
+        run: python .github/workflows/check_links.py
+        continue-on-error: ${{ env.CI_PHASE == '0' }}
+
+      - name: Check required metadata fields
+        run: python .github/workflows/check_metadata.py
+        continue-on-error: ${{ env.CI_PHASE == '0' }}
+
+      - name: Post Phase 0 summary
+        if: ${{ env.CI_PHASE == '0' }}
+        run: |
+          echo "## 📋 Phase 0 观察模式 - 仅记录，不阻止合入" >> $GITHUB_STEP_SUMMARY
+          echo "如需切换到 block 模式，请在 workflow_dispatch 中选择 phase=1" >> $GITHUB_STEP_SUMMARY
+
+  doc-schema-validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate doc-schema.md exists
+        run: |
+          if [ ! -f docs/standards/doc-schema.md ]; then
+            echo "ERROR: docs/standards/doc-schema.md not found"
+            exit 1
+          fi
+          echo "✓ docs/standards/doc-schema.md exists"
+
+      - name: Validate ADR template exists
+        run: |
+          if [ ! -f docs/adr/ADR-TEMPLATE.md ]; then
+            echo "ERROR: docs/adr/ADR-TEMPLATE.md not found"
+            exit 1
+          fi
+          echo "✓ docs/adr/ADR-TEMPLATE.md exists"
+
+      - name: Validate SPEC template exists
+        run: |
+          if [ ! -f docs/spec/SPEC-TEMPLATE.md ]; then
+            echo "ERROR: docs/spec/SPEC-TEMPLATE.md not found"
+            exit 1
+          fi
+          echo "✓ docs/spec/SPEC-TEMPLATE.md exists"
+
+      - name: Validate governance doc exists
+        run: |
+          if [ ! -f docs/standards/DOCS-GOVERNANCE.md ]; then
+            echo "ERROR: docs/standards/DOCS-GOVERNANCE.md not found"
+            exit 1
+          fi
+          echo "✓ docs/standards/DOCS-GOVERNANCE.md exists"
+
+  ci-self-check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate governance doc metadata
+        run: |
+          if grep -q 'doc_id: STD-DOCS-GOVERNANCE-001' docs/standards/DOCS-GOVERNANCE.md; then
+            echo "✓ DOCS-GOVERNANCE.md is valid"
+          else
+            echo "ERROR: docs/standards/DOCS-GOVERNANCE.md is missing proper metadata"
+            exit 1
+          fi
+          if grep -q 'doc_id: STD-DOC-SCHEMA-001' docs/standards/doc-schema.md; then
+            echo "✓ doc-schema.md is valid"
+          else
+            echo "ERROR: docs/standards/doc-schema.md is missing proper metadata"
+            exit 1
+          fi
+
+# =============================================================================
+# 分级上线说明（DOCS-GOVERNANCE.md §4）：
+#
+# Phase 0（Day 1-7）：warn 模式
+#   → 默认 CI_PHASE=0，所有 doc-consistency 检查使用 continue-on-error
+#   → PR 可以合入，但检查结果会出现在 workflow log 中
+#   → 建议：每天检查 log 中是否有 P0 级问题（doc_id 重复）
+#
+# Phase 1（Day 8+）：block 模式
+#   → 手动在 workflow_dispatch 中选择 phase=1，或将 env.CI_PHASE 改为 '1'
+#   → 所有检查失败则 PR 阻塞合入
+#
+# 推荐切换顺序（不阻断开发流）：
+#   1. doc_id 唯一性     ← 先上，最重要
+#   2. depends_on 有效性
+#   3. deprecated 约束
+#   4. 链接检查         ← 最后上，历史链接最多
+# =============================================================================

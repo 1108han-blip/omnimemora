@@ -1,0 +1,51 @@
+{
+  "query": "如何配置 OmniMemora 的 scope 隔离",
+  "agent": "supervisor",
+  "client": "openclaw",
+  "current_usage": 8500,
+  "monthly_quota": 100000,
+  "candidate_memories": [
+    {
+      "id": "mem_001",
+      "content": "Scope 类型包括 user、workspace、agent 和 custom，默认隔离，显式共享。",
+      "category": "architecture",
+      "created_at": "2026-04-10T00:10:00Z",
+      "tokens": 90
+    },
+    {
+      "id": "mem_002",
+      "content": "agent scope 下，不同 agent 互不可见，需要完全匹配 agent_id。",
+      "category": "scope",
+      "created_at": "2026-04-10T00:11:00Z",
+      "tokens": 85
+    },
+    {
+      "id": "mem_003",
+      "content": "workspace scope 下，同一 workspace 内的 agent 可以共享读写。",
+      "category": "scope",
+      "created_at": "2026-04-10T00:12:00Z",
+      "tokens": 80
+    },
+    {
+      "id": "mem_004",
+      "content": "配置文件在 config/ 目录下，可以通过环境变量或命令行参数覆盖。",
+      "category": "config",
+      "created_at": "2026-04-10T00:13:00Z",
+      "tokens": 95
+    },
+    {
+      "id": "mem_005",
+      "content": "上周的会议记录提到了 scope 隔离的重要性，但没有具体实施细节。",
+      "category": "general",
+      "created_at": "2026-04-10T00:14:00Z",
+      "tokens": 100
+    },
+    {
+      "id": "mem_006",
+      "content": "scope 解析优先级为 Header > Body > Config，确保租户隔离。",
+      "category": "scope",
+      "created_at": "2026-04-10T00:15:00Z",
+      "tokens": 88
+    }
+  ]
+}

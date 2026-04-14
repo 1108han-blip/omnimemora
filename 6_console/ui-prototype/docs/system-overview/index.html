@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OmniMemora | System Overview</title>
+    <link rel="icon" href="data:,">
+    <style>
+        :root {
+            --bg: #09111f;
+            --panel: rgba(13, 20, 33, 0.88);
+            --border: #263248;
+            --text: #e6edf8;
+            --muted: #9bacbf;
+            --green: #4ade80;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: "Segoe UI", system-ui, sans-serif;
+            color: var(--text);
+            background: linear-gradient(180deg, #09111f 0%, #0c1423 100%);
+        }
+        a { color: inherit; }
+        .page { max-width: 1080px; margin: 0 auto; padding: 28px 24px 56px; }
+        .nav, .footer { display: flex; justify-content: space-between; gap: 16px; align-items: center; flex-wrap: wrap; }
+        .nav { margin-bottom: 24px; }
+        .brand { display: flex; align-items: center; gap: 12px; text-decoration: none; }
+        .brand-mark {
+            width: 42px; height: 42px; border-radius: 14px; display: flex; align-items: center; justify-content: center;
+            font-weight: 800; background: linear-gradient(135deg, #2563eb, #7c3aed);
+        }
+        .brand-copy strong { display: block; font-size: 21px; }
+        .brand-copy span { display: block; font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+        .nav-links { display: flex; gap: 10px; flex-wrap: wrap; }
+        .nav-links a { text-decoration: none; color: var(--muted); font-size: 14px; padding: 8px 12px; border-radius: 999px; }
+        .nav-links a.active, .nav-links a:hover { color: var(--text); background: rgba(15, 23, 42, 0.76); border: 1px solid var(--border); }
+        .hero, .panel { border: 1px solid var(--border); border-radius: 22px; background: var(--panel); }
+        .hero { padding: 30px; margin-bottom: 18px; }
+        .panel { padding: 24px; margin-top: 18px; }
+        h1, h2, h3, p { margin: 0; }
+        .eyebrow { color: var(--green); font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+        h1 { font-size: 34px; margin-bottom: 12px; }
+        p { color: var(--muted); line-height: 1.8; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        .item {
+            padding: 16px; border-radius: 16px; border: 1px solid var(--border); background: rgba(10, 18, 31, 0.84);
+            margin-top: 14px;
+        }
+        .item strong { display: block; margin-bottom: 8px; }
+        .footer { margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); color: var(--muted); font-size: 13px; line-height: 1.7; }
+        .footer a { color: #cbd5e1; text-decoration: none; }
+        .footer a:hover { text-decoration: underline; }
+        @media (max-width: 860px) {
+            .grid { grid-template-columns: 1fr; }
+            .page { padding: 22px 18px 40px; }
+            h1 { font-size: 28px; }
+        }
+    </style>
+</head>
+<body>
+    <main class="page">
+        <nav class="nav">
+            <a class="brand" href="../../">
+                <div class="brand-mark">M</div>
+                <div class="brand-copy">
+                <strong>OmniMemora</strong>
+                    <span>Agent Memory API</span>
+                </div>
+            </a>
+            <div class="nav-links">
+                <a href="../../">Home</a>
+                <a href="../../demo/">Demo</a>
+                <a href="../api/">API</a>
+                <a class="active" href="./">System Overview</a>
+                <a href="../../contact/">Contact</a>
+            </div>
+        </nav>
+
+        <section class="hero">
+            <div class="eyebrow">System Overview</div>
+            <h1>How the current OmniMemora control surface is organized.</h1>
+            <p>
+                This page translates the earlier console information architecture into a public-facing overview. It exists to explain
+                how the demo and future control plane are structured, without turning architecture into the main selling point.
+            </p>
+        </section>
+
+        <section class="panel">
+            <h2>Near-term pages</h2>
+            <div class="grid">
+                <div class="item">
+                    <strong>Overview</strong>
+                    <p>Token savings summary, recent requests, active tenants, and service health.</p>
+                </div>
+                <div class="item">
+                    <strong>Query / Recall</strong>
+                    <p>Manual recall execution with selected memories, packed context, and short explanations.</p>
+                </div>
+                <div class="item">
+                    <strong>Requests</strong>
+                    <p>Request-level history and detailed token savings evidence for one query.</p>
+                </div>
+                <div class="item">
+                    <strong>Usage / Savings</strong>
+                    <p>Tenant and agent views of usage totals, trends, and savings behavior.</p>
+                </div>
+                <div class="item">
+                    <strong>Docs</strong>
+                    <p>API reference, onboarding, and troubleshooting surfaces that support integration work.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Next layers</h2>
+            <div class="grid">
+                <div class="item">
+                    <strong>Memory Browser</strong>
+                    <p>Browse raw memory resources by namespace, memory type, or agent for operations and debugging.</p>
+                </div>
+                <div class="item">
+                    <strong>Tenants</strong>
+                    <p>Tenant list, tenant summaries, and policy surfaces for isolated workloads.</p>
+                </div>
+                <div class="item">
+                    <strong>Agents</strong>
+                    <p>Agent-level usage and recall comparisons across planner, executor, or supervisor roles.</p>
+                </div>
+                <div class="item">
+                    <strong>Settings</strong>
+                    <p>Feature flags, metering options, API endpoints, and platform-level controls.</p>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel">
+            <h2>Build order</h2>
+            <p>
+                The current recommendation is to prioritize what proves commercial value first: query results, token savings,
+                and request evidence. Full settings and admin surfaces stay behind that.
+            </p>
+        </section>
+
+        <footer class="footer">
+            <div>
+                Includes components based on OpenViking (AGPL-3.0). See the <a href="../../open-source/">open-source page</a> for details.
+            </div>
+            <div>
+                <a href="../../demo/">Demo</a> ·
+                <a href="../api/">API</a> ·
+                <a href="../../contact/">Contact</a> ·
+                <a href="../../open-source/">Open Source</a>
+            </div>
+        </footer>
+    </main>
+</body>
+</html>

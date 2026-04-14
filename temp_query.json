@@ -1,0 +1,33 @@
+{
+  "query": "继续优化 engine scoring，让 relevance_score 对中文关键词更敏感",
+  "candidate_memories": [
+    {
+      "id": "mem1",
+      "type": "knowledge",
+      "category": "knowledge",
+      "content": "OmniMemora 是 Memory Control Plane for AI Agents，负责优化上下文选择而非存储。核心原则：Local-first, Weakly intrusive, Replaceable, Observable, Policy-driven。",
+      "abstract": "产品定义：Memory Control Plane for AI Agents"
+    },
+    {
+      "id": "mem2",
+      "type": "result",
+      "category": "result",
+      "content": "router.py 中的 calculate_memory_score_detailed() 负责计算评分：relevance_score * type_weight - length_penalty。relevance_score 基于关键词命中：success_keyword, strategy_keyword, important_keyword, knowledge_keyword, failure_experience。",
+      "abstract": "评分引擎在 router.py 中"
+    },
+    {
+      "id": "mem3",
+      "type": "strategy",
+      "category": "strategy",
+      "content": "当前关键词列表：success_keywords=[\"成功\", \"完成\", \"success\", \"完成\", \"done\", \"completed\"], strategy_keywords=[\"策略\", \"规划\", \"policy\", \"strategy\", \"方案\"], important_keywords=[\"重要\", \"关键\", \"important\", \"critical\", \"核心\"], knowledge_keywords=[\"知识\", \"规则\", \"knowledge\", \"rule\", \"原则\"]",
+      "abstract": "当前关键词配置"
+    },
+    {
+      "id": "mem4",
+      "type": "knowledge",
+      "category": "knowledge",
+      "content": "engine.py 是统一能力入口，负责串联 filter → route/score → reduce redundancy → select → pack → meter。所有外部依赖从外部注入，不碰文件系统。",
+      "abstract": "engine.py 架构"
+    }
+  ]
+}
