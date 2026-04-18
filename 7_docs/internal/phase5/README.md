@@ -14,6 +14,7 @@
 - [Track A 8765 过渡兼容清单](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Phase5_5_TrackA_8765_过渡兼容清单_2026-04-18.md)
 - [Track B 自愈状态机 Bounded Scan](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Phase5_5_TrackB_自愈状态机_Bounded_Scan_2026-04-18.md)
 - [Track B 自愈状态机定义](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Phase5_5_TrackB_自愈状态机定义_2026-04-18.md)
+- [Track B B2 候选实例故障基线](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Phase5_5_TrackB_B2_候选实例故障基线_2026-04-18.md)
 
 ## Archived Phase 5 Convergence Docs
 

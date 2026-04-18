@@ -250,6 +250,19 @@ last_verified_commit: ""
 | 结论适用范围 | `候选成立`：当前仓库候选实现已具备 `M5` 所需的最小数据集合边界，且上报范围已收敛到低敏元数据集合 |
 | 备注 | 本记录是代码与测试对位证据，不代表真实云端服务已接收这些字段；云端服务上线前仍需单独验证服务端契约 |
 
+### RECORD-B-015
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-015` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；候选实例以 adapter `18012`、runtime `18765`、隔离数据目录 `.tmp/candidate-runtime-data-b2` 启动；上游 stub 指向 `http://127.0.0.1:19001/v1` |
+| 验证动作 | 1. 以隔离 runtime data 启动候选实例；2. `enable(openclaw)` 后顺序请求 `POST /llm/chat`，读取最新 compile event；3. 杀掉候选 runtime，仅保留 adapter，观察 `GET /health`、`GET /agents/control`、`POST /memory/search`、`POST /llm/chat`；4. 再停掉候选 gateway，观察 `GET /health` 与 `GET /agents/control` 的可达性 |
+| 观察结果 | healthy 分支下，`openclaw` 的最新 compile event 为 `runtime_compile / compile_success`。能力层故障注入后，`/health` 返回 `degraded`，`/agents/control` 返回 `503`，`/memory/search` 返回 `500`，但 `/llm/chat` 仍可返回上游结果。入口层故障注入后，`18012` 整体不可达，现有产品接口无法返回任何决策状态 |
+| 结论适用范围 | `候选成立`：Track B 当前在候选实例上已具备 healthy 分支基线与能力层故障探测能力，但尚未具备统一的 `degraded-capability` 状态输出，也尚未具备 `user-decision-required` 的产品接口承载 |
+| 备注 | 本记录证明的是 Track B 的“当前缺口基线”，不是自愈功能已存在的证据；验证过程未触碰真实 `18011`、未修改真实用户配置 |
+
 ## 五、Gate B 完成判据
 
 当满足以下条件时，`Gate B` 可视为通过：
@@ -274,3 +287,4 @@ last_verified_commit: ""
   - `RECORD-B-012` 已确认当前候选实例下 `claude_code` 可通过 `/agents/control/install -> /uninstall` 在线恢复原始 settings 配置
   - `RECORD-B-013` 已确认当前候选实例下 `cursor` 可通过 `/agents/control/install -> /uninstall` 在线恢复原始 settings 配置
   - `RECORD-B-014` 已确认当前候选实现下云端 usage telemetry 仅包含最小必要元数据，且不再包含 `tenant`
+  - `RECORD-B-015` 已确认 Track B 在候选实例上的 healthy / capability failure / gateway failure 三类当前基线行为

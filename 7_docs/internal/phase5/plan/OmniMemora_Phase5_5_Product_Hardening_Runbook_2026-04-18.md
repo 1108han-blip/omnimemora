@@ -95,6 +95,7 @@ last_verified_commit: ""
 - [x] 自愈状态机定义文档已建立
 - [x] `18011` 入口故障与能力层故障已在文档层分层建模
 - [x] `user-decision-required` 已有正式状态定义
+- [x] `B2` 候选实例故障基线已建立
 - [ ] 还没有正式的故障状态机实现
 - [ ] 还没有 `user-decision-required` 的最小接口输出
 
@@ -104,6 +105,7 @@ last_verified_commit: ""
 - [x] 明确自动修复动作边界
 - [x] 明确自动降级到 passthrough 的触发条件
 - [x] 明确 `user-decision-required` 的最小状态定义
+- [x] 建立 healthy / capability failure / gateway failure 的候选实例基线
 - [ ] 明确 `user-decision-required` 的最小接口输出
 - [ ] 明确禁止自动 restore backup 的代码约束点
 
@@ -133,4 +135,4 @@ last_verified_commit: ""
 4. `B2` 候选实例故障场景验证批
 5. `C1` 责任边界图批
 
-当前下一步：`B2`
+当前下一步：`Track B` 最小接口输出定义与实现前置
