@@ -563,3 +563,16 @@ last_verified_commit: ""
 | 观察结果 | 当前 `uninstall` 用户动作的唯一正式承载面是 runtime internal plane：`POST /gateway/decision/uninstall` 与 runtime dashboard 按钮都依赖 `8765` 存活。既有 `RECORD-B-021` 已证明当 `gateway dead + runtime alive` 时，`uninstall` 可执行并能完成 `route off + detach + restore backup`。但当 `runtime` 也已不可用时，当前架构下不存在独立于 runtime 的第二决策承载面，因此无法安全执行同一动作 |
 | 结论适用范围 | `结构性限制已确认`：本阶段不应把 `uninstall + runtime already unavailable` 当作“再补一条普通验证”来继续硬做；这条路径需要未来把 internal decision carrier 从 runtime 能力层进一步解耦后再实现 |
 | 备注 | 这不是当前代码的单点 bug，而是现阶段 mixed architecture 的边界；后续若进入模块拆分，应把该问题并入新的 decision carrier / control-plane decoupling 子工程 |
+
+### RECORD-B-036
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-036` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库现实 / 代码与回归测试` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；涉及 `4_core/local-runtime/api/control_carrier_store.go`、`gateway_status.go` 与既有 runtime API tests |
+| 验证动作 | 1. 将 `gateway/status` 与 `gateway/decision/*` 的文件承载逻辑从 gateway handler 文件中抽离为独立 control-carrier store；2. 运行 `gofmt -w api/control_carrier_store.go api/gateway_status.go`；3. 运行 `go test ./tests ./api` |
+| 观察结果 | runtime 侧新增独立 `control_carrier_store.go`，统一承载 `gatewayStatusPayload`、`gatewayDecisionPayload`、状态文件路径、决策文件路径以及读写逻辑；`gateway_status.go` 退回为薄文件，不再承担 decision/status 文件持久化职责。`go test ./tests ./api` 全部通过 |
+| 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第一批低风险逻辑解耦已经落地，decision/control carrier 的文件承载职责已从 runtime gateway handler 中分离出来，且未引入 runtime API 行为回归 |
+| 备注 | 本记录证明的是逻辑边界收敛与测试级稳定性，不等同于 `runtime dead + uninstall` 已解决 |
