@@ -24,9 +24,9 @@ last_verified_commit: ""
 
 若本文件与执行计划或 runbook 表述冲突，以：
 
-1. [OmniMemora Phase 5.5 Product Hardening 执行计划](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Phase5_5_Product_Hardening_执行计划_2026-04-18.md)
+1. [OmniMemora Decision Carrier / Control-Plane Decoupling 执行计划](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Decision_Carrier_Control_Plane_Decoupling_执行计划_2026-04-18.md)
 2. 本文件
-3. [OmniMemora Phase 5.5 Product Hardening Runbook](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Phase5_5_Product_Hardening_Runbook_2026-04-18.md)
+3. [OmniMemora Decision Carrier / Control-Plane Decoupling Runbook](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Decision_Carrier_Control_Plane_Decoupling_Runbook_2026-04-18.md)
 
 的优先顺序解释。
 
