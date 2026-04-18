@@ -31,6 +31,7 @@ last_verified_commit: ""
 - 云端边界仍由 [7_docs/internal/phase5/plan/云端小工程.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/云端小工程.md) 承担；若两者表述冲突，以本文件对应的收敛执行计划为准
 - `Gate B` 的正式记录载体见 [OmniMemora 验证对象登记与验收记录](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_验证对象登记与验收记录_2026-04-18.md)
 - 工作区切批方案见 [OmniMemora 工作区分批切割清单](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_工作区分批切割清单_2026-04-18.md)
+- `V2` 历史依赖与后备优化定位见 [OmniMemora V2遗产映射与后备优化清单](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_V2遗产映射与后备优化清单_2026-04-18.md)
 
 ## 二、总执行规则
 
