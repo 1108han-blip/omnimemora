@@ -70,7 +70,7 @@ The dashboard shows:
 - Daily trend chart
 - Connection status
 
-Internal runtime dashboard: http://127.0.0.1:8765/dashboard
+Internal runtime health (operator only): http://127.0.0.1:8765/health
 Product entry health: http://127.0.0.1:18011/health
 
 ## Support

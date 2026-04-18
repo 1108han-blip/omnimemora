@@ -267,7 +267,7 @@ Truth Source Bridge v2 的預設 precedence 順序固定為：
 - [ ] [CONSTITUTION.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/CONSTITUTION.md) 明確寫出「受控旁路」和「產品不重定義用戶上游語義」
 - [ ] [0_blueprint/DEFAULT_IN_CONTROL_PLANE.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/DEFAULT_IN_CONTROL_PLANE.md) 增補「禁止靜默模型重寫」
 - [ ] [9_adr/ADR-0003-interface-access-paths.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/9_adr/ADR-0003-interface-access-paths.md) 明確三段邊界與 `18011/8765` 層級
-- [ ] [CANONICAL_FACTS.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/CANONICAL_FACTS.md) 補入「用戶端配置是真相來源」與「產品外出口不屬於產品責任」
+- [ ] [0_blueprint/PRODUCT_DEFINITION.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/PRODUCT_DEFINITION.md) 補入「用戶端配置是真相來源」與「產品外出口不屬於產品責任」
 
 ### P1：接入與工程文檔需要同步
 
