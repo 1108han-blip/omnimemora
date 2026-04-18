@@ -105,6 +105,8 @@ func (s *Server) handleAgentControlRescan(w http.ResponseWriter, r *http.Request
 	s.handleAgentControlList(w, r)
 }
 
+// Runtime agent control remains the low-frequency install layer only.
+// Product routing and product-facing control semantics stay at :18011.
 func (s *Server) handleAgentControlInstall(w http.ResponseWriter, r *http.Request) {
 	var req agentControlRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

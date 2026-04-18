@@ -65,8 +65,12 @@ last_verified_commit: ""
 - [x] `README.txt` 中 `8765/dashboard` 的对外展示已收掉
 - [x] runtime `README.txt` 已改写为 operator/internal runtime 说明，不再保留“安装即生效 / 自动接入”旧叙事
 - [x] runtime CLI 输出已把 dashboard 明确标成 internal/operator surface，并补出 `18011` 作为产品入口
+- [x] runtime `README.md` 已明确 runtime HTTP contract 只用于 internal/operator verification，不能当产品控制面证据
+- [x] demo dashboard README 已明确 `5173 -> 18011` 的产品边界，排除 `:8765` 直连解释
+- [x] runtime dashboard 标题与 handler 注释已收敛为 internal/operator surface，不再暗示产品主控制面
+- [x] runtime `/agents/control*` 注释已明确其仅为 low-frequency install layer
 - [ ] archive / 审计记录之外，仍需确认是否还有活跃对外文档把 `8765` 误写成产品面
-- [ ] runtime HTTP contract 仍暴露可被误抬升的内部控制接口叙事
+- [ ] runtime HTTP contract 仍需继续检查是否有可被误抬升的内部控制接口叙事
 
 ### 下一步动作
 

@@ -31,6 +31,12 @@ Canonical references:
 
 The following HTTP contract is internal-to-gateway and internal-to-operator only. It is not a public product API surface.
 
+Interpretation rule:
+
+- gateway may proxy selected low-frequency actions through `:18011`
+- operators may use these paths for internal verification
+- external agents and end-user product validation must not bind directly to `:8765`
+
 | Method | Path | Notes |
 |------|------|-------|
 | `GET` | `/health` | Runtime health |
@@ -95,6 +101,12 @@ curl -s http://127.0.0.1:8765/metrics
 ```
 
 These checks are for internal runtime verification only. Product-facing validation should bind to the gateway at `:18011`.
+
+Do not use the runtime contract as evidence that a product-facing control surface exists. For example:
+
+- `GET /agents/control` on `:8765` proves only that the internal install layer is available
+- runtime dashboard proves only that the internal/operator surface is alive
+- neither should be used as the product entry or user-control truth
 
 ## Non-Goals
 

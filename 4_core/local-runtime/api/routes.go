@@ -224,8 +224,9 @@ func (s *Server) handleConnectorList(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, connectors)
 }
 
-// handleDashboard serves the local dashboard (Phase 3.5)
-// Provides polished UI with hero, last query, and trend sections
+// handleDashboard serves the runtime-local internal/operator dashboard.
+// It is an internal verification and recovery surface, not the product-facing
+// control truth.
 func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	metrics, err := s.service.GetMetrics(r.Context())
 	if err != nil {
@@ -233,7 +234,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		html := `<!DOCTYPE html>
 <html>
 <head>
-	<title>OmniMemora Dashboard</title>
+		<title>OmniMemora Runtime Dashboard</title>
 	<meta charset="utf-8">
 	<style>
 		body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 40px; background: #f5f5f5; }
@@ -275,7 +276,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	html := `<!DOCTYPE html>
 <html>
 <head>
-	<title>OmniMemora - Token Savings Dashboard</title>
+	<title>OmniMemora Runtime - Token Savings Dashboard</title>
 	<meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1">
 	<style>
