@@ -161,8 +161,10 @@ last_verified_commit: ""
 
 ## 六、Track C: 18011 纯接入编排层拆分准备
 
+- [x] Track C bounded global scan 已完成
+- [x] 当前 `18011` / compile / strategy / V2 遗产散点已完成第一轮责任盘点
 - [ ] 暂不进入实现
-- [ ] 只允许做责任盘点和边界图草案
+- [ ] 下一步只允许做责任边界图与迁移顺序草案
 
 ## 七、Track D: 候选实例补强验证
 
@@ -177,4 +179,4 @@ last_verified_commit: ""
 4. `B2` 候选实例故障场景验证批
 5. `C1` 责任边界图批
 
-当前下一步：`Track B` 若继续推进，应进入“能力层故障与入口层故障的联合恢复策略”或回切 `Track C` 做 `18011` 责任拆分准备；当前入口层自动修复窗口、失败分级、用户决策闭环和 route-off 语义已收口
+当前下一步：`Track C` 已进入边界定义阶段；应先产出 `18011 ingress/orchestration / local compile module / local strategy module` 的责任边界图与迁移顺序，再决定是否进入实际拆分准备
