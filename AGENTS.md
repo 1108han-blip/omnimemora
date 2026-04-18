@@ -33,6 +33,25 @@ Use the following only when you are explicitly operating on Phase 3 experiment f
 - Do not treat legacy endpoints (for example `:8000`) as product truth for current-stage checks.
 - Do not bypass product behavior by writing meter files directly or simulating usage outside product API calls.
 
+## Workspace Governance Rule (Mandatory)
+
+- Codex must actively monitor branch and worktree health while executing phased work.
+- Before expanding implementation scope, Codex must check whether the workspace is still in a safe range.
+- Default thresholds:
+  - `<= 8` uncommitted files: normal progress allowed
+  - `9-12`: tighten scope; avoid opportunistic expansion
+  - `13-15`: warning zone; prioritize batching, records, and cleanup
+  - `> 15`: do not expand implementation by default
+  - `> 20`: pause implementation; only do governance, batching, validation alignment, or documentation
+- Codex must pause earlier when high-risk files are involved, including ingress, runtime, control API, routing state, environment mutation, or deployment paths.
+- Codex must distinguish and label:
+  - repository reality
+  - candidate reality
+  - running reality
+- Codex must not mix code-reading conclusions with running-instance behavior in one validation claim.
+- Codex must not advance to the next gate unless the validation target is explicitly named and the conclusion scope is recorded.
+- When suitable, Codex should proactively use lower-cost subagents for bounded low-risk work such as document cleanup, inventories, checklist backfill, and contract comparison, while keeping main-thread control over gate decisions and workspace risk.
+
 ## One-Line Operator Command
 
 ```powershell

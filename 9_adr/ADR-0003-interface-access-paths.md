@@ -23,7 +23,7 @@ last_verified_commit: ""
 
 > **产品路径必须唯一，不可分裂。**
 
-OmniMemora 只有一个产品入口。所有协议接入（MCP/CLI/REST/Wrapper）最终都收敛到同一条核心路径。
+OmniMemora 只有一条产品数据路径。所有协议接入（MCP/CLI/REST/Wrapper）最终都收敛到同一条核心路径。
 
 ### 错误结构（禁止出现）
 
@@ -98,6 +98,12 @@ LLM
 | CLI | HTTP REST | :18011 | 本地优先，低延迟 |
 | REST | HTTP JSON | :18011 | 工具链 / CI/CD / 编排系统 |
 | Wrapper | subprocess | :18011 | 策略验证与实验 |
+
+补充口径：
+
+- `:5173` 是用户控制入口，不承载产品数据路径
+- `:18011` 是用户开启产品路由后的唯一产品数据入口
+- `:8765` 是内部 Local Memory Plane，不对用户暴露为产品入口
 
 ### 关键约束
 
@@ -179,22 +185,24 @@ Unified Entry
 
 | 端口 | 角色 | 备注 |
 |------|------|------|
+| 5173 | Dashboard / Control UI | **用户控制入口**，不承载产品数据路径 |
 | 8765 | Local Memory Plane（Go Runtime） | 仅存储/检索，**非产品入口** |
-| 18011 | Unified Interface Layer（Python Adapter） | **唯一产品入口**，所有协议统一接入 |
+| 18011 | Unified Interface Layer（Python Adapter） | **唯一产品数据入口**，所有协议统一接入 |
 
 ---
 
 ## 七、决策记录
 
-- **DECISION-0003-01**：OmniMemora 产品路径唯一，所有协议接入收敛到 Python Adapter (18011)
+- **DECISION-0003-01**：OmniMemora 产品数据路径唯一，所有协议接入收敛到 Python Adapter (18011)
 - **DECISION-0003-02**：Go Runtime (8765) 仅作为 Local Memory Plane，不承载产品入口
-- **DECISION-0003-03**：所有响应返回统一数据结构，不得因协议不同而分化
-- **DECISION-0003-04**：能力模块可配置（token_optimization / compression 等），但产品路径不可选
+- **DECISION-0003-03**：Dashboard (5173) 是用户控制入口，不参与产品数据路径
+- **DECISION-0003-04**：所有响应返回统一数据结构，不得因协议不同而分化
+- **DECISION-0003-05**：能力模块可配置（token_optimization / compression 等），但产品路径不可选
 
 ---
 
 ## 八、溯源
 
-- 产品宪法：`0_blueprint/PRODUCT_CONSTITUTION.md`
+- 控制面基线：`0_blueprint/DEFAULT_IN_CONTROL_PLANE.md`
 - 产品定义：`0_blueprint/PRODUCT_DEFINITION.md`（已同步修订）
 - 本文档替代：原 ADR-0003 多路径架构描述

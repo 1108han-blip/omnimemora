@@ -1,233 +1,227 @@
-# OmniMemora — Product Definition (Single Source of Truth)
+# OmniMemora — Product Definition
 
-## 1. What it is
+> ⚠️ **2026-04-16 更新：** 本文件作為當前產品定義基線，正式收斂「入口映射原則」。
+> 舊版「optional call / default-in optimization layer」等表述，如與本文衝突，一律以本文為準。
 
-OmniMemora is a **Memory Control Plane for AI Agents**.
+---
 
-It operates as an **optional context optimization layer** on top of existing AI systems.
+## 1. 核心定位
 
-### Product Vision
+OmniMemora 是一個**本地 LLM Gateway（入口層）**，並帶有一個由 UI 控制的 agent 接入/路由控制面。
+
+其責任是在用戶明確開啟某個 agent 後，接管該 agent 的 LLM 請求路徑，並在轉發前完成 memory recall、context compile、token 壓縮與 context 注入。
+
+OmniMemora 的產品邊界是**入口層治理**，不是模型供應方，也不是 Agent 工具插件。
+
+### One-line Vision
 
 > Keep it on, or things get worse.
 
 ---
 
-## 2. What it does
+## 2. 設計原則（必須遵守）
 
-OmniMemora improves how context is constructed before entering the model by:
+### 原則 1：不改用戶上游語義
 
-- selecting relevant memory
-- compressing redundant information
-- optimizing token usage
-- keeping only minimal necessary results for LLM input
+OmniMemora 不改變以下內容：
+
+- 用戶原本使用的 LLM Provider（如 MiniMax / OpenAI / Anthropic）
+- 用戶原本使用的 API Key / OAuth 登錄態 / 賬號歸屬
+- 用戶原本配置的 model 名稱
+- 用戶原本的 provider 選擇與調用邏輯
+
+統一要求：
+
+> 用戶原來怎麼連上游 LLM，OmniMemora 接入後應保持該語義不變。
+
+### 原則 2：只在用戶授權後接管請求路徑
+
+OmniMemora 的唯一強制行為是：
+
+> 某個 agent 一旦在 UI 中被明確開啟「使用 OmniMemora」，其 LLM 請求必須先進入 OmniMemora Gateway，再由 OmniMemora 轉發到原始上游。
+
+也就是：
+
+```text
+Agent -> OmniMemora Gateway -> Original Upstream LLM
+```
+
+OmniMemora 接管的是**入口路徑**，不是**模型決定權**；是否接管由用戶 UI 控制，而不是 agent 自主決定。
+
+### 原則 3：透明轉發
+
+Gateway 必須實現 Transparent Forwarding：
+
+- 不改變原始請求語義
+- 不破壞原始 provider 調用方式
+- 不引入 provider 偽裝
+- 不要求用戶重配模型
+- 不要求用戶切換既有賬戶體系
+- 路由關閉時仍可經過 Gateway，但只能透明直通，不執行 compile / recall / inject
+
+標準轉發路徑：
+
+```text
+Agent Request
+  -> OmniMemora (compile / recall / inject)
+  -> Original Upstream (MiniMax / OpenAI / Anthropic)
+```
+
+### 原則 4：編譯執行內置於請求路徑
+
+OmniMemora 的核心能力必須在 Gateway 內部自動執行，包括：
+
+- memory recall
+- context compile
+- token 壓縮
+- context 注入
+
+這些能力不作為工具調用暴露給 Agent，也不依賴 Agent 主動觸發。
+
+統一要求：
+
+> 編譯能力屬於入口層內建能力，不屬於 Agent 可選工具能力。
+
+### 原則 5：用戶體驗必須像工具一樣簡單
+
+安裝後必須做到：
+
+- 不要求用戶理解 Gateway 架構
+- 不要求用戶重寫複雜配置
+- 不要求用戶切換原有模型使用方式
+- 不要求用戶理解 attach/detach 與路由控制的底層差異
+- 但必須允許用戶在 UI 裡明確控制「接入」與「使用」
+
+用戶感知應統一為：
+
+> 我原來怎麼用，現在還是怎麼用，但上下文效果更好、token 更省。
 
 ---
 
-## 3. What it does NOT do
-
-OmniMemora does NOT:
-
-- own or replace memory systems
-- act as a required execution path
-- function as an orchestration layer
-- control agent behavior
-- store primary user memory
-- expose strategy/candidate set/scoring/control-plane metadata to LLM
-
----
-
-## 4. Position in the system
-
-```
-Agent (ChatGPT / Codex / OpenClaw)
-↓ (optional call)
-OmniMemora (Control Plane)
-↓
-Optimized Context
-↓
-LLM
-```
-
----
-
-## 5. Control definition
-
-OmniMemora does NOT control memory.
-
-It **optimizes what is selected into context**.
-
-Context for LLM is the **result**, not the decision process.
-
----
-
-## 6. Core value
-
-- improve context quality
-- reduce token usage
-- enable cross-session consistency (when used)
-
----
-
-## 7. Design principles
-
-- Local-first
-- Weakly intrusive
-- Replaceable
-- Observable
-- Policy-driven
-
----
-
-## 8. One-line definition
-
-OmniMemora = Control Plane that optimizes context, not memory.
-
----
-
-## 9. Architecture: Unified Entry（统一入口）
-
-### 9.1 核心原则：单一路路
-
-> **产品路径必须唯一，不可分裂。**
-
-OmniMemora 只有一个产品入口，所有协议接入（MC
-
-P/CLI/REST/Wrapper）最终都收敛到同一条核心路径：
-
-```
-Agent
-  ↓
-OmniMemora Unified Entry
-  ↓
-Context Compiler / Control Plane
-  ↓
-LLM
-```
-
-错误的多路径结构（禁止出现）：
-
-```
-Agent
-  ↓
-┌─→ Go Runtime (8765) ──→ ???
-│
-└─→ Python Adapter (18011) ──→ ???
-
-（功能口径不一致，数据结构不一致，用户体验不一致）
-```
-
-### 9.2 多接口，单路径
-
-统一入口不等于单一协议。对外兼容多种接入协议，但内部只允许一条产品路径：
-
-```
-  MCP ──┐
-  CLI ──┼──→ Unified Interface Layer ──→ Core Compiler
-  REST ─┤
-  Wrap ─┘
-```
-
-- **MCP**：通用 Agent 生态标准接入面
-- **CLI**：本地优先路径，低延迟
-- **REST**：工具链 / CI/CD / 编排系统
-- **Wrapper**：策略验证与实验
-
-所有接口都是**协议适配层**，不是产品路径分支。协议可以替换，核心路径不分裂。
-
-### 9.3 可选：能力模块，不是产品路径
-
-OmniMemora 默认启用完整核心能力。用户可以关闭增强模块，但不关闭主路径：
-
-```
-Unified Entry
-   ↓
-[ module toggles ]
-   ├─ token_optimization  on/off
-   ├─ compression         on/off
-   ├─ feedback            on/off
-   └─ policy_mode         permissive/strict
-```
-
-关闭模块仍然走同一条主路径，只是该模块不生效。
-
-这与"可选路径"的本质区别：
-
-| 概念 | 正确 | 错误 |
-|------|------|------|
-| 可选 | 用户可关闭增强模块 | 用户可选择不走主路径 |
-| 默认 | 默认启用完整能力 | 默认不启用，绕路走 |
-| 路径 | 始终唯一 | 分裂为多条路径 |
-
-### 9.4 统一入口的技术表达
-
-无论从哪个端口/协议接入，最终执行的都是同一个 `Context Compiler`：
-
-```
-Port 8765 (Go Runtime MCP)
-  ↓
-  ┌─────────────────────────┐
-  │  Protocol Adapter       │ ← 把 MCP JSON-RPC 转为内部调用
-  └──────────┬──────────────┘
-             ↓
-Port 18011 (Python Adapter REST)
-  ↓
-  ┌─────────────────────────┐
-  │  Protocol Adapter       │ ← 把 REST JSON 转为内部调用
-  └──────────┬──────────────┘
-             ↓
-  ┌──────────────────────────────────────┐
-  │  Unified Interface Layer             │
-  │  ┌────────────────────────────────┐ │
-  │  │  Context Compiler (Core)      │ │
-  │  │  engine.optimize_context()    │ │
-  │  │  - filter                      │ │
-  │  │  - route_score                 │ │
-  │  │  - dedup                       │ │
-  │  │  - select                      │ │
-  │  │  - pack                        │ │
-  │  │  - meter                       │ │
-  │  └────────────────────────────────┘ │
-  │  ┌────────────────────────────────┐ │
-  │  │  Metering & Trace Store       │ │
-  │  └────────────────────────────────┘ │
-  └──────────────┬─────────────────────┘
-                 ↓
-           Structured JSON
-           { saved_tokens, ratio,
-             selected_memories, ... }
-```
-
-### 9.5 技术实现约束
-
-1. **所有接入协议共享同一个 Context Compiler 实例**
-2. **所有请求共享同一个 metering pipeline**
-3. **所有响应返回同一个数据结构**（不可因接入协议不同而返回不同数据结构）
-4. **Go Runtime (8765) 不得自行实现独立的 Context Assembly 逻辑**，必须调用统一 Context Compiler
-
----
-
-## 10. 接口行为约束（来自 ADR-0003 修订版）
-
-| 接口 | 协议 | 入口端口 | 是否直接调用 Core |
-|------|------|---------|------------------|
-| MCP | SSE + JSON-RPC | 18011 (Python Adapter) | 是，统一 Context Compiler |
-| CLI | HTTP REST | 18011 (Python Adapter) | 是，统一 Context Compiler |
-| REST | HTTP JSON | 18011 (Python Adapter) | 是，统一 Context Compiler |
-| Wrapper | subprocess | 18011 (Python Adapter) | 是，统一 Context Compiler |
-
-> **注意**：Go Runtime (8765) 仅作为 Local Memory Plane，不承载产品入口功能。
-> 产品入口统一在 Python Adapter (18011)。
-
----
-
-## 11. 非目标（必须明确）
+## 3. 非目標（必須明確）
 
 OmniMemora 不做：
 
-- AI Agent 本体
-- 模型服务
-- 数据存储平台
-- 单一 memory server
-- 云端承载主记忆
-- 多条产品路径
-- 协议相关功能（orchestration / tool system）
+- 替代 LLM Provider 本身
+- 強制用戶切換模型
+- 管理用戶 API Key 生命周期
+- 作為一個由 Agent 主動調用的工具插件存在
+- 把是否使用 OmniMemora 的決定權交給 Agent
+- 通過 prompt 提示、建議或軟約束引導 Agent 使用
+- 在檢測到 agent 後自動 attach 或自動開啟產品路由
+
+統一邊界：
+
+> OmniMemora 不是一個由 agent 自主決定是否調用的增強工具；它是一個由用戶在 UI 中顯式控制接入與路由的本地網關層。
+
+---
+
+## 4. 技術實現約束
+
+### 必須實現
+
+- 本地 Gateway 統一入口
+- UI 顯式控制的雙開關模型
+- 接入前自動備份，卸載時恢復備份
+- 純本地模式默認不啟用雲端策略更新與數據上報
+- 開啟雲端策略更新時，最小必要遙測數據默認隨之啟用
+- 請求級路徑接管，而不是工具級調用
+- 基於原始請求語義的上游動態轉發
+- 編譯前置執行機制（pre-forward hook）
+- 保持原有上游 provider 語義不變的透明轉發能力
+
+### 禁止實現
+
+- 修改 Agent 內部邏輯
+- 重寫 Agent SDK
+- 依賴 prompt 引導觸發使用
+- 依賴建議、提示或軟約束讓 Agent 使用 OmniMemora
+- 通過 provider 偽裝改變用戶原始模型語義
+- 將入口接管降級為可選工具調用
+- 將 UI 父級卡片粒度擴張成所有臨時 subagent 都單獨控制
+
+---
+
+## 5. 架構位置
+
+```text
+[ Agent ]
+     ↓
+[ OmniMemora Gateway ]
+     ↓  (compile / recall / inject)
+[ Original Upstream LLM ]
+     ↓
+[ Response -> Agent ]
+```
+
+Gateway 位於本機應用層，先於用戶系統代理生效。
+
+它只控制「請求先經過你」，不接管、不破壞用戶原有系統代理、VPN、Clash、TUN 分流體系。
+
+### 固定入口口徑
+
+- `:5173` = 用戶控制入口
+- `:18011` = 用戶開啟產品路由後的唯一產品數據入口
+- `:8765` = 內部 memory plane
+
+---
+
+## 6. 工程口徑
+
+### 核心判斷標準
+
+> 這個改動有沒有增強「路徑控制權」？
+
+- 沒有：不應進入主線
+- 有：才屬於 OmniMemora 主產品能力
+
+補充判準：
+
+> 控制面入口與產品數據入口不可混寫；`5173` 管控制，`18011` 管數據路徑，`8765` 不對用戶暴露為產品入口。
+
+### 標準入口表達
+
+| Agent | Request Format | OmniMemora Entry | Upstream Role |
+|------|----------------|------------------|---------------|
+| Claude Code | Anthropic Messages API | `/llm/v1/messages`、`/v1/messages`、`/llm/anthropic`（legacy alias） | 保持原始上游語義 |
+| OpenClaw | OpenAI Chat Completions | `/llm/chat` | 保持原始上游語義 |
+| Codex CLI | OpenAI-compatible / Responses-compatible | `/v1/chat/completions` 或兼容入口 | 保持原始上游語義 |
+
+### Claude Code ingress contract
+
+- `llm_proxy` 必須保留真實 ingress path
+- `gateway_compile` 協議判定必須優先依據真實 ingress path
+- 不允許 compile 僅靠 payload 猜測 Anthropic / OpenAI 協議
+
+### Anthropic diagnostics contract
+
+Anthropic payload trace 是正式診斷能力，必須可開關：
+
+- `OMNIMEMORA_TRACE_ANTHROPIC_PAYLOAD=true|false`
+- `OMNIMEMORA_TRACE_REDACT=true|false`
+
+默認要求：
+
+- trace 默認關閉
+- redact 默認開啟
+- trace 需按 `request_id` 串聯 inbound / post-compile / upstream response status
+
+### 核心能力位置
+
+memory recall / context compile / token 壓縮 / context 注入：
+
+- 必須在 Gateway 內部執行
+- 必須發生在轉發前
+- 不暴露為 Agent 工具
+
+---
+
+## 7. 一句話產品定義
+
+OmniMemora 是一個不改變用戶模型選擇的本地 LLM Gateway；用戶可在 UI 中決定哪些 agent 接入、哪些 agent 啟用產品路由，並在啟用後獲得上下文優化與 token 壓縮。
+
+---
+
+## 8. 團隊統一認知語句
+
+> 我們不是在做一個「讓 Agent 調用的工具」，而是在做一個「Agent 無法繞開的入口層」。
