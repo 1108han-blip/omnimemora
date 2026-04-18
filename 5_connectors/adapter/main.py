@@ -2877,10 +2877,12 @@ async def query_memory_v2(request: MemoryQueryRequest, http_request: Request):
     # --- Cloud Integration: Report usage async ---
     report_usage_async(
         request_id=request_id,
-        tenant=access.tenant_id,
+        route="/memory/query",
+        version="2.2.0",
         saved_tokens=result.token_savings.saved_tokens_estimate,
         savings_ratio=result.token_savings.savings_ratio,
-        request_count=1
+        optimization_enabled=bool(flags.optimization_enabled and not context_bypass),
+        error_code=None,
     )
 
     # --- Store call chain trace ---

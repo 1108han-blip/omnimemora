@@ -33,8 +33,11 @@ class FeatureFlags(BaseModel):
 
 class UsageReport(BaseModel):
     request_id: str
-    tenant: Optional[str] = None
+    route: Optional[str] = None
+    version: str = "2.2.0"
     saved_tokens: int = 0
     savings_ratio: float = 0.0
-    request_count: int = 1
+    optimization_enabled: Optional[bool] = None
+    latency_ms: Optional[int] = None
+    error_code: Optional[str] = None
     timestamp: str = ""

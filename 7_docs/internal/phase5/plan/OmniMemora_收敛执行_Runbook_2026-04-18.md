@@ -32,6 +32,7 @@ last_verified_commit: ""
 - `Gate B` 的正式记录载体见 [OmniMemora 验证对象登记与验收记录](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_验证对象登记与验收记录_2026-04-18.md)
 - 工作区切批方案见 [OmniMemora 工作区分批切割清单](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_工作区分批切割清单_2026-04-18.md)
 - `V2` 历史依赖与后备优化定位见 [OmniMemora V2遗产映射与后备优化清单](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_V2遗产映射与后备优化清单_2026-04-18.md)
+- `M5` 的最小数据边界口径见 [OmniMemora M5 云端最小数据上报口径](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_M5_云端最小数据上报口径_2026-04-18.md)
 
 ## 二、总执行规则
 
@@ -300,20 +301,20 @@ last_verified_commit: ""
 - [x] 固定 `纯本地模式 = 默认关闭云端策略更新`
 - [x] 固定 `纯本地模式 = 默认不上报数据`
 - [x] 固定 `开启云端策略更新 = 默认同意最小必要数据上报`
-- [ ] 固定最小数据集合边界
+- [x] 固定最小数据集合边界
 - [x] 固定云端边界为“策略下发，本地执行”
 
 ### 输出
 
-- [ ] 云端配置口径
-- [ ] 最小数据上报口径
-- [ ] 默认值说明
+- [x] 云端配置口径
+- [x] 最小数据上报口径
+- [x] 默认值说明
 
 ### Gate E
 
 - [x] 纯本地默认不上报
 - [x] 开启云端策略更新后最小必要数据上报自动生效
-- [ ] 上报范围不超出既定元数据集合
+- [x] 上报范围不超出既定元数据集合
 
 ### 停止条件
 

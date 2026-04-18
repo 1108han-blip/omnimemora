@@ -237,6 +237,19 @@ last_verified_commit: ""
 | 结论适用范围 | `候选成立`：当前仓库候选实例下，`cursor` 已能通过 `/agents/control/install -> /uninstall` 在线完成接入与恢复原始配置闭环，可作为 `uninstall -> restore original upstream config` 的补充候选证据 |
 | 备注 | 本记录绑定的是隔离 `HOME` 的候选实例在线验收，不代表真实用户 `.cursor` 配置已被在线验证；同时未触碰真实 `~/.codex`，满足“测试不能影响在使用中的 Codex 本体”约束 |
 
+### RECORD-B-014
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-014` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区 |
+| 验证动作 | 1. 读取 [config.py](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/5_connectors/adapter/config.py) 中 `CloudIntegrationConfig` 默认值；2. 读取 [cloud/models.py](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/5_connectors/adapter/cloud/models.py)、[cloud/usage_reporter.py](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/5_connectors/adapter/cloud/usage_reporter.py)、[main.py](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/5_connectors/adapter/main.py) 的 usage telemetry 路径；3. 运行 `python3 -m unittest 5_connectors.adapter.tests.test_cloud_config 5_connectors.adapter.tests.test_cloud_usage_schema` |
+| 观察结果 | `CloudIntegrationConfig` 已固定为：纯本地模式默认 `enabled=false` 且 `usage_report_enabled=false`；开启云端策略更新后默认 `usage_report_enabled=true`。当前 `UsageReport` schema 包含 `request_id / route / version / saved_tokens / savings_ratio / optimization_enabled / latency_ms / error_code / timestamp`，不再包含 `tenant`。测试通过，证明“云端更新默认启用最小 usage telemetry”与“tenant 不进入 payload”均成立 |
+| 结论适用范围 | `候选成立`：当前仓库候选实现已具备 `M5` 所需的最小数据集合边界，且上报范围已收敛到低敏元数据集合 |
+| 备注 | 本记录是代码与测试对位证据，不代表真实云端服务已接收这些字段；云端服务上线前仍需单独验证服务端契约 |
+
 ## 五、Gate B 完成判据
 
 当满足以下条件时，`Gate B` 可视为通过：
@@ -260,3 +273,4 @@ last_verified_commit: ""
   - `RECORD-B-011` 已确认当前候选实例下 `codex_cli` 可通过 `/agents/control/install -> /uninstall` 在线恢复原始 provider 配置
   - `RECORD-B-012` 已确认当前候选实例下 `claude_code` 可通过 `/agents/control/install -> /uninstall` 在线恢复原始 settings 配置
   - `RECORD-B-013` 已确认当前候选实例下 `cursor` 可通过 `/agents/control/install -> /uninstall` 在线恢复原始 settings 配置
+  - `RECORD-B-014` 已确认当前候选实现下云端 usage telemetry 仅包含最小必要元数据，且不再包含 `tenant`

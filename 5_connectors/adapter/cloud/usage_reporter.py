@@ -54,10 +54,13 @@ def _ensure_worker():
 
 def report_usage_async(
     request_id: str,
-    tenant: Optional[str] = None,
+    route: Optional[str] = None,
+    version: str = "2.2.0",
     saved_tokens: int = 0,
     savings_ratio: float = 0.0,
-    request_count: int = 1
+    optimization_enabled: Optional[bool] = None,
+    latency_ms: Optional[int] = None,
+    error_code: Optional[str] = None,
 ):
     """
     异步上报 usage（best effort，不阻塞主流程）
@@ -70,10 +73,13 @@ def report_usage_async(
 
         usage = UsageReport(
             request_id=request_id,
-            tenant=tenant,
+            route=route,
+            version=version,
             saved_tokens=saved_tokens,
             savings_ratio=savings_ratio,
-            request_count=request_count,
+            optimization_enabled=optimization_enabled,
+            latency_ms=latency_ms,
+            error_code=error_code,
             timestamp=datetime.utcnow().isoformat() + "Z"
         )
 
