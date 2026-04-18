@@ -1,78 +1,65 @@
-# OmniMemora - Local Memory Plane for AI Agents
-Version 1.0.0 (Phase 3.6)
+# OmniMemora Runtime
+Version 1.0.0
 
-## What is OmniMemora Runtime?
+## What this binary is
 
-This binary is the Local Memory Plane backend (internal service).
-Product-facing interfaces are unified at Python Adapter `:18011`.
+This binary is the local runtime behind OmniMemora.
 
-## Quick Start (安装即生效)
+- Product-facing data entry: `http://127.0.0.1:18011`
+- User control entry: `:5173` / future GUI
+- Runtime port: `:8765` by default
 
-1. Extract the archive
-2. Double-click `omnimemora.exe` or run: `omnimemora start`
-3. Done! Dashboard opens automatically
-4. OmniMemora auto-detects your AI tools and connects them
+`8765` is an internal memory plane. It is not a second product entry.
 
-## New in v1.0.0
+## What this binary does
 
-- Auto-detect AI tools (Codex, Claude Code, Cursor, OpenClaw)
-- Auto-attach on first run
-- Memory verification ensures everything works
-- Status card shows Runtime, Memory, and Savings status
+- stores local memory
+- serves runtime-local health and internal HTTP contract
+- executes low-frequency install / uninstall actions for agent configs
+- supports gateway compile / search / query through internal calls
+
+## What this binary does not do
+
+- does not replace the gateway at `:18011`
+- does not define product routing policy
+- does not define KPI truth
+- does not auto-enable routing
+- does not make product-entry decisions for users
 
 ## Commands
 
 ```bash
-omnimemora start              # Start + auto-detect + auto-attach
-omnimemora start --skip-attach   # Start without auto-attaching
-omnimemora attach <agent>    # Attach agent (codex/claude/cursor/openclaw/all)
-omnimemora detach <agent>    # Detach agent
-omnimemora status            # Show status and savings
-omnimemora stop              # Stop runtime
-omnimemora dashboard         # Open dashboard
+omnimemora start            # Start runtime and expose detected agents to the UI
+omnimemora start --attach   # Explicitly attach detected agents
+omnimemora attach <agent>   # Attach one agent
+omnimemora detach <agent>   # Detach one agent
+omnimemora status           # Show runtime-local status
+omnimemora stop             # Stop runtime
+omnimemora dashboard        # Open runtime dashboard (operator/internal view)
 ```
 
-## Auto-Detection
+## Operator Notes
 
-OmniMemora automatically detects these AI tools:
-- Codex (OpenAI)
-- Claude Code (Anthropic)
-- Cursor
-- OpenClaw
+- The runtime dashboard is an internal/operator surface.
+- Product-facing validation should bind to the gateway at `:18011`.
+- Runtime health checks and contract checks may use `:8765` for internal verification only.
 
-When multiple agents are detected, a quick-select UI lets you choose which to connect.
+## Ports
 
-## How It Works
-
-1. Your agent makes a memory query
-2. OmniMemora finds relevant memories
-3. Context is compressed using intelligent strategy
-4. Token count is reduced while preserving relevance
-5. You save tokens on every query!
-
-## System Requirements
-
-- Windows 10+ or macOS 10.14+
-- Fully self-contained (no dependencies)
-- Default backend port: 8765 (auto-fallback to 8766/8767/8775 if occupied)
+- Runtime default port: `8765`
+- Runtime may fall back to `8766 / 8767 / 8775` if occupied
+- Gateway product port: `18011`
 
 ## Data Location
 
-All data stored locally:
-- Windows: `%USERPROFILE%\.omnimemora\`
+All data is stored locally:
+
+- Windows: `%USERPROFILE%\\.omnimemora\\`
 - macOS/Linux: `~/.omnimemora/`
 
-## Dashboard
+## Internal Checks
 
-The dashboard shows:
-- Total tokens saved
-- Today's / Week's / Month's savings
-- Daily trend chart
-- Connection status
+- Runtime health: `http://127.0.0.1:8765/health`
+- Product entry health: `http://127.0.0.1:18011/health`
 
-Internal runtime health (operator only): http://127.0.0.1:8765/health
-Product entry health: http://127.0.0.1:18011/health
-
-## Support
-
-Report issues: https://github.com/omnimemora/omnimemora/issues
+Use the runtime health endpoint only for internal/operator checks.

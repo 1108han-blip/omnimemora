@@ -48,7 +48,7 @@ func Start(args []string, version string) error {
 			runtimeIsRunning = true
 			actualPort = existingPort
 			fmt.Printf("OmniMemora is already running on port %d\n", existingPort)
-			fmt.Printf("Dashboard: http://127.0.0.1:%d/dashboard\n", existingPort)
+			fmt.Printf("Runtime dashboard (internal/operator): http://127.0.0.1:%d/dashboard\n", existingPort)
 		} else {
 			// Saved port not responding - scan default ports
 			foundPort := 0
@@ -127,12 +127,13 @@ func Start(args []string, version string) error {
 	// Print startup info
 	fmt.Printf("OmniMemora v%s started successfully\n", version)
 	fmt.Printf("Runtime:   http://127.0.0.1:%d\n", port)
-	fmt.Printf("Dashboard: http://127.0.0.1:%d/dashboard\n", port)
+	fmt.Printf("Runtime dashboard (internal/operator): http://127.0.0.1:%d/dashboard\n", port)
+	fmt.Printf("Product entry: http://127.0.0.1:18011\n")
 	fmt.Printf("Data dir:  %s\n", bootstrapResult.DataDir)
 
 	if bootstrapResult.FirstRun {
 		fmt.Println("\nFirst run complete! Demo data has been seeded.")
-		fmt.Println("Your dashboard should show initial token savings.")
+		fmt.Println("The runtime dashboard should show initial internal token-savings data.")
 	}
 
 	// Open dashboard in browser
@@ -514,7 +515,7 @@ func Status() error {
 	// Get metrics
 	metrics, err := fetchMetrics(activePort)
 	if err != nil {
-		fmt.Printf("Dashboard: http://127.0.0.1:%d/dashboard\n", activePort)
+		fmt.Printf("Runtime dashboard (internal/operator): http://127.0.0.1:%d/dashboard\n", activePort)
 		fmt.Println("\nToken savings data unavailable.")
 	} else {
 		if metrics.TokenSavings.TodaySavedTokens > 0 {
@@ -528,7 +529,7 @@ func Status() error {
 			fmt.Printf("Total saved: %s tokens\n", formatInt64(metrics.TokenSavings.TotalSavedTokens))
 		}
 
-		fmt.Printf("\nDashboard: http://127.0.0.1:%d/dashboard\n", activePort)
+		fmt.Printf("\nRuntime dashboard (internal/operator): http://127.0.0.1:%d/dashboard\n", activePort)
 	}
 
 	return nil
@@ -585,7 +586,7 @@ func OpenDashboard(args []string) error {
 		return nil
 	}
 
-	fmt.Printf("Opening dashboard: %s\n", url)
+	fmt.Printf("Opening runtime dashboard (internal/operator): %s\n", url)
 	return openBrowser(url)
 }
 

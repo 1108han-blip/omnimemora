@@ -63,6 +63,8 @@ last_verified_commit: ""
 - [x] 第一批对外文档残留已开始收口：插件 README 已改为只展示 `18011` 为用户可见入口
 - [x] runtime README 已补 internal-only 说明并去除失效 `CANONICAL_FACTS.md` 引用
 - [x] `README.txt` 中 `8765/dashboard` 的对外展示已收掉
+- [x] runtime `README.txt` 已改写为 operator/internal runtime 说明，不再保留“安装即生效 / 自动接入”旧叙事
+- [x] runtime CLI 输出已把 dashboard 明确标成 internal/operator surface，并补出 `18011` 作为产品入口
 - [ ] archive / 审计记录之外，仍需确认是否还有活跃对外文档把 `8765` 误写成产品面
 - [ ] runtime HTTP contract 仍暴露可被误抬升的内部控制接口叙事
 
@@ -72,6 +74,7 @@ last_verified_commit: ""
 - [x] 列出需要继续保留的内部 runtime HTTP contract
 - [x] 列出应从“正式产品接口叙事”中退场的 `8765` 路径
 - [x] 为 `Track A` 建立过渡兼容说明
+- [x] 收紧 runtime 自身 README/CLI 文案中的 internal/operator 边界
 
 ### 停止条件
 
