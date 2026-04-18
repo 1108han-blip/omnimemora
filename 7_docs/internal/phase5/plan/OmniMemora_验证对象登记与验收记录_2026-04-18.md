@@ -211,6 +211,19 @@ last_verified_commit: ""
 | 结论适用范围 | `候选成立`：当前仓库候选实例下，`/agents/control/install -> /uninstall` 已能在线完成 `codex_cli` 的接入与恢复原上游配置闭环，可作为 `uninstall -> restore original upstream config` 的更高层级候选证据 |
 | 备注 | 本记录绑定的是隔离 `HOME` 的候选实例在线验收，不代表真实用户 `~/.codex` 已被在线验证；同时也修正了 Codex `installed` 判定必须识别 provider-based 配置而非仅识别旧 MCP 标记 |
 
+### RECORD-B-012
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-012` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；候选实例以 adapter `18012`、runtime `18765`、隔离数据目录 `.tmp/candidate-runtime-data-claude-online`、隔离 `HOME=.tmp/candidate-home-claude-online` 启动 |
+| 验证动作 | 1. 在隔离 `HOME` 下预写入 `.claude/settings.json` 原始内容 `{\"theme\":\"dark\"}`；2. 通过 `POST http://127.0.0.1:18012/agents/control/install` 安装 `claude_code`；3. 读取 `GET /agents/control` 与隔离 `settings.json`；4. 通过 `POST http://127.0.0.1:18012/agents/control/uninstall` 卸载 `claude_code`；5. 再次读取隔离 `settings.json` 与备份文件状态 |
+| 观察结果 | `install` 后控制卡中 `claude_code.installed=true`，隔离 `settings.json` 新增 `memory.provider=omnimemora`、`endpoint=http://127.0.0.1:18011` 等字段，同时保留原有 `theme=dark`；`uninstall` 后控制卡中 `claude_code.installed=false`，隔离 `settings.json` 恢复为原始仅含 `theme=dark`，备份文件 `settings.json.omnimemora.backup` 被移除 |
+| 结论适用范围 | `候选成立`：当前仓库候选实例下，`claude_code` 已能通过 `/agents/control/install -> /uninstall` 在线完成接入与恢复原始配置闭环，可作为 `uninstall -> restore original upstream config` 的补充候选证据 |
+| 备注 | 本记录绑定的是隔离 `HOME` 的候选实例在线验收，不代表真实用户 `~/.claude` 或 `~/.claude.json` 已被在线验证；同时满足“测试不能影响在使用中的 Codex 本体”约束，因为本轮未触碰真实 `~/.codex` |
+
 ## 五、Gate B 完成判据
 
 当满足以下条件时，`Gate B` 可视为通过：
@@ -232,3 +245,4 @@ last_verified_commit: ""
   - `RECORD-B-009` 已确认 `uninstall/detach -> restore original config` 的候选实现具备测试级证据
   - `RECORD-B-010` 已确认当前候选实例下 `openclaw` 的 `route=on` 会进入 `runtime_compile`，`runtime_bridge` 缺口已解除
   - `RECORD-B-011` 已确认当前候选实例下 `codex_cli` 可通过 `/agents/control/install -> /uninstall` 在线恢复原始 provider 配置
+  - `RECORD-B-012` 已确认当前候选实例下 `claude_code` 可通过 `/agents/control/install -> /uninstall` 在线恢复原始 settings 配置
