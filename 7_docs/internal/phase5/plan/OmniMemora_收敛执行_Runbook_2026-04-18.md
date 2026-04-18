@@ -38,22 +38,16 @@ last_verified_commit: ""
 
 - `M1`：**已完成**
 - `M2`：**已完成**
-- `M3`：**部分实现已存在，但未正式收敛**
-- `M4`：**关键闭环已补上，但验收记录未独立沉淀**
+- `M3`：**候选实例控制面已可验证，继续补契约与在线证据**
+- `M4`：**`openclaw` 的 route on/off 闭环已有候选实例记录，仍需补剩余验收项**
 - `M5`：**配置语义已补上，但仍需正式验收记录**
-- 工作区健康：**红色**
-  - 当前分支：`checkpoint/llm-proxy-usage-fix`
-  - 当前未提交项：`26`
-  - 当前结论：暂停实现扩面，先做工作区治理
-- A 批状态：**已完成内容核对，未完成物理收口**
-  - 当前物理边界：`6` 个已修改文件 + `5` 个未跟踪文件
-  - 当前判断：可作为第一个单独收口对象
-- D 批状态：**已完成降噪处理**
-  - `.mcp.json.disabled` 已转为本地忽略
-  - `.git/gc.log` 与对象清理异常已完成治理
-  - `git gc` 与串行 `git fsck --full` 已恢复正常
-- `M3` 候选实例：`18012/18765` 启动已验证；`openclaw` 的 `enable/disable` 已完成一轮候选实例闭环并确认可落盘
+- 工作区健康：**绿色**
+  - 当前分支：`master`
+  - 当前未提交项：`3`
+  - 当前结论：允许小范围定点推进，禁止扩大到 UI 或云端新实现面
+- `M3` 候选实例：`18012/18765` 启动已验证；`openclaw` 的 `enable/disable` 已完成候选实例落盘闭环；`route=on` 已在候选实例下进入 `runtime_compile`
   - `M3` 恢复语义：`uninstall/detach -> restore original config` 已有隔离测试证据，见 `RECORD-B-009`
+  - `M4` 最新证据：`RECORD-B-010`
 
 ### 必须遵守
 
@@ -260,7 +254,7 @@ last_verified_commit: ""
 - [x] 验证 `route=on -> compile path`
 - [x] 验证 `route=off -> passthrough path`
 - [x] 验证 `route=off` 不调用 compile
-- [ ] 验证 agent 在 `route=on` 时不可自主绕过
+- [x] 验证 agent 在 `route=on` 时不可自主绕过
 - [ ] 验证 `uninstall -> restore original upstream config`
 
 ### 输出
@@ -272,6 +266,7 @@ last_verified_commit: ""
 
 - [x] `route=off = passthrough`
 - [x] `route=on = compile path`
+- [x] `openclaw` 在候选实例上 `route=on` 不再落入 `agent_route_disabled` 透明直通
 - [ ] `uninstall = restore original upstream config`
 
 ### 停止条件
@@ -390,7 +385,7 @@ last_verified_commit: ""
 
 ### Day 4：路由闭环验证
 
-- [ ] 完成 route on/off 行为验证
+- [ ] 完成剩余 family 的 route on/off 行为验证
 - [ ] 进入 M5 前，确认 Gate D 已通过
 
 ### Day 5：云端语义收敛

@@ -185,6 +185,19 @@ last_verified_commit: ""
 | 结论适用范围 | `候选成立`：当前仓库候选实现已具备 `uninstall/detach -> restore original config` 的测试级证据，可作为 `M3` 的恢复语义支撑 |
 | 备注 | 本记录是隔离测试证据，不是对用户真实机器配置的在线卸载验证；若后续需要产品级在线验收，应在不污染用户真实配置的前提下另补候选实例记录 |
 
+### RECORD-B-010
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-010` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；候选实例以 adapter `18012`、runtime `18765`、隔离数据目录 `.tmp/candidate-runtime-data-master` 启动；上游指向 `http://127.0.0.1:19001/v1` |
+| 验证动作 | 1. 补入 [runtime_bridge.py](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/5_connectors/adapter/runtime_bridge.py) 以恢复 compile-path 依赖；2. 运行 `python3 -m unittest 5_connectors.adapter.tests.test_llm_proxy_agent_detection 5_connectors.adapter.tests.test_agent_control_api 5_connectors.adapter.tests.test_agent_routing_state`；3. 顺序调用 `POST /agents/control/enable`、读取 `agent_modes.json`、调用 `POST /llm/chat`、读取 `/compile/events?limit=1`、再调用 `POST /agents/control/disable` 并再次读取 `agent_modes.json` |
+| 观察结果 | `runtime_bridge` 补入后 `5_connectors.adapter.main` 可正常 import，相关 unittest 通过；`enable(openclaw)` 后 `agent_modes.json` 写为 `force_if_possible`；随后发往 `http://127.0.0.1:18012/llm/chat` 的请求返回 `200`，最新 compile event 的 `trace_id=0855ff3cc8f6`，`compile_status=compile_success`、`compile_path=runtime_compile`、`compile_reason=runtime_compile`；最后 `disable(openclaw)` 后 `agent_modes.json` 恢复为 `off` |
+| 结论适用范围 | `候选成立`：当前仓库候选实例下，`openclaw` 在 `route=on` 时已进入 compile path，不再因缺失 `runtime_bridge` 而失败，也不再落入 `agent_route_disabled` 的透明直通路径 |
+| 备注 | 本记录证明的是 `route=on -> compile path` 与状态落盘闭环在候选实例上成立；不自动外推到其他 family，也不等同于产品级卸载恢复在线验收完成 |
+
 ## 五、Gate B 完成判据
 
 当满足以下条件时，`Gate B` 可视为通过：
@@ -204,3 +217,4 @@ last_verified_commit: ""
   - `RECORD-B-006` 的候选启动阻塞已由 `RECORD-B-007` 解除
   - `RECORD-B-008` 已确认当前候选实例下 `openclaw` 的 `enable/disable` 可正确落盘
   - `RECORD-B-009` 已确认 `uninstall/detach -> restore original config` 的候选实现具备测试级证据
+  - `RECORD-B-010` 已确认当前候选实例下 `openclaw` 的 `route=on` 会进入 `runtime_compile`，`runtime_bridge` 缺口已解除
