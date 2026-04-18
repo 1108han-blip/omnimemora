@@ -6,7 +6,7 @@ reviewers: [arch-lead]
 status: active
 version: 1.0.0
 effective_date: 2026-04-18
-depends_on: [PLAN-PHASE5-CONVERGENCE-2026-04-18]
+depends_on: [PLAN-PHASE5_5-PRODUCT-HARDENING-2026-04-18]
 supersedes: []
 last_verified_commit: ""
 ---
@@ -24,9 +24,9 @@ last_verified_commit: ""
 
 若本文件与执行计划或 runbook 表述冲突，以：
 
-1. [OmniMemora 收敛执行计划（管理里程碑版）](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_收敛执行计划_2026-04-18.md)
+1. [OmniMemora Phase 5.5 Product Hardening 执行计划](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Phase5_5_Product_Hardening_执行计划_2026-04-18.md)
 2. 本文件
-3. [OmniMemora 收敛执行 Runbook / Checklist](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_收敛执行_Runbook_2026-04-18.md)
+3. [OmniMemora Phase 5.5 Product Hardening Runbook](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Phase5_5_Product_Hardening_Runbook_2026-04-18.md)
 
 的优先顺序解释。
 

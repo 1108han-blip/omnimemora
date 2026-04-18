@@ -20,9 +20,8 @@ last_verified_commit: ""
 当前 phase5 没有独立的 working-principles / SOP 文档；因此本阶段的控制基线固定为：
 
 1. [云端小工程](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/云端小工程.md)
-2. [OmniMemora 收敛执行计划](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_收敛执行计划_2026-04-18.md)
-3. [OmniMemora 收敛执行 Runbook](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_收敛执行_Runbook_2026-04-18.md)
-4. 本文件
+2. [OmniMemora 验证对象登记与验收记录](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_验证对象登记与验收记录_2026-04-18.md)
+3. 本文件
 
 若表述冲突，以本文件的执行顺序和 gate 定义为准。
 

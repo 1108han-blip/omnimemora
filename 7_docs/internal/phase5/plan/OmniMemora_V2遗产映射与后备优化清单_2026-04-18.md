@@ -6,7 +6,7 @@ reviewers: [arch-lead]
 status: active
 version: 1.0.0
 effective_date: 2026-04-18
-depends_on: [PLAN-PHASE5-CONVERGENCE-2026-04-18]
+depends_on: [PLAN-PHASE5_5-PRODUCT-HARDENING-2026-04-18]
 supersedes: []
 last_verified_commit: ""
 ---
@@ -23,10 +23,10 @@ last_verified_commit: ""
 - 说明当前主线哪些地方仍依赖 `V2` 遗产
 - 把 `V2` 明确降级为“后备优化轨”，避免后续排障与重启优化时重新考古
 
-若本文与 phase5 收敛执行计划冲突，以：
+若本文与当前 phase5.5 执行文档冲突，以：
 
-1. [OmniMemora 收敛执行计划（管理里程碑版）](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_收敛执行计划_2026-04-18.md)
-2. [OmniMemora 收敛执行 Runbook](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_收敛执行_Runbook_2026-04-18.md)
+1. [OmniMemora Phase 5.5 Product Hardening 执行计划](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Phase5_5_Product_Hardening_执行计划_2026-04-18.md)
+2. [OmniMemora Phase 5.5 Product Hardening Runbook](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Phase5_5_Product_Hardening_Runbook_2026-04-18.md)
 3. 本文
 
 的优先顺序解释。
