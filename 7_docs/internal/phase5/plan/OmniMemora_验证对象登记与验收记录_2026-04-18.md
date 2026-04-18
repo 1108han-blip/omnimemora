@@ -354,6 +354,19 @@ last_verified_commit: ""
 | 结论适用范围 | `候选成立`：Track B 现在在 runtime dashboard 上已有最小 UI 动作承载，可在入口层故障时为用户提供显式的 `disable-route / uninstall` 操作入口 |
 | 备注 | 本记录验证的是 dashboard HTML 承载面，不代表完整 GUI/5173 已完成同等级接入；动作实际仍落到 runtime internal plane 的 `/gateway/decision/*` 接口 |
 
+### RECORD-B-023
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-023` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；以隔离 `HOME=.tmp/candidate-home-claude-uninstall`、`PORT=18016`、`RUNTIME_PORT=18769`、`OMNIMEMORA_RUNTIME_DATA_DIR=.tmp/candidate-runtime-data-b6` 启动 |
+| 验证动作 | 1. 启动隔离候选实例；2. 手动杀掉候选 adapter，使 runtime 进入 `user-decision-required`；3. 读取 runtime `GET /gateway/status` 返回的 JSON 字段 |
+| 观察结果 | gateway 故障后，runtime `GET /gateway/status` 返回：`status=user-decision-required`、`status_source=gateway-exit-monitor`、`transition_reason=gateway_process_exited`。说明入口层故障状态不仅有结果态，还明确带出了状态写入责任方和转移原因 |
+| 结论适用范围 | `候选成立`：Track B 当前已经把最小状态机责任边界写进运行时状态面；`gateway-exit-monitor` 作为写入方只产生 `user-decision-required`，和既定状态机定义一致 |
+| 备注 | 本记录只覆盖 `gateway-exit-monitor` 分支；`runtime-restart-monitor` 的恢复/降级写入边界由代码测试和 `start.sh` 实现约束共同保证 |
+
 ## 五、Gate B 完成判据
 
 当满足以下条件时，`Gate B` 可视为通过：
@@ -386,3 +399,4 @@ last_verified_commit: ""
   - `RECORD-B-020` 已确认 Track B 可在入口层故障时通过 runtime internal plane 执行 `disable-route`
   - `RECORD-B-021` 已确认 Track B 可在入口层故障时通过 runtime internal plane 执行 `uninstall`，并同步完成 `restore backup` 与 `route state -> off`
   - `RECORD-B-022` 已确认 Track B 在 runtime dashboard 上已有最小 UI 动作承载，可在入口层故障时提供 `disable-route / uninstall` 入口
+  - `RECORD-B-023` 已确认 Track B 运行时状态面现在显式输出 `status_source / transition_reason`，可区分故障状态责任方

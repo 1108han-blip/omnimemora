@@ -172,6 +172,12 @@ Track B 自动化明确不允许做：
   - `degraded-capability`
   - `recovering-gateway`
   - `user-decision-required`
+- `status_source`
+  - `observed-health`
+  - `runtime-restart-monitor`
+  - `gateway-exit-monitor`
+  - `manual-override` / `internal-test`（仅调试）
+- `transition_reason`
 - `gateway_health`
 - `capability_health`
 - `routing_effective`
@@ -179,7 +185,27 @@ Track B 自动化明确不允许做：
 - `recommended_action`
 - `error_code`
 
-## 七、与现有实现的绑定关系
+## 七、状态写入责任方
+
+Track B 的状态写入责任方固定为：
+
+1. `observed-health`
+   - 来源：adapter 基于实时 backend health 的默认推导
+   - 可产生：`healthy`、`degraded-capability`
+
+2. `runtime-restart-monitor`
+   - 来源：`start.sh` 中的 runtime 自愈监控
+   - 可产生：`recovering-gateway`、`degraded-capability`、`healthy`
+
+3. `gateway-exit-monitor`
+   - 来源：`start.sh` 中的 adapter/gateway 退出监控
+   - 可产生：`user-decision-required`
+
+4. `manual-override` / `internal-test`
+   - 仅用于调试、测试或内控验证
+   - 不作为正式产品运行时责任方
+
+## 八、与现有实现的绑定关系
 
 - `agent_control_api.py`
   - 当前已有 `healthy/degraded/unreachable` 粗状态，可作为入口

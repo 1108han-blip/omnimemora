@@ -20,6 +20,8 @@ class TrackBStatusTests(unittest.TestCase):
             routing_enabled=True,
         )
         self.assertEqual(payload["status"], "healthy")
+        self.assertEqual(payload["status_source"], "observed-health")
+        self.assertEqual(payload["transition_reason"], "backend_healthy")
         self.assertEqual(payload["gateway_health"], "healthy")
         self.assertEqual(payload["capability_health"], "healthy")
         self.assertTrue(payload["routing_effective"])
@@ -37,6 +39,8 @@ class TrackBStatusTests(unittest.TestCase):
             routing_enabled=True,
         )
         self.assertEqual(payload["status"], "degraded-capability")
+        self.assertEqual(payload["status_source"], "observed-health")
+        self.assertEqual(payload["transition_reason"], "capability_unhealthy")
         self.assertEqual(payload["gateway_health"], "healthy")
         self.assertEqual(payload["capability_health"], "degraded")
         self.assertFalse(payload["routing_effective"])
@@ -80,13 +84,39 @@ class TrackBStatusTests(unittest.TestCase):
                 saved = track_b_status.write_status_override(
                     {
                         "status": "user-decision-required",
+                        "status_source": "gateway-exit-monitor",
                         "user_action_required": True,
                         "unknown_field": "ignored",
                     }
                 )
                 payload = json.loads(path.read_text(encoding="utf-8"))
-        self.assertEqual(saved, {"status": "user-decision-required", "user_action_required": True})
-        self.assertEqual(payload, {"status": "user-decision-required", "user_action_required": True})
+        self.assertEqual(
+            saved,
+            {"status": "user-decision-required", "status_source": "gateway-exit-monitor", "user_action_required": True},
+        )
+        self.assertEqual(
+            payload,
+            {"status": "user-decision-required", "status_source": "gateway-exit-monitor", "user_action_required": True},
+        )
+
+    def test_write_status_override_requires_status_source(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="omnimemora-track-b-status-") as tmpdir:
+            path = Path(tmpdir) / "track_b_status.json"
+            with mock.patch.dict("os.environ", {"OMNIMEMORA_TRACK_B_STATUS_PATH": str(path)}, clear=False):
+                with self.assertRaisesRegex(ValueError, "status_source is required"):
+                    track_b_status.write_status_override({"status": "recovering-gateway"})
+
+    def test_write_status_override_rejects_invalid_source_status_combo(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="omnimemora-track-b-status-") as tmpdir:
+            path = Path(tmpdir) / "track_b_status.json"
+            with mock.patch.dict("os.environ", {"OMNIMEMORA_TRACK_B_STATUS_PATH": str(path)}, clear=False):
+                with self.assertRaisesRegex(ValueError, "cannot write status"):
+                    track_b_status.write_status_override(
+                        {
+                            "status": "user-decision-required",
+                            "status_source": "runtime-restart-monitor",
+                        }
+                    )
 
 
 class TrackBStatusApiTests(unittest.TestCase):
@@ -156,7 +186,12 @@ class TrackBStatusApiTests(unittest.TestCase):
                     set_response = client.post(
                         "/proxy/system-status/override",
                         headers={"X-Internal-Token": "secret-token"},
-                        json={"status": "recovering-gateway", "recommended_action": "wait_for_recovery"},
+                        json={
+                            "status": "recovering-gateway",
+                            "status_source": "runtime-restart-monitor",
+                            "transition_reason": "runtime_unreachable",
+                            "recommended_action": "wait_for_recovery",
+                        },
                     )
                     clear_response = client.delete(
                         "/proxy/system-status/override",
@@ -166,3 +201,24 @@ class TrackBStatusApiTests(unittest.TestCase):
         self.assertEqual(set_response.status_code, 200)
         self.assertEqual(clear_response.status_code, 200)
         self.assertFalse(path.exists())
+
+    def test_override_endpoint_rejects_missing_status_source(self) -> None:
+        app = FastAPI()
+        app.include_router(status_api.router)
+
+        with tempfile.TemporaryDirectory(prefix="omnimemora-track-b-status-api-") as tmpdir:
+            path = Path(tmpdir) / "track_b_status.json"
+            env = {
+                "OMNIMEMORA_TRACK_B_STATUS_PATH": str(path),
+                "OMNIMEMORA_INTERNAL_API_TOKEN": "secret-token",
+            }
+            with mock.patch.dict("os.environ", env, clear=False):
+                client = TestClient(app)
+                response = client.post(
+                    "/proxy/system-status/override",
+                    headers={"X-Internal-Token": "secret-token"},
+                    json={"status": "recovering-gateway"},
+                )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("status_source is required", response.json()["detail"])

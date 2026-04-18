@@ -16,6 +16,8 @@ _ALLOWED_STATUS = {
 }
 _ALLOWED_OVERRIDE_KEYS = {
     "status",
+    "status_source",
+    "transition_reason",
     "gateway_health",
     "capability_health",
     "routing_requested",
@@ -23,6 +25,12 @@ _ALLOWED_OVERRIDE_KEYS = {
     "user_action_required",
     "recommended_action",
     "error_code",
+}
+_ALLOWED_STATUS_SOURCE_SCOPE = {
+    "runtime-restart-monitor": {"healthy", "recovering-gateway", "degraded-capability"},
+    "gateway-exit-monitor": {"user-decision-required"},
+    "manual-override": _ALLOWED_STATUS,
+    "internal-test": _ALLOWED_STATUS,
 }
 
 
@@ -63,14 +71,34 @@ def sanitize_status_override(payload: dict[str, Any]) -> dict[str, Any]:
             if lowered in _ALLOWED_STATUS:
                 sanitized[key] = lowered
             continue
+        if key == "status_source":
+            lowered = normalized.lower()
+            if lowered in _ALLOWED_STATUS_SOURCE_SCOPE:
+                sanitized[key] = lowered
+            continue
         sanitized[key] = normalized
     return sanitized
+
+
+def _validate_override_scope(sanitized: dict[str, Any]) -> None:
+    status = str(sanitized.get("status") or "").strip().lower()
+    if not status:
+        return
+    source = str(sanitized.get("status_source") or "").strip().lower()
+    if not source:
+        raise ValueError("status_source is required when status is set")
+    allowed = _ALLOWED_STATUS_SOURCE_SCOPE.get(source)
+    if not allowed:
+        raise ValueError(f"unsupported status_source: {source}")
+    if status not in allowed:
+        raise ValueError(f"status_source {source} cannot write status {status}")
 
 
 def write_status_override(payload: dict[str, Any]) -> dict[str, Any]:
     path = _status_override_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     sanitized = sanitize_status_override(payload)
+    _validate_override_scope(sanitized)
     path.write_text(json.dumps(sanitized, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return sanitized
 
@@ -107,6 +135,8 @@ def build_track_b_status(
     capability_health = _capability_health_state(backend_health)
     payload: dict[str, Any] = {
         "status": "healthy" if backend_health.healthy else "degraded-capability",
+        "status_source": "observed-health",
+        "transition_reason": "backend_healthy" if backend_health.healthy else "capability_unhealthy",
         "gateway_health": "healthy",
         "capability_health": capability_health,
         "routing_requested": routing_enabled,
@@ -122,6 +152,14 @@ def build_track_b_status(
     status = str(override.get("status") or "").strip().lower()
     if status in _ALLOWED_STATUS:
         payload["status"] = status
+
+    status_source = str(override.get("status_source") or "").strip().lower()
+    if status_source:
+        payload["status_source"] = status_source
+
+    transition_reason = str(override.get("transition_reason") or "").strip()
+    if transition_reason:
+        payload["transition_reason"] = transition_reason
 
     gateway_health = str(override.get("gateway_health") or "").strip().lower()
     if gateway_health:

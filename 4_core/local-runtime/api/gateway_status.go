@@ -11,6 +11,8 @@ import (
 
 type gatewayStatusPayload struct {
 	Status             string `json:"status"`
+	StatusSource       string `json:"status_source,omitempty"`
+	TransitionReason   string `json:"transition_reason,omitempty"`
 	GatewayHealth      string `json:"gateway_health"`
 	CapabilityHealth   string `json:"capability_health"`
 	RoutingRequested   bool   `json:"routing_requested"`
@@ -23,6 +25,8 @@ type gatewayStatusPayload struct {
 func defaultGatewayStatus() gatewayStatusPayload {
 	return gatewayStatusPayload{
 		Status:             "healthy",
+		StatusSource:       "observed-health",
+		TransitionReason:   "gateway_process_healthy",
 		GatewayHealth:      "healthy",
 		CapabilityHealth:   "healthy",
 		RoutingRequested:   false,

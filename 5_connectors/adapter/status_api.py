@@ -15,6 +15,8 @@ router = APIRouter(tags=["proxy"])
 
 class TrackBStatusOverrideRequest(BaseModel):
     status: Optional[str] = None
+    status_source: Optional[str] = None
+    transition_reason: Optional[str] = None
     gateway_health: Optional[str] = None
     capability_health: Optional[str] = None
     routing_requested: Optional[bool] = None
@@ -98,7 +100,10 @@ async def set_proxy_system_status_override(
 ):
     _track_b = importlib.import_module("5_connectors.adapter.track_b_status")
     _require_internal_service_token(request)
-    _track_b.write_status_override(payload.model_dump(exclude_none=True))
+    try:
+        _track_b.write_status_override(payload.model_dump(exclude_none=True))
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     _mark_diagnostic_surface(response)
     return await _build_system_status()
 

@@ -151,10 +151,10 @@ runtime_self_heal_loop() {
       continue
     fi
 
-    set_track_b_override '{"status":"recovering-gateway","gateway_health":"healthy","capability_health":"degraded","routing_effective":false,"recommended_action":"wait_for_recovery","error_code":"runtime_unreachable"}'
+    set_track_b_override '{"status":"recovering-gateway","status_source":"runtime-restart-monitor","transition_reason":"runtime_unreachable","gateway_health":"healthy","capability_health":"degraded","routing_effective":false,"recommended_action":"wait_for_recovery","error_code":"runtime_unreachable"}'
 
     if [ "$attempts_left" -le 0 ]; then
-      set_track_b_override '{"status":"degraded-capability","gateway_health":"healthy","capability_health":"degraded","routing_effective":false,"recommended_action":"degrade_to_passthrough","error_code":"runtime_restart_failed"}'
+      set_track_b_override '{"status":"degraded-capability","status_source":"runtime-restart-monitor","transition_reason":"runtime_restart_failed","gateway_health":"healthy","capability_health":"degraded","routing_effective":false,"recommended_action":"degrade_to_passthrough","error_code":"runtime_restart_failed"}'
       sleep 2
       continue
     fi
@@ -174,8 +174,8 @@ runtime_self_heal_loop() {
       clear_track_b_override
       clear_track_b_status_file
     else
-      set_track_b_override '{"status":"degraded-capability","gateway_health":"healthy","capability_health":"degraded","routing_effective":false,"recommended_action":"degrade_to_passthrough","error_code":"runtime_restart_failed"}'
-      write_track_b_status_file '{"status":"degraded-capability","gateway_health":"healthy","capability_health":"degraded","routing_effective":false,"user_action_required":false,"recommended_action":"degrade_to_passthrough","error_code":"runtime_restart_failed"}'
+      set_track_b_override '{"status":"degraded-capability","status_source":"runtime-restart-monitor","transition_reason":"runtime_restart_failed","gateway_health":"healthy","capability_health":"degraded","routing_effective":false,"recommended_action":"degrade_to_passthrough","error_code":"runtime_restart_failed"}'
+      write_track_b_status_file '{"status":"degraded-capability","status_source":"runtime-restart-monitor","transition_reason":"runtime_restart_failed","gateway_health":"healthy","capability_health":"degraded","routing_effective":false,"user_action_required":false,"recommended_action":"degrade_to_passthrough","error_code":"runtime_restart_failed"}'
     fi
 
     sleep 2
@@ -204,7 +204,7 @@ ADAPTER_EXIT_CODE=0
 wait "$ADAPTER_PID" || ADAPTER_EXIT_CODE=$?
 if [ "$STOPPING" != "1" ] && kill -0 "$RUNTIME_PID" >/dev/null 2>&1; then
   echo "[TRACK_B] Adapter exited with code ${ADAPTER_EXIT_CODE}; entering user-decision-required state."
-  write_track_b_status_file '{"status":"user-decision-required","gateway_health":"unhealthy","capability_health":"healthy","routing_effective":false,"user_action_required":true,"recommended_action":"disable_route_or_uninstall","error_code":"gateway_unreachable"}'
+  write_track_b_status_file '{"status":"user-decision-required","status_source":"gateway-exit-monitor","transition_reason":"gateway_process_exited","gateway_health":"unhealthy","capability_health":"healthy","routing_effective":false,"user_action_required":true,"recommended_action":"disable_route_or_uninstall","error_code":"gateway_unreachable"}'
   wait "$RUNTIME_PID"
 fi
 kill "$SUPERVISOR_PID" "$RUNTIME_PID" >/dev/null 2>&1 || true
