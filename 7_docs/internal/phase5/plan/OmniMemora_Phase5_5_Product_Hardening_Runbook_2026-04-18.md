@@ -99,6 +99,7 @@ last_verified_commit: ""
 - [x] `Track B` 最小统一状态输出接口已落地
 - [x] 已明确 `restore backup` 当前只存在于显式 `uninstall/detach` 路径
 - [x] `Track B` override 写入入口与控制面消费路径已落地
+- [x] `Track B` 能力层最小自愈闭环已在候选实例上成立
 - [ ] 还没有正式的故障状态机实现
 
 ### 下一步动作
@@ -111,6 +112,7 @@ last_verified_commit: ""
 - [x] 明确 `user-decision-required` 的最小接口输出
 - [x] 明确禁止自动 restore backup 的代码约束点
 - [x] 明确 override 写入约束与控制面消费路径
+- [x] 建立 capability failure -> recovering-gateway -> healthy 的候选实例证据
 
 ### 停止条件
 
@@ -138,4 +140,4 @@ last_verified_commit: ""
 4. `B2` 候选实例故障场景验证批
 5. `C1` 责任边界图批
 
-当前下一步：`Track B` 最小自愈编排器与状态写入责任方前置
+当前下一步：`Track B` 入口层故障的最小 user-decision-required 承载面前置

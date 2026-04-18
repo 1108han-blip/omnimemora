@@ -289,6 +289,19 @@ last_verified_commit: ""
 | 结论适用范围 | `候选成立`：Track B 已具备受限的 override 写入边界与明确的控制面消费路径，后续自愈编排可通过该入口写入 `recovering-gateway / user-decision-required`，且不会直接越权触发 `restore backup` 或 `uninstall/detach` |
 | 备注 | 本记录覆盖的是“override 前置基础设施”，不是完整的自愈执行器；实际写入责任方仍需在后续 Track B 编排实现中明确 |
 
+### RECORD-B-018
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-018` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；以 `PORT=18013 RUNTIME_PORT=18766 OMNIMEMORA_RUNTIME_DATA_DIR=.tmp/candidate-runtime-data-b3 OMNIMEMORA_DATA_DIR=.tmp/candidate-runtime-data-b3 TRACK_B_RUNTIME_RESTART_ATTEMPTS=1 TRACK_B_RECOVERY_SETTLE_SECONDS=4 bash ./start.sh` 启动 |
+| 验证动作 | 1. 正常启动候选 runtime 与 adapter；2. 读取初始 `GET /proxy/system-status`，确认 `healthy`；3. 读取 `.tmp/candidate-runtime-data-b3/runtime.state` 中的 runtime pid 并手动 `kill`；4. 轮询 `GET /proxy/system-status` 观察状态变化；5. 观察 start.sh 会话输出中的 `Runtime unhealthy, attempting restart` 与 `Runtime recovered` |
+| 观察结果 | runtime 被杀后，状态先进入 `degraded-capability`，随后进入 `recovering-gateway`，再在恢复窗口结束后回到 `healthy`。会话输出显示 supervisor 实际执行了一次 runtime 重拉起并成功通过 `/health`。由于 `track_b_status.json` 路径现在跟随 `OMNIMEMORA_DATA_DIR`，候选实例 override 不再污染共享默认目录 |
+| 结论适用范围 | `候选成立`：Track B 的能力层最小自愈闭环已在候选实例上成立，能够完成 `degraded-capability -> recovering-gateway -> healthy`，且仍未引入自动 `restore backup`、自动 `uninstall/detach` |
+| 备注 | 本记录只覆盖 `start.sh` 管理的能力层恢复路径，不覆盖 gateway 自身不可达时的 `user-decision-required` 分支；入口层故障仍需后续单独实现与验证 |
+
 ## 五、Gate B 完成判据
 
 当满足以下条件时，`Gate B` 可视为通过：
@@ -316,3 +329,4 @@ last_verified_commit: ""
   - `RECORD-B-015` 已确认 Track B 在候选实例上的 healthy / capability failure / gateway failure 三类当前基线行为
   - `RECORD-B-016` 已确认 Track B 最小统一状态输出接口已落地，可承载 `degraded-capability / recovering-gateway / user-decision-required`
   - `RECORD-B-017` 已确认 Track B override 写入边界与控制面消费路径已落地
+  - `RECORD-B-018` 已确认 Track B 能力层最小自愈闭环已在候选实例上成立

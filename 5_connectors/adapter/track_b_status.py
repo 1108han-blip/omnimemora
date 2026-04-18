@@ -30,6 +30,9 @@ def _status_override_path() -> Path:
     explicit = os.getenv("OMNIMEMORA_TRACK_B_STATUS_PATH", "").strip()
     if explicit:
         return Path(explicit)
+    data_dir = os.getenv("OMNIMEMORA_DATA_DIR", "").strip()
+    if data_dir:
+        return Path(data_dir).resolve() / "track_b_status.json"
     return Path(config.omnimemora_usage_state_path).resolve().parent / "track_b_status.json"
 
 

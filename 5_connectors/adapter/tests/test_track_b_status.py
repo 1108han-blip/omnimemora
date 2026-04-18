@@ -67,6 +67,12 @@ class TrackBStatusTests(unittest.TestCase):
                 payload = track_b_status.read_status_override()
         self.assertEqual(payload, {"status": "recovering-gateway", "error_code": "runtime_restart"})
 
+    def test_status_override_path_prefers_omnimemora_data_dir(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="omnimemora-track-b-status-") as tmpdir:
+            with mock.patch.dict("os.environ", {"OMNIMEMORA_DATA_DIR": tmpdir}, clear=False):
+                path = track_b_status._status_override_path()
+        self.assertEqual(path, Path(tmpdir).resolve() / "track_b_status.json")
+
     def test_write_status_override_sanitizes_unknown_fields(self) -> None:
         with tempfile.TemporaryDirectory(prefix="omnimemora-track-b-status-") as tmpdir:
             path = Path(tmpdir) / "track_b_status.json"
