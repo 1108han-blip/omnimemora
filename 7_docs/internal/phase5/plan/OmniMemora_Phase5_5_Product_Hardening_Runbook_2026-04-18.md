@@ -26,12 +26,13 @@ last_verified_commit: ""
 ## 二、当前状态
 
 - 当前阶段：`Phase 5.5 / Product Hardening`
-- 当前 gate：`Track C / 18011 拆分准备与 main.py 瘦身`
+- 当前 gate：`Track B / 联合恢复优先级 contract`
 - 工作区健康：`绿色`
 - 当前分支：`master`
 - 当前推进焦点：
   - [x] `Track A` 收口批完成
   - [x] `Track B` 入口层与能力层故障状态机主干完成
+  - [x] `Track B` 联合恢复策略 bounded scan 完成
   - [x] `Track C` bounded global scan 完成
   - [x] `Track C` 第一批低风险迁移完成
   - [x] `Track C` 第二批中风险表层迁移完成
@@ -96,6 +97,7 @@ last_verified_commit: ""
 
 - [Track B Bounded Scan](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Phase5_5_TrackB_自愈状态机_Bounded_Scan_2026-04-18.md)
 - [Track B 联合恢复策略 Bounded Scan](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Phase5_5_TrackB_联合恢复策略_Bounded_Scan_2026-04-18.md)
+- [Track B 自愈状态机定义](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Phase5_5_TrackB_自愈状态机定义_2026-04-18.md)
 
 ### 当前结论
 
@@ -127,6 +129,7 @@ last_verified_commit: ""
 - [x] 自动修复关闭分支已具备候选实例证据，并能输出明确 `transition_reason`
 - [x] `window_expired` 与 `attempts_exhausted` 两类失败分支已具备候选实例证据
 - [x] 退避策略已落地为指数回退并受上限约束
+- [x] 联合恢复优先级 contract 已写入状态机定义
 
 ### 下一步动作
 
@@ -156,7 +159,7 @@ last_verified_commit: ""
 
 ### 下一步候选
 
-- [ ] 先定义联合恢复优先级 contract：
+- [ ] 将联合恢复优先级 contract 落到实现：
   - `gateway unreachable` 优先于能力层故障
   - `disable-route` 后恢复到 `healthy + routing_effective=false`
   - `uninstall` 后不再回到产品增强路径
@@ -196,4 +199,4 @@ last_verified_commit: ""
 4. `B2` 候选实例故障场景验证批
 5. `C1` 责任边界图批
 
-当前下一步：`Track C` 已完成拆分准备；应决定第一批小范围迁移是否从 `main.py` 的低风险表层职责开始
+当前下一步：`Track B` 已完成联合恢复优先级 contract；应决定是否把这三条优先级规则落到 `start.sh / orchestrator / runtime decision flow`

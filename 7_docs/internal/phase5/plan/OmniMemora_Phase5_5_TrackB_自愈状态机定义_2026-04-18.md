@@ -24,6 +24,7 @@ last_verified_commit: ""
 - 自动动作
 - 用户决策入口
 - 禁止动作
+- 联合恢复优先级
 
 ## 二、状态输入
 
@@ -168,7 +169,79 @@ Track B 自动化明确不允许做：
 - `DetachAgent()`
 - 任何会修改用户原配置并退出产品接入的动作
 
-## 六、最小接口要求
+## 六、联合恢复优先级 contract
+
+Track B 在入口层故障与能力层故障同时出现时，必须遵守以下优先级：
+
+### 1. 入口层故障优先于能力层故障
+
+条件：
+
+- `gateway_health = unreachable`
+- 同时 `capability_health = degraded|unreachable`
+
+规则：
+
+- 先按入口层故障处理
+- 优先进入 gateway recovery window
+- 在 recovery window 未耗尽前，不允许因为能力层故障直接进入 `degraded-capability`
+- 只有 gateway 恢复成功后，才重新判断能力层是否需要进入 `degraded-capability`
+
+原因：
+
+- 入口不可达时，能力层故障对用户已不可见
+- 此时先恢复 `18011` 才有意义
+
+### 2. `disable-route` 用户动作后的收敛规则
+
+条件：
+
+- 当前处于 `user-decision-required`
+- 用户选择 `disable-route`
+
+规则：
+
+- 允许 gateway 恢复继续进行
+- 一旦 gateway 恢复成功，顶层状态应回到：
+  - `status = healthy`
+  - `routing_effective = false`
+- 即使能力层仍然不可用，也只保留为诊断信息
+- 不再升级为顶层故障，因为用户已显式选择 passthrough
+
+### 3. `uninstall` 用户动作后的收敛规则
+
+条件：
+
+- 当前处于 `user-decision-required`
+- 用户选择 `uninstall`
+
+规则：
+
+- 允许 gateway 继续拉起，以保持 internal/operator surface 存活
+- 但产品接入语义已退出：
+  - 不再恢复到产品增强路径
+  - 不再把 `routing_effective` 设为 `true`
+- 后续即使 gateway 恢复，也只能落在 detached / operator-available 语义，不得自动回到已接入增强态
+
+### 4. 能力层故障只在 `route=on` 时升级
+
+条件：
+
+- `gateway_health = healthy`
+- `capability_health = degraded|unreachable`
+
+规则：
+
+- `route=on`：允许进入 `degraded-capability`
+- `route=off`：保持顶层 `healthy`，只保留诊断信息
+
+### 5. 联合恢复 contract 的禁止项
+
+- 不得让 `gateway-exit-monitor` 和 `runtime-restart-monitor` 互相覆盖 `user-decision-required`
+- 不得在用户已做出 `disable-route` 或 `uninstall` 决策后，又自动把状态推回产品增强路径
+- 不得把联合恢复 contract 实现成新的产品入口或第二控制面
+
+## 七、最小接口要求
 
 后续实现至少需要一个统一状态输出，供 UI / gateway / 诊断面共享。
 
@@ -192,7 +265,7 @@ Track B 自动化明确不允许做：
 - `recommended_action`
 - `error_code`
 
-## 七、状态写入责任方
+## 八、状态写入责任方
 
 Track B 的状态写入责任方固定为：
 
@@ -236,7 +309,7 @@ Track B 的状态写入责任方固定为：
 
 这条规则的目的，是把“可自动恢复的瞬时入口故障”和“需要用户决策的不可恢复故障”分开，避免系统过早打断用户。
 
-## 八、与现有实现的绑定关系
+## 十、与现有实现的绑定关系
 
 - `agent_control_api.py`
   - 当前已有 `healthy/degraded/unreachable` 粗状态，可作为入口
