@@ -14,7 +14,7 @@ import asyncio
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List, Any, Dict, Set
 from datetime import datetime
@@ -39,6 +39,8 @@ from .quota_observer import (
     upstream_url_for_observation,
 )
 from .startup_probe import run_startup_probe
+from .mcp_surface import configure_mcp_surface
+from .diagnostics_surface import configure_diagnostics_surface
 
 # 兼容数字开头包：逐个子模块动态导入（避免语法错误）
 import importlib
@@ -147,10 +149,14 @@ import importlib
 _llm_proxy_mod = importlib.import_module("5_connectors.adapter.llm_proxy")
 _status_api_mod = importlib.import_module("5_connectors.adapter.status_api")
 _agent_control_api_mod = importlib.import_module("5_connectors.adapter.agent_control_api")
+_mcp_surface_mod = importlib.import_module("5_connectors.adapter.mcp_surface")
+_diagnostics_surface_mod = importlib.import_module("5_connectors.adapter.diagnostics_surface")
 app.include_router(_llm_proxy_mod.router, prefix="")
 app.include_router(_status_api_mod.router, prefix="")
 app.include_router(_agent_control_api_mod.router, prefix="")
-del _llm_proxy_mod, _status_api_mod, _agent_control_api_mod
+app.include_router(_mcp_surface_mod.router, prefix="")
+app.include_router(_diagnostics_surface_mod.router, prefix="")
+del _llm_proxy_mod, _status_api_mod, _agent_control_api_mod, _mcp_surface_mod, _diagnostics_surface_mod
 
 @app.middleware("http")
 async def attach_request_id(request: Request, call_next):
@@ -222,424 +228,6 @@ else:
     if _resolved_host in ("0.0.0.0", "::"):
         _resolved_host = "127.0.0.1"
     _adapter_http_base = f"http://{_resolved_host}:{_resolved_port}"
-
-# In-memory session store for MCP SSE connections: session_id -> asyncio.Queue
-_mcp_sessions: Dict[str, asyncio.Queue] = {}
-_mcp_sessions_lock: asyncio.Lock = None
-_mcp_bootstrap_done: Set[str] = set()
-_mcp_bootstrap_lock: asyncio.Lock = None
-
-def _get_sessions_lock() -> asyncio.Lock:
-    global _mcp_sessions_lock
-    if _mcp_sessions_lock is None:
-        _mcp_sessions_lock = asyncio.Lock()
-    return _mcp_sessions_lock
-
-
-def _get_bootstrap_lock() -> asyncio.Lock:
-    global _mcp_bootstrap_lock
-    if _mcp_bootstrap_lock is None:
-        _mcp_bootstrap_lock = asyncio.Lock()
-    return _mcp_bootstrap_lock
-
-
-@app.get("/sse")
-async def mcp_sse(request: Request):
-    """
-    MCP SSE endpoint — initiates an SSE stream with endpoint info.
-    OpenClaw MCP client connects here first to get the messages endpoint.
-    """
-    session_id = f"mcp_{uuid4().hex[:8]}"
-
-    async def event_stream():
-        queue: asyncio.Queue = asyncio.Queue()
-        async with _get_sessions_lock():
-            _mcp_sessions[session_id] = queue
-
-        try:
-            # Send the endpoint message (standard MCP handshake)
-            yield f"event: endpoint\ndata: /messages?sessionId={session_id}\n\n"
-            yield f"event: keepalive\ndata: \n\n"
-
-            # Keep-alive ping every 20 seconds (matches Go Runtime behavior)
-            while True:
-                try:
-                    msg = await asyncio.wait_for(queue.get(), timeout=20.0)
-                    yield f"event: message\ndata: {msg}\n\n"
-                except asyncio.TimeoutError:
-                    yield f"event: keepalive\ndata: \n\n"
-        except asyncio.CancelledError:
-            pass
-        finally:
-            async with _get_sessions_lock():
-                _mcp_sessions.pop(session_id, None)
-
-    return StreamingResponse(
-        event_stream(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        }
-    )
-
-
-def _mcp_result(msg_id: Any, result: Any) -> Dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": msg_id, "result": result}
-
-
-def _mcp_error(msg_id: Any, code: int, message: str) -> Dict[str, Any]:
-    return {"jsonrpc": "2.0", "id": msg_id, "error": {"code": code, "message": message}}
-
-
-def _mcp_tools_payload() -> Dict[str, Any]:
-    return {
-        "tools": [
-            {
-                "name": "memory.context",
-                "description": "FINAL COMPILE TOOL — Must be called before sending to LLM. Merges candidates from native memory, native compiler, and session context. Returns packed_context + token savings. Never bypass this.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string"},
-                        "keyword": {"type": "string"},
-                        "limit": {"type": "integer"},
-                        "native_compiled_context": {"type": "string", "description": "OpenClaw native compiler output — treated as one candidate"},
-                        "current_session_context": {"type": "string", "description": "Current session context — treated as one candidate"},
-                        "raw_candidates": {"type": "array", "description": "Explicit candidate list from caller"},
-                    },
-                    "required": ["query"],
-                },
-            },
-            {
-                "name": "omnimemora_search_memory",
-                "description": "[alias for memory.context] FINAL COMPILE — do not use output directly in LLM without going through memory.context first.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "keyword": {"type": "string"},
-                        "limit": {"type": "integer"},
-                        "native_compiled_context": {"type": "string"},
-                        "current_session_context": {"type": "string"},
-                    },
-                    "required": ["keyword"],
-                },
-            },
-            {
-                "name": "memory.search",
-                "description": "CANDIDATE RETRIEVAL TOOL — Returns raw candidates. Must be fed to memory.context for final compile before LLM. Cannot be used directly as LLM input.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "keyword": {"type": "string"},
-                        "limit": {"type": "integer"},
-                    },
-                    "required": ["keyword"],
-                },
-            },
-            {
-                "name": "memory.write",
-                "description": "Write memory content.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "content": {"type": "string"},
-                        "scope": {"type": "string"},
-                    },
-                    "required": ["content"],
-                },
-            },
-            {
-                "name": "omnimemora_write_memory",
-                "description": "[alias for memory.write] Write a memory item.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "content": {"type": "string"},
-                        "scope": {"type": "string"},
-                    },
-                    "required": ["content"],
-                },
-            },
-        ],
-    }
-
-
-def _mcp_initialize_payload() -> Dict[str, Any]:
-    return {
-        "protocolVersion": "2025-03-26",
-        "capabilities": {
-            "tools": {},
-        },
-        "serverInfo": {
-            "name": "omnimemora-adapter",
-            "version": "2.2.0",
-        },
-    }
-
-
-def _infer_agent_id_for_bootstrap(body: Dict[str, Any], request: Optional[Request]) -> str:
-    """Infer best-effort agent id for MCP initialize bootstrap."""
-    params = body.get("params", {}) if isinstance(body, dict) else {}
-    if isinstance(params, dict):
-        client_info = params.get("clientInfo", {})
-        if isinstance(client_info, dict):
-            name = str(client_info.get("name", "")).strip()
-            if name:
-                return name
-    if request:
-        raw = (request.headers.get("x-agent-id") or "").strip()
-        if raw:
-            return raw
-        ua = (request.headers.get("user-agent") or "").lower()
-        if "codex" in ua:
-            return "codex"
-        if "claude" in ua:
-            return "claude_code"
-        if "openclaw" in ua:
-            return "openclaw-agent"
-    return "mcp-client"
-
-
-def _bootstrap_key(request: Optional[Request], tenant: str, agent: str) -> str:
-    """Stable-ish key to avoid duplicate bootstrap calls for same session/client."""
-    if request:
-        sid = (
-            request.query_params.get("sessionId")
-            or request.headers.get("x-session-id")
-            or request.headers.get("x-conversation-id")
-            or request.headers.get("x-thread-id")
-        )
-        if sid:
-            return f"sid:{sid}"
-        client_ip = request.client.host if request.client else "unknown"
-        return f"client:{client_ip}:{tenant}:{agent}"
-    return f"fallback:{tenant}:{agent}"
-
-
-async def _bootstrap_mcp_initialize(request: Optional[Request], body: Dict[str, Any]) -> None:
-    """
-    Product-level behavior: after MCP initialize, proactively run one OmniMemora
-    context compile call so connected agents are observed by product usage.
-    """
-    if not config.mcp_auto_bootstrap_enabled:
-        return
-
-    tenant = "openclaw"
-    user = "openclaw-user"
-    if request:
-        tenant = (request.headers.get("x-omnimemora-tenant") or request.headers.get("x-openviking-account") or tenant).strip() or tenant
-        user = (request.headers.get("x-openviking-user") or request.headers.get("x-user-id") or user).strip() or user
-    agent = _infer_agent_id_for_bootstrap(body, request)
-    canonical_agent = _5_agent_id.resolve_canonical_agent_id(agent)
-    key = _bootstrap_key(request, tenant, canonical_agent)
-
-    async with _get_bootstrap_lock():
-        if key in _mcp_bootstrap_done:
-            return
-        _mcp_bootstrap_done.add(key)
-
-    payload = {
-        "query": config.mcp_auto_bootstrap_query[:200],
-        "keyword": config.mcp_auto_bootstrap_query[:200],
-        "limit": 4,
-        "tenant": tenant,
-        "user": user,
-        "agent": canonical_agent,
-        "agent_id": canonical_agent,
-        "integration_type": "pre_llm_connector",
-    }
-    if request:
-        session_id = (
-            request.query_params.get("sessionId")
-            or request.headers.get("x-session-id")
-            or request.headers.get("x-conversation-id")
-            or request.headers.get("x-thread-id")
-        )
-        workspace_id = request.headers.get("x-workspace-id")
-        if session_id:
-            payload["session_id"] = session_id
-        if workspace_id:
-            payload["workspace_id"] = workspace_id
-
-    try:
-        async with httpx.AsyncClient(timeout=12.0, trust_env=False) as client:
-            resp = await client.post(f"{_adapter_http_base}/mcp/query", json=payload)
-            if resp.status_code >= 400:
-                loguru.logger.warning(
-                    f"[MCP_BOOTSTRAP] initialize bootstrap failed status={resp.status_code} key={key}"
-                )
-                return
-            data = resp.json()
-            loguru.logger.info(
-                f"[MCP_BOOTSTRAP] initialized key={key} tenant={tenant} agent={canonical_agent} request_id={data.get('request_id')}"
-            )
-    except Exception as exc:
-        loguru.logger.warning(f"[MCP_BOOTSTRAP] initialize bootstrap error key={key}: {exc}")
-
-
-async def _dispatch_mcp_jsonrpc(body: Dict[str, Any], request: Optional[Request] = None) -> Optional[Dict[str, Any]]:
-    method = body.get("method", "")
-    msg_id = body.get("id")
-    if not isinstance(body, dict):
-        return _mcp_error(None, -32600, "invalid request")
-
-    if method == "initialize":
-        # Product-level default: connected agent triggers one proactive OmniMemora call.
-        asyncio.create_task(_bootstrap_mcp_initialize(request, body))
-        return _mcp_result(msg_id, _mcp_initialize_payload())
-
-    if method in ("notifications/initialized",):
-        # JSON-RPC notification: no response body.
-        return None
-
-    if method in ("ping",):
-        return _mcp_result(msg_id, {})
-
-    if method == "tools/list":
-        return _mcp_result(msg_id, _mcp_tools_payload())
-
-    # tools/call — dispatch to MCP tool implementations
-    if method == "tools/call":
-        params = body.get("params", {})
-        tool_name = params.get("name", "")
-        tool_args = params.get("arguments", {})
-
-        try:
-            content_blocks = await _mcp_call_tool(tool_name, tool_args)
-            return _mcp_result(msg_id, {"content": content_blocks})
-        except Exception as e:
-            return _mcp_error(msg_id, -32603, f"tool error: {e}")
-
-    # Unknown method
-    return _mcp_error(msg_id, -32601, f"method not found: {method}")
-
-
-@app.post("/messages")
-async def mcp_messages(request: Request, sessionId: Optional[str] = None):
-    """
-    Legacy MCP JSON-RPC message handler (SSE /messages flow for OpenClaw).
-    """
-    body = await request.json()
-    response = await _dispatch_mcp_jsonrpc(body, request)
-    if response is None:
-        return JSONResponse(status_code=204, content={})
-    return JSONResponse(response)
-
-
-@app.get("/mcp")
-async def mcp_http_health():
-    """
-    Streamable HTTP MCP capability endpoint for clients that probe over HTTP.
-    """
-    return {
-        "status": "ok",
-        "transport": "http-jsonrpc",
-        "message_endpoint": "/mcp",
-        "legacy_sse_endpoint": "/sse",
-    }
-
-
-@app.post("/mcp")
-async def mcp_http_jsonrpc(request: Request):
-    """
-    Streamable HTTP MCP endpoint used by Claude Code and other HTTP MCP clients.
-    """
-    body = await request.json()
-    response = await _dispatch_mcp_jsonrpc(body, request)
-    if response is None:
-        return JSONResponse(status_code=204, content={})
-    return JSONResponse(response)
-
-
-async def _mcp_call_tool(name: str, args: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """
-    Dispatch MCP tool call to appropriate handler.
-    Returns MCP content blocks list: [{"type": "text", "text": str}, ...]
-    """
-    if name in ("memory.context", "memory.recall", "omnimemora_search_memory"):
-        # All search-like tools route through Context Compiler for token savings
-        query = args.get("query") or args.get("keyword", "")
-        limit = int(args.get("limit", 8)) or 8
-
-        from httpx import AsyncClient
-        async with AsyncClient(timeout=30.0, trust_env=False) as client:
-            mcp_resp = await client.post(
-                f"{_adapter_http_base}/mcp/query",
-                json={
-                    "query": query[:200],
-                    "keyword": query[:200],
-                    "limit": limit,
-                    "tenant": "openclaw",
-                    "user": "openclaw-user",
-                    "agent": "openclaw-agent",
-                    # Multi-source final compile gate (Phase 4)
-                    "native_compiled_context": args.get("native_compiled_context"),
-                    "current_session_context": args.get("current_session_context"),
-                    "raw_candidates": args.get("raw_candidates"),
-                },
-            )
-            if mcp_resp.status_code >= 400:
-                return [{"type": "text", "text": f"error: mcp query failed ({mcp_resp.status_code}) url={_adapter_http_base}/mcp/query"}]
-
-            data = mcp_resp.json()
-            saved = data.get("usage", {}).get("saved_tokens_estimate", 0)
-            ratio = data.get("usage", {}).get("savings_ratio", 0)
-            count = len(data.get("selected_memories", []))
-            packed = data.get("packed_context", "")
-
-            # Human-readable summary (first content block)
-            summary = f"OmniMemora: saved {saved} tokens ({ratio:.0%} reduction), {count} memories selected"
-            if packed:
-                summary += f"\n\n{packed}"
-
-            # Machine-parseable metadata (second content block, JSON string)
-            import json as _json
-            meta = {
-                "saved_tokens": saved,
-                "ratio": round(ratio, 3),
-                "memory_count": count,
-                "selected_memories": data.get("selected_memories", []),
-            }
-
-            return [
-                {"type": "text", "text": summary},
-                {"type": "text", "text": _json.dumps(meta, ensure_ascii=False)},
-            ]
-
-    if name in ("memory.search",):
-        keyword = args.get("keyword", "")
-        limit = int(args.get("limit", 8)) or 8
-
-        from httpx import AsyncClient
-        async with AsyncClient(timeout=30.0, trust_env=False) as client:
-            sr = await client.post(
-                f"{_adapter_http_base}/memory/search",
-                json={"query": keyword, "keyword": keyword, "limit": limit, "agent": "openclaw-agent"},
-                headers={"X-OpenViking-Account": "openclaw", "X-OpenViking-User": "openclaw-user"},
-            )
-            if sr.status_code >= 400:
-                return [{"type": "text", "text": f"error: search failed ({sr.status_code})"}]
-            search_result = sr.json()
-
-        memories = search_result.get("memories", [])
-        total = search_result.get("total", 0)
-        lines = [f"Found {total} memories:"]
-        for m in memories[:limit]:
-            lines.append(f"- [{m.get('category','memory')} | score={m.get('score',0):.2f}] {m.get('abstract', m.get('content',''))[:80]}")
-        return [{"type": "text", "text": "\n".join(lines)}]
-
-    if name in ("memory.write", "memory.store", "omnimemora_write_memory"):
-        content = args.get("content", "")
-        if not content:
-            return [{"type": "text", "text": "error: content required"}]
-        write_req = MemoryRequest(content=content, agent="openclaw-agent")
-        write_result = await write_memory(write_req, Request(scope={"type": "http"}))
-        uri = write_result.uri or write_result.memory_id or "unknown"
-        return [{"type": "text", "text": f"memory stored: {uri}"}]
-
-    return [{"type": "text", "text": f"error: unknown tool: {name}"}]
 
 
 @app.exception_handler(SupportAPIError)
@@ -726,6 +314,20 @@ class RateLimiter:
 
 # 全局限流器
 _rate_limiter = RateLimiter(max_per_minute=config.rate_limit_per_minute)
+
+configure_diagnostics_surface(
+    config_obj=config,
+    get_backend_fn=_get_backend,
+    get_dedup_cache_fn=get_dedup_cache,
+    rate_limiter=_rate_limiter,
+    adapter_hostname=_adapter_hostname,
+    adapter_started_at=_adapter_started_at,
+    agent_metrics_module=_5_agnet_m,
+    agent_identity_module=_5_agent_id,
+    get_meter_fn=get_meter,
+    support_schema_version=SUPPORT_SCHEMA_VERSION,
+    support_error_catalog=SUPPORT_ERROR_CATALOG,
+)
 
 
 # ==================== 请求/响应模型 ====================
@@ -1789,189 +1391,6 @@ def filter_expired_memories(memories: list, current_time: int = None) -> list:
     return filtered
 
 
-# ==================== 路由 ====================
-
-@app.get("/")
-async def root():
-    """根路径"""
-    result = {
-        "service": "Memory Adapter v2.2",
-        "version": "2.2.0",
-        "support_schema_version": SUPPORT_SCHEMA_VERSION,
-        "dedup_stats": get_dedup_cache().get_stats(),
-        "rate_limit": {
-            "max_per_minute": config.rate_limit_per_minute,
-            "current": _rate_limiter.get_current_count()
-        }
-    }
-    # Only include viking_url when using openviking backend (compatibility)
-    if config.viking_url:
-        result["viking_url"] = config.viking_url
-    return result
-
-
-@app.get("/health")
-async def health(mode: str = "full"):
-    """
-    健康检查。
-
-    ?mode=local  — 本地快速检查，仅验证 adapter 进程存活，不探测 viking。
-                   用于 wrapper / 自动化探测。
-    ?mode=full   — 完整检查，含 viking 连通性（默认，保持向后兼容）。
-    """
-    if mode == "local":
-        return {
-            "status": "healthy",
-            "mode": "local",
-            "interface_policy": {
-                "product_entry_port": 18011,
-                "mcp_endpoint": "/mcp",
-                "internal_backend_port": 8765,
-                "note": "External agents must connect to 18011. Port 8765 is internal only.",
-            },
-            "dedup_stats": get_dedup_cache().get_stats(),
-            "rate_limit": {
-                "enabled": config.enable_rate_limit,
-                "max_per_minute": config.rate_limit_per_minute,
-                "current": _rate_limiter.get_current_count(),
-            },
-        }
-
-    # mode == "full": 完整健康检查（通过 backend interface）
-    backend_health = await _get_backend().health()
-    _route_state = importlib.import_module("5_connectors.adapter.agent_routing_state")
-    _track_b_orchestrator = importlib.import_module("5_connectors.adapter.track_b_orchestrator")
-    per_agent_modes, _default_mode = _route_state.get_agent_modes_cache()
-    system_status = _track_b_orchestrator.build_system_status_from_backend_health(
-        backend_health=backend_health,
-        per_agent_modes=per_agent_modes,
-    )
-
-    return {
-        "status": "healthy" if backend_health.healthy else "degraded",
-        "mode": "full",
-        "interface_policy": {
-            "product_entry_port": 18011,
-            "mcp_endpoint": "/mcp",
-            "internal_backend_port": 8765,
-            "note": "External agents must connect to 18011. Port 8765 is internal only.",
-        },
-        "memory_backend": {
-            "type": backend_health.backend_type,
-            "healthy": backend_health.healthy,
-            "details": backend_health.details,
-        },
-        "system_status": system_status,
-        "timeout_profile": {
-            "connect_seconds": config.viking_connect_timeout_seconds,
-            "health_seconds": config.viking_health_timeout_seconds,
-            "search_seconds": config.viking_search_timeout_seconds,
-            "read_seconds": config.viking_read_timeout_seconds,
-            "delete_seconds": config.viking_delete_timeout_seconds,
-            "snapshot_seconds": config.viking_snapshot_timeout_seconds,
-            "upload_seconds": config.viking_upload_timeout_seconds,
-            "commit_seconds": config.viking_commit_timeout_seconds,
-            "resolve_seconds": config.viking_resolve_timeout_seconds,
-            "retry_attempts": config.viking_retry_attempts,
-            "retry_backoff_seconds": config.viking_retry_backoff_seconds,
-            "slow_request_threshold_ms": config.slow_request_threshold_ms,
-        },
-        "path_policy": {
-            "agent_segment_sanitized": True,
-            "namespace_prepare_on_write": True,
-            "missing_namespace_returns_empty": True,
-        },
-        "error_policy": {
-            "schema_version": SUPPORT_SCHEMA_VERSION,
-            "request_id_header": "X-Request-ID",
-            "catalog_endpoint": "/support/error-codes",
-            "structured_http_errors": True,
-            "write_error_fields": ["reason", "error_code", "request_id", "support"],
-        },
-        "dedup_stats": get_dedup_cache().get_stats(),
-        "rate_limit": {
-            "enabled": config.enable_rate_limit,
-            "max_per_minute": config.rate_limit_per_minute,
-            "current": _rate_limiter.get_current_count(),
-        },
-    }
-
-
-@app.get("/debug/runtime_fingerprint")
-async def runtime_fingerprint():
-    """
-    Runtime fingerprint for fast operator verification.
-    Helps confirm whether dashboard and clients are hitting the same adapter instance.
-    Includes code source paths so operators can instantly tell if the running
-    code matches the files they edited (avoids "I changed X but it didn't take effect").
-    """
-    import importlib
-    import inspect as _inspect
-
-    live_5m = _5_agnet_m.get_live_agents(window_minutes=5)
-    live_24h = _5_agnet_m.get_live_agents(window_minutes=1440)
-
-    _KEY_MODULES = [
-        "5_connectors.adapter.main",
-        "5_connectors.adapter.metrics_aggregator",
-        "5_connectors.adapter.agent_identity",
-        "5_connectors.adapter.agent_metrics",
-    ]
-    code_source = {}
-    for _name in _KEY_MODULES:
-        try:
-            _mod = importlib.import_module(_name)
-            code_source[_name] = _inspect.getfile(_mod)
-        except Exception as _e:
-            code_source[_name] = f"import failed: {_e}"
-
-    return {
-        "service": "Memory Adapter v2.2",
-        "version": "2.2.0",
-        "pid": os.getpid(),
-        "hostname": _adapter_hostname,
-        "started_at": _adapter_started_at,
-        "python": sys.version.split(" ")[0],
-        "config": {
-            "adapter_host": config.adapter_host,
-            "adapter_port": config.adapter_port,
-            "memory_backend_type": config.memory_backend.backend_type,
-            "memory_backend_url": config.memory_backend.base_url,
-            "agent_events_path": config.agent_events_path,
-        },
-        "code_source": code_source,
-        "live_counts": {
-            "window_5m": len(live_5m),
-            "window_24h": len(live_24h),
-        },
-        "interface_policy": {
-            "product_entry_port": 18011,
-            "mcp_endpoint": "/mcp",
-            "internal_backend_port": 8765,
-            "note": "External agents must connect to 18011. Port 8765 is internal only.",
-        },
-    }
-
-
-@app.get("/support/error-codes")
-async def support_error_codes():
-    """售后错误码目录。"""
-    return {
-        "schema_version": SUPPORT_SCHEMA_VERSION,
-        "count": len(SUPPORT_ERROR_CATALOG),
-        "error_codes": [
-            {
-                "code": code,
-                "category": meta["category"],
-                "severity": meta["severity"],
-                "retryable": meta["retryable"],
-                "suggested_action": meta["suggested_action"],
-            }
-            for code, meta in sorted(SUPPORT_ERROR_CATALOG.items())
-        ],
-    }
-
-
 @app.post("/memory/write", response_model=MemoryResponse)
 async def write_memory(request: MemoryRequest, http_request: Request):
     """
@@ -2142,6 +1561,15 @@ async def write_memory(request: MemoryRequest, http_request: Request):
             detail=str(e),
             suggested_action="记录 request_id 并检查 Adapter 运行日志中的对应堆栈。",
         )
+
+
+configure_mcp_surface(
+    adapter_http_base=_adapter_http_base,
+    config_obj=config,
+    agent_identity_module=_5_agent_id,
+    memory_request_model=MemoryRequest,
+    write_memory_fn=write_memory,
+)
 
 
 @app.post("/memory/search")
@@ -3125,173 +2553,6 @@ async def mcp_query(request: Request):
     finally:
         request.state.v2_tenant_override = None
         request.state.v2_user_override = None
-
-
-@app.get("/metrics/summary")
-async def get_metrics_summary(response: Response, tenant: str = "all"):
-    """
-    Phase 2 Dashboard Refactor: Unified Metrics Summary Endpoint.
-
-    This is the ONLY endpoint the dashboard should consume for KPI data.
-    All time windows and agent IDs are canonicalized.
-
-    Response structure:
-        {
-            "generated_at": float,
-            "tenant": "all",
-            "windows": {
-                "5m": { active_agents, proxied_requests, compile_success, ... },
-                "24h": { ... },
-                "all_time": { requests_processed, tokens_saved, avg_reduction_ratio, history_agents },
-            },
-            "agents": {
-                "realtime": [{ agent_id, last_seen, connected, proxied_requests_5m, ... }],
-                "all_time": [{ agent_id, requests, tokens_saved, avg_reduction_ratio }],
-            },
-            "events": [{ request_id, ts, agent_id, kind, mode, saved_ratio, mem_count, query_preview }],
-        }
-    """
-    import importlib
-    _5_agg = importlib.import_module("5_connectors.adapter.metrics_aggregator")
-    response.headers["X-OmniMemora-Surface-Role"] = "kpi"
-    response.headers["X-OmniMemora-KPI-Source"] = "/metrics/summary"
-    return _5_agg.compute_unified_summary()
-
-
-@app.get("/metrics/debug/sources")
-async def get_metrics_debug_sources():
-    """
-    Engineering diagnostic: return field-to-source mapping.
-    Documents where each field in /metrics/summary comes from.
-    Not shown to end users — for debugging only.
-    """
-    import importlib
-    _5_agg = importlib.import_module("5_connectors.adapter.metrics_aggregator")
-    return _5_agg.get_metrics_debug_sources()
-
-
-@app.get("/metrics/recent_requests")
-async def get_recent_requests(tenant: str = "default", limit: int = 20):
-    """
-    Recent request log for Live Flow module.
-    Returns last N requests with key fields.
-    """
-    import importlib
-    _5_ms = importlib.import_module("5_connectors.adapter.metrics_service")
-    requests = _5_ms.get_recent_requests(tenant, limit)
-    return {"tenant": tenant, "requests": requests}
-
-
-@app.get("/metrics/tenants")
-async def get_metric_tenants():
-    """Return known tenants that have persisted meter data."""
-    import importlib
-    _5_ms = importlib.import_module("5_connectors.adapter.metrics_service")
-    return {"tenants": _5_ms.list_tenants()}
-
-
-@app.get("/debug/context_diff")
-async def get_context_diff(request_id: str):
-    """
-    Before/After context comparison for a specific request.
-    Shows candidate_memories (before filtering) vs selected_memories (after).
-
-    Returns:
-        {
-          "request_id": str,
-          "before_tokens": int,
-          "after_tokens": int,
-          "selected_memories": [...],
-          "dropped_memories": [...]
-        }
-    """
-    meter = get_meter(request_id)
-    if not meter:
-        raise HTTPException(status_code=404, detail=f"Meter not found for request_id={request_id}")
-
-    meter_dict = meter.to_dict()
-    candidate_memories = meter_dict.get("candidate_memories", [])
-    dropped_memories = meter_dict.get("dropped_memories", [])
-
-    # Compute selected_memories: candidates minus dropped
-    dropped_content_set = {m.get("content", "").strip() for m in dropped_memories}
-    selected_memories = [m for m in candidate_memories if m.get("content", "").strip() not in dropped_content_set]
-
-    return {
-        "request_id": request_id,
-        "before_tokens": meter_dict.get("baseline_tokens_estimate", 0),
-        "after_tokens": meter_dict.get("actual_tokens_estimate", 0),
-        "selected_memories": selected_memories,
-        "dropped_memories": dropped_memories,
-    }
-
-
-@app.get("/debug/call_chain")
-async def get_call_chain(request_id: str):
-    """
-    Call chain trace for a specific request.
-    Shows timing per stage: policy_eval, backend_search, engine_optimize, meter_persist.
-
-    Returns:
-        {
-          "trace_id": str,
-          "stages": [{"name": str, "duration_ms": float}, ...]
-        }
-    """
-    import importlib
-    _5_trace = importlib.import_module("5_connectors.adapter.trace_store")
-    chain_dict = _5_trace.get_trace_dict(request_id)
-    if not chain_dict:
-        raise HTTPException(status_code=404, detail=f"Trace not found for request_id={request_id}")
-    return chain_dict
-
-
-# ==================== Agent Observability Endpoints ====================
-
-@app.get("/agents/live")
-async def get_agents_live(response: Response, window_minutes: int = 30):
-    """
-    Return list of active agents with recent activity.
-    Active = last_seen_at within window_minutes.
-    """
-    live = _5_agnet_m.get_live_agents(window_minutes=window_minutes)
-    response.headers["X-OmniMemora-Surface-Role"] = "diagnostic"
-    response.headers["X-OmniMemora-KPI-Source"] = "/metrics/summary"
-    return {
-        "surface_role": "diagnostic",
-        "kpi_source": "/metrics/summary",
-        "diagnostic_scope": "agent session snapshots reconstructed from agent_events JSONL",
-        "agents": live,
-        "count": len(live),
-    }
-
-
-@app.get("/agents/metrics")
-async def get_agent_metrics_get(
-    response: Response,
-    agent_id: Optional[str] = None,
-    session_id: Optional[str] = None,
-):
-    """
-    Query agent metrics, optionally filtered by agent_id / session_id.
-
-    Note: agent_id is normalized to canonical form before query
-    (per ADR-0005: adapter only maps, does not redefine).
-    """
-    # ADR-0005: normalize incoming agent_id to canonical
-    canonical_id = None
-    if agent_id:
-        canonical_id = _5_agent_id.resolve_canonical_agent_id(agent_id)
-    metrics = _5_agnet_m.get_agent_metrics(agent_id=canonical_id, session_id=session_id)
-    response.headers["X-OmniMemora-Surface-Role"] = "diagnostic"
-    response.headers["X-OmniMemora-KPI-Source"] = "/metrics/summary"
-    return {
-        "surface_role": "diagnostic",
-        "kpi_source": "/metrics/summary",
-        "diagnostic_scope": "agent/session aggregates replayed from agent_events JSONL",
-        "metrics": [m.dict() for m in metrics],
-        "count": len(metrics),
-    }
 
 
 # ==================== Trial Provisioning (Protected Admin) ====================

@@ -166,8 +166,9 @@ last_verified_commit: ""
 - [x] Track C 责任边界图与迁移顺序草案已建立
 - [x] `main.py` slimming candidate 清单已建立
 - [x] 第一批低风险迁移已落地：`startup probe` 与 `quota-path observation helper` 已从 `main.py` 外移
+- [x] 第二批中风险表层迁移已落地：`MCP/SSE surface` 与 diagnostics surface 已从 `main.py` 外移为独立 router
 - [ ] 暂不进入高耦合迁移
-- [ ] 下一步只允许决定第二批小范围迁移是否从 `MCP-SSE / diagnostics surface` 开始
+- [ ] 下一步只允许决定第三批小范围迁移是否从 `support/admin surface` 或其他剩余表层职责开始
 
 ## 七、Track D: 候选实例补强验证
 

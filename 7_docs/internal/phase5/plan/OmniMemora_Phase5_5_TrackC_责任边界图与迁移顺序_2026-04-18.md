@@ -182,6 +182,9 @@ last_verified_commit: ""
 - 第一批低风险外移已验证成立：
   - `startup probe`
   - `quota/path observation helpers`
+- 第二批中风险外移已验证成立：
+  - `MCP/SSE surface`
+  - diagnostics surface
 
 ### C3. compile facade 固定
 
@@ -222,6 +225,9 @@ last_verified_commit: ""
    - middleware
    - backend lazy init
    - router mount
+4. 已完成的表层 router 外移：
+   - `MCP/SSE surface`
+   - diagnostics surface
 4. 不在第一批触碰：
    - request middleware 链
    - trace header 传播
