@@ -16,7 +16,7 @@ last_verified_commit: ""
 ## 一、当前状态
 
 - 当前阶段：`Decision Carrier / Control-Plane Decoupling`
-- 当前 gate：`Track C / 第三批 supervisor hint 已落地`
+- 当前 gate：`Track D 阶段性完成 / 当前 decoupling 计划达到边界`
 - 工作区健康：`绿色`
 - 当前分支：`master`
 
@@ -104,6 +104,8 @@ last_verified_commit: ""
 
 - 所有关键极端故障路径写入验证记录
 - 不影响真实用户配置
+- [x] 第一批极端故障验证已落地：隔离二进制环境下，`runtime dead + disable-route` 与 `runtime dead + uninstall` 的离线路径均已得到候选实例级证据
+- [x] 第二批极端故障验证已落地：gateway/runtime 联合故障下，supervisor hint 与 offline fallback (`disable-route` / `uninstall`) 的组合路径均已得到候选实例级证据
 
 ## 七、文档净化动作
 
@@ -130,4 +132,6 @@ last_verified_commit: ""
 - [x] 完成 `Track C` 第二批前置：补齐最小 command router，暴露现有 CLI dispatch path
 - [x] 完成 `Track C` 第二批实现：为 `runtime dead` 场景添加 CLI/offline fallback entry
 - [x] 完成 `Track C` 第三批实现：补 supervisor hint / recovery manifest，使极端故障时能输出确定性的下一步动作
-- [ ] 进入 `Track D`：补 `runtime dead + disable-route/uninstall` 的候选实例级极端故障验证
+- [x] 完成 `Track D` 第一批：补 `runtime dead + disable-route/uninstall` 的候选实例级极端故障验证
+- [x] 完成 `Track D` 第二批：补 gateway/runtime 联合故障下 offline fallback 与 supervisor hint 的组合验证
+- [ ] 回到 decoupling 总计划：做当前阶段收口与下一主线判断

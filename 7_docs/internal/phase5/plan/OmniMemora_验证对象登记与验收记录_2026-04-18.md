@@ -836,3 +836,29 @@ last_verified_commit: ""
 | 观察结果 | `start.sh` 现在会在极端故障分支下写出统一 recovery hint，内容明确指向 `omnimemora recover disable-route <family>` / `omnimemora recover uninstall <family>`；`bash -n start.sh` 通过 |
 | 结论适用范围 | `仓库现实成立`：Track C 第三批 supervisor hint 已落地，极端故障时已经具备确定性的下一步动作提示承载 |
 | 备注 | 本记录证明的是脚本级 recovery hint 承载已实现，不等同于 `runtime dead + uninstall` 的候选实例级完整闭环已完成 |
+
+### RECORD-B-057
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-057` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例 / 隔离二进制极端故障验证` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；使用重建后的 `tools/omnimemora-runtime`，并通过隔离 `HOME`、隔离 `agent_modes.json`、隔离 `gateway_decision.json` 进行离线恢复验证，不启动 runtime HTTP 服务 |
+| 验证动作 | 1. 在隔离环境中执行 `tools/omnimemora-runtime recover disable-route claude`，验证 `runtime dead + disable-route`；2. 在另一组隔离环境中预置 Claude 配置、备份数据与 `agent_modes.json`，执行 `tools/omnimemora-runtime recover uninstall claude`，验证 `runtime dead + uninstall`；3. 核对隔离 `settings.json`、`agent_modes.json`、`gateway_decision.json` 与 backup 目录变化 |
+| 观察结果 | `recover disable-route claude` 执行后，隔离 `agent_modes.json` 中 `claude_code` 已持久化为 `off`，隔离 `gateway_decision.json` 中写入 `"action": "disable-route"`；`recover uninstall claude` 执行后，隔离 Claude 配置被恢复为原始 `{\"theme\":\"dark\"}`，`agent_modes.json` 中 `claude_code` 变为 `off`，`gateway_decision.json` 中写入 `"action": "uninstall"`，隔离 backup 目录被清空 |
+| 结论适用范围 | `候选成立`：Track D 第一批极端故障验证已经成立，`runtime dead + disable-route` 与 `runtime dead + uninstall` 现在都具备不依赖 runtime HTTP 面的最小正式恢复路径 |
+| 备注 | 该记录只证明隔离离线路径成立，不代表 gateway/runtime 联合故障下的完整 supervisor 组合验证已经完成 |
+
+### RECORD-B-058
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-058` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例 / 联合故障 + supervisor hint + offline fallback` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；通过 `start.sh` 启动隔离候选实例，使用显式 `PYTHON_BIN=/Library/Developer/CommandLineTools/Library/Frameworks/Python3.framework/Versions/3.9/Resources/Python.app/Contents/MacOS/Python` 与 `PYTHONPATH=/Users/sc/Library/Python/3.9/lib/python/site-packages` 以满足本机 `uvicorn` 依赖；使用隔离 `HOME`、隔离 `OMNIMEMORA_DATA_DIR`、隔离 `agent_modes.json` 与隔离 Claude 配置/backup |
+| 验证动作 | 1. 以 `TRACK_B_SELF_HEAL_ENABLED=0` 启动候选实例；2. 手动终止 adapter，等待系统进入 `user-decision-required`；3. 再手动终止 runtime，等待 `recovery_hint.txt` 生成；4. 在隔离环境中分别执行 `tools/omnimemora-runtime recover disable-route claude` 与 `tools/omnimemora-runtime recover uninstall claude`；5. 核对 `recovery_hint.txt`、`track_b_status.json`、`gateway_decision.json`、`agent_modes.json` 与 Claude 配置恢复结果 |
+| 观察结果 | 两次联合故障验证都进入 `status=user-decision-required`，且 `recovery_hint.txt` 被写出，内容明确指向 `omnimemora recover disable-route <family>` / `omnimemora recover uninstall <family>`；`recover disable-route claude` 执行后，隔离 `agent_modes.json` 中 `claude_code=off` 且 `gateway_decision.json` 写入 `"action": "disable-route"`；`recover uninstall claude` 执行后，隔离 Claude 配置恢复为原始 `{\"theme\":\"dark\"}`，`agent_modes.json` 中 `claude_code=off`，`gateway_decision.json` 写入 `"action": "uninstall"`，backup 目录被清空 |
+| 结论适用范围 | `候选成立`：Track D 第二批联合故障验证已经成立，gateway/runtime 联合故障下，supervisor hint 与 offline fallback (`disable-route` / `uninstall`) 的组合路径可作为当前阶段的正式最小恢复方案 |
+| 备注 | 本记录证明的是联合故障下的最小恢复链路已经闭环，不等同于真实客户端修复或 `5173` 可视化验证已经完成 |
