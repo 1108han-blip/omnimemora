@@ -57,7 +57,6 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	mcpHandshakes, mcpToolCalls := s.getMCPStats()
 	hasMCPConnected := mcpHandshakes > 0
 	hasMCPActive := mcpToolCalls > 0
-	gatewayStatus := loadGatewayStatus()
 
 	html := `<!DOCTYPE html>
 <html>
@@ -271,7 +270,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	<div class="container">
 `
 
-	html += buildGatewayAlertHTML(gatewayStatus)
+	html += buildControlCarrierDashboardFragment()
 	html += buildRuntimeStatusCardHTML(hasConnectedAgents, hasMCPConnected, hasMCPActive, mcpHandshakes, mcpToolCalls)
 	html += buildRuntimeHeroHTML(metrics, hasData, hasMCPActive, hasMCPConnected, mcpToolCalls, connectedAgents)
 	html += buildTrendSectionHTML(metrics, hasData)
@@ -281,7 +280,6 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		</div>
 	</div>
 `
-	html += gatewayActionScriptHTML()
 	html += `</body>
 </html>`
 

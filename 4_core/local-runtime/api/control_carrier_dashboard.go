@@ -1,5 +1,10 @@
 package api
 
+func buildControlCarrierDashboardFragment() string {
+	gatewayStatus := loadGatewayStatus()
+	return buildGatewayAlertHTML(gatewayStatus) + gatewayActionScriptHTML()
+}
+
 func buildGatewayAlertHTML(gatewayStatus gatewayStatusPayload) string {
 	if gatewayStatus.Status == "healthy" {
 		return ""

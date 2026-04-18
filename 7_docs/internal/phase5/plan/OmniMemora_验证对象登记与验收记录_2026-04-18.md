@@ -667,3 +667,16 @@ last_verified_commit: ""
 | 观察结果 | runtime 侧新增独立 `bootstrap_state.go`，`Server` 不再直接承载 `bootstrapSuccess` 布尔状态，而是通过 `bootstrap *bootstrapState` 间接承载 bootstrap/control 状态；`go test ./tests ./api` 全部通过，未引入 runtime API 回归 |
 | 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第八批低风险逻辑解耦已经落地，runtime bootstrap/control 状态已进一步从 server 主结构中分离 |
 | 备注 | 本记录证明的是 bootstrap state carrier 的边界收敛，不等同于 runtime/control-plane 已物理解耦 |
+
+### RECORD-B-044
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-044` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库现实 / 代码与回归测试` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；涉及 `4_core/local-runtime/api/control_carrier_dashboard.go`、`operator_dashboard_surface.go` 与既有 runtime API tests |
+| 验证动作 | 1. 将 operator dashboard 对 gateway status / action script 的直接消费收敛为统一 `buildControlCarrierDashboardFragment()`；2. 运行 `gofmt -w api/control_carrier_dashboard.go api/operator_dashboard_surface.go`；3. 运行 `go test ./tests ./api` |
+| 观察结果 | operator dashboard surface 不再直接调用 `loadGatewayStatus()` 或 `gatewayActionScriptHTML()`，改为只消费 control-carrier dashboard fragment；`go test ./tests ./api` 全部通过，既有 dashboard / gateway alert 行为未出现回归 |
+| 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第九批低风险逻辑解耦已经落地，operator dashboard 与 control-carrier 呈现细节的耦合进一步降低 |
+| 备注 | 本记录证明的是 control-carrier fragment 消费边界的收敛，不等同于 control-plane 已独立为新宿主 |
