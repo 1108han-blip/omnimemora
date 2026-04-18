@@ -14,12 +14,27 @@ def _mark_diagnostic_surface(response: Response) -> None:
     response.headers["X-OmniMemora-KPI-Source"] = "/metrics/summary"
 
 
+async def _build_system_status() -> dict:
+    _main = importlib.import_module("5_connectors.adapter.main")
+    _route_state = importlib.import_module("5_connectors.adapter.agent_routing_state")
+    _track_b = importlib.import_module("5_connectors.adapter.track_b_status")
+
+    per_agent_modes, _default_mode = _route_state.get_agent_modes_cache()
+    routing_enabled = any(mode == "force_if_possible" for mode in per_agent_modes.values())
+    backend_health = await _main._get_backend().health()
+    return _track_b.build_track_b_status(
+        backend_health=backend_health,
+        routing_enabled=routing_enabled,
+        override=_track_b.read_status_override(),
+    )
+
+
 # ============================================================================
 # Proxy Status（Phase 2）
 # ============================================================================
 
 @router.get("/proxy/status")
-async def proxy_status(response: Response, window_minutes: int = 30):
+async def proxy_status(response: Response, window_minutes: int = 30, include_system: bool = False):
     """
     返回每個 Agent 的代理接入狀態。
 
@@ -36,7 +51,19 @@ async def proxy_status(response: Response, window_minutes: int = 30):
     """
     _ps = importlib.import_module("5_connectors.adapter.proxy_store")
     _mark_diagnostic_surface(response)
-    return _ps.summarize_agent_status(window_minutes=window_minutes)
+    agents = _ps.summarize_agent_status(window_minutes=window_minutes)
+    if not include_system:
+        return agents
+    return {
+        "system_status": await _build_system_status(),
+        "agents": agents,
+    }
+
+
+@router.get("/proxy/system-status")
+async def proxy_system_status(response: Response):
+    _mark_diagnostic_surface(response)
+    return await _build_system_status()
 
 
 @router.get("/proxy/events")

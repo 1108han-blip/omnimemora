@@ -263,6 +263,19 @@ last_verified_commit: ""
 | 结论适用范围 | `候选成立`：Track B 当前在候选实例上已具备 healthy 分支基线与能力层故障探测能力，但尚未具备统一的 `degraded-capability` 状态输出，也尚未具备 `user-decision-required` 的产品接口承载 |
 | 备注 | 本记录证明的是 Track B 的“当前缺口基线”，不是自愈功能已存在的证据；验证过程未触碰真实 `18011`、未修改真实用户配置 |
 
+### RECORD-B-016
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-016` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实现` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；状态输出实现位于 [track_b_status.py](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/5_connectors/adapter/track_b_status.py) 与 [status_api.py](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/5_connectors/adapter/status_api.py) |
+| 验证动作 | 1. 新增 Track B 状态语义模块，基于 backend health 与 route request 推导 `healthy / degraded-capability / recovering-gateway / user-decision-required`；2. 暴露 `GET /proxy/system-status`，并为 `GET /proxy/status?include_system=true` 增加可选聚合输出；3. 运行 `python3 -m unittest 5_connectors.adapter.tests.test_track_b_status 5_connectors.adapter.tests.test_agent_control_api 5_connectors.adapter.tests.test_llm_proxy_agent_detection` |
+| 观察结果 | 新接口输出已包含 `status / gateway_health / capability_health / routing_requested / routing_effective / user_action_required / recommended_action / error_code`。默认情况下，gateway 存活且 backend 健康时输出 `healthy`；backend 不健康时输出 `degraded-capability`，推荐动作为 `degrade_to_passthrough`；若后续状态机写入 override 文件，则同一接口可承载 `recovering-gateway` 与 `user-decision-required`，且不会自动引出 `restore backup` 或 `uninstall/detach`。相关 unittest 全部通过 |
+| 结论适用范围 | `候选成立`：Track B 已具备最小统一状态输出接口，可表达当前观测状态，并为后续自愈编排提供非破坏性的状态承载面 |
+| 备注 | 本记录覆盖的是“状态输出前置层”，不是自动修复或用户决策流程已完整上线；`user-decision-required` 目前仍需未来状态机显式写入 override 才会出现 |
+
 ## 五、Gate B 完成判据
 
 当满足以下条件时，`Gate B` 可视为通过：
@@ -288,3 +301,4 @@ last_verified_commit: ""
   - `RECORD-B-013` 已确认当前候选实例下 `cursor` 可通过 `/agents/control/install -> /uninstall` 在线恢复原始 settings 配置
   - `RECORD-B-014` 已确认当前候选实现下云端 usage telemetry 仅包含最小必要元数据，且不再包含 `tenant`
   - `RECORD-B-015` 已确认 Track B 在候选实例上的 healthy / capability failure / gateway failure 三类当前基线行为
+  - `RECORD-B-016` 已确认 Track B 最小统一状态输出接口已落地，可承载 `degraded-capability / recovering-gateway / user-decision-required`
