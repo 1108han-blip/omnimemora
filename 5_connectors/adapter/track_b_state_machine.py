@@ -13,6 +13,7 @@ ALLOWED_STATUS: Set[str] = {
 
 ALLOWED_STATUS_SOURCE_SCOPE: Dict[str, Set[str]] = {
     "runtime-restart-monitor": {"healthy", "recovering-gateway", "degraded-capability"},
+    "gateway-restart-monitor": {"healthy", "recovering-gateway"},
     "gateway-exit-monitor": {"user-decision-required"},
     "manual-override": ALLOWED_STATUS,
     "internal-test": ALLOWED_STATUS,

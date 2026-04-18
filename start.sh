@@ -9,6 +9,9 @@ SUPERVISOR_LOG="$LOG_DIR/track_b_supervisor.log"
 TRACK_B_SELF_HEAL_ENABLED="${TRACK_B_SELF_HEAL_ENABLED:-1}"
 TRACK_B_RUNTIME_RESTART_ATTEMPTS="${TRACK_B_RUNTIME_RESTART_ATTEMPTS:-1}"
 TRACK_B_RECOVERY_SETTLE_SECONDS="${TRACK_B_RECOVERY_SETTLE_SECONDS:-3}"
+TRACK_B_GATEWAY_RESTART_ATTEMPTS="${TRACK_B_GATEWAY_RESTART_ATTEMPTS:-2}"
+TRACK_B_GATEWAY_RESTART_BACKOFF_SECONDS="${TRACK_B_GATEWAY_RESTART_BACKOFF_SECONDS:-2}"
+TRACK_B_GATEWAY_RECOVERY_WINDOW_SECONDS="${TRACK_B_GATEWAY_RECOVERY_WINDOW_SECONDS:-20}"
 
 RUNTIME_BIN="${RUNTIME_BIN:-$ROOT_DIR/tools/omnimemora-runtime}"
 RUNTIME_EXE_LEGACY="$ROOT_DIR/tools/omnimemora.exe"
@@ -189,10 +192,65 @@ write_manual_recovery_status() {
   write_track_b_status_file "{\"status\":\"recovering-gateway\",\"status_source\":\"manual-override\",\"transition_reason\":\"${reason}\",\"gateway_health\":\"recovering\",\"capability_health\":\"healthy\",\"routing_effective\":false,\"user_action_required\":false,\"recommended_action\":\"wait_for_recovery\",\"error_code\":\"${error_code}\"}"
 }
 
+write_auto_gateway_recovery_status() {
+  local reason="$1"
+  local error_code="${2:-gateway_unreachable}"
+  write_track_b_status_file "{\"status\":\"recovering-gateway\",\"status_source\":\"gateway-restart-monitor\",\"transition_reason\":\"${reason}\",\"gateway_health\":\"recovering\",\"capability_health\":\"healthy\",\"routing_effective\":false,\"user_action_required\":false,\"recommended_action\":\"wait_for_recovery\",\"error_code\":\"${error_code}\"}"
+}
+
 write_user_decision_required_status() {
   local reason="$1"
   local error_code="${2:-gateway_unreachable}"
   write_track_b_status_file "{\"status\":\"user-decision-required\",\"status_source\":\"gateway-exit-monitor\",\"transition_reason\":\"${reason}\",\"gateway_health\":\"unhealthy\",\"capability_health\":\"healthy\",\"routing_effective\":false,\"user_action_required\":true,\"recommended_action\":\"disable_route_or_uninstall\",\"error_code\":\"${error_code}\"}"
+}
+
+attempt_gateway_auto_recovery() {
+  local attempts_left="$TRACK_B_GATEWAY_RESTART_ATTEMPTS"
+  local started_at
+  started_at="$(date +%s)"
+  local deadline=$((started_at + TRACK_B_GATEWAY_RECOVERY_WINDOW_SECONDS))
+
+  if [ "$TRACK_B_SELF_HEAL_ENABLED" != "1" ]; then
+    log_supervisor "gateway auto recovery skipped because TRACK_B_SELF_HEAL_ENABLED=${TRACK_B_SELF_HEAL_ENABLED}"
+    return 1
+  fi
+
+  while [ "$attempts_left" -gt 0 ] && kill -0 "$RUNTIME_PID" >/dev/null 2>&1; do
+    local now
+    now="$(date +%s)"
+    if [ "$now" -gt "$deadline" ]; then
+      log_supervisor "gateway auto recovery window expired after $TRACK_B_GATEWAY_RECOVERY_WINDOW_SECONDS seconds"
+      break
+    fi
+
+    local attempt_no
+    attempt_no=$((TRACK_B_GATEWAY_RESTART_ATTEMPTS - attempts_left + 1))
+    attempts_left=$((attempts_left - 1))
+
+    log_supervisor "gateway auto recovery attempt=${attempt_no}/${TRACK_B_GATEWAY_RESTART_ATTEMPTS}"
+    write_auto_gateway_recovery_status "gateway_process_exited_auto_recovery" "gateway_restart_requested"
+    start_adapter_process
+
+    if wait_for_health \
+      "Adapter(auto-restart)" \
+      "http://127.0.0.1:${ADAPTER_PORT}/health" \
+      "$ADAPTER_PID" \
+      "$LOG_DIR/adapter_start.out.log" \
+      "$LOG_DIR/adapter_start.err.log" \
+      15; then
+      log_supervisor "gateway auto recovery succeeded on attempt=${attempt_no}"
+      sleep "$TRACK_B_RECOVERY_SETTLE_SECONDS"
+      clear_track_b_status_file
+      return 0
+    fi
+
+    log_supervisor "gateway auto recovery failed on attempt=${attempt_no}"
+    if [ "$attempts_left" -gt 0 ]; then
+      sleep "$TRACK_B_GATEWAY_RESTART_BACKOFF_SECONDS"
+    fi
+  done
+
+  return 1
 }
 
 wait_for_health() {
@@ -299,8 +357,15 @@ while true; do
     break
   fi
 
-  echo "[TRACK_B] Adapter exited with code ${ADAPTER_EXIT_CODE}; entering user-decision-required state."
-  log_supervisor "adapter exited code=${ADAPTER_EXIT_CODE}; waiting for user decision"
+  echo "[TRACK_B] Adapter exited with code ${ADAPTER_EXIT_CODE}; attempting auto recovery."
+  log_supervisor "adapter exited code=${ADAPTER_EXIT_CODE}; attempting gateway auto recovery"
+  if attempt_gateway_auto_recovery; then
+    echo "[TRACK_B] Gateway auto recovery succeeded."
+    continue
+  fi
+
+  echo "[TRACK_B] Gateway auto recovery exhausted; entering user-decision-required state."
+  log_supervisor "gateway auto recovery exhausted; waiting for user decision"
   write_user_decision_required_status "gateway_process_exited" "gateway_unreachable"
 
   while kill -0 "$RUNTIME_PID" >/dev/null 2>&1; do

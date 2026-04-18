@@ -148,6 +148,20 @@ class TrackBStatusTests(unittest.TestCase):
                         }
                     )
 
+    def test_write_status_override_allows_gateway_restart_monitor_recovering(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="omnimemora-track-b-status-") as tmpdir:
+            path = Path(tmpdir) / "track_b_status.json"
+            with mock.patch.dict("os.environ", {"OMNIMEMORA_TRACK_B_STATUS_PATH": str(path)}, clear=False):
+                saved = track_b_status.write_status_override(
+                    {
+                        "status": "recovering-gateway",
+                        "status_source": "gateway-restart-monitor",
+                        "transition_reason": "gateway_process_exited_auto_recovery",
+                    }
+                )
+        self.assertEqual(saved["status"], "recovering-gateway")
+        self.assertEqual(saved["status_source"], "gateway-restart-monitor")
+
     def test_write_status_override_rejects_auto_clear_after_user_decision_required(self) -> None:
         with tempfile.TemporaryDirectory(prefix="omnimemora-track-b-status-") as tmpdir:
             path = Path(tmpdir) / "track_b_status.json"

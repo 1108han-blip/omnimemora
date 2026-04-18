@@ -204,14 +204,30 @@ Track B 的状态写入责任方固定为：
    - 来源：`start.sh` 中的 runtime 自愈监控
    - 可产生：`recovering-gateway`、`degraded-capability`、`healthy`
 
-3. `gateway-exit-monitor`
+3. `gateway-restart-monitor`
+   - 来源：`start.sh` 中的 gateway 自动重启窗口
+   - 可产生：`recovering-gateway`、`healthy`
+   - 仅用于入口层自动修复窗口，不得直接写 `user-decision-required`
+
+4. `gateway-exit-monitor`
    - 来源：`start.sh` 中的 adapter/gateway 退出监控
    - 可产生：`user-decision-required`
    - 该状态一旦写入，后续自动来源不得自行清除
 
-4. `manual-override` / `internal-test`
+5. `manual-override` / `internal-test`
    - 仅用于调试、测试或内控验证
    - 不作为正式产品运行时责任方
+
+## 九、自动修复窗口
+
+入口层故障的自动修复按“窗口 + 次数”约束执行：
+
+- `gateway` 进程退出后，先进入自动修复窗口
+- 在窗口内按有限次数重启 `18011`
+- 任一次重启成功即回到 `healthy`
+- 只有自动修复窗口耗尽后，才允许进入 `user-decision-required`
+
+这条规则的目的，是把“可自动恢复的瞬时入口故障”和“需要用户决策的不可恢复故障”分开，避免系统过早打断用户。
 
 ## 八、与现有实现的绑定关系
 
