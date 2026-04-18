@@ -6,6 +6,97 @@ from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 
 
+<<<<<<< HEAD
+=======
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _prefer_minimax_upstream() -> bool:
+    """
+    Decide whether Anthropic-compatible upstream should default to MiniMax.
+
+    Important:
+    - Agent-facing `ANTHROPIC_BASE_URL` may point at OmniMemora itself (`/llm`)
+    - Gateway upstream must not inherit that value, or it can recurse/bypass incorrectly
+    """
+    return bool(os.getenv("MINIMAX_API_KEY", "").strip())
+
+
+def _default_anthropic_upstream_base_url() -> str:
+    explicit = os.getenv("OMNIMEMORA_ANTHROPIC_BASE_URL", "").strip()
+    if explicit:
+        return explicit
+    if _prefer_minimax_upstream():
+        return "https://api.minimaxi.com/anthropic"
+    return "https://api.anthropic.com"
+
+
+def _default_anthropic_api_key() -> str:
+    explicit = os.getenv("OMNIMEMORA_ANTHROPIC_API_KEY", "").strip()
+    if explicit:
+        return explicit
+    minimax = os.getenv("MINIMAX_API_KEY", "").strip()
+    if minimax:
+        return minimax
+    return os.getenv("ANTHROPIC_API_KEY", "")
+
+
+def _default_anthropic_model() -> str:
+    explicit = os.getenv("OMNIMEMORA_ANTHROPIC_MODEL", "").strip()
+    if explicit:
+        return explicit
+    if _prefer_minimax_upstream():
+        return "MiniMax-M2.7"
+    return "claude-sonnet-4-20250514"
+
+
+def _default_openai_model() -> str:
+    explicit = os.getenv("OMNIMEMORA_OPENAI_MODEL", "").strip()
+    if explicit:
+        return explicit
+    return "gemma4:26b"
+
+
+def _default_openai_model_map() -> dict[str, str]:
+    explicit = os.getenv("OMNIMEMORA_OPENAI_MODEL_MAP", "").strip()
+    if not explicit:
+        return {
+            "gemma4:26b": "gemma4:26b",
+        }
+    try:
+        parsed = json.loads(explicit)
+    except Exception:
+        return {
+            "gemma4:26b": "gemma4:26b",
+        }
+    if not isinstance(parsed, dict):
+        return {
+            "gemma4:26b": "gemma4:26b",
+        }
+    normalized: dict[str, str] = {}
+    for raw_key, raw_value in parsed.items():
+        key = str(raw_key).strip()
+        value = str(raw_value).strip()
+        if key and value:
+            normalized[key] = value
+    return normalized or {
+        "gemma4:26b": "gemma4:26b",
+    }
+
+
+def _default_anthropic_timeout_seconds() -> float:
+    return float(os.getenv("OMNIMEMORA_ANTHROPIC_TIMEOUT_SECONDS", "120"))
+
+
+def _default_openai_timeout_seconds() -> float:
+    return float(os.getenv("OMNIMEMORA_OPENAI_TIMEOUT_SECONDS", "240"))
+
+
+>>>>>>> 0a5d2f8 (feat: default telemetry consent to cloud policy updates)
 class MemoryBackendConfig(BaseModel):
     """Memory Backend 配置"""
     backend_type: str = os.getenv("MEMORY_BACKEND_TYPE", "omnimemora_runtime")
@@ -64,11 +155,24 @@ class RegistrySyncConfig(BaseModel):
 
 class CloudIntegrationConfig(BaseModel):
     """云接入层配置"""
-    enabled: bool = os.getenv("CLOUD_ENABLED", "false").lower() == "true"
+    enabled: bool = _env_bool(
+        "OMNIMEMORA_CLOUD_POLICY_UPDATES_ENABLED",
+        _env_bool("CLOUD_ENABLED", False),
+    )
     base_url: str = os.getenv("CLOUD_BASE_URL", "https://your-cloud-domain")
     policy_timeout_ms: float = float(os.getenv("CLOUD_POLICY_TIMEOUT_MS", "500"))
     flags_timeout_ms: float = float(os.getenv("CLOUD_FLAGS_TIMEOUT_MS", "300"))
-    usage_report_enabled: bool = os.getenv("CLOUD_USAGE_REPORT_ENABLED", "true").lower() == "true"
+    # Consent rule:
+    # - pure local mode: cloud disabled, no usage reporting
+    # - cloud policy updates enabled: minimal telemetry is enabled by default
+    #   unless the operator explicitly overrides it back off
+    usage_report_enabled: bool = _env_bool(
+        "CLOUD_USAGE_REPORT_ENABLED",
+        _env_bool(
+            "OMNIMEMORA_CLOUD_POLICY_UPDATES_ENABLED",
+            _env_bool("CLOUD_ENABLED", False),
+        ),
+    )
 
 
 class Config(BaseModel):
