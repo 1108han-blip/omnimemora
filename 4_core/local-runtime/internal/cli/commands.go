@@ -19,7 +19,7 @@ import (
 	"github.com/omnimemora/local-runtime/internal/verify"
 )
 
-// Start starts the OmniMemora runtime with full auto-detach/attach flow
+// Start starts the OmniMemora runtime and surfaces detected agents in the UI.
 func Start(args []string, version string) error {
 	// Parse flags
 	portFlag := ""
@@ -70,15 +70,17 @@ func Start(args []string, version string) error {
 		}
 	}
 
-	// If runtime is running (either from state or found via scan), proceed with attach
+	// If runtime is running (either from state or found via scan), optionally proceed with explicit attach
 	if runtimeIsRunning {
 		// Wait for runtime to be fully ready
 		if err := waitForRuntime(actualPort, 5*time.Second); err != nil {
 			fmt.Printf("Warning: Runtime may not be fully ready: %v\n", err)
 		}
-		// Run auto-attach flow if not skipped
-		if !skipAttach {
+		// Attach is now explicit. Only run when the operator asks for it.
+		if forceAttach && !skipAttach {
 			runAutoAttachFlow(actualPort, forceAttach)
+		} else {
+			showDetectedAgentCandidates()
 		}
 		return nil
 	}
@@ -136,12 +138,27 @@ func Start(args []string, version string) error {
 	// Open dashboard in browser
 	openBrowser(fmt.Sprintf("http://127.0.0.1:%d/dashboard", port))
 
-	// Phase 3.6: Auto-detect and attach agents (unless skipped)
-	if !skipAttach {
+	// Agent detection remains visible, but attach is explicit and UI-controlled by default.
+	if forceAttach && !skipAttach {
 		runAutoAttachFlow(port, forceAttach)
+	} else {
+		showDetectedAgentCandidates()
 	}
 
 	return nil
+}
+
+func showDetectedAgentCandidates() {
+	agents := attach.DetectAgents()
+	if len(agents) == 0 {
+		return
+	}
+
+	fmt.Println()
+	fmt.Println("Detected agents (shown in UI, not auto-attached):")
+	for _, agent := range agents {
+		fmt.Printf("  - %s\n", agent.Name)
+	}
 }
 
 // runAutoAttachFlow performs the full auto-detect/attach/verify flow

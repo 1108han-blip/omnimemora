@@ -23,21 +23,21 @@ import (
 
 // Server is the HTTP API server
 type Server struct {
-	httpServer       *http.Server
-	cfg              *config.RuntimeConfig
-	service          *app.Service
-	registry         *connector.Registry
-	scopeModel       *scope.Model
-	metering         *metering.Collector
-	rtCtx            *lifecycle.RuntimeContext
-	bootstrapSuccess bool // Phase 3.6: Tracks if bootstrap verification passed
-	mcpMu            sync.RWMutex
-	mcpSessions      map[string]*mcpSession
-	mcpHandshakeCount int64
-	mcpToolCallCount  int64
-	mcpMemoryWriteCount int64
+	httpServer                        *http.Server
+	cfg                               *config.RuntimeConfig
+	service                           *app.Service
+	registry                          *connector.Registry
+	scopeModel                        *scope.Model
+	metering                          *metering.Collector
+	rtCtx                             *lifecycle.RuntimeContext
+	bootstrapSuccess                  bool // Phase 3.6: Tracks if bootstrap verification passed
+	mcpMu                             sync.RWMutex
+	mcpSessions                       map[string]*mcpSession
+	mcpHandshakeCount                 int64
+	mcpToolCallCount                  int64
+	mcpMemoryWriteCount               int64
 	mcpMemorySearchContextRecallCount int64
-	mcpLastStartupError string
+	mcpLastStartupError               string
 }
 
 // NewServer creates a new API server
@@ -63,12 +63,12 @@ func NewServer(cfg *config.RuntimeConfig, store storepkg.Store, rtCtx *lifecycle
 	}
 
 	server := &Server{
-		cfg:        cfg,
-		service:    svc,
-		registry:   registry,
-		scopeModel: scopeModel,
-		metering:   meteringCollector,
-		rtCtx:      rtCtx,
+		cfg:         cfg,
+		service:     svc,
+		registry:    registry,
+		scopeModel:  scopeModel,
+		metering:    meteringCollector,
+		rtCtx:       rtCtx,
 		mcpSessions: make(map[string]*mcpSession),
 	}
 
@@ -85,6 +85,10 @@ func NewServer(cfg *config.RuntimeConfig, store storepkg.Store, rtCtx *lifecycle
 	mux.HandleFunc("GET /health", server.handleHealth)
 	mux.HandleFunc("GET /metrics", server.handleMetrics)
 	mux.HandleFunc("GET /dashboard", server.handleDashboard)
+	mux.HandleFunc("GET /agents/control", server.handleAgentControlList)
+	mux.HandleFunc("POST /agents/control/rescan", server.handleAgentControlRescan)
+	mux.HandleFunc("POST /agents/control/install", server.handleAgentControlInstall)
+	mux.HandleFunc("POST /agents/control/uninstall", server.handleAgentControlUninstall)
 	mux.HandleFunc("GET /sse", server.handleMCPSSE)
 	mux.HandleFunc("GET /mcp", server.handleMCPSSE)
 	mux.HandleFunc("GET /mcp/sse", server.handleMCPSSE)
