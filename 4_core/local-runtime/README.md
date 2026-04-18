@@ -23,11 +23,13 @@ Use the runtime for storage, retrieval, and runtime-local health only. External 
 
 Canonical references:
 
-- [CANONICAL_FACTS.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/CANONICAL_FACTS.md)
+- [0_blueprint/PRODUCT_DEFINITION.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/PRODUCT_DEFINITION.md)
 - [9_adr/ADR-0003-interface-access-paths.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/9_adr/ADR-0003-interface-access-paths.md)
 - [README.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/README.md)
 
 ## Exposed Runtime HTTP Contract
+
+The following HTTP contract is internal-to-gateway and internal-to-operator only. It is not a public product API surface.
 
 | Method | Path | Notes |
 |------|------|-------|
@@ -91,6 +93,8 @@ go test ./tests/... -v
 curl -s http://127.0.0.1:8765/health
 curl -s http://127.0.0.1:8765/metrics
 ```
+
+These checks are for internal runtime verification only. Product-facing validation should bind to the gateway at `:18011`.
 
 ## Non-Goals
 

@@ -60,12 +60,14 @@ last_verified_commit: ""
 - [x] 当前产品主文档已把 `8765` 定义为内部 plane
 - [x] runtime README 与 runtime API 已承认 `8765` 仅内部使用
 - [x] adapter 控制面已经以 `18011 -> runtime(/agents/control)` 代理方式存在
+- [x] 第一批对外文档残留已开始收口：插件 README 已改为只展示 `18011` 为用户可见入口
+- [x] runtime README 已补 internal-only 说明并去除失效 `CANONICAL_FACTS.md` 引用
 - [ ] 旧插件/旧文档里仍有把 `8765` 具象展示给用户的残留
 - [ ] runtime HTTP contract 仍暴露可被误抬升的内部控制接口叙事
 
 ### 下一步动作
 
-- [ ] 收敛对外文档中的 `8765` 展示面
+- [ ] 继续收敛剩余对外文档中的 `8765` 展示面
 - [ ] 列出需要继续保留的内部 runtime HTTP contract
 - [ ] 列出应从“正式产品接口叙事”中退场的 `8765` 路径
 - [ ] 为 `Track A` 建立过渡兼容说明
