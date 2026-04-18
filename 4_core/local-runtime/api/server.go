@@ -30,7 +30,7 @@ type Server struct {
 	scopeModel                        *scope.Model
 	metering                          *metering.Collector
 	rtCtx                             *lifecycle.RuntimeContext
-	bootstrapSuccess                  bool // Phase 3.6: Tracks if bootstrap verification passed
+	bootstrap                         *bootstrapState // Phase 3.6: bootstrap/control state carrier
 	mcpMu                             sync.RWMutex
 	mcpSessions                       map[string]*mcpSession
 	mcpHandshakeCount                 int64
@@ -69,6 +69,7 @@ func NewServer(cfg *config.RuntimeConfig, store storepkg.Store, rtCtx *lifecycle
 		scopeModel:  scopeModel,
 		metering:    meteringCollector,
 		rtCtx:       rtCtx,
+		bootstrap:   newBootstrapState(),
 		mcpSessions: make(map[string]*mcpSession),
 	}
 

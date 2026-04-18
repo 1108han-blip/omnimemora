@@ -26,7 +26,7 @@ func (s *Server) handleInternalMetrics(w http.ResponseWriter, r *http.Request) {
 
 	switch req.Type {
 	case "bootstrap_success":
-		s.bootstrapSuccess = true
+		s.bootstrap.setSuccess(true)
 		writeJSON(w, 200, map[string]string{"status": "ok"})
 	default:
 		writeError(w, 400, "UNKNOWN_TYPE", "unknown metrics type")

@@ -654,3 +654,16 @@ last_verified_commit: ""
 | 观察结果 | runtime 侧新增独立 `operator_dashboard_surface.go`，承载 dashboard route、hero、trend、efficiency 与 runtime status card 相关 HTML 组装逻辑；`server.go` 不再内联 dashboard route wiring，`routes.go` 不再承载 operator dashboard 主 surface。`go test ./tests ./api` 全部通过，既有 gateway alert / dashboard 相关测试未出现回归 |
 | 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第七批低风险逻辑解耦已经落地，runtime operator dashboard 主 surface 已与 capability handler 主体进一步分离 |
 | 备注 | 本记录证明的是 operator dashboard surface 的模块边界收敛，不等同于 control-plane 已物理解耦 |
+
+### RECORD-B-043
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-043` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库现实 / 代码与回归测试` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；涉及 `4_core/local-runtime/api/bootstrap_state.go`、`server.go`、`bootstrap_surface.go` 与既有 runtime API tests |
+| 验证动作 | 1. 将 runtime bootstrap/control 状态从 `Server` 主结构中抽离为独立 `bootstrapState`；2. 通过 `newBootstrapState()` 在 `server.go` 中注入；3. 由 `bootstrap_surface.go` 通过独立 state carrier 写入 bootstrap success；4. 运行 `gofmt -w api/bootstrap_state.go api/server.go api/bootstrap_surface.go`；5. 运行 `go test ./tests ./api` |
+| 观察结果 | runtime 侧新增独立 `bootstrap_state.go`，`Server` 不再直接承载 `bootstrapSuccess` 布尔状态，而是通过 `bootstrap *bootstrapState` 间接承载 bootstrap/control 状态；`go test ./tests ./api` 全部通过，未引入 runtime API 回归 |
+| 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第八批低风险逻辑解耦已经落地，runtime bootstrap/control 状态已进一步从 server 主结构中分离 |
+| 备注 | 本记录证明的是 bootstrap state carrier 的边界收敛，不等同于 runtime/control-plane 已物理解耦 |
