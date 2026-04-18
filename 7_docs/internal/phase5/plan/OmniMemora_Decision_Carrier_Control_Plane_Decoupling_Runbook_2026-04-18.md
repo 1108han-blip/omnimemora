@@ -16,7 +16,7 @@ last_verified_commit: ""
 ## 一、当前状态
 
 - 当前阶段：`Decision Carrier / Control-Plane Decoupling`
-- 当前 gate：`Track B / 第十四批逻辑解耦已落地`
+- 当前 gate：`Track B / 第十五批逻辑解耦已落地`
 - 工作区健康：`绿色`
 - 当前分支：`master`
 
@@ -72,6 +72,7 @@ last_verified_commit: ""
 - [x] 第十二批低风险逻辑解耦已落地：MCP session registry 已独立成 `mcp_transport_state.go`，不再由 `Server` 主结构直接承载
 - [x] 第十三批低风险逻辑解耦已落地：MCP metrics / counter state 已独立成 `mcp_metrics_state.go`，不再由 `Server` 主结构直接承载
 - [x] 第十四批低风险逻辑解耦已落地：MCP protocol types 与 tool response helpers 已独立成 `mcp_protocol.go`
+- [x] 第十五批低风险逻辑解耦已落地：MCP 静态 tool catalog 与默认 scope 构造已独立成 `mcp_tool_catalog.go`
 
 ## 五、Track C: 最小 decision carrier 承载实现
 
