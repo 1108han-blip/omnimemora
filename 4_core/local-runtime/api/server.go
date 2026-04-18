@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -32,8 +31,7 @@ type Server struct {
 	rtCtx                             *lifecycle.RuntimeContext
 	bootstrap                         *bootstrapState // Phase 3.6: bootstrap/control state carrier
 	mcpState                          *mcpState
-	mcpMu                             sync.RWMutex
-	mcpSessions                       map[string]*mcpSession
+	mcpTransport                      *mcpTransportState
 	mcpHandshakeCount                 int64
 	mcpToolCallCount                  int64
 	mcpMemoryWriteCount               int64
@@ -63,15 +61,15 @@ func NewServer(cfg *config.RuntimeConfig, store storepkg.Store, rtCtx *lifecycle
 	}
 
 	server := &Server{
-		cfg:         cfg,
-		service:     svc,
-		registry:    registry,
-		scopeModel:  scopeModel,
-		metering:    meteringCollector,
-		rtCtx:       rtCtx,
-		bootstrap:   newBootstrapState(),
-		mcpState:    newMCPState(),
-		mcpSessions: make(map[string]*mcpSession),
+		cfg:          cfg,
+		service:      svc,
+		registry:     registry,
+		scopeModel:   scopeModel,
+		metering:     meteringCollector,
+		rtCtx:        rtCtx,
+		bootstrap:    newBootstrapState(),
+		mcpState:     newMCPState(),
+		mcpTransport: newMCPTransportState(),
 	}
 
 	mux := http.NewServeMux()

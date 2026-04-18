@@ -706,3 +706,16 @@ last_verified_commit: ""
 | 观察结果 | runtime 侧新增独立 `mcp_state.go`，`Server` 不再直接持有 `mcpLastStartupError` 字段，而是通过 `mcpState` 间接承载；`go test ./tests ./api` 全部通过，MCP 相关 metrics / handler 行为未出现回归 |
 | 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第十一批低风险逻辑解耦已经落地，MCP startup error 状态已进一步从 server 主结构中分离 |
 | 备注 | 本记录证明的是 MCP startup error state carrier 的边界收敛，不等同于 MCP session registry 已完成解耦 |
+
+### RECORD-B-047
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-047` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库现实 / 代码与回归测试` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；涉及 `4_core/local-runtime/api/mcp_transport_state.go`、`server.go`、`mcp.go` 与既有 runtime API tests |
+| 验证动作 | 1. 将 MCP session registry 从 `Server` 主结构中抽离为独立 `mcpTransportState`；2. 通过 `newMCPTransportState()` 在 `server.go` 中注入；3. 由 `mcp.go` 通过 `putSession/getSession/deleteSession` 使用 transport state；4. 运行 `gofmt -w api/mcp_transport_state.go api/server.go api/mcp.go`；5. 运行 `go test ./tests ./api` |
+| 观察结果 | runtime 侧新增独立 `mcp_transport_state.go`，`Server` 不再直接持有 `mcpMu` 和 `mcpSessions`，而是通过 `mcpTransport` 间接承载 MCP session registry；`go test ./tests ./api` 全部通过，MCP transport 行为未出现回归 |
+| 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第十二批低风险逻辑解耦已经落地，MCP session registry 已进一步从 server 主结构中分离 |
+| 备注 | 本记录证明的是 MCP transport session registry 的边界收敛，不等同于 MCP metrics / counters 已完成解耦 |

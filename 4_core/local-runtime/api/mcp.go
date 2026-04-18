@@ -55,13 +55,9 @@ func (s *Server) handleMCPSSE(w http.ResponseWriter, r *http.Request) {
 		send: make(chan []byte, 32),
 	}
 
-	s.mcpMu.Lock()
-	s.mcpSessions[sessionID] = session
-	s.mcpMu.Unlock()
+	s.mcpTransport.putSession(sessionID, session)
 	defer func() {
-		s.mcpMu.Lock()
-		delete(s.mcpSessions, sessionID)
-		s.mcpMu.Unlock()
+		s.mcpTransport.deleteSession(sessionID)
 	}()
 
 	_, _ = fmt.Fprintf(w, "event: endpoint\ndata: /messages?sessionId=%s\n\n", sessionID)
@@ -92,9 +88,7 @@ func (s *Server) handleMCPMessages(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	s.mcpMu.RLock()
-	session := s.mcpSessions[sessionID]
-	s.mcpMu.RUnlock()
+	session := s.mcpTransport.getSession(sessionID)
 	if session == nil {
 		s.setMCPStartupError("session not found")
 		writeError(w, 404, "MCP_SESSION_NOT_FOUND", "session not found")
