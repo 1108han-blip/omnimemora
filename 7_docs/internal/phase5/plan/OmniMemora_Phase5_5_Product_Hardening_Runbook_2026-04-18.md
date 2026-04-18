@@ -92,16 +92,19 @@ last_verified_commit: ""
 - [x] install/uninstall 与 backup/restore 语义已固定
 - [x] `route=off -> passthrough` / `route=on -> compile path` 已有候选实例证据
 - [x] 当前已有健康检查入口：adapter `/health`、runtime `/health`
+- [x] 自愈状态机定义文档已建立
+- [x] `18011` 入口故障与能力层故障已在文档层分层建模
+- [x] `user-decision-required` 已有正式状态定义
 - [ ] 还没有正式的故障状态机实现
-- [ ] `18011` 入口故障与能力层故障尚未在代码中分层建模
-- [ ] 还没有 `user-decision-required` 的正式状态与 UI 表达
+- [ ] 还没有 `user-decision-required` 的最小接口输出
 
 ### 下一步动作
 
-- [ ] 固定状态机输入源：入口健康、能力层健康、route 状态、attach 状态
-- [ ] 明确自动修复动作边界
-- [ ] 明确自动降级到 passthrough 的触发条件
-- [ ] 明确 `user-decision-required` 的最小接口与状态表示
+- [x] 固定状态机输入源：入口健康、能力层健康、route 状态、attach 状态
+- [x] 明确自动修复动作边界
+- [x] 明确自动降级到 passthrough 的触发条件
+- [x] 明确 `user-decision-required` 的最小状态定义
+- [ ] 明确 `user-decision-required` 的最小接口输出
 - [ ] 明确禁止自动 restore backup 的代码约束点
 
 ### 停止条件
@@ -130,4 +133,4 @@ last_verified_commit: ""
 4. `B2` 候选实例故障场景验证批
 5. `C1` 责任边界图批
 
-当前下一步：`B1`
+当前下一步：`B2`
