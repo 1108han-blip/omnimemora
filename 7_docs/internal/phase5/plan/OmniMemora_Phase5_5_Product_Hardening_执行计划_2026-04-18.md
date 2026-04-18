@@ -101,6 +101,12 @@ scan 完成后，执行期只允许做定向核对，不再扩成全局重考古
 
 目标：把“用户启用产品后，系统先自救，再决定如何降级”落成真实行为。
 
+当前阶段完成边界：
+
+- 已完成入口层故障自动恢复窗口、用户决策接口、联合恢复优先级 contract、`route=on/off` 联合故障候选证据
+- `uninstall + runtime already unavailable` 不在本阶段强行实现
+- 该路径后置到未来 decision carrier / control-plane decoupling 工程
+
 #### 入口层故障
 
 入口层 = `18011`
