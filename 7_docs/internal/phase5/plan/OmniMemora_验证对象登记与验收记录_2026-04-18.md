@@ -589,3 +589,16 @@ last_verified_commit: ""
 | 观察结果 | runtime 侧新增独立 `control_carrier_surface.go`，统一承载 control-carrier 的 HTTP surface；`routes.go` 不再内联 `gateway/status` handler，原有 `gateway_decision.go` 与 `gateway_status.go` 被清退。`go test ./tests ./api` 全部通过 |
 | 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第二批低风险逻辑解耦已经落地，decision/control carrier 的 HTTP surface 已与 runtime capability 主 surface 形成更清晰的模块入口，且未引入 runtime API 行为回归 |
 | 备注 | 本记录证明的是 control-carrier surface 的模块化边界收敛，不等同于极端故障承载问题已完全解决 |
+
+### RECORD-B-038
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-038` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库现实 / 代码与回归测试` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；涉及 `4_core/local-runtime/api/control_carrier_dashboard.go`、`routes.go` 与既有 runtime dashboard tests |
+| 验证动作 | 1. 将 runtime dashboard 中与 `gateway/status`、`user-decision-required`、`runGatewayAction(...)` 相关的 control-carrier 呈现与脚本抽离为独立 `control_carrier_dashboard.go`；2. 运行 `gofmt -w api/control_carrier_dashboard.go api/routes.go`；3. 运行 `go test ./tests ./api` |
+| 观察结果 | runtime 侧新增独立 `control_carrier_dashboard.go`，承载 gateway alert HTML 与 gateway action script；`routes.go` 不再内联该部分 control-carrier 片段。`go test ./tests ./api` 全部通过，既有 dashboard 相关测试未出现回归 |
+| 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第三批低风险逻辑解耦已经落地，runtime dashboard 中的 decision/control 呈现职责已与 capability dashboard 主体进一步分离，且未引入回归 |
+| 备注 | 本记录证明的是 dashboard 级 control-carrier 片段解耦，不等同于 runtime dead 极端承载问题已解决 |
