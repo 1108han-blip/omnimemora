@@ -1,8 +1,10 @@
 {
-  "_comment": "Per-agent control mode configuration (ADR-0005). Keys must be canonical_agent_id.",
+  "_comment": "Per-agent routing control for OmniMemora UI. Keys must be canonical_agent_id.",
   "per_agent_modes": {
-    "claude_code": "guided",
-    "openclaw": "observe"
+    "claude_code": "off",
+    "openclaw": "off",
+    "codex_cli": "off",
+    "cursor": "off"
   },
-  "default_mode": "observe"
+  "default_mode": "off"
 }
