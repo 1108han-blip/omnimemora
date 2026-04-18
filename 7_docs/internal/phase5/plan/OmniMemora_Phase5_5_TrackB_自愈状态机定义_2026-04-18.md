@@ -60,6 +60,11 @@ Track B 的状态机输入固定为四类：
 - `route=on` 继续 compile path
 - `route=off` 继续 passthrough
 
+补充：
+
+- 当 `route=off` 且 `gateway_health=healthy` 时，即使 `capability_health=degraded|unreachable`，顶层状态仍保持 `healthy`
+- 此时能力层故障只作为诊断信息保留，不升级成顶层故障，因为用户当前显式处于 passthrough
+
 ### `degraded-capability`
 
 条件：
@@ -67,6 +72,7 @@ Track B 的状态机输入固定为四类：
 - `gateway_health = healthy`
 - `capability_health = degraded|unreachable`
 - 自动修复尝试失败或短时间内不可恢复
+- 且 `route=on`
 
 动作：
 

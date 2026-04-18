@@ -48,6 +48,26 @@ class TrackBStatusTests(unittest.TestCase):
         self.assertEqual(payload["recommended_action"], "degrade_to_passthrough")
         self.assertEqual(payload["error_code"], "all_connection_attempts_failed")
 
+    def test_build_track_b_status_route_off_keeps_top_level_healthy(self) -> None:
+        payload = track_b_status.build_track_b_status(
+            backend_health=BackendHealth(
+                healthy=False,
+                backend_type="omnimemora_runtime",
+                details={"status": "All connection attempts failed"},
+            ),
+            routing_enabled=False,
+        )
+        self.assertEqual(payload["status"], "healthy")
+        self.assertEqual(payload["status_source"], "observed-health")
+        self.assertEqual(payload["transition_reason"], "route_off_passthrough")
+        self.assertEqual(payload["gateway_health"], "healthy")
+        self.assertEqual(payload["capability_health"], "degraded")
+        self.assertFalse(payload["routing_requested"])
+        self.assertFalse(payload["routing_effective"])
+        self.assertFalse(payload["user_action_required"])
+        self.assertEqual(payload["recommended_action"], "none")
+        self.assertEqual(payload["error_code"], "all_connection_attempts_failed")
+
     def test_build_track_b_status_user_decision_override(self) -> None:
         payload = track_b_status.build_track_b_status(
             backend_health=BackendHealth(healthy=False, backend_type="omnimemora_runtime"),

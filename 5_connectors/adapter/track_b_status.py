@@ -158,16 +158,29 @@ def build_track_b_status(
     override: Optional[dict[str, Any]] = None,
 ) -> dict[str, Any]:
     capability_health = _capability_health_state(backend_health)
+    observed_status = "healthy"
+    observed_transition_reason = "backend_healthy"
+    observed_recommended_action = "none"
+
+    if not backend_health.healthy and routing_enabled:
+        observed_status = "degraded-capability"
+        observed_transition_reason = "capability_unhealthy"
+        observed_recommended_action = "degrade_to_passthrough"
+    elif not backend_health.healthy and not routing_enabled:
+        observed_status = "healthy"
+        observed_transition_reason = "route_off_passthrough"
+        observed_recommended_action = "none"
+
     payload: dict[str, Any] = {
-        "status": "healthy" if backend_health.healthy else "degraded-capability",
+        "status": observed_status,
         "status_source": "observed-health",
-        "transition_reason": "backend_healthy" if backend_health.healthy else "capability_unhealthy",
+        "transition_reason": observed_transition_reason,
         "gateway_health": "healthy",
         "capability_health": capability_health,
         "routing_requested": routing_enabled,
         "routing_effective": routing_enabled and backend_health.healthy,
         "user_action_required": False,
-        "recommended_action": "none" if backend_health.healthy else "degrade_to_passthrough",
+        "recommended_action": observed_recommended_action,
         "error_code": _derive_error_code(backend_health),
     }
 
