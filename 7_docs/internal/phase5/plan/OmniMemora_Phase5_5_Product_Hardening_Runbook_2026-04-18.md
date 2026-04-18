@@ -105,6 +105,7 @@ last_verified_commit: ""
 - [x] `Track B` 已具备最小用户动作接口（uninstall via runtime internal plane），且与 `route state -> off` 语义对齐
 - [x] `Track B` 已具备最小 UI 动作承载（runtime dashboard -> /gateway/decision/*）
 - [x] `Track B` 已把最小状态写入责任方落到运行时状态面（`status_source / transition_reason`）
+- [x] `Track B` 已把 `user-decision-required` 固定成自动化不可自行清除的终态
 - [ ] 还没有正式的故障状态机实现
 
 ### 下一步动作
@@ -150,4 +151,4 @@ last_verified_commit: ""
 4. `B2` 候选实例故障场景验证批
 5. `C1` 责任边界图批
 
-当前下一步：`Track B` 正式故障状态机编排器最小实现，或转入 `Track A` 剩余 contract 收口
+当前下一步：`Track B` 正式故障状态机编排器最小实现，或转入 `Track A` 剩余 contract 收口；当前不再允许自动来源越权清除 `user-decision-required`

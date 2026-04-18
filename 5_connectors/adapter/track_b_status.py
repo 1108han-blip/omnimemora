@@ -32,6 +32,12 @@ _ALLOWED_STATUS_SOURCE_SCOPE = {
     "manual-override": _ALLOWED_STATUS,
     "internal-test": _ALLOWED_STATUS,
 }
+_ALLOWED_STATUS_TRANSITIONS = {
+    "healthy": {"healthy", "degraded-capability", "recovering-gateway", "user-decision-required"},
+    "degraded-capability": {"healthy", "degraded-capability", "recovering-gateway", "user-decision-required"},
+    "recovering-gateway": {"healthy", "degraded-capability", "recovering-gateway", "user-decision-required"},
+    "user-decision-required": {"user-decision-required", "healthy"},
+}
 
 
 def _status_override_path() -> Path:
@@ -94,11 +100,30 @@ def _validate_override_scope(sanitized: dict[str, Any]) -> None:
         raise ValueError(f"status_source {source} cannot write status {status}")
 
 
+def _validate_status_transition(current_override: Optional[dict[str, Any]], sanitized: dict[str, Any]) -> None:
+    next_status = str(sanitized.get("status") or "").strip().lower()
+    if not next_status:
+        return
+    current_status = str((current_override or {}).get("status") or "").strip().lower()
+    if not current_status:
+        return
+    if current_status == next_status:
+        return
+    allowed = _ALLOWED_STATUS_TRANSITIONS.get(current_status, set())
+    if next_status not in allowed:
+        raise ValueError(f"invalid Track B transition: {current_status} -> {next_status}")
+    source = str(sanitized.get("status_source") or "").strip().lower()
+    if current_status == "user-decision-required" and source not in {"manual-override", "internal-test"}:
+        raise ValueError("user-decision-required can only be cleared by explicit user action or test override")
+
+
 def write_status_override(payload: dict[str, Any]) -> dict[str, Any]:
     path = _status_override_path()
     path.parent.mkdir(parents=True, exist_ok=True)
     sanitized = sanitize_status_override(payload)
+    current_override = read_status_override()
     _validate_override_scope(sanitized)
+    _validate_status_transition(current_override, sanitized)
     path.write_text(json.dumps(sanitized, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     return sanitized
 

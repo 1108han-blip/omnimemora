@@ -145,6 +145,7 @@ Track B 的状态机输入固定为四类：
 注：
 
 - `route-off-installed` 与 `detached` 是用户动作结果，不是自动故障终态
+- 一旦进入 `user-decision-required`，自动来源不得自行清除该状态；只有显式用户动作、手动 override 或测试 override 才允许把状态带离该终态
 
 ## 五、自动化动作上限
 
@@ -200,6 +201,7 @@ Track B 的状态写入责任方固定为：
 3. `gateway-exit-monitor`
    - 来源：`start.sh` 中的 adapter/gateway 退出监控
    - 可产生：`user-decision-required`
+   - 该状态一旦写入，后续自动来源不得自行清除
 
 4. `manual-override` / `internal-test`
    - 仅用于调试、测试或内控验证

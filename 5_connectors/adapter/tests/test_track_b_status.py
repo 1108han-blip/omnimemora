@@ -118,6 +118,41 @@ class TrackBStatusTests(unittest.TestCase):
                         }
                     )
 
+    def test_write_status_override_rejects_auto_clear_after_user_decision_required(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="omnimemora-track-b-status-") as tmpdir:
+            path = Path(tmpdir) / "track_b_status.json"
+            path.write_text(
+                json.dumps({"status": "user-decision-required", "status_source": "gateway-exit-monitor"}),
+                encoding="utf-8",
+            )
+            with mock.patch.dict("os.environ", {"OMNIMEMORA_TRACK_B_STATUS_PATH": str(path)}, clear=False):
+                with self.assertRaisesRegex(ValueError, "can only be cleared by explicit user action"):
+                    track_b_status.write_status_override(
+                        {
+                            "status": "healthy",
+                            "status_source": "runtime-restart-monitor",
+                            "transition_reason": "runtime_recovered",
+                        }
+                    )
+
+    def test_write_status_override_allows_manual_clear_after_user_decision_required(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="omnimemora-track-b-status-") as tmpdir:
+            path = Path(tmpdir) / "track_b_status.json"
+            path.write_text(
+                json.dumps({"status": "user-decision-required", "status_source": "gateway-exit-monitor"}),
+                encoding="utf-8",
+            )
+            with mock.patch.dict("os.environ", {"OMNIMEMORA_TRACK_B_STATUS_PATH": str(path)}, clear=False):
+                saved = track_b_status.write_status_override(
+                    {
+                        "status": "healthy",
+                        "status_source": "manual-override",
+                        "transition_reason": "user_confirmed_recovery",
+                    }
+                )
+        self.assertEqual(saved["status"], "healthy")
+        self.assertEqual(saved["status_source"], "manual-override")
+
 
 class TrackBStatusApiTests(unittest.TestCase):
     def test_proxy_system_status_endpoint(self) -> None:
@@ -222,3 +257,32 @@ class TrackBStatusApiTests(unittest.TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("status_source is required", response.json()["detail"])
+
+    def test_override_endpoint_rejects_auto_clear_after_user_decision_required(self) -> None:
+        app = FastAPI()
+        app.include_router(status_api.router)
+
+        with tempfile.TemporaryDirectory(prefix="omnimemora-track-b-status-api-") as tmpdir:
+            path = Path(tmpdir) / "track_b_status.json"
+            path.write_text(
+                json.dumps({"status": "user-decision-required", "status_source": "gateway-exit-monitor"}),
+                encoding="utf-8",
+            )
+            env = {
+                "OMNIMEMORA_TRACK_B_STATUS_PATH": str(path),
+                "OMNIMEMORA_INTERNAL_API_TOKEN": "secret-token",
+            }
+            with mock.patch.dict("os.environ", env, clear=False):
+                client = TestClient(app)
+                response = client.post(
+                    "/proxy/system-status/override",
+                    headers={"X-Internal-Token": "secret-token"},
+                    json={
+                        "status": "healthy",
+                        "status_source": "runtime-restart-monitor",
+                        "transition_reason": "runtime_recovered",
+                    },
+                )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("can only be cleared by explicit user action", response.json()["detail"])
