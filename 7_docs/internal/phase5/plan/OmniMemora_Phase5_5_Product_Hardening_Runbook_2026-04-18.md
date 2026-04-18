@@ -136,6 +136,7 @@ last_verified_commit: ""
 - [x] 已具备 `route=off` 联合故障候选实例证据：gateway 恢复后最终收敛到 `healthy + routing_effective=false`
 - [x] 已明确 `uninstall + runtime already unavailable` 属于当前架构的结构性限制，不作为本阶段强行实现目标
 - [x] `Track B` 当前按阶段性完成收口；`runtime dead + uninstall` 后置到未来模块拆分
+- [x] 后续模块分离与逻辑解耦入口文档已建立
 
 ### 下一步动作
 

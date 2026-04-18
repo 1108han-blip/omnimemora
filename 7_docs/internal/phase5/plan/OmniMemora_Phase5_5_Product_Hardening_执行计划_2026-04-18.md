@@ -106,6 +106,7 @@ scan 完成后，执行期只允许做定向核对，不再扩成全局重考古
 - 已完成入口层故障自动恢复窗口、用户决策接口、联合恢复优先级 contract、`route=on/off` 联合故障候选证据
 - `uninstall + runtime already unavailable` 不在本阶段强行实现
 - 该路径后置到未来 decision carrier / control-plane decoupling 工程
+- 后续入口见 [OmniMemora 后续模块分离与逻辑解耦预备计划](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_后续模块分离与逻辑解耦预备计划_2026-04-18.md)
 
 #### 入口层故障
 
