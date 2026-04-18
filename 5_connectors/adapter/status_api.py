@@ -4,9 +4,24 @@ status_api.py — OmniMemora LLM Proxy + Compile 狀態 API
 提供 /proxy/status、/proxy/events 和 Phase 3 /compile/status、/compile/events 端點。
 """
 import importlib
-from fastapi import APIRouter, Response
+import os
+from typing import Optional
+
+from fastapi import APIRouter, HTTPException, Request, Response
+from pydantic import BaseModel
 
 router = APIRouter(tags=["proxy"])
+
+
+class TrackBStatusOverrideRequest(BaseModel):
+    status: Optional[str] = None
+    gateway_health: Optional[str] = None
+    capability_health: Optional[str] = None
+    routing_requested: Optional[bool] = None
+    routing_effective: Optional[bool] = None
+    user_action_required: Optional[bool] = None
+    recommended_action: Optional[str] = None
+    error_code: Optional[str] = None
 
 
 def _mark_diagnostic_surface(response: Response) -> None:
@@ -27,6 +42,15 @@ async def _build_system_status() -> dict:
         routing_enabled=routing_enabled,
         override=_track_b.read_status_override(),
     )
+
+
+def _require_internal_service_token(request: Request) -> None:
+    internal_token = request.headers.get("X-Internal-Token", "")
+    expected_token = os.getenv("OMNIMEMORA_INTERNAL_API_TOKEN", "")
+    if not expected_token:
+        raise HTTPException(status_code=500, detail="Internal API token not configured on adapter.")
+    if not internal_token or internal_token != expected_token:
+        raise HTTPException(status_code=403, detail="Invalid internal service token.")
 
 
 # ============================================================================
@@ -62,6 +86,28 @@ async def proxy_status(response: Response, window_minutes: int = 30, include_sys
 
 @router.get("/proxy/system-status")
 async def proxy_system_status(response: Response):
+    _mark_diagnostic_surface(response)
+    return await _build_system_status()
+
+
+@router.post("/proxy/system-status/override")
+async def set_proxy_system_status_override(
+    payload: TrackBStatusOverrideRequest,
+    request: Request,
+    response: Response,
+):
+    _track_b = importlib.import_module("5_connectors.adapter.track_b_status")
+    _require_internal_service_token(request)
+    _track_b.write_status_override(payload.model_dump(exclude_none=True))
+    _mark_diagnostic_surface(response)
+    return await _build_system_status()
+
+
+@router.delete("/proxy/system-status/override")
+async def clear_proxy_system_status_override(request: Request, response: Response):
+    _track_b = importlib.import_module("5_connectors.adapter.track_b_status")
+    _require_internal_service_token(request)
+    _track_b.clear_status_override()
     _mark_diagnostic_surface(response)
     return await _build_system_status()
 

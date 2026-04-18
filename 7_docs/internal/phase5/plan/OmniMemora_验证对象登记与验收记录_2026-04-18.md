@@ -276,6 +276,19 @@ last_verified_commit: ""
 | 结论适用范围 | `候选成立`：Track B 已具备最小统一状态输出接口，可表达当前观测状态，并为后续自愈编排提供非破坏性的状态承载面 |
 | 备注 | 本记录覆盖的是“状态输出前置层”，不是自动修复或用户决策流程已完整上线；`user-decision-required` 目前仍需未来状态机显式写入 override 才会出现 |
 
+### RECORD-B-017
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-017` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实现` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；override 写入入口位于 [status_api.py](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/5_connectors/adapter/status_api.py)，控制面消费位于 [agent_control_api.py](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/5_connectors/adapter/agent_control_api.py) |
+| 验证动作 | 1. 为 Track B 状态 override 增加受 `X-Internal-Token / OMNIMEMORA_INTERNAL_API_TOKEN` 保护的 `POST /proxy/system-status/override` 与 `DELETE /proxy/system-status/override`；2. 将 `GET /agents/control` 与 `POST /agents/control/rescan` 顶层补入 `system_status`；3. 运行 `python3 -m unittest 5_connectors.adapter.tests.test_track_b_status 5_connectors.adapter.tests.test_agent_control_api 5_connectors.adapter.tests.test_llm_proxy_agent_detection` |
+| 观察结果 | override 仅接受允许字段并写入 `track_b_status.json`，未知字段被忽略；未配置 internal token 时写入口返回 `500`，token 不匹配时返回 `403`。控制面聚合输出已包含顶层 `system_status`，因此 UI/控制面读取 `GET /agents/control` 即可获得 Track B 当前统一状态，无需自行拼装 runtime health 与 route state |
+| 结论适用范围 | `候选成立`：Track B 已具备受限的 override 写入边界与明确的控制面消费路径，后续自愈编排可通过该入口写入 `recovering-gateway / user-decision-required`，且不会直接越权触发 `restore backup` 或 `uninstall/detach` |
+| 备注 | 本记录覆盖的是“override 前置基础设施”，不是完整的自愈执行器；实际写入责任方仍需在后续 Track B 编排实现中明确 |
+
 ## 五、Gate B 完成判据
 
 当满足以下条件时，`Gate B` 可视为通过：
@@ -302,3 +315,4 @@ last_verified_commit: ""
   - `RECORD-B-014` 已确认当前候选实现下云端 usage telemetry 仅包含最小必要元数据，且不再包含 `tenant`
   - `RECORD-B-015` 已确认 Track B 在候选实例上的 healthy / capability failure / gateway failure 三类当前基线行为
   - `RECORD-B-016` 已确认 Track B 最小统一状态输出接口已落地，可承载 `degraded-capability / recovering-gateway / user-decision-required`
+  - `RECORD-B-017` 已确认 Track B override 写入边界与控制面消费路径已落地

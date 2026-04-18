@@ -14,6 +14,16 @@ _ALLOWED_STATUS = {
     "recovering-gateway",
     "user-decision-required",
 }
+_ALLOWED_OVERRIDE_KEYS = {
+    "status",
+    "gateway_health",
+    "capability_health",
+    "routing_requested",
+    "routing_effective",
+    "user_action_required",
+    "recommended_action",
+    "error_code",
+}
 
 
 def _status_override_path() -> Path:
@@ -32,6 +42,42 @@ def read_status_override() -> Optional[dict[str, Any]]:
     if not isinstance(raw, dict):
         return None
     return raw
+
+
+def sanitize_status_override(payload: dict[str, Any]) -> dict[str, Any]:
+    sanitized: dict[str, Any] = {}
+    for key, value in payload.items():
+        if key not in _ALLOWED_OVERRIDE_KEYS:
+            continue
+        if key in {"routing_requested", "routing_effective", "user_action_required"}:
+            sanitized[key] = bool(value)
+            continue
+        normalized = str(value or "").strip()
+        if not normalized:
+            continue
+        if key == "status":
+            lowered = normalized.lower()
+            if lowered in _ALLOWED_STATUS:
+                sanitized[key] = lowered
+            continue
+        sanitized[key] = normalized
+    return sanitized
+
+
+def write_status_override(payload: dict[str, Any]) -> dict[str, Any]:
+    path = _status_override_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    sanitized = sanitize_status_override(payload)
+    path.write_text(json.dumps(sanitized, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return sanitized
+
+
+def clear_status_override() -> None:
+    path = _status_override_path()
+    try:
+        path.unlink()
+    except FileNotFoundError:
+        return
 
 
 def _capability_health_state(backend_health: BackendHealth) -> str:

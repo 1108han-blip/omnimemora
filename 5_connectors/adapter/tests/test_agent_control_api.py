@@ -86,6 +86,40 @@ class AgentControlApiTests(unittest.TestCase):
                         saved = json.loads(path.read_text(encoding="utf-8"))
                         self.assertEqual(saved["per_agent_modes"]["openclaw"], "off")
 
+    def test_get_agents_control_includes_system_status(self) -> None:
+        async def fake_runtime_request(method: str, path_value: str, payload=None):
+            if path_value == "/health":
+                return {"status": "ok"}
+            if path_value == "/agents/control":
+                return {
+                    "agents": [
+                        {
+                            "family_id": "openclaw",
+                            "display_name": "OpenClaw",
+                            "installed": True,
+                            "detected": True,
+                            "backup_available": False,
+                            "message": "",
+                        }
+                    ]
+                }
+            raise AssertionError(f"unexpected runtime request: {method} {path_value}")
+
+        with tempfile.TemporaryDirectory(prefix="omnimemora-agent-control-") as tmpdir:
+            path = Path(tmpdir) / "agent_modes.json"
+            path.write_text(
+                json.dumps({"per_agent_modes": {"openclaw": "off"}, "default_mode": "off"}),
+                encoding="utf-8",
+            )
+            with mock.patch.object(agent_routing_state, "_agent_modes_path", return_value=path):
+                agent_routing_state.reload_agent_modes()
+                with mock.patch.object(agent_control_api, "_runtime_request", side_effect=fake_runtime_request):
+                    with mock.patch.object(agent_control_api, "_build_metrics_index", return_value={}):
+                        payload = asyncio.run(agent_control_api.get_agents_control())
+
+        self.assertIn("system_status", payload)
+        self.assertEqual(payload["system_status"]["status"], "healthy")
+
 
 if __name__ == "__main__":
     unittest.main()

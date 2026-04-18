@@ -51,6 +51,24 @@ async def _runtime_health_state() -> str:
     return "healthy" if status in {"healthy", "ok"} else "degraded"
 
 
+async def _build_system_status() -> Dict[str, Any]:
+    _track_b = __import__("5_connectors.adapter.track_b_status", fromlist=["dummy"])
+    _backend_base = __import__("5_connectors.adapter.backends.base", fromlist=["BackendHealth"])
+    health_state = await _runtime_health_state()
+    per_agent_modes, _default_mode = _route_state.get_agent_modes_cache()
+    routing_enabled = any(mode == "force_if_possible" for mode in per_agent_modes.values())
+    backend_health = _backend_base.BackendHealth(
+        healthy=health_state == "healthy",
+        backend_type="omnimemora_runtime",
+        details={"source": "runtime_health_state", "state": health_state},
+    )
+    return _track_b.build_track_b_status(
+        backend_health=backend_health,
+        routing_enabled=routing_enabled,
+        override=_track_b.read_status_override(),
+    )
+
+
 def _build_metrics_index() -> dict[str, dict[str, Any]]:
     live = _agent_metrics.get_live_agents(window_minutes=30)
     all_metrics = _agent_metrics.get_agent_metrics()
@@ -137,7 +155,7 @@ async def get_agents_control():
         cards = await _build_control_cards()
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"runtime control unavailable: {exc}") from exc
-    return {"agents": cards, "count": len(cards)}
+    return {"agents": cards, "count": len(cards), "system_status": await _build_system_status()}
 
 
 @router.post("/agents/control/rescan")
@@ -147,7 +165,7 @@ async def rescan_agents_control():
         cards = await _build_control_cards()
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"runtime rescan unavailable: {exc}") from exc
-    return {"agents": cards, "count": len(cards)}
+    return {"agents": cards, "count": len(cards), "system_status": await _build_system_status()}
 
 
 @router.post("/agents/control/install")

@@ -67,6 +67,21 @@ class TrackBStatusTests(unittest.TestCase):
                 payload = track_b_status.read_status_override()
         self.assertEqual(payload, {"status": "recovering-gateway", "error_code": "runtime_restart"})
 
+    def test_write_status_override_sanitizes_unknown_fields(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="omnimemora-track-b-status-") as tmpdir:
+            path = Path(tmpdir) / "track_b_status.json"
+            with mock.patch.dict("os.environ", {"OMNIMEMORA_TRACK_B_STATUS_PATH": str(path)}, clear=False):
+                saved = track_b_status.write_status_override(
+                    {
+                        "status": "user-decision-required",
+                        "user_action_required": True,
+                        "unknown_field": "ignored",
+                    }
+                )
+                payload = json.loads(path.read_text(encoding="utf-8"))
+        self.assertEqual(saved, {"status": "user-decision-required", "user_action_required": True})
+        self.assertEqual(payload, {"status": "user-decision-required", "user_action_required": True})
+
 
 class TrackBStatusApiTests(unittest.TestCase):
     def test_proxy_system_status_endpoint(self) -> None:
@@ -108,3 +123,40 @@ class TrackBStatusApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.json()["system_status"]["status"], "healthy")
         self.assertEqual(response.json()["agents"]["openclaw"]["connected"], True)
+
+    def test_override_endpoint_requires_internal_token(self) -> None:
+        app = FastAPI()
+        app.include_router(status_api.router)
+        client = TestClient(app)
+        response = client.post("/proxy/system-status/override", json={"status": "recovering-gateway"})
+        self.assertEqual(response.status_code, 500)
+
+    def test_override_endpoint_writes_and_clears_status(self) -> None:
+        app = FastAPI()
+        app.include_router(status_api.router)
+
+        async def fake_build_system_status():
+            return {"status": "recovering-gateway", "user_action_required": False}
+
+        with tempfile.TemporaryDirectory(prefix="omnimemora-track-b-status-api-") as tmpdir:
+            path = Path(tmpdir) / "track_b_status.json"
+            env = {
+                "OMNIMEMORA_TRACK_B_STATUS_PATH": str(path),
+                "OMNIMEMORA_INTERNAL_API_TOKEN": "secret-token",
+            }
+            with mock.patch.dict("os.environ", env, clear=False):
+                with mock.patch.object(status_api, "_build_system_status", side_effect=fake_build_system_status):
+                    client = TestClient(app)
+                    set_response = client.post(
+                        "/proxy/system-status/override",
+                        headers={"X-Internal-Token": "secret-token"},
+                        json={"status": "recovering-gateway", "recommended_action": "wait_for_recovery"},
+                    )
+                    clear_response = client.delete(
+                        "/proxy/system-status/override",
+                        headers={"X-Internal-Token": "secret-token"},
+                    )
+
+        self.assertEqual(set_response.status_code, 200)
+        self.assertEqual(clear_response.status_code, 200)
+        self.assertFalse(path.exists())
