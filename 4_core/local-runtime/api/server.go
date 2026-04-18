@@ -82,7 +82,7 @@ func NewServer(cfg *config.RuntimeConfig, store storepkg.Store, rtCtx *lifecycle
 	handler = scopeMiddleware(handler, scopeResolver)
 
 	// Register routes
-	mux.HandleFunc("GET /", server.handleRoot)
+	registerRootRoutes(mux, server)
 	mux.HandleFunc("GET /health", server.handleHealth)
 	mux.HandleFunc("GET /metrics", server.handleMetrics)
 	registerOperatorDashboardRoutes(mux, server)

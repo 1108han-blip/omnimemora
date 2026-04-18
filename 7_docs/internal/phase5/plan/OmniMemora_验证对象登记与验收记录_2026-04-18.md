@@ -680,3 +680,16 @@ last_verified_commit: ""
 | 观察结果 | operator dashboard surface 不再直接调用 `loadGatewayStatus()` 或 `gatewayActionScriptHTML()`，改为只消费 control-carrier dashboard fragment；`go test ./tests ./api` 全部通过，既有 dashboard / gateway alert 行为未出现回归 |
 | 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第九批低风险逻辑解耦已经落地，operator dashboard 与 control-carrier 呈现细节的耦合进一步降低 |
 | 备注 | 本记录证明的是 control-carrier fragment 消费边界的收敛，不等同于 control-plane 已独立为新宿主 |
+
+### RECORD-B-045
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-045` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库现实 / 代码与回归测试` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；涉及 `4_core/local-runtime/api/root_surface.go`、`server.go`、`mcp.go` 与既有 runtime API tests |
+| 验证动作 | 1. 将 `/` 的 operator-facing redirect surface 从 `mcp.go` 抽离为独立 `root_surface.go`；2. 通过 `registerRootRoutes(...)` 从 `server.go` 注册 `GET /`；3. 运行 `gofmt -w api/root_surface.go api/server.go api/mcp.go`；4. 运行 `go test ./tests ./api` |
+| 观察结果 | runtime 侧新增独立 `root_surface.go`，`mcp.go` 不再同时承载 MCP transport 与 `/` redirect/operator 入口；`go test ./tests ./api` 全部通过，未出现 runtime API 回归 |
+| 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第十批低风险逻辑解耦已经落地，root/operator surface 已与 MCP transport 主体进一步分离 |
+| 备注 | 本记录证明的是 root/operator 入口边界的收敛，不等同于 runtime decision/control 已物理解耦 |

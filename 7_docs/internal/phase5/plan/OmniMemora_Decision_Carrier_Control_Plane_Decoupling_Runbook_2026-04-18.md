@@ -16,7 +16,7 @@ last_verified_commit: ""
 ## 一、当前状态
 
 - 当前阶段：`Decision Carrier / Control-Plane Decoupling`
-- 当前 gate：`Track B / 第九批逻辑解耦已落地`
+- 当前 gate：`Track B / 第十批逻辑解耦已落地`
 - 工作区健康：`绿色`
 - 当前分支：`master`
 
@@ -67,6 +67,7 @@ last_verified_commit: ""
 - [x] 第七批低风险逻辑解耦已落地：runtime operator dashboard 主 surface 已独立成 `operator_dashboard_surface.go` 与 `registerOperatorDashboardRoutes(...)`
 - [x] 第八批低风险逻辑解耦已落地：runtime bootstrap/control 状态已独立成 `bootstrap_state.go`，不再由 `Server` 主结构直接承载
 - [x] 第九批低风险逻辑解耦已落地：operator dashboard 对 gateway status / action script 的直接消费已收敛为统一 control-carrier fragment
+- [x] 第十批低风险逻辑解耦已落地：`/` 的 operator-facing redirect surface 已独立成 `root_surface.go` 与 `registerRootRoutes(...)`
 
 ## 五、Track C: 最小 decision carrier 承载实现
 
