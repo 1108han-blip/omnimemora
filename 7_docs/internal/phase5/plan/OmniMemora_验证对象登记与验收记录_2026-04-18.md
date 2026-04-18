@@ -615,3 +615,16 @@ last_verified_commit: ""
 | 观察结果 | `server.go` 不再内联 control-carrier route 注册，转而通过 `registerControlCarrierRoutes(...)` 完成 wiring；`go test ./tests ./api` 全部通过，runtime API 行为未出现回归 |
 | 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第四批低风险逻辑解耦已经落地，control-carrier 的 server wiring 已与 runtime capability 主路由注册形成更清晰的入口边界 |
 | 备注 | 本记录证明的是 route registration 层面的逻辑边界收敛，不等同于极端故障承载问题已完全解决 |
+
+### RECORD-B-040
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-040` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库现实 / 代码与回归测试` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；涉及 `4_core/local-runtime/api/agent_control.go`、`server.go` 与既有 runtime API tests |
+| 验证动作 | 1. 将 runtime low-frequency install layer 的 `/agents/control*` 路由注册从 `server.go` 抽离为 `registerInstallControlRoutes(...)`；2. 运行 `gofmt -w api/agent_control.go api/server.go`；3. 运行 `go test ./tests ./api` |
+| 观察结果 | `server.go` 不再内联 `/agents/control*` 的 route wiring，转而通过 `registerInstallControlRoutes(...)` 完成低频 install layer 注册；`go test ./tests ./api` 全部通过，runtime API 行为未出现回归 |
+| 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第五批低风险逻辑解耦已经落地，runtime install-control route wiring 已与 capability 主路由注册形成更清晰的入口边界 |
+| 备注 | 本记录证明的是 low-frequency install layer wiring 的边界收敛，不等同于 control-plane 承载问题已最终解决 |

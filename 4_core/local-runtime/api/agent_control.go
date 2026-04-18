@@ -8,6 +8,13 @@ import (
 	"github.com/omnimemora/local-runtime/internal/attach"
 )
 
+func registerInstallControlRoutes(mux *http.ServeMux, server *Server) {
+	mux.HandleFunc("GET /agents/control", server.handleAgentControlList)
+	mux.HandleFunc("POST /agents/control/rescan", server.handleAgentControlRescan)
+	mux.HandleFunc("POST /agents/control/install", server.handleAgentControlInstall)
+	mux.HandleFunc("POST /agents/control/uninstall", server.handleAgentControlUninstall)
+}
+
 type agentControlStatus struct {
 	FamilyID        string `json:"family_id"`
 	DisplayName     string `json:"display_name"`

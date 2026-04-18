@@ -62,6 +62,7 @@ last_verified_commit: ""
 - [x] 第二批低风险逻辑解耦已落地：runtime `gateway/status` 与 `gateway/decision/*` 的 HTTP handler 已抽离为独立 control-carrier surface，`routes.go` 不再承载该入口实现
 - [x] 第三批低风险逻辑解耦已落地：runtime dashboard 中的 user-decision-required 呈现与动作脚本已抽离为独立 control-carrier dashboard 片段
 - [x] 第四批低风险逻辑解耦已落地：runtime server wiring 中的 control-carrier route 注册已独立成 `registerControlCarrierRoutes(...)`
+- [x] 第五批低风险逻辑解耦已落地：runtime low-frequency install layer 的 `/agents/control*` route wiring 已独立成 `registerInstallControlRoutes(...)`
 
 ## 五、Track C: 最小 decision carrier 承载实现
 
