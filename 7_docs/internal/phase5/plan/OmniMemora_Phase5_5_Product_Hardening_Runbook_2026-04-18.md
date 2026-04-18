@@ -70,7 +70,7 @@ last_verified_commit: ""
 - [x] runtime dashboard 标题与 handler 注释已收敛为 internal/operator surface，不再暗示产品主控制面
 - [x] runtime `/agents/control*` 注释已明确其仅为 low-frequency install layer
 - [x] adapter runtime backend/factory 注释已明确 `:8765` 只是 internal runtime plane，不是第二产品入口
-- [ ] archive / 审计记录之外，仍需确认是否还有活跃对外文档把 `8765` 误写成产品面
+- [x] archive / 审计记录之外，活跃文档面未再发现把 `8765` 误写成产品入口或用户直接控制面的叙事
 - [ ] runtime HTTP contract 仍需继续检查是否有可被误抬升的内部控制接口叙事
 
 ### 下一步动作

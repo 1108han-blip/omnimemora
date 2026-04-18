@@ -55,8 +55,16 @@ last_verified_commit: ""
 
 Track A 不是“删除 8765”，而是“收掉把 8765 当对外产品面的叙事和误用面”。
 
+按当前活跃文档面复扫，剩余 `8765` 提及主要属于以下几类：
+
+- 产品边界基线文档中的明确边界声明
+- Track A/Track B 兼容与验证记录
+- runtime 默认端口、候选实例端口、测试夹具与内部 transport 说明
+
+当前没有再发现把 runtime `/agents/control*` 或 runtime dashboard 写成用户直接控制面的活跃执行文档。
+
 当前最安全的第一批动作应是：
 
 1. 对外文档和插件说明的第一批收口已完成
-2. 下一步应转入 runtime contract 的内部标注与退场清单整理
-3. 暂不触碰 `18011 -> runtime` 的内部调用链
+2. runtime contract 的内部标注与退场清单整理已完成第一轮
+3. 下一步只需在需要时继续审查实现注释与 internal contract，暂不触碰 `18011 -> runtime` 的内部调用链
