@@ -12,30 +12,6 @@ import (
 	"github.com/omnimemora/local-runtime/pkg"
 )
 
-type mcpSession struct {
-	id   string
-	send chan []byte
-}
-
-type mcpRequest struct {
-	JSONRPC string          `json:"jsonrpc"`
-	ID      any             `json:"id,omitempty"`
-	Method  string          `json:"method"`
-	Params  json.RawMessage `json:"params,omitempty"`
-}
-
-type mcpResponse struct {
-	JSONRPC string    `json:"jsonrpc"`
-	ID      any       `json:"id,omitempty"`
-	Result  any       `json:"result,omitempty"`
-	Error   *mcpError `json:"error,omitempty"`
-}
-
-type mcpError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
-}
-
 func (s *Server) handleMCPSSE(w http.ResponseWriter, r *http.Request) {
 	flusher, ok := w.(http.Flusher)
 	if !ok {
@@ -345,30 +321,5 @@ func (s *Server) callMCPTool(ctx context.Context, id any, name string, args map[
 	default:
 		s.setMCPStartupError("unknown tool: " + name)
 		return mcpToolError(id, "unknown tool: "+name)
-	}
-}
-
-func mcpToolText(id any, text string) *mcpResponse {
-	return &mcpResponse{
-		JSONRPC: "2.0",
-		ID:      id,
-		Result: map[string]any{
-			"content": []map[string]any{
-				{"type": "text", "text": text},
-			},
-		},
-	}
-}
-
-func mcpToolError(id any, msg string) *mcpResponse {
-	return &mcpResponse{
-		JSONRPC: "2.0",
-		ID:      id,
-		Result: map[string]any{
-			"isError": true,
-			"content": []map[string]any{
-				{"type": "text", "text": msg},
-			},
-		},
 	}
 }

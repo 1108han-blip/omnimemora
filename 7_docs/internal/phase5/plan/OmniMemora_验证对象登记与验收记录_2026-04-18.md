@@ -732,3 +732,16 @@ last_verified_commit: ""
 | 观察结果 | runtime 侧新增独立 `mcp_metrics_state.go`，`Server` 不再直接持有 handshake/tool-call/write/search counters，而是通过 `mcpMetrics` 间接承载；`go test ./tests ./api` 全部通过，MCP metrics / dashboard / handler 行为未出现回归 |
 | 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第十三批低风险逻辑解耦已经落地，MCP metrics / counter state 已进一步从 server 主结构中分离 |
 | 备注 | 本记录证明的是 MCP metrics state carrier 的边界收敛，不等同于 MCP transport / protocol surface 已完全独立 |
+
+### RECORD-B-049
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-049` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库现实 / 代码与回归测试` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；涉及 `4_core/local-runtime/api/mcp_protocol.go`、`mcp.go` 与既有 runtime API tests |
+| 验证动作 | 1. 将 MCP protocol types 与 tool response helpers 从 `mcp.go` 抽离为独立 `mcp_protocol.go`；2. 保持 handler 与 tool dispatch 行为不变；3. 运行 `gofmt -w api/mcp_protocol.go api/mcp.go`；4. 运行 `go test ./tests ./api` |
+| 观察结果 | runtime 侧新增独立 `mcp_protocol.go`，`mcp.go` 不再同时承载 protocol type definitions 与 response helper；`go test ./tests ./api` 全部通过，MCP transport / tool dispatch 行为未出现回归 |
+| 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第十四批低风险逻辑解耦已经落地，MCP protocol surface 已进一步从 MCP handler 主体中分离 |
+| 备注 | 本记录证明的是 MCP protocol type/helper 边界的收敛，不等同于 MCP handler / transport lifecycle 已完成物理解耦 |
