@@ -172,6 +172,19 @@ last_verified_commit: ""
 | 结论适用范围 | `候选成立`：在当前仓库候选实例上，`enable/disable` 已同时影响控制面返回值和 route state 持久化文件；此前观察到的持久化不一致暂未复现，不能再作为当前 `M3` 阻塞项 |
 | 备注 | 本记录只覆盖 `openclaw` 的候选实例闭环；不自动外推到其他 family，也不等同于 `M3` 全部验收完成 |
 
+### RECORD-B-009
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-009` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；验证动作在 `4_core/local-runtime/internal/attach` 的隔离测试环境中执行，`HOME` 指向临时目录 |
+| 验证动作 | 1. 运行 `go test ./internal/attach -run 'TestAttachThenDetachCodexRestoresOriginalConfig' -v`；2. 复核 [attach_codex_test.go](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/4_core/local-runtime/internal/attach/attach_codex_test.go) 与 [attach.go](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/4_core/local-runtime/internal/attach/attach.go) 中 `DetachAgent -> RestoreBackup` 路径 |
+| 观察结果 | 定向测试通过：`AttachCodex()` 先创建备份，`DetachCodex()` 后原始 `config.toml` 被完整恢复，备份文件被移除；代码路径显示通用 `DetachAgent()` 先尝试 `RestoreBackup(agent)`，恢复成功则直接返回，不再继续做片段删除 |
+| 结论适用范围 | `候选成立`：当前仓库候选实现已具备 `uninstall/detach -> restore original config` 的测试级证据，可作为 `M3` 的恢复语义支撑 |
+| 备注 | 本记录是隔离测试证据，不是对用户真实机器配置的在线卸载验证；若后续需要产品级在线验收，应在不污染用户真实配置的前提下另补候选实例记录 |
+
 ## 五、Gate B 完成判据
 
 当满足以下条件时，`Gate B` 可视为通过：
@@ -190,3 +203,4 @@ last_verified_commit: ""
   - `M3` 若继续推进，只能绑定显式启动后的 `仓库候选实例`
   - `RECORD-B-006` 的候选启动阻塞已由 `RECORD-B-007` 解除
   - `RECORD-B-008` 已确认当前候选实例下 `openclaw` 的 `enable/disable` 可正确落盘
+  - `RECORD-B-009` 已确认 `uninstall/detach -> restore original config` 的候选实现具备测试级证据
