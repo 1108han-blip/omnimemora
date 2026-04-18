@@ -1922,6 +1922,15 @@ async def health(mode: str = "full"):
 
     # mode == "full": 完整健康检查（通过 backend interface）
     backend_health = await _get_backend().health()
+    _route_state = importlib.import_module("5_connectors.adapter.agent_routing_state")
+    _track_b = importlib.import_module("5_connectors.adapter.track_b_status")
+    per_agent_modes, _default_mode = _route_state.get_agent_modes_cache()
+    routing_enabled = any(mode == "force_if_possible" for mode in per_agent_modes.values())
+    system_status = _track_b.build_track_b_status(
+        backend_health=backend_health,
+        routing_enabled=routing_enabled,
+        override=_track_b.read_status_override(),
+    )
 
     return {
         "status": "healthy" if backend_health.healthy else "degraded",
@@ -1937,6 +1946,7 @@ async def health(mode: str = "full"):
             "healthy": backend_health.healthy,
             "details": backend_health.details,
         },
+        "system_status": system_status,
         "timeout_profile": {
             "connect_seconds": config.viking_connect_timeout_seconds,
             "health_seconds": config.viking_health_timeout_seconds,
