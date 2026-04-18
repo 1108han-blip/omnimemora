@@ -405,6 +405,8 @@ last_verified_commit: ""
   - `RECORD-B-026` 已确认先前候选实例重测失败的真实根因是 runtime 二进制未随源码更新自动重建；`start.sh` 现已补“源码较新则自动重建 runtime”约束，并在候选实例上完成 `gateway failure -> user action -> gateway restart` 闭环
   - `RECORD-B-027` 已确认 Track B 的 gateway 自动修复窗口已在候选实例上成立；gateway 退出后会先自动重启，再在窗口耗尽后才进入用户决策态
   - `RECORD-B-028` 已确认当自动修复被显式关闭时，Track B 会直接进入 `user-decision-required`，并带出精确的 `transition_reason`
+  - `RECORD-B-029` 已确认当恢复窗口过短时，Track B 会以 `gateway_auto_recovery_window_expired` 进入用户决策态
+  - `RECORD-B-030` 已确认当重试次数耗尽时，Track B 会以 `gateway_auto_recovery_attempts_exhausted` 进入用户决策态
 
 ### RECORD-B-024
 
@@ -470,3 +472,29 @@ last_verified_commit: ""
 | 观察结果 | supervisor 记录：`adapter exited -> gateway auto recovery skipped because TRACK_B_SELF_HEAL_ENABLED=0 -> gateway auto recovery exhausted result=disabled`。状态文件和 runtime internal plane 一致返回：`status=user-decision-required`、`transition_reason=gateway_auto_recovery_disabled`、`error_code=gateway_unreachable` |
 | 结论适用范围 | `候选成立`：Track B 当前不仅区分“自动恢复成功”与“进入用户决策”，还会对“自动恢复被关闭”给出明确的终止原因，便于后续 UI 和运维诊断消费 |
 | 备注 | 本记录验证的是关闭自动修复的失败分支；`window_expired / attempts_exhausted` 仍属于后续可补的更细分候选实例证据 |
+
+### RECORD-B-029
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-029` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例 / 隔离在线闭环` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；以隔离 `HOME=.tmp/candidate-home-trackb-expire-3`、`PORT=18030`、`RUNTIME_PORT=18783`、`OMNIMEMORA_DATA_DIR=.tmp/candidate-data-trackb-expire-3` 启动 |
+| 验证动作 | 1. 以 `TRACK_B_GATEWAY_RESTART_ATTEMPTS=2`、`TRACK_B_GATEWAY_HEALTH_TIMEOUT_SECONDS=2`、`TRACK_B_GATEWAY_RECOVERY_WINDOW_SECONDS=1` 启动隔离候选实例；2. 启动后临时移走 `tools/_run_adapter.py`，确保 gateway 自动重启失败；3. 手动杀掉候选 adapter；4. 读取 supervisor 日志、状态文件和 runtime `GET /gateway/status` |
+| 观察结果 | supervisor 记录：`gateway auto recovery attempt=1/2 -> failed on attempt=1 -> backoff=1s -> gateway auto recovery window expired after 1 seconds -> result=window-expired`。状态文件和 runtime internal plane 一致返回：`status=user-decision-required`、`transition_reason=gateway_auto_recovery_window_expired`、`error_code=gateway_restart_window_expired` |
+| 结论适用范围 | `候选成立`：Track B 现在可区分“恢复窗口过短/已过期”这一失败分支，并给出明确终止原因 |
+| 备注 | 本记录通过临时移走 `_run_adapter.py` 制造可控的 gateway 重启失败，验证完成后文件已恢复；不触碰真实用户环境 |
+
+### RECORD-B-030
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-030` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例 / 隔离在线闭环` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；以隔离 `HOME=.tmp/candidate-home-trackb-exhaust-2`、`PORT=18031`、`RUNTIME_PORT=18784`、`OMNIMEMORA_DATA_DIR=.tmp/candidate-data-trackb-exhaust-2` 启动 |
+| 验证动作 | 1. 以 `TRACK_B_GATEWAY_RESTART_ATTEMPTS=1`、`TRACK_B_GATEWAY_HEALTH_TIMEOUT_SECONDS=2`、`TRACK_B_GATEWAY_RECOVERY_WINDOW_SECONDS=30` 启动隔离候选实例；2. 启动后临时移走 `tools/_run_adapter.py`，确保唯一一次 gateway 自动重启失败；3. 手动杀掉候选 adapter；4. 读取 supervisor 日志、状态文件和 runtime `GET /gateway/status` |
+| 观察结果 | supervisor 记录：`gateway auto recovery attempt=1/1 -> failed on attempt=1 -> result=attempts-exhausted`。状态文件和 runtime internal plane 一致返回：`status=user-decision-required`、`transition_reason=gateway_auto_recovery_attempts_exhausted`、`error_code=gateway_restart_attempts_exhausted` |
+| 结论适用范围 | `候选成立`：Track B 现在可区分“重试次数耗尽”这一失败分支，并给出明确终止原因 |
+| 备注 | 本记录同样通过临时移走 `_run_adapter.py` 制造可控失败，验证完成后文件已恢复；不触碰真实用户环境 |

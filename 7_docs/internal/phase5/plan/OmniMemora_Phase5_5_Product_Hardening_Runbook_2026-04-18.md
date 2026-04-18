@@ -123,7 +123,8 @@ last_verified_commit: ""
 - [x] `start.sh` 已补 runtime 二进制陈旧检测，避免源码更新后继续复用旧 runtime 造成假阴性
 - [x] gateway 入口故障的自动修复窗口与有限重试策略已落地
 - [x] 自动修复关闭分支已具备候选实例证据，并能输出明确 `transition_reason`
-- [ ] 还没有更细的恢复窗口分级与退避策略
+- [x] `window_expired` 与 `attempts_exhausted` 两类失败分支已具备候选实例证据
+- [x] 退避策略已落地为指数回退并受上限约束
 
 ### 下一步动作
 
@@ -147,6 +148,8 @@ last_verified_commit: ""
 - [x] 避免 runtime 二进制陈旧导致候选实例验证读取旧行为
 - [x] 建立 gateway failure -> auto recovery window -> healthy 的候选实例证据
 - [x] 建立 gateway failure + self-heal disabled -> user-decision-required 的候选实例证据
+- [x] 建立 gateway failure + recovery window expired -> user-decision-required 的候选实例证据
+- [x] 建立 gateway failure + retry attempts exhausted -> user-decision-required 的候选实例证据
 
 ### 停止条件
 
@@ -174,4 +177,4 @@ last_verified_commit: ""
 4. `B2` 候选实例故障场景验证批
 5. `C1` 责任边界图批
 
-当前下一步：`Track B` 若继续推进，应进入更细的恢复窗口分级、退避策略和 `window_expired / attempts_exhausted` 两类失败原因的候选实例补强；当前状态机本体、自动修复窗口、用户决策闭环、候选实例重启闭环和 route-off 语义已收口
+当前下一步：`Track B` 若继续推进，应进入“能力层故障与入口层故障的联合恢复策略”或回切 `Track C` 做 `18011` 责任拆分准备；当前入口层自动修复窗口、失败分级、用户决策闭环和 route-off 语义已收口
