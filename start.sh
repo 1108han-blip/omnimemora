@@ -15,8 +15,10 @@ if ! command -v curl >/dev/null 2>&1; then
   exit 1
 fi
 
-if ! command -v python >/dev/null 2>&1; then
-  echo "[ERROR] python is required."
+PYTHON_BIN="${PYTHON_BIN:-$(command -v python3 || true)}"
+
+if [ -z "$PYTHON_BIN" ]; then
+  echo "[ERROR] python3 is required."
   exit 1
 fi
 
@@ -44,11 +46,14 @@ fi
 mkdir -p "$LOG_DIR"
 
 echo "[1/2] Starting runtime on :$RUNTIME_PORT ..."
+OMNIMEMORA_RUNTIME_PORT="$RUNTIME_PORT" \
 "$RUNTIME_BIN" serve >"$LOG_DIR/runtime_start.out.log" 2>"$LOG_DIR/runtime_start.err.log" &
 RUNTIME_PID=$!
 
 echo "[2/2] Starting adapter on :$ADAPTER_PORT ..."
-PORT="$ADAPTER_PORT" python "$ADAPTER_SCRIPT" >"$LOG_DIR/adapter_start.out.log" 2>"$LOG_DIR/adapter_start.err.log" &
+PORT="$ADAPTER_PORT" \
+MEMORY_BACKEND_URL="http://127.0.0.1:${RUNTIME_PORT}" \
+"$PYTHON_BIN" "$ADAPTER_SCRIPT" >"$LOG_DIR/adapter_start.out.log" 2>"$LOG_DIR/adapter_start.err.log" &
 ADAPTER_PID=$!
 
 cleanup() {
@@ -56,22 +61,49 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-for _ in $(seq 1 30); do
-  if curl -sf "http://127.0.0.1:${RUNTIME_PORT}/health" >/dev/null; then
-    break
-  fi
-  sleep 1
-done
+wait_for_health() {
+  local service_name="$1"
+  local url="$2"
+  local pid="$3"
+  local stdout_log="$4"
+  local stderr_log="$5"
+  local timeout_seconds="${6:-30}"
 
-for _ in $(seq 1 30); do
-  if curl -sf "http://127.0.0.1:${ADAPTER_PORT}/health" >/dev/null; then
-    break
-  fi
-  sleep 1
-done
+  for _ in $(seq 1 "$timeout_seconds"); do
+    if ! kill -0 "$pid" >/dev/null 2>&1; then
+      echo "[ERROR] ${service_name} exited before becoming healthy."
+      echo "        stdout: $stdout_log"
+      echo "        stderr: $stderr_log"
+      return 1
+    fi
+    if curl -sf "$url" >/dev/null; then
+      echo "[OK] ${service_name}: $url"
+      return 0
+    fi
+    sleep 1
+  done
 
-echo "[OK] Runtime: http://127.0.0.1:${RUNTIME_PORT}/health"
-echo "[OK] Adapter: http://127.0.0.1:${ADAPTER_PORT}/health"
+  echo "[ERROR] ${service_name} failed health check before timeout (${timeout_seconds}s)."
+  echo "        health: $url"
+  echo "        stdout: $stdout_log"
+  echo "        stderr: $stderr_log"
+  return 1
+}
+
+wait_for_health \
+  "Runtime" \
+  "http://127.0.0.1:${RUNTIME_PORT}/health" \
+  "$RUNTIME_PID" \
+  "$LOG_DIR/runtime_start.out.log" \
+  "$LOG_DIR/runtime_start.err.log"
+
+wait_for_health \
+  "Adapter" \
+  "http://127.0.0.1:${ADAPTER_PORT}/health" \
+  "$ADAPTER_PID" \
+  "$LOG_DIR/adapter_start.out.log" \
+  "$LOG_DIR/adapter_start.err.log"
+
 echo "Press Ctrl+C to stop both services."
 
 wait "$RUNTIME_PID" "$ADAPTER_PID"

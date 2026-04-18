@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
 	"syscall"
 	"time"
 
@@ -23,6 +24,19 @@ import (
 const (
 	Version = "1.0.0"
 )
+
+func resolvePreferredRuntimePort() int {
+	raw := os.Getenv("OMNIMEMORA_RUNTIME_PORT")
+	if raw == "" {
+		return pkg.PortRuntime
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil || parsed <= 0 {
+		log.Printf("Warning: invalid OMNIMEMORA_RUNTIME_PORT=%q, using default %d", raw, pkg.PortRuntime)
+		return pkg.PortRuntime
+	}
+	return parsed
+}
 
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
@@ -56,12 +70,13 @@ func main() {
 	}
 
 	// Resolve port (8765 or next available, see pkg/constants.go for canonical ports)
-	port, fellBack, err := runtime.ResolvePort(pkg.PortRuntime)
+	preferredPort := resolvePreferredRuntimePort()
+	port, fellBack, err := runtime.ResolvePort(preferredPort)
 	if err != nil {
 		log.Fatalf("Failed to resolve port: %v", err)
 	}
 	if fellBack {
-		log.Printf("Warning: Preferred port %d unavailable, using %d", pkg.PortRuntime, port)
+		log.Printf("Warning: Preferred port %d unavailable, using %d", preferredPort, port)
 	}
 
 	// Save runtime state for adapter discovery
