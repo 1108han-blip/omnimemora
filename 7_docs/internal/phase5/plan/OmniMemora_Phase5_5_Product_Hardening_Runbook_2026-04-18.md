@@ -118,6 +118,7 @@ last_verified_commit: ""
 - [x] `Track B` 最小编排器已落地，`main / status_api / agent_control_api` 统一走单一状态决策入口
 - [x] `Track B` 状态机本体已拆成独立模块，状态、来源、转移与 override 应用不再混在读写层
 - [x] `Track B` 已具备“用户动作 -> 决策文件 -> gateway 重启编排 -> 成功/失败转移”的完整高层编排路径（当前为代码与单元级成立）
+- [x] 候选实例重测阻塞已定位为 adapter 运行依赖缺失，`start.sh` 已补前置依赖预检
 - [ ] 还没有完整的故障状态机实现
 
 ### 下一步动作
@@ -137,7 +138,8 @@ last_verified_commit: ""
 - [x] 建立 gateway failure -> dashboard 最小动作承载的候选实例证据
 - [x] 建立 gateway failure -> `status_source / transition_reason` 责任边界的候选实例证据
 - [x] 建立 gateway failure -> user action decision file -> gateway restart orchestration 的代码与单元级证据
-- [ ] 补一条 gateway failure -> user action -> gateway restart 的候选实例级闭环记录
+- [x] 定位候选实例重测阻塞的真实根因，并将其从状态机逻辑问题中分离出来
+- [ ] 在 adapter 运行依赖满足后，补一条 gateway failure -> user action -> gateway restart 的候选实例级闭环记录
 
 ### 停止条件
 

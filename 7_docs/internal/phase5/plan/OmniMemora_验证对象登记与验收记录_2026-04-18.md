@@ -401,6 +401,7 @@ last_verified_commit: ""
   - `RECORD-B-022` 已确认 Track B 在 runtime dashboard 上已有最小 UI 动作承载，可在入口层故障时提供 `disable-route / uninstall` 入口
   - `RECORD-B-023` 已确认 Track B 运行时状态面现在显式输出 `status_source / transition_reason`，可区分故障状态责任方
   - `RECORD-B-024` 已确认 Track B 现在会把 runtime 用户动作写成共享决策文件，并由 `start.sh` 接管 gateway 重启编排；当前证据为代码与单元测试级，候选实例需补重测
+  - `RECORD-B-025` 已确认本机候选实例阻塞来自 adapter 运行依赖缺失，而非 Track B 状态机逻辑；`start.sh` 已补前置依赖预检
 
 ### RECORD-B-024
 
@@ -414,3 +415,16 @@ last_verified_commit: ""
 | 观察结果 | Go 测试已确认 runtime 动作接口在写入 `agent_modes.json` / restore backup 之外，还会写入 `gateway_decision.json`；shell 语法检查通过。`start.sh` 现在在 gateway 退出后不再只停留在等待态，而是会读取用户决策、写入 `recovering-gateway`、尝试重启 adapter，并在失败时回写 `user-decision-required` |
 | 结论适用范围 | `代码与单元级成立`：Track B 已具备“用户动作 -> 决策文件 -> gateway 重启编排 -> 成功/失败转移”的完整高层编排路径 |
 | 备注 | 当前机器上的一次候选实例重测未成功拉起隔离实例，现象更像既有启动环境问题，尚不足以否定本批实现；该分支仍需补一条候选实例级闭环记录 |
+
+### RECORD-B-025
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-025` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例 / 启动阻塞定位` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；以隔离 `PORT=18017`、`RUNTIME_PORT=18770`、隔离 `HOME` 与隔离数据目录启动候选实例 |
+| 验证动作 | 1. 以隔离端口启动候选实例；2. 读取 `start.sh` stdout 与 `tools/verification/logs/adapter_start.err.log`；3. 复核 runtime 与 adapter 启动状态 |
+| 观察结果 | runtime 在 `18770` 可正常启动并通过 `/health`；adapter 在 `_run_adapter.py` 入口直接因 `ModuleNotFoundError: No module named 'uvicorn'` 退出。因此当前候选实例无法补齐在线闭环的直接原因是 adapter 运行依赖缺失，而不是 Track B 状态机或 gateway 决策编排逻辑错误 |
+| 结论适用范围 | `候选阻塞已定位`：本机当前需要先满足 adapter Python 依赖，才能继续 Track B 的候选实例级闭环验收 |
+| 备注 | 为避免再次出现“runtime 已启动但 adapter 半失败”的假象，`start.sh` 已补 `uvicorn` 前置依赖预检；这不改变产品语义，只改善候选实例诊断路径 |

@@ -31,6 +31,23 @@ if [ -z "$PYTHON_BIN" ]; then
   exit 1
 fi
 
+if ! "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1
+import importlib
+import sys
+
+required = ("uvicorn",)
+missing = [name for name in required if importlib.util.find_spec(name) is None]
+if missing:
+    print(",".join(missing))
+    sys.exit(1)
+PY
+then
+  echo "[ERROR] Adapter Python dependency missing. Required module(s): uvicorn"
+  echo "        Interpreter: $PYTHON_BIN"
+  echo "        Candidate/runtime validation cannot continue until adapter deps are available."
+  exit 1
+fi
+
 if [ ! -f "$RUNTIME_BIN" ]; then
   if [ -f "$RUNTIME_EXE_LEGACY" ]; then
     RUNTIME_BIN="$RUNTIME_EXE_LEGACY"
