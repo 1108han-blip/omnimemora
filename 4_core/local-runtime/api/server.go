@@ -31,13 +31,13 @@ type Server struct {
 	metering                          *metering.Collector
 	rtCtx                             *lifecycle.RuntimeContext
 	bootstrap                         *bootstrapState // Phase 3.6: bootstrap/control state carrier
+	mcpState                          *mcpState
 	mcpMu                             sync.RWMutex
 	mcpSessions                       map[string]*mcpSession
 	mcpHandshakeCount                 int64
 	mcpToolCallCount                  int64
 	mcpMemoryWriteCount               int64
 	mcpMemorySearchContextRecallCount int64
-	mcpLastStartupError               string
 }
 
 // NewServer creates a new API server
@@ -70,6 +70,7 @@ func NewServer(cfg *config.RuntimeConfig, store storepkg.Store, rtCtx *lifecycle
 		metering:    meteringCollector,
 		rtCtx:       rtCtx,
 		bootstrap:   newBootstrapState(),
+		mcpState:    newMCPState(),
 		mcpSessions: make(map[string]*mcpSession),
 	}
 
@@ -190,13 +191,9 @@ func (s *Server) getMCPDetailedStats() (handshakes int64, toolCalls int64, write
 }
 
 func (s *Server) setMCPStartupError(msg string) {
-	s.mcpMu.Lock()
-	s.mcpLastStartupError = msg
-	s.mcpMu.Unlock()
+	s.mcpState.setStartupError(msg)
 }
 
 func (s *Server) getMCPStartupError() string {
-	s.mcpMu.RLock()
-	defer s.mcpMu.RUnlock()
-	return s.mcpLastStartupError
+	return s.mcpState.startupError()
 }

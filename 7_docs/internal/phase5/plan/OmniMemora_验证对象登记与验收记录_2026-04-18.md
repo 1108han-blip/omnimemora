@@ -693,3 +693,16 @@ last_verified_commit: ""
 | 观察结果 | runtime 侧新增独立 `root_surface.go`，`mcp.go` 不再同时承载 MCP transport 与 `/` redirect/operator 入口；`go test ./tests ./api` 全部通过，未出现 runtime API 回归 |
 | 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第十批低风险逻辑解耦已经落地，root/operator surface 已与 MCP transport 主体进一步分离 |
 | 备注 | 本记录证明的是 root/operator 入口边界的收敛，不等同于 runtime decision/control 已物理解耦 |
+
+### RECORD-B-046
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-046` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库现实 / 代码与回归测试` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；涉及 `4_core/local-runtime/api/mcp_state.go`、`server.go` 与既有 runtime API tests |
+| 验证动作 | 1. 将 MCP startup error 状态从 `Server` 主结构中抽离为独立 `mcpState`；2. 通过 `newMCPState()` 在 `server.go` 中注入；3. 保持既有 `setMCPStartupError(...)` / `getMCPStartupError()` API 不变；4. 运行 `gofmt -w api/mcp_state.go api/server.go`；5. 运行 `go test ./tests ./api` |
+| 观察结果 | runtime 侧新增独立 `mcp_state.go`，`Server` 不再直接持有 `mcpLastStartupError` 字段，而是通过 `mcpState` 间接承载；`go test ./tests ./api` 全部通过，MCP 相关 metrics / handler 行为未出现回归 |
+| 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第十一批低风险逻辑解耦已经落地，MCP startup error 状态已进一步从 server 主结构中分离 |
+| 备注 | 本记录证明的是 MCP startup error state carrier 的边界收敛，不等同于 MCP session registry 已完成解耦 |
