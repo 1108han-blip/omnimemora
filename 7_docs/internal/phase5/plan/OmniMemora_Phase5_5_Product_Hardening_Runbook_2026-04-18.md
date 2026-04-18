@@ -95,6 +95,7 @@ last_verified_commit: ""
 ### 当前输入
 
 - [Track B Bounded Scan](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Phase5_5_TrackB_自愈状态机_Bounded_Scan_2026-04-18.md)
+- [Track B 联合恢复策略 Bounded Scan](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Phase5_5_TrackB_联合恢复策略_Bounded_Scan_2026-04-18.md)
 
 ### 当前结论
 
@@ -151,6 +152,15 @@ last_verified_commit: ""
 - [x] 建立 gateway failure + self-heal disabled -> user-decision-required 的候选实例证据
 - [x] 建立 gateway failure + recovery window expired -> user-decision-required 的候选实例证据
 - [x] 建立 gateway failure + retry attempts exhausted -> user-decision-required 的候选实例证据
+- [x] 联合恢复策略 bounded scan 已完成
+
+### 下一步候选
+
+- [ ] 先定义联合恢复优先级 contract：
+  - `gateway unreachable` 优先于能力层故障
+  - `disable-route` 后恢复到 `healthy + routing_effective=false`
+  - `uninstall` 后不再回到产品增强路径
+- [ ] 暂不继续扩新接口或新状态字段
 
 ### 停止条件
 
