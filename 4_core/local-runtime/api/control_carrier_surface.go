@@ -11,6 +11,12 @@ import (
 	"github.com/omnimemora/local-runtime/internal/attach"
 )
 
+func registerControlCarrierRoutes(mux *http.ServeMux, server *Server) {
+	mux.HandleFunc("GET /gateway/status", server.handleGatewayStatus)
+	mux.HandleFunc("POST /gateway/decision/disable-route", server.handleGatewayDecisionDisableRoute)
+	mux.HandleFunc("POST /gateway/decision/uninstall", server.handleGatewayDecisionUninstall)
+}
+
 type gatewayDecisionRequest struct {
 	FamilyID string `json:"family_id"`
 }

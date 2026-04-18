@@ -61,6 +61,7 @@ last_verified_commit: ""
 - [x] 第一批低风险逻辑解耦已落地：runtime `gateway/status` 与 `gateway/decision/*` 的文件承载逻辑已从 gateway handler 中抽离为独立 control-carrier store
 - [x] 第二批低风险逻辑解耦已落地：runtime `gateway/status` 与 `gateway/decision/*` 的 HTTP handler 已抽离为独立 control-carrier surface，`routes.go` 不再承载该入口实现
 - [x] 第三批低风险逻辑解耦已落地：runtime dashboard 中的 user-decision-required 呈现与动作脚本已抽离为独立 control-carrier dashboard 片段
+- [x] 第四批低风险逻辑解耦已落地：runtime server wiring 中的 control-carrier route 注册已独立成 `registerControlCarrierRoutes(...)`
 
 ## 五、Track C: 最小 decision carrier 承载实现
 
@@ -106,3 +107,4 @@ last_verified_commit: ""
 - [x] 开始 `Track B`：固化 decision/control carrier 与 runtime capability 的逻辑边界
 - [x] 将 runtime internal plane 中的 control-carrier 责任与 capability 责任拆成更清晰的模块入口
 - [ ] 继续 `Track B`：识别并外移仍混在 runtime capability surface 中的剩余 decision/control 语义，重点转向 server wiring 与更小的 lifecycle 入口
+- [ ] 继续 `Track B`：识别并外移仍混在 runtime lifecycle / bootstrap 路径中的 decision/control 语义
