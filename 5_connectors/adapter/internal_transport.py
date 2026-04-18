@@ -13,6 +13,8 @@ Per ADR-0006: 内部直连传递规范。
 - 不硬编码单一地址（127.0.0.1 / localhost / ::1 均可）
 - 不依赖用户配置 NO_PROXY
 """
+from __future__ import annotations
+
 import asyncio
 import httpx
 import logging

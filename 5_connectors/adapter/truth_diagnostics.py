@@ -3,7 +3,7 @@ truth_diagnostics.py - structured diagnostics helpers for Truth Bridge v2.
 """
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Optional, Sequence
 
 from .truth_models import CanonicalTruthRefs, RawTruthIntent, ResolutionDecision
 from .truth_registry import CanonicalTruthRegistry, get_default_truth_registry
@@ -215,7 +215,7 @@ def detect_conflicts(
 
 
 def summarize_conflict(
-    conflict_types: list[str] | tuple[str, ...],
+    conflict_types: Sequence[str],
     *,
     provider_ref: Optional[str] = None,
     raw_intent: Optional[RawTruthIntent] = None,

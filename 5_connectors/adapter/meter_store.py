@@ -3,7 +3,7 @@ Meter 持久化层 - 负责 meter artifact 的内存缓存与磁盘读写
 只属于 adapter 运行时，不属于 core 逻辑
 """
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List, Dict, Any, Union
 import glob as _glob
 import os
 import tempfile
@@ -162,7 +162,7 @@ def _ensure_persistence_loaded() -> None:
         pass
 
 
-def store_meter(meter: TokenSavingsMeter | Dict[str, Any]) -> None:
+def store_meter(meter: Union[TokenSavingsMeter, Dict[str, Any]]) -> None:
     """
     Store meter artifact in memory and persist to disk atomically.
     Accepts either a TokenSavingsMeter dataclass or a dict (e.g. from engine result).
