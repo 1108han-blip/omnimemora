@@ -32,11 +32,11 @@ if [ -z "$PYTHON_BIN" ]; then
 fi
 
 if ! "$PYTHON_BIN" - <<'PY' >/dev/null 2>&1
-import importlib
+from importlib.util import find_spec
 import sys
 
 required = ("uvicorn",)
-missing = [name for name in required if importlib.util.find_spec(name) is None]
+missing = [name for name in required if find_spec(name) is None]
 if missing:
     print(",".join(missing))
     sys.exit(1)
