@@ -26,28 +26,28 @@ last_verified_commit: ""
 ## 二、当前状态
 
 - 当前阶段：`Phase 5.5 / Product Hardening`
-- 当前 gate：`启动控制层落地`
+- 当前 gate：`Track C / 18011 拆分准备与 main.py 瘦身`
 - 工作区健康：`绿色`
 - 当前分支：`master`
-- 当前起步目标：
-  - [x] phase5.5 管理版计划落地
-  - [x] phase5.5 runbook 落地
-  - [x] `workspace-governance` skill 写入 bounded global scan 规则
-  - [x] `Track A` bounded global scan 初版完成
-  - [x] `Track B` bounded global scan 初版完成
-  - [ ] 进入 `Track A` 具体实现批次
+- 当前推进焦点：
+  - [x] `Track A` 收口批完成
+  - [x] `Track B` 入口层与能力层故障状态机主干完成
+  - [x] `Track C` bounded global scan 完成
+  - [x] `Track C` 第一批低风险迁移完成
+  - [x] `Track C` 第二批中风险表层迁移完成
+  - [ ] 决定 `Track C` 第三批是否继续进入更高耦合 surface / contract 收口
 
 ## 三、固定总规则
 
-- [ ] 每个 track 开始前必须完成 bounded global scan
-- [ ] scan 结果必须写清四栏：
-  - [ ] `可复用`
-  - [ ] `必须避开`
-  - [ ] `需要清理`
-  - [ ] `当前实现入口`
-- [ ] scan 完成后，只允许做定向核对
-- [ ] 行为验证必须继续绑定验证对象登记文档
-- [ ] `A/B` 未完成前，不进入 `Track C` 的实际拆分
+- [x] 每个 track 开始前必须完成 bounded global scan
+- [x] scan 结果必须写清四栏：
+  - [x] `可复用`
+  - [x] `必须避开`
+  - [x] `需要清理`
+  - [x] `当前实现入口`
+- [x] scan 完成后，只允许做定向核对
+- [x] 行为验证必须继续绑定验证对象登记文档
+- [x] `A/B` 已达到进入 `Track C` 准备与小批迁移的前置条件
 
 ## 四、Track A: 8765 对外接口收口
 
@@ -168,7 +168,7 @@ last_verified_commit: ""
 - [x] 第一批低风险迁移已落地：`startup probe` 与 `quota-path observation helper` 已从 `main.py` 外移
 - [x] 第二批中风险表层迁移已落地：`MCP/SSE surface` 与 diagnostics surface 已从 `main.py` 外移为独立 router
 - [ ] 暂不进入高耦合迁移
-- [ ] 下一步只允许决定第三批小范围迁移是否从 `support/admin surface` 或其他剩余表层职责开始
+- [ ] 下一步只允许决定第三批小范围迁移是否从 `token-savings / meter query surface` 或 `trial / internal admin surface` 开始
 
 ## 七、Track D: 候选实例补强验证
 

@@ -81,13 +81,17 @@ last_verified_commit: ""
 
 ## 四、可外移
 
-以下内容适合成为后续 slimming 的第一批候选：
+以下内容适合成为后续 slimming 的分批候选：
 
 ### A. 启动探测与内部 transport 预探测
 
 当前位置：
 
 - startup probe 代码块
+
+当前状态：
+
+- [x] 已外移
 
 建议去向：
 
@@ -108,6 +112,10 @@ last_verified_commit: ""
 - `_classify_quota_observation`
 - `_upstream_url_for_observation`
 
+当前状态：
+
+- [x] 已外移
+
 建议去向：
 
 - 独立 `quota_observer.py` / `path_observer.py`
@@ -126,9 +134,13 @@ last_verified_commit: ""
 - `/mcp/query`
 - MCP bootstrap helpers
 
+当前状态：
+
+- [x] 已外移
+
 建议去向：
 
-- 独立 `mcp_api.py`
+- 独立 `mcp_surface.py`
 
 原因：
 
@@ -145,10 +157,13 @@ last_verified_commit: ""
 - `/agents/live`
 - `/agents/metrics`
 
+当前状态：
+
+- [x] 已外移
+
 建议去向：
 
-- 独立 `metrics_api.py`
-- 或 `diagnostics_api.py`
+- 独立 `diagnostics_surface.py`
 
 原因：
 
@@ -195,6 +210,20 @@ last_verified_commit: ""
 
 - 这是独立业务轴线
 - 当前不应和 Track C 的入口瘦身绑在一起
+- 它们更适合作为第三批候选中的“单独业务 surface”，而不是继续混在 `main.py` 的纯入口瘦身里
+
+### 4. token-savings / meter query surface
+
+当前位置：
+
+- `/usage/token-savings`
+- `/usage/token-savings/trend`
+- `/requests/{request_id}/meter`
+
+原因：
+
+- 这批 surface 相对 `memory/query` 更表层，但仍依赖 meter artifact 与 V2 统计链路
+- 可以作为第三批候选，但应独立于 memory CRUD 与 compile path
 
 ## 六、建议的瘦身顺序
 
@@ -205,19 +234,41 @@ last_verified_commit: ""
 - startup probe
 - quota/path observation helpers
 
+状态：
+
+- [x] 已完成
+
 风险最低，且不触发路由行为变化。
 
 ### Step 2
 
 再抽离：
 
-- MCP/SSE surface 到 `mcp_api.py`
+- MCP/SSE surface
+- diagnostics surface
+
+状态：
+
+- [x] 已完成
 
 收益高，但应单独成批验证。
 
 ### Step 3
 
 再抽离：
+
+- token-savings / meter query surface
+- trial / internal admin surface
+
+状态：
+
+- [ ] 候选，未开始
+
+说明：
+
+- 这一步已经不再是“纯表层无状态 route 外移”
+- 若继续推进，应再次判断是否仍属于 `Track C` 的低风险拆分准备
+- 若会触及 meter artifact、trial entitlement、quota 业务轴线，应单独立批
 
 - metrics / debug / support / agents diagnostics 到 `diagnostics_api.py`
 
