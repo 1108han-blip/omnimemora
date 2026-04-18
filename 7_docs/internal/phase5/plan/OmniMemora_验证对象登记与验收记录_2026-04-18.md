@@ -784,3 +784,16 @@ last_verified_commit: ""
 | 观察结果 | runtime 侧新增独立 `mcp_dispatch.go`，`mcp.go` 仅保留 MCP transport surface；`go test ./tests ./api` 全部通过，MCP transport / dispatch 行为未出现回归 |
 | 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第十七批低风险逻辑解耦已经落地，MCP dispatch surface 已进一步从 MCP transport 主体中分离 |
 | 备注 | 本记录证明的是 MCP dispatch 边界的收敛，不等同于 MCP transport 已具备独立宿主能力 |
+
+### RECORD-B-053
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-053` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库现实 / 代码与回归测试` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；涉及 `4_core/local-runtime/api/control_carrier_actions.go`、`control_carrier_surface.go` 与既有 runtime API tests |
+| 验证动作 | 1. 新增 `control_carrier_actions.go`，将 `disable-route` / `uninstall` 的动作核心抽离为 shared decision action core；2. 让 `control_carrier_surface.go` 的 HTTP handler 改为调用共享动作核心，而不是内联动作逻辑；3. 运行 `gofmt -w api/control_carrier_actions.go api/control_carrier_surface.go`；4. 运行 `go test ./tests ./api` |
+| 观察结果 | runtime 侧新增独立 `control_carrier_actions.go`，共享承载 route-off 持久化、gateway decision 持久化、detach/restore 调用与动作返回消息；`control_carrier_surface.go` 退回为较薄的 HTTP carrier。`go test ./tests ./api` 全部通过，既有 gateway decision HTTP 行为未出现回归 |
+| 结论适用范围 | `仓库现实成立`：Track C 的第一批实现已经落地，`disable-route` / `uninstall` 的动作核心不再只存在于 runtime HTTP surface 内，后续 CLI/offline fallback entry 可直接复用该共享动作核心 |
+| 备注 | 本记录证明的是 shared decision action core 的抽离已经完成，不等同于 `runtime dead + uninstall` 已在候选实例级成立 |

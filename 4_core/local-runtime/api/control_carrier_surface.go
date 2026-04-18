@@ -7,8 +7,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/omnimemora/local-runtime/internal/attach"
 )
 
 func registerControlCarrierRoutes(mux *http.ServeMux, server *Server) {
@@ -106,24 +104,16 @@ func (s *Server) handleGatewayDecisionDisableRoute(w http.ResponseWriter, r *htt
 		return
 	}
 	familyID := controlFamilyID(agentType)
-	if err := disableRouteForFamily(familyID); err != nil {
-		writeError(w, 500, "DISABLE_ROUTE_FAILED", err.Error())
-		return
-	}
-	if err := writeGatewayDecision(gatewayDecisionPayload{
-		Action:           "disable-route",
-		FamilyID:         familyID,
-		DecisionSource:   "user-runtime-action",
-		TransitionReason: "user_disabled_route_after_gateway_failure",
-	}); err != nil {
+	result, err := applyDisableRouteDecision(familyID)
+	if err != nil {
 		writeError(w, 500, "DISABLE_ROUTE_DECISION_FAILED", err.Error())
 		return
 	}
 	writeJSON(w, 200, map[string]any{
-		"family_id": familyID,
-		"action":    "disable_route",
+		"family_id": result.FamilyID,
+		"action":    result.Action,
 		"applied":   true,
-		"message":   "route state persisted as off; successful gateway recovery will converge to healthy passthrough (routing_effective=false)",
+		"message":   result.Message,
 	})
 }
 
@@ -139,27 +129,15 @@ func (s *Server) handleGatewayDecisionUninstall(w http.ResponseWriter, r *http.R
 		return
 	}
 	familyID := controlFamilyID(agentType)
-	if err := disableRouteForFamily(familyID); err != nil {
-		writeError(w, 500, "UNINSTALL_ROUTE_STATE_FAILED", err.Error())
-		return
-	}
-	if err := attach.DetachAgent(agentType, 8765); err != nil {
-		writeError(w, 500, "UNINSTALL_FAILED", err.Error())
-		return
-	}
-	if err := writeGatewayDecision(gatewayDecisionPayload{
-		Action:           "uninstall",
-		FamilyID:         familyID,
-		DecisionSource:   "user-runtime-action",
-		TransitionReason: "user_uninstalled_after_gateway_failure",
-	}); err != nil {
+	result, err := applyUninstallDecision(agentType, familyID)
+	if err != nil {
 		writeError(w, 500, "UNINSTALL_DECISION_FAILED", err.Error())
 		return
 	}
 	writeJSON(w, 200, map[string]any{
-		"family_id": familyID,
-		"action":    "uninstall",
+		"family_id": result.FamilyID,
+		"action":    result.Action,
 		"applied":   true,
-		"message":   "route state persisted as off; agent detached and backup restore attempted; successful gateway recovery will remain outside product-enhanced routing",
+		"message":   result.Message,
 	})
 }

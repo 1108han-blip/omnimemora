@@ -16,7 +16,7 @@ last_verified_commit: ""
 ## 一、当前状态
 
 - 当前阶段：`Decision Carrier / Control-Plane Decoupling`
-- 当前 gate：`Track B / 第十七批逻辑解耦已落地`
+- 当前 gate：`Track C / 第一批实现已落地`
 - 工作区健康：`绿色`
 - 当前分支：`master`
 
@@ -75,6 +75,7 @@ last_verified_commit: ""
 - [x] 第十五批低风险逻辑解耦已落地：MCP 静态 tool catalog 与默认 scope 构造已独立成 `mcp_tool_catalog.go`
 - [x] 第十六批低风险逻辑解耦已落地：MCP write/search/context 三个工具分支已独立成 `mcp_tool_handlers.go`
 - [x] 第十七批低风险逻辑解耦已落地：MCP dispatch surface 已独立成 `mcp_dispatch.go`，`mcp.go` 只保留 transport surface
+- [x] Track B 当前阶段性完成：runtime internal plane 中可低风险抽离的 decision/control、operator surface、MCP state 与静态 dispatch 模块已完成收敛；继续向下将开始触碰 transport/handler 时序核心
 
 ## 五、Track C: 最小 decision carrier 承载实现
 
@@ -87,6 +88,7 @@ last_verified_commit: ""
 
 - `runtime dead + uninstall` 可成立
 - `runtime dead + disable-route` 可成立
+- [x] 第一批实现已落地：`disable-route` / `uninstall` 的动作核心已抽离为 shared decision action core，后续 runtime HTTP carrier 与 offline carrier 可共同复用
 
 ## 六、Track D: 候选实例与极端故障验证
 
@@ -119,4 +121,7 @@ last_verified_commit: ""
 - [x] 压薄 phase5 入口活跃文档面
 - [x] 开始 `Track B`：固化 decision/control carrier 与 runtime capability 的逻辑边界
 - [x] 将 runtime internal plane 中的 control-carrier 责任与 capability 责任拆成更清晰的模块入口
-- [ ] 继续 `Track B`：识别并外移仍混在 runtime lifecycle / operator dashboard 总装配中的剩余 decision/control 语义，重点转向更小的 bootstrap/lifecycle 装配边界
+- [x] 完成 `Track B` 当前阶段低风险逻辑解耦
+- [x] 完成 `Track C` bounded implementation 设计：明确采用 `shared decision action core + CLI/offline fallback entry + supervisor hint` 的最小承载路径
+- [x] 完成 `Track C` 第一批实现：抽离 shared decision action core，供 runtime HTTP carrier 与后续 offline carrier 复用
+- [ ] 进入 `Track C` 第二批实现：先补最小 command router，再为 `runtime dead` 场景添加 CLI/offline fallback entry
