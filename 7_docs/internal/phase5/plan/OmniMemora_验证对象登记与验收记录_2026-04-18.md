@@ -400,3 +400,17 @@ last_verified_commit: ""
   - `RECORD-B-021` 已确认 Track B 可在入口层故障时通过 runtime internal plane 执行 `uninstall`，并同步完成 `restore backup` 与 `route state -> off`
   - `RECORD-B-022` 已确认 Track B 在 runtime dashboard 上已有最小 UI 动作承载，可在入口层故障时提供 `disable-route / uninstall` 入口
   - `RECORD-B-023` 已确认 Track B 运行时状态面现在显式输出 `status_source / transition_reason`，可区分故障状态责任方
+  - `RECORD-B-024` 已确认 Track B 现在会把 runtime 用户动作写成共享决策文件，并由 `start.sh` 接管 gateway 重启编排；当前证据为代码与单元测试级，候选实例需补重测
+
+### RECORD-B-024
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-024` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库现实 / 代码与单元测试级` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区 |
+| 验证动作 | 1. 实现 runtime `/gateway/decision/disable-route` 与 `/gateway/decision/uninstall` 写入共享 `gateway_decision.json`；2. 更新 `start.sh`，在 adapter 退出进入 `user-decision-required` 后轮询该决策文件，并在用户动作后触发 gateway 重启；3. 运行 `go test ./tests ./api` 与 `bash -n start.sh` |
+| 观察结果 | Go 测试已确认 runtime 动作接口在写入 `agent_modes.json` / restore backup 之外，还会写入 `gateway_decision.json`；shell 语法检查通过。`start.sh` 现在在 gateway 退出后不再只停留在等待态，而是会读取用户决策、写入 `recovering-gateway`、尝试重启 adapter，并在失败时回写 `user-decision-required` |
+| 结论适用范围 | `代码与单元级成立`：Track B 已具备“用户动作 -> 决策文件 -> gateway 重启编排 -> 成功/失败转移”的完整高层编排路径 |
+| 备注 | 当前机器上的一次候选实例重测未成功拉起隔离实例，现象更像既有启动环境问题，尚不足以否定本批实现；该分支仍需补一条候选实例级闭环记录 |

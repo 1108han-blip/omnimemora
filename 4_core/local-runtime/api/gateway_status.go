@@ -22,6 +22,13 @@ type gatewayStatusPayload struct {
 	ErrorCode          string `json:"error_code,omitempty"`
 }
 
+type gatewayDecisionPayload struct {
+	Action           string `json:"action"`
+	FamilyID         string `json:"family_id"`
+	DecisionSource   string `json:"decision_source,omitempty"`
+	TransitionReason string `json:"transition_reason,omitempty"`
+}
+
 func defaultGatewayStatus() gatewayStatusPayload {
 	return gatewayStatusPayload{
 		Status:             "healthy",
@@ -45,6 +52,32 @@ func gatewayStatusPath() (string, error) {
 		return "", err
 	}
 	return filepath.Join(dataDir, "track_b_status.json"), nil
+}
+
+func gatewayDecisionPath() (string, error) {
+	if explicit := strings.TrimSpace(os.Getenv("OMNIMEMORA_GATEWAY_DECISION_PATH")); explicit != "" {
+		return filepath.Clean(explicit), nil
+	}
+	dataDir, err := rtpkg.GetDataDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dataDir, "gateway_decision.json"), nil
+}
+
+func writeGatewayDecision(decision gatewayDecisionPayload) error {
+	path, err := gatewayDecisionPath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(decision, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, append(data, '\n'), 0644)
 }
 
 func loadGatewayStatus() gatewayStatusPayload {

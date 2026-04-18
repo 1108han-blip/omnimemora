@@ -164,6 +164,14 @@ func TestGatewayDecisionDisableRouteWritesAgentModes(t *testing.T) {
 	if !strings.Contains(string(raw), `"openclaw": "off"`) {
 		t.Fatalf("expected openclaw off in agent modes, got %s", string(raw))
 	}
+
+	decisionRaw, err := os.ReadFile(filepath.Join(tmpDir, "gateway_decision.json"))
+	if err != nil {
+		t.Fatalf("failed to read gateway decision: %v", err)
+	}
+	if !strings.Contains(string(decisionRaw), `"action": "disable-route"`) {
+		t.Fatalf("expected disable-route decision, got %s", string(decisionRaw))
+	}
 }
 
 func TestGatewayDecisionUninstallRestoresClaudeConfigAndDisablesRoute(t *testing.T) {
@@ -227,6 +235,14 @@ func TestGatewayDecisionUninstallRestoresClaudeConfigAndDisablesRoute(t *testing
 	}
 	if !strings.Contains(string(rawModes), `"claude_code": "off"`) {
 		t.Fatalf("expected claude_code off after uninstall, got %s", string(rawModes))
+	}
+
+	decisionRaw, err := os.ReadFile(filepath.Join(tmpDir, "gateway_decision.json"))
+	if err != nil {
+		t.Fatalf("failed to read gateway decision: %v", err)
+	}
+	if !strings.Contains(string(decisionRaw), `"action": "uninstall"`) {
+		t.Fatalf("expected uninstall decision, got %s", string(decisionRaw))
 	}
 
 	backupRoot := filepath.Join(homeDir, ".omnimemora", "agent-control", "backups")

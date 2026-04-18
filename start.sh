@@ -15,6 +15,7 @@ ADAPTER_SCRIPT="$ROOT_DIR/tools/_run_adapter.py"
 INTERNAL_API_TOKEN="${OMNIMEMORA_INTERNAL_API_TOKEN:-track-b-$$-$(date +%s)}"
 TRACK_B_DATA_DIR="${OMNIMEMORA_RUNTIME_DATA_DIR:-${OMNIMEMORA_DATA_DIR:-$HOME/.omnimemora}}"
 TRACK_B_STATUS_PATH="${OMNIMEMORA_TRACK_B_STATUS_PATH:-${TRACK_B_DATA_DIR}/track_b_status.json}"
+GATEWAY_DECISION_PATH="${OMNIMEMORA_GATEWAY_DECISION_PATH:-${TRACK_B_DATA_DIR}/gateway_decision.json}"
 AGENT_MODES_PATH="${OMNIMEMORA_AGENT_MODES_PATH:-$ROOT_DIR/5_connectors/adapter/config/agent_modes.json}"
 STOPPING=0
 
@@ -60,12 +61,15 @@ OMNIMEMORA_AGENT_MODES_PATH="$AGENT_MODES_PATH" \
 RUNTIME_PID=$!
 
 echo "[2/2] Starting adapter on :$ADAPTER_PORT ..."
-PORT="$ADAPTER_PORT" \
-MEMORY_BACKEND_URL="http://127.0.0.1:${RUNTIME_PORT}" \
-OMNIMEMORA_INTERNAL_API_TOKEN="$INTERNAL_API_TOKEN" \
-OMNIMEMORA_AGENT_MODES_PATH="$AGENT_MODES_PATH" \
-"$PYTHON_BIN" "$ADAPTER_SCRIPT" >"$LOG_DIR/adapter_start.out.log" 2>"$LOG_DIR/adapter_start.err.log" &
-ADAPTER_PID=$!
+start_adapter_process() {
+  PORT="$ADAPTER_PORT" \
+  MEMORY_BACKEND_URL="http://127.0.0.1:${RUNTIME_PORT}" \
+  OMNIMEMORA_INTERNAL_API_TOKEN="$INTERNAL_API_TOKEN" \
+  OMNIMEMORA_AGENT_MODES_PATH="$AGENT_MODES_PATH" \
+  "$PYTHON_BIN" "$ADAPTER_SCRIPT" >>"$LOG_DIR/adapter_start.out.log" 2>>"$LOG_DIR/adapter_start.err.log" &
+  ADAPTER_PID=$!
+}
+start_adapter_process
 
 cleanup() {
   STOPPING=1
@@ -100,10 +104,55 @@ clear_track_b_status_file() {
   rm -f "$TRACK_B_STATUS_PATH" >/dev/null 2>&1 || true
 }
 
+clear_gateway_decision_file() {
+  rm -f "$GATEWAY_DECISION_PATH" >/dev/null 2>&1 || true
+}
+
+read_gateway_decision() {
+  if [ ! -f "$GATEWAY_DECISION_PATH" ]; then
+    return 1
+  fi
+  DECISION_PATH="$GATEWAY_DECISION_PATH" "$PYTHON_BIN" - <<'PY'
+import json
+import os
+import sys
+
+path = os.environ["DECISION_PATH"]
+try:
+    with open(path, "r", encoding="utf-8") as fh:
+        payload = json.load(fh)
+except Exception:
+    sys.exit(1)
+
+action = str(payload.get("action") or "").strip()
+family_id = str(payload.get("family_id") or "").strip()
+reason = str(payload.get("transition_reason") or "").strip()
+source = str(payload.get("decision_source") or "").strip()
+if not action:
+    sys.exit(1)
+print(action)
+print(family_id)
+print(reason)
+print(source)
+PY
+}
+
 start_runtime_process() {
   OMNIMEMORA_RUNTIME_PORT="$RUNTIME_PORT" \
   "$RUNTIME_BIN" serve >>"$LOG_DIR/runtime_start.out.log" 2>>"$LOG_DIR/runtime_start.err.log" &
   RUNTIME_PID=$!
+}
+
+write_manual_recovery_status() {
+  local reason="$1"
+  local error_code="${2:-gateway_unreachable}"
+  write_track_b_status_file "{\"status\":\"recovering-gateway\",\"status_source\":\"manual-override\",\"transition_reason\":\"${reason}\",\"gateway_health\":\"recovering\",\"capability_health\":\"healthy\",\"routing_effective\":false,\"user_action_required\":false,\"recommended_action\":\"wait_for_recovery\",\"error_code\":\"${error_code}\"}"
+}
+
+write_user_decision_required_status() {
+  local reason="$1"
+  local error_code="${2:-gateway_unreachable}"
+  write_track_b_status_file "{\"status\":\"user-decision-required\",\"status_source\":\"gateway-exit-monitor\",\"transition_reason\":\"${reason}\",\"gateway_health\":\"unhealthy\",\"capability_health\":\"healthy\",\"routing_effective\":false,\"user_action_required\":true,\"recommended_action\":\"disable_route_or_uninstall\",\"error_code\":\"${error_code}\"}"
 }
 
 wait_for_health() {
@@ -200,11 +249,58 @@ echo "Press Ctrl+C to stop both services."
 
 runtime_self_heal_loop &
 SUPERVISOR_PID=$!
-ADAPTER_EXIT_CODE=0
-wait "$ADAPTER_PID" || ADAPTER_EXIT_CODE=$?
-if [ "$STOPPING" != "1" ] && kill -0 "$RUNTIME_PID" >/dev/null 2>&1; then
+while true; do
+  ADAPTER_EXIT_CODE=0
+  wait "$ADAPTER_PID" || ADAPTER_EXIT_CODE=$?
+  if [ "$STOPPING" = "1" ]; then
+    break
+  fi
+  if ! kill -0 "$RUNTIME_PID" >/dev/null 2>&1; then
+    break
+  fi
+
   echo "[TRACK_B] Adapter exited with code ${ADAPTER_EXIT_CODE}; entering user-decision-required state."
-  write_track_b_status_file '{"status":"user-decision-required","status_source":"gateway-exit-monitor","transition_reason":"gateway_process_exited","gateway_health":"unhealthy","capability_health":"healthy","routing_effective":false,"user_action_required":true,"recommended_action":"disable_route_or_uninstall","error_code":"gateway_unreachable"}'
-  wait "$RUNTIME_PID"
-fi
+  write_user_decision_required_status "gateway_process_exited" "gateway_unreachable"
+
+  while kill -0 "$RUNTIME_PID" >/dev/null 2>&1; do
+    DECISION_LINES="$(read_gateway_decision || true)"
+    if [ -z "${DECISION_LINES:-}" ]; then
+      sleep 1
+      continue
+    fi
+
+    ACTION="$(printf '%s\n' "$DECISION_LINES" | sed -n '1p')"
+    FAMILY_ID="$(printf '%s\n' "$DECISION_LINES" | sed -n '2p')"
+    TRANSITION_REASON="$(printf '%s\n' "$DECISION_LINES" | sed -n '3p')"
+    clear_gateway_decision_file
+
+    if [ -z "$ACTION" ]; then
+      sleep 1
+      continue
+    fi
+
+    echo "[TRACK_B] Received user decision '${ACTION}' for family '${FAMILY_ID}'. Restarting gateway ..."
+    write_manual_recovery_status "${TRANSITION_REASON:-user_requested_gateway_restart}" "gateway_restart_requested"
+    start_adapter_process
+    if wait_for_health \
+      "Adapter(restart)" \
+      "http://127.0.0.1:${ADAPTER_PORT}/health" \
+      "$ADAPTER_PID" \
+      "$LOG_DIR/adapter_start.out.log" \
+      "$LOG_DIR/adapter_start.err.log" \
+      15; then
+      echo "[TRACK_B] Gateway recovered after user decision."
+      sleep "$TRACK_B_RECOVERY_SETTLE_SECONDS"
+      clear_track_b_status_file
+      break
+    fi
+
+    echo "[TRACK_B] Gateway restart failed after user decision."
+    write_user_decision_required_status "gateway_restart_failed_after_user_action" "gateway_restart_failed"
+  done
+
+  if ! kill -0 "$RUNTIME_PID" >/dev/null 2>&1; then
+    break
+  fi
+done
 kill "$SUPERVISOR_PID" "$RUNTIME_PID" >/dev/null 2>&1 || true
