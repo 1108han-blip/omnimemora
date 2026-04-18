@@ -550,3 +550,16 @@ last_verified_commit: ""
 | 观察结果 | gateway 在 `18036` 上自动恢复监听成功；最终 `GET /proxy/system-status` 与 `GET /health.system_status` 一致返回 `status=healthy`、`routing_requested=false`、`routing_effective=false`、`recommended_action=none`，隔离 `track_b_status.json` 已不存在，隔离 `agent_modes.json` 仍保持 `claude_code=off`。supervisor 日志显示 gateway 自动恢复成功；本次运行最终未留下 `degraded-capability` 残留 |
 | 结论适用范围 | `候选成立`：Track B 现在已具备 `route=off` 下联合故障后的稳定收敛证据，最终会回到健康 passthrough，而不会把 route-off 用户置于故障状态 |
 | 备注 | 该记录证明的是 `route=off` 的稳定收敛结果，不主张 runtime 必然持续失效；对应隔离 `.tmp/candidate-*` 工件已在验证后清理 |
+
+### RECORD-B-035
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-035` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库现实 / 定向风险判断` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；基于 `gateway_decision.go`、`routes.go`、`attach.DetachAgent()`、既有 `RECORD-B-021/B-022/B-033/B-034` 综合判断 |
+| 验证动作 | 1. 复核 runtime `/gateway/decision/uninstall` 的执行前提；2. 复核 runtime dashboard 对 `Disable Route / Uninstall` 的承载方式；3. 对照既有候选实例证据，判断 `uninstall` 在联合故障场景下的可执行边界 |
+| 观察结果 | 当前 `uninstall` 用户动作的唯一正式承载面是 runtime internal plane：`POST /gateway/decision/uninstall` 与 runtime dashboard 按钮都依赖 `8765` 存活。既有 `RECORD-B-021` 已证明当 `gateway dead + runtime alive` 时，`uninstall` 可执行并能完成 `route off + detach + restore backup`。但当 `runtime` 也已不可用时，当前架构下不存在独立于 runtime 的第二决策承载面，因此无法安全执行同一动作 |
+| 结论适用范围 | `结构性限制已确认`：本阶段不应把 `uninstall + runtime already unavailable` 当作“再补一条普通验证”来继续硬做；这条路径需要未来把 internal decision carrier 从 runtime 能力层进一步解耦后再实现 |
+| 备注 | 这不是当前代码的单点 bug，而是现阶段 mixed architecture 的边界；后续若进入模块拆分，应把该问题并入新的 decision carrier / control-plane decoupling 子工程 |
