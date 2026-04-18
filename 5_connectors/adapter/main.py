@@ -41,6 +41,7 @@ from .quota_observer import (
 from .startup_probe import run_startup_probe
 from .mcp_surface import configure_mcp_surface
 from .diagnostics_surface import configure_diagnostics_surface
+from .usage_surface import configure_usage_surface
 
 # 兼容数字开头包：逐个子模块动态导入（避免语法错误）
 import importlib
@@ -151,12 +152,14 @@ _status_api_mod = importlib.import_module("5_connectors.adapter.status_api")
 _agent_control_api_mod = importlib.import_module("5_connectors.adapter.agent_control_api")
 _mcp_surface_mod = importlib.import_module("5_connectors.adapter.mcp_surface")
 _diagnostics_surface_mod = importlib.import_module("5_connectors.adapter.diagnostics_surface")
+_usage_surface_mod = importlib.import_module("5_connectors.adapter.usage_surface")
 app.include_router(_llm_proxy_mod.router, prefix="")
 app.include_router(_status_api_mod.router, prefix="")
 app.include_router(_agent_control_api_mod.router, prefix="")
 app.include_router(_mcp_surface_mod.router, prefix="")
 app.include_router(_diagnostics_surface_mod.router, prefix="")
-del _llm_proxy_mod, _status_api_mod, _agent_control_api_mod, _mcp_surface_mod, _diagnostics_surface_mod
+app.include_router(_usage_surface_mod.router, prefix="")
+del _llm_proxy_mod, _status_api_mod, _agent_control_api_mod, _mcp_surface_mod, _diagnostics_surface_mod, _usage_surface_mod
 
 @app.middleware("http")
 async def attach_request_id(request: Request, call_next):
@@ -327,6 +330,13 @@ configure_diagnostics_surface(
     get_meter_fn=get_meter,
     support_schema_version=SUPPORT_SCHEMA_VERSION,
     support_error_catalog=SUPPORT_ERROR_CATALOG,
+)
+
+configure_usage_surface(
+    config_obj=config,
+    get_tenant_usage_fn=get_tenant_usage,
+    get_trend_data_fn=get_trend_data,
+    get_meter_fn=get_meter,
 )
 
 
@@ -2301,63 +2311,6 @@ async def query_memory_v2(request: MemoryQueryRequest, http_request: Request):
         context_bypass=context_bypass,
         matched_keywords=matched_keywords,
     )
-
-
-@app.get("/usage/token-savings")
-async def get_token_savings(
-    tenant: str,
-    agent: Optional[str] = None,
-    start_time: Optional[str] = None,
-    end_time: Optional[str] = None
-):
-    """Get aggregated token savings for a tenant/agent."""
-    from datetime import datetime
-
-    start_dt = datetime.fromisoformat(start_time) if start_time else None
-    end_dt = datetime.fromisoformat(end_time) if end_time else None
-
-    usage = get_tenant_usage(tenant, agent=agent, start_time=start_dt, end_time=end_dt)
-    registry_entry = get_tenant_registry_entry(config.omnimemora_access_registry_path, tenant)
-    monthly_quota_tokens = None
-    plan = None
-    status = None
-    quota_status = "untracked"
-    if registry_entry:
-        plan = registry_entry.get("plan")
-        status = registry_entry.get("status")
-        raw_quota = registry_entry.get("monthly_quota_tokens")
-        if raw_quota not in (None, ""):
-            try:
-                monthly_quota_tokens = int(raw_quota)
-            except (TypeError, ValueError):
-                monthly_quota_tokens = None
-
-    current_period_usage = usage.get("current_period_usage", 0)
-    if monthly_quota_tokens is not None:
-        quota_status = "over_quota" if current_period_usage > monthly_quota_tokens else "within_quota"
-
-    usage["plan"] = plan
-    usage["status"] = status
-    usage["monthly_quota_tokens"] = monthly_quota_tokens
-    usage["quota_status"] = quota_status
-    return usage
-
-
-@app.get("/usage/token-savings/trend")
-async def get_token_savings_trend(tenant: str, agent: Optional[str] = None, days: int = 7):
-    """Get token savings trend data for the last N days."""
-    trend_data = get_trend_data(tenant, days)
-    trend_data["agent"] = agent
-    return trend_data
-
-
-@app.get("/requests/{request_id}/meter")
-async def get_request_meter(request_id: str):
-    """Get full meter artifact for a specific request."""
-    meter = get_meter(request_id)
-    if not meter:
-        raise HTTPException(status_code=404, detail=f"Meter not found for request_id={request_id}")
-    return meter.to_dict()
 
 
 # ==================== Demo UI Dashboard Endpoints ====================

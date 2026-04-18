@@ -225,6 +225,10 @@ last_verified_commit: ""
 - 这批 surface 相对 `memory/query` 更表层，但仍依赖 meter artifact 与 V2 统计链路
 - 可以作为第三批候选，但应独立于 memory CRUD 与 compile path
 
+当前状态：
+
+- [x] 已外移
+
 ## 六、建议的瘦身顺序
 
 ### Step 1
@@ -262,7 +266,15 @@ last_verified_commit: ""
 
 状态：
 
-- [ ] 候选，未开始
+- [~] 部分完成
+
+已完成：
+
+- `token-savings / meter query surface`
+
+继续后置：
+
+- `trial / internal admin surface`
 
 说明：
 

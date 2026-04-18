@@ -167,8 +167,10 @@ last_verified_commit: ""
 - [x] `main.py` slimming candidate 清单已建立
 - [x] 第一批低风险迁移已落地：`startup probe` 与 `quota-path observation helper` 已从 `main.py` 外移
 - [x] 第二批中风险表层迁移已落地：`MCP/SSE surface` 与 diagnostics surface 已从 `main.py` 外移为独立 router
+- [x] 第三批定向风险判断已完成：`token-savings / meter query surface` 可继续小批次迁移，`trial / internal admin surface` 后置
+- [x] 第三批子集已落地：`token-savings / meter query surface` 已从 `main.py` 外移为独立 router
 - [ ] 暂不进入高耦合迁移
-- [ ] 下一步只允许决定第三批小范围迁移是否从 `token-savings / meter query surface` 或 `trial / internal admin surface` 开始
+- [ ] 下一步只允许决定是否继续处理 `trial / internal admin surface`，或将 `Track C` 视为阶段性完成
 
 ## 七、Track D: 候选实例补强验证
 
