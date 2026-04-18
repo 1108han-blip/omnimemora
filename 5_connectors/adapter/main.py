@@ -33,6 +33,12 @@ from .config import config
 from .trace_context import REQUEST_HEADER, TRACE_HEADER, build_trace_event, ensure_request_context
 from .trace_events import append_trace_event
 from .cloud import load_policy, load_flags, report_usage_async
+from .quota_observer import (
+    classify_quota_observation,
+    is_quota_related_path,
+    upstream_url_for_observation,
+)
+from .startup_probe import run_startup_probe
 
 # 兼容数字开头包：逐个子模块动态导入（避免语法错误）
 import importlib
@@ -51,7 +57,6 @@ _5_agent_id = importlib.import_module("5_connectors.adapter.agent_identity")
 _5_ctrl     = importlib.import_module("5_connectors.adapter.control_mode")
 _5_route_state = importlib.import_module("5_connectors.adapter.agent_routing_state")
 _5_agnet_m  = importlib.import_module("5_connectors.adapter.agent_metrics")
-_5_it       = importlib.import_module("5_connectors.adapter.internal_transport")
 _5_agnet_m.get_agent_metrics_store(
     events_path=config.agent_events_path,
     flush_interval_seconds=config.agent_events_flush_interval_seconds,
@@ -110,29 +115,7 @@ loguru.logger.add(
     format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>{name}</cyan>:<cyan>{function}</cyan> - <level>{message}</level>"
 )
 
-# ADR-0006 §6: 启动时预探测内部服务
-# probe 结果写日志，方便排查"为什么 localhost 连不上"
-if config.internal_transport.probe_on_startup:
-    import logging as _logging
-    _it_logger = _logging.getLogger("internal_transport")
-    _probe_services = [
-        ("omnimemora_runtime", config.memory_backend.base_url),
-    ]
-    for _svc_name, _svc_url in _probe_services:
-        try:
-            _resolved, _reason = _5_it.resolve_internal_base_url_sync(
-                _svc_name,
-                _svc_url,
-                config.internal_transport.loopback_candidates,
-            )
-            _it_logger.info(
-                f"[internal_transport] startup probe: "
-                f"service={_svc_name} configured={_svc_url} resolved={_resolved} reason={_reason}"
-            )
-        except Exception as _e:
-            _it_logger.warning(
-                f"[internal_transport] startup probe failed for {_svc_name}: {_e}"
-            )
+run_startup_probe()
 
 
 class SupportAPIError(Exception):
@@ -169,72 +152,6 @@ app.include_router(_status_api_mod.router, prefix="")
 app.include_router(_agent_control_api_mod.router, prefix="")
 del _llm_proxy_mod, _status_api_mod, _agent_control_api_mod
 
-_QUOTA_ROUTE_KEYWORDS = (
-    "account",
-    "usage",
-    "limit",
-    "billing",
-    "subscription",
-    "entitlement",
-    "quota",
-    "credit",
-    "remaining",
-)
-
-_PROXY_INGRESS_PATHS = {
-    "/llm/chat",
-    "/llm/chat/completions",
-    "/llm/v1/chat/completions",
-    "/llm/api/chat",
-    "/llm/anthropic",
-    "/llm/v1/messages",
-    "/v1/messages",
-    "/v1/responses",
-    "/v1/codex/responses",
-    "/v1/chat/completions",
-}
-
-
-def _is_quota_related_path(path: str) -> bool:
-    lowered = (path or "").lower()
-    if lowered in _PROXY_INGRESS_PATHS:
-        return True
-    return any(token in lowered for token in _QUOTA_ROUTE_KEYWORDS)
-
-
-def _quota_marker(request: Request) -> Dict[str, str]:
-    marker = getattr(request.state, "quota_audit", None)
-    if isinstance(marker, dict):
-        return {
-            "upstream_url": str(marker.get("upstream_url") or ""),
-            "action": str(marker.get("action") or "").strip(),
-        }
-    return {"upstream_url": "", "action": ""}
-
-
-def _classify_quota_observation(request: Request, path: str, status_code: int, content_length: str) -> str:
-    marker = _quota_marker(request)
-    if marker["action"]:
-        return marker["action"]
-    if path in _PROXY_INGRESS_PATHS:
-        return "intercepted"
-    if status_code in {404, 405}:
-        return "intercepted"
-    if str(content_length).strip() in {"0", ""} and status_code in {200, 204}:
-        return "empty"
-    return "bypassed"
-
-
-def _upstream_url_for_observation(request: Request, path: str) -> str:
-    marker = _quota_marker(request)
-    if marker["upstream_url"]:
-        return marker["upstream_url"]
-    normalized = (path or "").strip()
-    if normalized in {"/v1/responses", "/v1/codex/responses"}:
-        return "unknown(codex_responses_chain)"
-    return ""
-
-
 @app.middleware("http")
 async def attach_request_id(request: Request, call_next):
     context = ensure_request_context(request)
@@ -259,10 +176,10 @@ async def attach_request_id(request: Request, call_next):
     response.headers[REQUEST_HEADER] = context["request_id"]
     response.headers[TRACE_HEADER] = context["trace_id"]
     request_path = str(getattr(getattr(request, "url", None), "path", "") or "")
-    if _is_quota_related_path(request_path):
+    if is_quota_related_path(request_path):
         content_length = response.headers.get("content-length", "")
-        action = _classify_quota_observation(request, request_path, response.status_code, content_length)
-        upstream_url = _upstream_url_for_observation(request, request_path)
+        action = classify_quota_observation(request, request_path, response.status_code, content_length)
+        upstream_url = upstream_url_for_observation(request, request_path)
         loguru.logger.info(
             "[QUOTA_PATH_OBS] "
             f"request_id={context['request_id']} "

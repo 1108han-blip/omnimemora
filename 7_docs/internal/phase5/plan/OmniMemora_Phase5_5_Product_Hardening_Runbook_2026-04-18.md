@@ -165,8 +165,9 @@ last_verified_commit: ""
 - [x] 当前 `18011` / compile / strategy / V2 遗产散点已完成第一轮责任盘点
 - [x] Track C 责任边界图与迁移顺序草案已建立
 - [x] `main.py` slimming candidate 清单已建立
-- [ ] 暂不进入实现
-- [ ] 下一步只允许决定第一批小范围迁移是否从 `startup probe / quota-path helper / MCP-SSE / diagnostics surface` 开始
+- [x] 第一批低风险迁移已落地：`startup probe` 与 `quota-path observation helper` 已从 `main.py` 外移
+- [ ] 暂不进入高耦合迁移
+- [ ] 下一步只允许决定第二批小范围迁移是否从 `MCP-SSE / diagnostics surface` 开始
 
 ## 七、Track D: 候选实例补强验证
 

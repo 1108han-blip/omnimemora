@@ -179,6 +179,9 @@ last_verified_commit: ""
 完成标准：
 
 - 有一份 `main.py` slimming candidate 清单
+- 第一批低风险外移已验证成立：
+  - `startup probe`
+  - `quota/path observation helpers`
 
 ### C3. compile facade 固定
 
