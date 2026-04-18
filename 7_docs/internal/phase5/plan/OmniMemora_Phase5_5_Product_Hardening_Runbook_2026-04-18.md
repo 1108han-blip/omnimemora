@@ -103,6 +103,7 @@ last_verified_commit: ""
 - [x] `Track B` 入口层故障最小 `user-decision-required` 承载面已在候选实例上成立
 - [x] `Track B` 已具备最小用户动作接口（disable-route via runtime internal plane）
 - [x] `Track B` 已具备最小用户动作接口（uninstall via runtime internal plane），且与 `route state -> off` 语义对齐
+- [x] `Track B` 已具备最小 UI 动作承载（runtime dashboard -> /gateway/decision/*）
 - [ ] 还没有正式的故障状态机实现
 
 ### 下一步动作
@@ -119,6 +120,7 @@ last_verified_commit: ""
 - [x] 建立 gateway failure -> user-decision-required 的候选实例证据
 - [x] 建立 gateway failure -> disable-route 用户动作的候选实例证据
 - [x] 建立 gateway failure -> uninstall 用户动作的候选实例证据
+- [x] 建立 gateway failure -> dashboard 最小动作承载的候选实例证据
 
 ### 停止条件
 
@@ -146,4 +148,4 @@ last_verified_commit: ""
 4. `B2` 候选实例故障场景验证批
 5. `C1` 责任边界图批
 
-当前下一步：`Track B` UI 动作承载前置与正式故障状态机编排边界
+当前下一步：`Track B` 正式故障状态机编排边界与责任方收口

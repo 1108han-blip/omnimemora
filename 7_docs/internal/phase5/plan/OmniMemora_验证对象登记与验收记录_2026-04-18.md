@@ -341,6 +341,19 @@ last_verified_commit: ""
 | 结论适用范围 | `候选成立`：Track B 现在可在入口层故障下通过 runtime internal plane 执行显式 `uninstall`，且动作会同时完成 `restore backup` 与 `route state -> off`，不依赖 adapter 存活，也不触碰真实用户配置 |
 | 备注 | 本记录使用的是隔离 `HOME` 与隔离 agent config，只验证 `Claude Code` 路径；按当前安全约束，未对 `codex` 执行同类在线验证 |
 
+### RECORD-B-022
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-022` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；以隔离 `HOME=.tmp/candidate-home-claude-uninstall`、`PORT=18016`、`RUNTIME_PORT=18769`、`OMNIMEMORA_RUNTIME_DATA_DIR=.tmp/candidate-runtime-data-b6` 启动 |
+| 验证动作 | 1. 通过候选 adapter `POST /agents/control/install` 安装 `claude_code`；2. 手动杀掉候选 adapter，使 runtime 进入 `user-decision-required`；3. 读取 runtime `GET /dashboard` HTML；4. 检查 dashboard 中是否出现最小用户动作承载元素 |
+| 观察结果 | 当 gateway 故障后，runtime dashboard 除了显示 `Gateway status: user-decision-required` 外，还出现 `Family ID` 输入框、`Disable Route` 按钮、`Uninstall` 按钮，以及对应的 `runGatewayAction('disable-route') / runGatewayAction('uninstall')` 前端调用逻辑。说明 internal plane 已不只是文本提示，还具备最小可操作动作入口 |
+| 结论适用范围 | `候选成立`：Track B 现在在 runtime dashboard 上已有最小 UI 动作承载，可在入口层故障时为用户提供显式的 `disable-route / uninstall` 操作入口 |
+| 备注 | 本记录验证的是 dashboard HTML 承载面，不代表完整 GUI/5173 已完成同等级接入；动作实际仍落到 runtime internal plane 的 `/gateway/decision/*` 接口 |
+
 ## 五、Gate B 完成判据
 
 当满足以下条件时，`Gate B` 可视为通过：
@@ -372,3 +385,4 @@ last_verified_commit: ""
   - `RECORD-B-019` 已确认 Track B 入口层故障已有最小 `user-decision-required` 承载面
   - `RECORD-B-020` 已确认 Track B 可在入口层故障时通过 runtime internal plane 执行 `disable-route`
   - `RECORD-B-021` 已确认 Track B 可在入口层故障时通过 runtime internal plane 执行 `uninstall`，并同步完成 `restore backup` 与 `route state -> off`
+  - `RECORD-B-022` 已确认 Track B 在 runtime dashboard 上已有最小 UI 动作承载，可在入口层故障时提供 `disable-route / uninstall` 入口

@@ -120,6 +120,12 @@ func TestDashboardShowsGatewayAlertWhenDecisionRequired(t *testing.T) {
 	if !strings.Contains(body, "User decision required before changing install state.") {
 		t.Fatalf("expected dashboard decision text, got body %s", body)
 	}
+	if !strings.Contains(body, `id="gateway-action-family"`) {
+		t.Fatalf("expected dashboard action input, got body %s", body)
+	}
+	if !strings.Contains(body, `runGatewayAction('uninstall')`) {
+		t.Fatalf("expected dashboard uninstall action carrier, got body %s", body)
+	}
 }
 
 func TestGatewayDecisionDisableRouteWritesAgentModes(t *testing.T) {
