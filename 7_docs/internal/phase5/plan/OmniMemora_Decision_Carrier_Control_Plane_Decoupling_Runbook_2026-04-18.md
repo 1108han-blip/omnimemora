@@ -16,7 +16,7 @@ last_verified_commit: ""
 ## 一、当前状态
 
 - 当前阶段：`Decision Carrier / Control-Plane Decoupling`
-- 当前 gate：`Track B / 第十二批逻辑解耦已落地`
+- 当前 gate：`Track B / 第十三批逻辑解耦已落地`
 - 工作区健康：`绿色`
 - 当前分支：`master`
 
@@ -70,6 +70,7 @@ last_verified_commit: ""
 - [x] 第十批低风险逻辑解耦已落地：`/` 的 operator-facing redirect surface 已独立成 `root_surface.go` 与 `registerRootRoutes(...)`
 - [x] 第十一批低风险逻辑解耦已落地：MCP startup error 状态已独立成 `mcp_state.go`，不再由 `Server` 主结构直接承载
 - [x] 第十二批低风险逻辑解耦已落地：MCP session registry 已独立成 `mcp_transport_state.go`，不再由 `Server` 主结构直接承载
+- [x] 第十三批低风险逻辑解耦已落地：MCP metrics / counter state 已独立成 `mcp_metrics_state.go`，不再由 `Server` 主结构直接承载
 
 ## 五、Track C: 最小 decision carrier 承载实现
 

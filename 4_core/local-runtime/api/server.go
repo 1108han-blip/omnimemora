@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,20 +21,17 @@ import (
 
 // Server is the HTTP API server
 type Server struct {
-	httpServer                        *http.Server
-	cfg                               *config.RuntimeConfig
-	service                           *app.Service
-	registry                          *connector.Registry
-	scopeModel                        *scope.Model
-	metering                          *metering.Collector
-	rtCtx                             *lifecycle.RuntimeContext
-	bootstrap                         *bootstrapState // Phase 3.6: bootstrap/control state carrier
-	mcpState                          *mcpState
-	mcpTransport                      *mcpTransportState
-	mcpHandshakeCount                 int64
-	mcpToolCallCount                  int64
-	mcpMemoryWriteCount               int64
-	mcpMemorySearchContextRecallCount int64
+	httpServer   *http.Server
+	cfg          *config.RuntimeConfig
+	service      *app.Service
+	registry     *connector.Registry
+	scopeModel   *scope.Model
+	metering     *metering.Collector
+	rtCtx        *lifecycle.RuntimeContext
+	bootstrap    *bootstrapState // Phase 3.6: bootstrap/control state carrier
+	mcpState     *mcpState
+	mcpTransport *mcpTransportState
+	mcpMetrics   *mcpMetricsState
 }
 
 // NewServer creates a new API server
@@ -70,6 +66,7 @@ func NewServer(cfg *config.RuntimeConfig, store storepkg.Store, rtCtx *lifecycle
 		bootstrap:    newBootstrapState(),
 		mcpState:     newMCPState(),
 		mcpTransport: newMCPTransportState(),
+		mcpMetrics:   newMCPMetricsState(),
 	}
 
 	mux := http.NewServeMux()
@@ -148,26 +145,15 @@ func generateRequestID() string {
 }
 
 func (s *Server) recordMCPHandshake() {
-	atomic.AddInt64(&s.mcpHandshakeCount, 1)
-}
-
-func (s *Server) recordMCPToolCall() {
-	atomic.AddInt64(&s.mcpToolCallCount, 1)
+	s.mcpMetrics.recordHandshake()
 }
 
 func (s *Server) getMCPStats() (handshakes int64, toolCalls int64) {
-	return atomic.LoadInt64(&s.mcpHandshakeCount), atomic.LoadInt64(&s.mcpToolCallCount)
+	return s.mcpMetrics.stats()
 }
 
 func (s *Server) recordMCPToolCallByName(name string) {
-	atomic.AddInt64(&s.mcpToolCallCount, 1)
-	isWrite, isSearchContextRecall := classifyMCPToolCall(name)
-	if isWrite {
-		atomic.AddInt64(&s.mcpMemoryWriteCount, 1)
-	}
-	if isSearchContextRecall {
-		atomic.AddInt64(&s.mcpMemorySearchContextRecallCount, 1)
-	}
+	s.mcpMetrics.recordToolCallByName(name)
 }
 
 func classifyMCPToolCall(name string) (isWrite bool, isSearchContextRecall bool) {
@@ -182,10 +168,7 @@ func classifyMCPToolCall(name string) (isWrite bool, isSearchContextRecall bool)
 }
 
 func (s *Server) getMCPDetailedStats() (handshakes int64, toolCalls int64, writeCalls int64, searchContextRecallCalls int64) {
-	return atomic.LoadInt64(&s.mcpHandshakeCount),
-		atomic.LoadInt64(&s.mcpToolCallCount),
-		atomic.LoadInt64(&s.mcpMemoryWriteCount),
-		atomic.LoadInt64(&s.mcpMemorySearchContextRecallCount)
+	return s.mcpMetrics.detailedStats()
 }
 
 func (s *Server) setMCPStartupError(msg string) {
