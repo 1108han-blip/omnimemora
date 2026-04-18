@@ -69,6 +69,7 @@ last_verified_commit: ""
 - [x] demo dashboard README 已明确 `5173 -> 18011` 的产品边界，排除 `:8765` 直连解释
 - [x] runtime dashboard 标题与 handler 注释已收敛为 internal/operator surface，不再暗示产品主控制面
 - [x] runtime `/agents/control*` 注释已明确其仅为 low-frequency install layer
+- [x] adapter runtime backend/factory 注释已明确 `:8765` 只是 internal runtime plane，不是第二产品入口
 - [ ] archive / 审计记录之外，仍需确认是否还有活跃对外文档把 `8765` 误写成产品面
 - [ ] runtime HTTP contract 仍需继续检查是否有可被误抬升的内部控制接口叙事
 

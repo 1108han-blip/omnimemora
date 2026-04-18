@@ -1,8 +1,8 @@
 # omnimemora_runtime_backend.py
-"""OmniMemora Runtime Backend Adapter (8765)
+"""OmniMemora Runtime Backend Adapter (internal 8765 plane)
 
-This adapter implements the MemoryBackend interface for OmniMemora Runtime.
-All OmniMemora Runtime-specific protocol details stay here.
+This adapter implements the internal MemoryBackend bridge to OmniMemora Runtime.
+It is an adapter-internal transport layer, not a second product entry surface.
 
 ADR-0006: All internal traffic uses internal_transport for loopback resolution
 and proxy-free HTTP client creation.
@@ -27,7 +27,7 @@ from .. import internal_transport as _it
 
 @register_backend("omnimemora_runtime")
 class OmniMemoraRuntimeBackend(MemoryBackend):
-    """OmniMemora Runtime Backend Adapter for 8765
+    """OmniMemora Runtime Backend Adapter for the internal runtime plane
 
     ADR-0006: base_url is resolved through internal_transport.resolve_internal_base_url
     to find the best reachable loopback address at runtime.
@@ -75,7 +75,7 @@ class OmniMemoraRuntimeBackend(MemoryBackend):
         path: str,
         **kwargs
     ) -> Dict[str, Any]:
-        """Make request to OmniMemora Runtime - Runtime protocol only"""
+        """Make an internal runtime-plane request."""
         url = f"{self.base_url}{path}"
         response = await self._client.request(
             method=method,

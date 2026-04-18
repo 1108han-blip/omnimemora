@@ -31,7 +31,11 @@ def get_backend_class(backend_type: str) -> Type[MemoryBackend]:
 
 
 class BackendConfig:
-    """Backend configuration container"""
+    """Backend configuration container.
+
+    For the default OmniMemora backend, base_url points to the internal runtime
+    plane. External product traffic still enters through :18011.
+    """
     def __init__(
         self,
         backend_type: str = "omnimemora_runtime",
