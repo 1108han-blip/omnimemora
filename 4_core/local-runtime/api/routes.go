@@ -26,10 +26,6 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, health)
 }
 
-func (s *Server) handleGatewayStatus(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, 200, loadGatewayStatus())
-}
-
 // handleMetrics handles GET /metrics
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	metrics, err := s.service.GetMetrics(r.Context())

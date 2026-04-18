@@ -576,3 +576,16 @@ last_verified_commit: ""
 | 观察结果 | runtime 侧新增独立 `control_carrier_store.go`，统一承载 `gatewayStatusPayload`、`gatewayDecisionPayload`、状态文件路径、决策文件路径以及读写逻辑；`gateway_status.go` 退回为薄文件，不再承担 decision/status 文件持久化职责。`go test ./tests ./api` 全部通过 |
 | 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第一批低风险逻辑解耦已经落地，decision/control carrier 的文件承载职责已从 runtime gateway handler 中分离出来，且未引入 runtime API 行为回归 |
 | 备注 | 本记录证明的是逻辑边界收敛与测试级稳定性，不等同于 `runtime dead + uninstall` 已解决 |
+
+### RECORD-B-037
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-037` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库现实 / 代码与回归测试` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；涉及 `4_core/local-runtime/api/control_carrier_surface.go`、`routes.go` 与既有 runtime API tests |
+| 验证动作 | 1. 将 `handleGatewayStatus`、`handleGatewayDecisionDisableRoute`、`handleGatewayDecisionUninstall` 以及相关 agent-modes helper 从原有 `gateway_*` / `routes.go` 文件中抽离为独立 `control_carrier_surface.go`；2. 运行 `gofmt -w api/control_carrier_store.go api/control_carrier_surface.go api/routes.go`；3. 运行 `go test ./tests ./api` |
+| 观察结果 | runtime 侧新增独立 `control_carrier_surface.go`，统一承载 control-carrier 的 HTTP surface；`routes.go` 不再内联 `gateway/status` handler，原有 `gateway_decision.go` 与 `gateway_status.go` 被清退。`go test ./tests ./api` 全部通过 |
+| 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第二批低风险逻辑解耦已经落地，decision/control carrier 的 HTTP surface 已与 runtime capability 主 surface 形成更清晰的模块入口，且未引入 runtime API 行为回归 |
+| 备注 | 本记录证明的是 control-carrier surface 的模块化边界收敛，不等同于极端故障承载问题已完全解决 |

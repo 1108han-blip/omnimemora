@@ -81,6 +81,13 @@ func disableRouteForFamily(familyID string) error {
 	return saveAgentModes(cfg)
 }
 
+// handleGatewayStatus serves the runtime-local control carrier state.
+// It is separate from runtime capability health and survives as the canonical
+// recovery decision surface for runtime-local operators.
+func (s *Server) handleGatewayStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, loadGatewayStatus())
+}
+
 func (s *Server) handleGatewayDecisionDisableRoute(w http.ResponseWriter, r *http.Request) {
 	var req gatewayDecisionRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
