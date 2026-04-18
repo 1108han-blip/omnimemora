@@ -16,7 +16,7 @@ last_verified_commit: ""
 ## 一、当前状态
 
 - 当前阶段：`Decision Carrier / Control-Plane Decoupling`
-- 当前 gate：`Track B / 第一批逻辑解耦已落地`
+- 当前 gate：`Track B / 第七批逻辑解耦已落地`
 - 工作区健康：`绿色`
 - 当前分支：`master`
 
@@ -64,6 +64,7 @@ last_verified_commit: ""
 - [x] 第四批低风险逻辑解耦已落地：runtime server wiring 中的 control-carrier route 注册已独立成 `registerControlCarrierRoutes(...)`
 - [x] 第五批低风险逻辑解耦已落地：runtime low-frequency install layer 的 `/agents/control*` route wiring 已独立成 `registerInstallControlRoutes(...)`
 - [x] 第六批低风险逻辑解耦已落地：runtime bootstrap/internal metrics 承载已独立成 `registerBootstrapRoutes(...)` 与 bootstrap surface
+- [x] 第七批低风险逻辑解耦已落地：runtime operator dashboard 主 surface 已独立成 `operator_dashboard_surface.go` 与 `registerOperatorDashboardRoutes(...)`
 
 ## 五、Track C: 最小 decision carrier 承载实现
 
@@ -108,5 +109,4 @@ last_verified_commit: ""
 - [x] 压薄 phase5 入口活跃文档面
 - [x] 开始 `Track B`：固化 decision/control carrier 与 runtime capability 的逻辑边界
 - [x] 将 runtime internal plane 中的 control-carrier 责任与 capability 责任拆成更清晰的模块入口
-- [ ] 继续 `Track B`：识别并外移仍混在 runtime capability surface 中的剩余 decision/control 语义，重点转向 server wiring 与更小的 lifecycle 入口
-- [ ] 继续 `Track B`：识别并外移仍混在 runtime lifecycle / bootstrap / operator dashboard 总装配中的 decision/control 语义
+- [ ] 继续 `Track B`：识别并外移仍混在 runtime lifecycle / operator dashboard 总装配中的剩余 decision/control 语义，重点转向更小的 bootstrap/lifecycle 装配边界

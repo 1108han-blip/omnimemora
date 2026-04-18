@@ -84,7 +84,7 @@ func NewServer(cfg *config.RuntimeConfig, store storepkg.Store, rtCtx *lifecycle
 	mux.HandleFunc("GET /", server.handleRoot)
 	mux.HandleFunc("GET /health", server.handleHealth)
 	mux.HandleFunc("GET /metrics", server.handleMetrics)
-	mux.HandleFunc("GET /dashboard", server.handleDashboard)
+	registerOperatorDashboardRoutes(mux, server)
 	registerControlCarrierRoutes(mux, server)
 	registerInstallControlRoutes(mux, server)
 	mux.HandleFunc("GET /sse", server.handleMCPSSE)
