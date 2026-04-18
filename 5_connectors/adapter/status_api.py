@@ -34,15 +34,13 @@ def _mark_diagnostic_surface(response: Response) -> None:
 async def _build_system_status() -> dict:
     _main = importlib.import_module("5_connectors.adapter.main")
     _route_state = importlib.import_module("5_connectors.adapter.agent_routing_state")
-    _track_b = importlib.import_module("5_connectors.adapter.track_b_status")
+    _track_b_orchestrator = importlib.import_module("5_connectors.adapter.track_b_orchestrator")
 
     per_agent_modes, _default_mode = _route_state.get_agent_modes_cache()
-    routing_enabled = any(mode == "force_if_possible" for mode in per_agent_modes.values())
     backend_health = await _main._get_backend().health()
-    return _track_b.build_track_b_status(
+    return _track_b_orchestrator.build_system_status_from_backend_health(
         backend_health=backend_health,
-        routing_enabled=routing_enabled,
-        override=_track_b.read_status_override(),
+        per_agent_modes=per_agent_modes,
     )
 
 

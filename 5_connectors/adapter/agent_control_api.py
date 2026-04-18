@@ -52,20 +52,12 @@ async def _runtime_health_state() -> str:
 
 
 async def _build_system_status() -> Dict[str, Any]:
-    _track_b = __import__("5_connectors.adapter.track_b_status", fromlist=["dummy"])
-    _backend_base = __import__("5_connectors.adapter.backends.base", fromlist=["BackendHealth"])
+    _track_b_orchestrator = __import__("5_connectors.adapter.track_b_orchestrator", fromlist=["dummy"])
     health_state = await _runtime_health_state()
     per_agent_modes, _default_mode = _route_state.get_agent_modes_cache()
-    routing_enabled = any(mode == "force_if_possible" for mode in per_agent_modes.values())
-    backend_health = _backend_base.BackendHealth(
-        healthy=health_state == "healthy",
-        backend_type="omnimemora_runtime",
-        details={"source": "runtime_health_state", "state": health_state},
-    )
-    return _track_b.build_track_b_status(
-        backend_health=backend_health,
-        routing_enabled=routing_enabled,
-        override=_track_b.read_status_override(),
+    return _track_b_orchestrator.build_system_status_from_runtime_health(
+        runtime_health_state=health_state,
+        per_agent_modes=per_agent_modes,
     )
 
 

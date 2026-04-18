@@ -10,10 +10,20 @@ from fastapi.testclient import TestClient
 
 status_api = importlib.import_module("5_connectors.adapter.status_api")
 track_b_status = importlib.import_module("5_connectors.adapter.track_b_status")
+track_b_orchestrator = importlib.import_module("5_connectors.adapter.track_b_orchestrator")
 BackendHealth = importlib.import_module("5_connectors.adapter.backends.base").BackendHealth
 
 
 class TrackBStatusTests(unittest.TestCase):
+    def test_orchestrator_builds_from_runtime_health(self) -> None:
+        payload = track_b_orchestrator.build_system_status_from_runtime_health(
+            runtime_health_state="healthy",
+            per_agent_modes={"openclaw": "force_if_possible"},
+        )
+        self.assertEqual(payload["status"], "healthy")
+        self.assertTrue(payload["routing_requested"])
+        self.assertTrue(payload["routing_effective"])
+
     def test_build_track_b_status_healthy(self) -> None:
         payload = track_b_status.build_track_b_status(
             backend_health=BackendHealth(healthy=True, backend_type="omnimemora_runtime"),
