@@ -108,6 +108,7 @@ last_verified_commit: ""
 - [x] `Track B` 已把 `user-decision-required` 固定成自动化不可自行清除的终态
 - [x] `Track B` 已把 `route=off` 下的能力层故障收敛为诊断信号，不再升级成顶层故障
 - [x] `Track B` 最小编排器已落地，`main / status_api / agent_control_api` 统一走单一状态决策入口
+- [x] `Track B` 状态机本体已拆成独立模块，状态、来源、转移与 override 应用不再混在读写层
 - [ ] 还没有完整的故障状态机实现
 
 ### 下一步动作
@@ -153,4 +154,4 @@ last_verified_commit: ""
 4. `B2` 候选实例故障场景验证批
 5. `C1` 责任边界图批
 
-当前下一步：`Track B` 若继续推进，应进入完整故障状态机实现；当前最小编排器、终态锁定和 route-off 语义已收口
+当前下一步：`Track B` 若继续推进，应进入更高一层的自动修复编排与恢复窗口实现；当前状态机本体、最小编排器、终态锁定和 route-off 语义已收口
