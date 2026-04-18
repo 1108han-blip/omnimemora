@@ -99,8 +99,7 @@ func NewServer(cfg *config.RuntimeConfig, store storepkg.Store, rtCtx *lifecycle
 	mux.HandleFunc("POST /memory/delete", server.handleDelete)
 	mux.HandleFunc("POST /connector/register", server.handleConnectorRegister)
 	mux.HandleFunc("GET /connector/list", server.handleConnectorList)
-	// Phase 3.6: Internal endpoints for bootstrap verification
-	mux.HandleFunc("POST /internal/metrics", server.handleInternalMetrics)
+	registerBootstrapRoutes(mux, server)
 
 	server.httpServer = &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Local.Endpoint, port),

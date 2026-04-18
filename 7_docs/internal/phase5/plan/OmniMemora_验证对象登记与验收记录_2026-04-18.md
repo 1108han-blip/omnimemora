@@ -628,3 +628,16 @@ last_verified_commit: ""
 | 观察结果 | `server.go` 不再内联 `/agents/control*` 的 route wiring，转而通过 `registerInstallControlRoutes(...)` 完成低频 install layer 注册；`go test ./tests ./api` 全部通过，runtime API 行为未出现回归 |
 | 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第五批低风险逻辑解耦已经落地，runtime install-control route wiring 已与 capability 主路由注册形成更清晰的入口边界 |
 | 备注 | 本记录证明的是 low-frequency install layer wiring 的边界收敛，不等同于 control-plane 承载问题已最终解决 |
+
+### RECORD-B-041
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-041` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库现实 / 代码与回归测试` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；涉及 `4_core/local-runtime/api/bootstrap_surface.go`、`server.go`、`routes.go` 与既有 runtime API tests |
+| 验证动作 | 1. 将 `POST /internal/metrics` 的 bootstrap/internal metrics 承载从 `routes.go` 抽离为独立 `bootstrap_surface.go`；2. 通过 `registerBootstrapRoutes(...)` 从 `server.go` 注册该入口；3. 运行 `gofmt -w api/bootstrap_surface.go api/server.go api/routes.go`；4. 运行 `go test ./tests ./api` |
+| 观察结果 | runtime 侧新增独立 `bootstrap_surface.go`，`server.go` 不再内联 bootstrap route 注册，`routes.go` 不再承载 bootstrap metrics handler。`go test ./tests ./api` 全部通过，runtime API 行为未出现回归 |
+| 结论适用范围 | `仓库现实成立`：本阶段 `Track B` 的第六批低风险逻辑解耦已经落地，bootstrap/internal metrics 的 route 与 handler 已从 runtime capability 主体中进一步分离 |
+| 备注 | 本记录证明的是 bootstrap/internal metrics 入口边界的收敛，不等同于极端故障承载问题已完全解决 |

@@ -762,27 +762,3 @@ func getScopeRefFromContext(r *http.Request) *pkg.ScopeRef {
 	}
 	return nil
 }
-
-// handleInternalMetrics handles POST /internal/metrics for bootstrap verification
-// This endpoint is used to mark bootstrap success and track internal states
-func (s *Server) handleInternalMetrics(w http.ResponseWriter, r *http.Request) {
-	var req struct {
-		Type  string `json:"type"`
-		Value int    `json:"value"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, 400, "INVALID_REQUEST", "invalid JSON body")
-		return
-	}
-
-	switch req.Type {
-	case "bootstrap_success":
-		// Mark that bootstrap verification succeeded
-		// This is stored in memory and reflected in dashboard
-		s.bootstrapSuccess = true
-		writeJSON(w, 200, map[string]string{"status": "ok"})
-	default:
-		writeError(w, 400, "UNKNOWN_TYPE", "unknown metrics type")
-	}
-}

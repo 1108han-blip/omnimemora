@@ -63,6 +63,7 @@ last_verified_commit: ""
 - [x] 第三批低风险逻辑解耦已落地：runtime dashboard 中的 user-decision-required 呈现与动作脚本已抽离为独立 control-carrier dashboard 片段
 - [x] 第四批低风险逻辑解耦已落地：runtime server wiring 中的 control-carrier route 注册已独立成 `registerControlCarrierRoutes(...)`
 - [x] 第五批低风险逻辑解耦已落地：runtime low-frequency install layer 的 `/agents/control*` route wiring 已独立成 `registerInstallControlRoutes(...)`
+- [x] 第六批低风险逻辑解耦已落地：runtime bootstrap/internal metrics 承载已独立成 `registerBootstrapRoutes(...)` 与 bootstrap surface
 
 ## 五、Track C: 最小 decision carrier 承载实现
 
@@ -108,4 +109,4 @@ last_verified_commit: ""
 - [x] 开始 `Track B`：固化 decision/control carrier 与 runtime capability 的逻辑边界
 - [x] 将 runtime internal plane 中的 control-carrier 责任与 capability 责任拆成更清晰的模块入口
 - [ ] 继续 `Track B`：识别并外移仍混在 runtime capability surface 中的剩余 decision/control 语义，重点转向 server wiring 与更小的 lifecycle 入口
-- [ ] 继续 `Track B`：识别并外移仍混在 runtime lifecycle / bootstrap 路径中的 decision/control 语义
+- [ ] 继续 `Track B`：识别并外移仍混在 runtime lifecycle / bootstrap / operator dashboard 总装配中的 decision/control 语义
