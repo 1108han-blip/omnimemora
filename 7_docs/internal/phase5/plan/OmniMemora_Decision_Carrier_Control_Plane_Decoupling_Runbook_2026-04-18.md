@@ -16,7 +16,7 @@ last_verified_commit: ""
 ## 一、当前状态
 
 - 当前阶段：`Decision Carrier / Control-Plane Decoupling`
-- 当前 gate：`Track C / 第一批实现已落地`
+- 当前 gate：`Track C / 第二批 offline fallback entry 已落地`
 - 工作区健康：`绿色`
 - 当前分支：`master`
 
@@ -89,6 +89,8 @@ last_verified_commit: ""
 - `runtime dead + uninstall` 可成立
 - `runtime dead + disable-route` 可成立
 - [x] 第一批实现已落地：`disable-route` / `uninstall` 的动作核心已抽离为 shared decision action core，后续 runtime HTTP carrier 与 offline carrier 可共同复用
+- [x] 第二批前置入口已落地：runtime 主入口已具备最小 command router，`serve` 之外的 CLI 命令已成为正式 dispatch path
+- [x] 第二批 offline fallback entry 已落地：`omnimemora recover disable-route <family>` / `omnimemora recover uninstall <family>` 已成为不依赖 runtime HTTP 面的最小本地恢复入口
 
 ## 六、Track D: 候选实例与极端故障验证
 
@@ -124,4 +126,6 @@ last_verified_commit: ""
 - [x] 完成 `Track B` 当前阶段低风险逻辑解耦
 - [x] 完成 `Track C` bounded implementation 设计：明确采用 `shared decision action core + CLI/offline fallback entry + supervisor hint` 的最小承载路径
 - [x] 完成 `Track C` 第一批实现：抽离 shared decision action core，供 runtime HTTP carrier 与后续 offline carrier 复用
-- [ ] 进入 `Track C` 第二批实现：先补最小 command router，再为 `runtime dead` 场景添加 CLI/offline fallback entry
+- [x] 完成 `Track C` 第二批前置：补齐最小 command router，暴露现有 CLI dispatch path
+- [x] 完成 `Track C` 第二批实现：为 `runtime dead` 场景添加 CLI/offline fallback entry
+- [ ] 进入 `Track C` 第三批实现：补 supervisor hint / recovery manifest，使极端故障时能输出确定性的下一步动作

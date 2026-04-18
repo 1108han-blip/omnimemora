@@ -12,7 +12,13 @@ type controlCarrierActionResult struct {
 	Message  string
 }
 
-func applyDisableRouteDecision(familyID string) (*controlCarrierActionResult, error) {
+type ControlCarrierActionResult struct {
+	FamilyID string
+	Action   string
+	Message  string
+}
+
+func ApplyDisableRouteDecision(familyID string) (*ControlCarrierActionResult, error) {
 	if err := disableRouteForFamily(familyID); err != nil {
 		return nil, fmt.Errorf("persist route off: %w", err)
 	}
@@ -24,14 +30,14 @@ func applyDisableRouteDecision(familyID string) (*controlCarrierActionResult, er
 	}); err != nil {
 		return nil, fmt.Errorf("persist gateway decision: %w", err)
 	}
-	return &controlCarrierActionResult{
+	return &ControlCarrierActionResult{
 		FamilyID: familyID,
 		Action:   "disable_route",
 		Message:  "route state persisted as off; successful gateway recovery will converge to healthy passthrough (routing_effective=false)",
 	}, nil
 }
 
-func applyUninstallDecision(agentType attach.AgentType, familyID string) (*controlCarrierActionResult, error) {
+func ApplyUninstallDecision(agentType attach.AgentType, familyID string) (*ControlCarrierActionResult, error) {
 	if err := disableRouteForFamily(familyID); err != nil {
 		return nil, fmt.Errorf("persist route off before uninstall: %w", err)
 	}
@@ -46,7 +52,7 @@ func applyUninstallDecision(agentType attach.AgentType, familyID string) (*contr
 	}); err != nil {
 		return nil, fmt.Errorf("persist gateway decision: %w", err)
 	}
-	return &controlCarrierActionResult{
+	return &ControlCarrierActionResult{
 		FamilyID: familyID,
 		Action:   "uninstall",
 		Message:  "route state persisted as off; agent detached and backup restore attempted; successful gateway recovery will remain outside product-enhanced routing",

@@ -797,3 +797,29 @@ last_verified_commit: ""
 | 观察结果 | runtime 侧新增独立 `control_carrier_actions.go`，共享承载 route-off 持久化、gateway decision 持久化、detach/restore 调用与动作返回消息；`control_carrier_surface.go` 退回为较薄的 HTTP carrier。`go test ./tests ./api` 全部通过，既有 gateway decision HTTP 行为未出现回归 |
 | 结论适用范围 | `仓库现实成立`：Track C 的第一批实现已经落地，`disable-route` / `uninstall` 的动作核心不再只存在于 runtime HTTP surface 内，后续 CLI/offline fallback entry 可直接复用该共享动作核心 |
 | 备注 | 本记录证明的是 shared decision action core 的抽离已经完成，不等同于 `runtime dead + uninstall` 已在候选实例级成立 |
+
+### RECORD-B-054
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-054` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库现实 / 代码与回归测试` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；涉及 `4_core/local-runtime/main.go`、`main_test.go`、`internal/cli/*.go` 与重建后的 `tools/omnimemora-runtime` |
+| 验证动作 | 1. 在 `main.go` 中引入最小 command router，将 `serve` 与 `start/status/stop/dashboard/attach/detach/connect-*/validate` 分发开；2. 新增 `main_test.go` 中的命令分发测试；3. 运行 `gofmt -w main.go main_test.go`；4. 运行 `go test ./...`；5. 重建 `tools/omnimemora-runtime` 并执行 `--help`、`status` 冒烟 |
+| 观察结果 | runtime 主入口现在正式暴露最小 CLI dispatch path，`serve` 路径保持不变；`go test ./...` 全部通过；重建后的 `tools/omnimemora-runtime --help` 正常输出 usage，`tools/omnimemora-runtime status` 能正确读取运行中实例状态而不会误进入 `serve` |
+| 结论适用范围 | `仓库现实成立`：Track C 第二批的前置入口已经具备，offline carrier 后续不必再先补一层主入口分发，可直接在现有 CLI dispatch path 上继续添加最小恢复命令 |
+| 备注 | 本记录证明的是 command router 已稳定可用，不等同于 `runtime dead + disable-route/uninstall` 的 offline fallback entry 已完成 |
+
+### RECORD-B-055
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-055` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库现实 / 代码、测试与二进制离线冒烟` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；涉及 `4_core/local-runtime/internal/cli/recover.go`、`main.go`、`api/control_carrier_actions.go`、重建后的 `tools/omnimemora-runtime` |
+| 验证动作 | 1. 新增 `recover` CLI/offline fallback entry，并接入 `main.go` command router；2. 复用 shared decision action core 执行 `disable-route` / `uninstall`，不依赖 runtime HTTP 面；3. 运行 `gofmt -w main.go api/control_carrier_actions.go api/control_carrier_surface.go internal/cli/recover.go internal/cli/recover_test.go`；4. 运行 `go test ./...`；5. 重建 `tools/omnimemora-runtime` 并执行 `recover --help` 与隔离环境下的 `recover disable-route claude` 二进制冒烟 |
+| 观察结果 | `recover --help` 正常输出 usage；隔离环境下执行 `tools/omnimemora-runtime recover disable-route claude` 后，隔离 `agent_modes.json` 中 `claude_code` 已持久化为 `off`，隔离 `gateway_decision.json` 中出现 `"action": "disable-route"` 决策记录。`go test ./...` 全部通过 |
+| 结论适用范围 | `仓库现实成立`：Track C 第二批 offline fallback entry 已落地，`runtime dead` 场景现在已经具备不依赖 runtime HTTP 面的最小本地恢复入口，至少 `disable-route` 路径可正式承载 |
+| 备注 | 本记录证明的是 offline fallback entry 已具备代码级、测试级和二进制离线冒烟证据；`runtime dead + uninstall` 的候选实例级完整闭环仍待后续批次继续补强 |

@@ -15,6 +15,7 @@ import (
 
 	"github.com/omnimemora/local-runtime/api"
 	"github.com/omnimemora/local-runtime/config"
+	"github.com/omnimemora/local-runtime/internal/cli"
 	"github.com/omnimemora/local-runtime/internal/runtime"
 	"github.com/omnimemora/local-runtime/lifecycle"
 	"github.com/omnimemora/local-runtime/pkg"
@@ -39,6 +40,77 @@ func resolvePreferredRuntimePort() int {
 }
 
 func main() {
+	command, commandArgs := resolveCommand(os.Args[1:])
+	if command != "serve" {
+		if err := runCommand(command, commandArgs); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
+
+	serveRuntime()
+}
+
+func resolveCommand(args []string) (string, []string) {
+	if len(args) == 0 {
+		return "help", nil
+	}
+	return args[0], args[1:]
+}
+
+func runCommand(command string, args []string) error {
+	switch command {
+	case "help", "--help", "-h":
+		printUsage()
+		return nil
+	case "start":
+		return cli.Start(args, Version)
+	case "status":
+		return cli.Status()
+	case "stop":
+		return cli.Stop()
+	case "dashboard":
+		return cli.OpenDashboard(args)
+	case "attach":
+		return cli.Attach(args)
+	case "detach":
+		return cli.Detach(args)
+	case "connect-codex":
+		return cli.ConnectCodex(args)
+	case "connect-claude":
+		return cli.ConnectClaude(args)
+	case "validate":
+		return cli.Validate(args)
+	case "recover":
+		return cli.Recover(args)
+	case "serve":
+		return nil
+	default:
+		printUsage()
+		return fmt.Errorf("unknown command: %s", command)
+	}
+}
+
+func printUsage() {
+	fmt.Printf(`OmniMemora Local Runtime v%s
+
+Usage:
+  omnimemora serve
+  omnimemora start
+  omnimemora status
+  omnimemora stop
+  omnimemora dashboard
+  omnimemora attach <agent>
+  omnimemora detach <agent>
+  omnimemora recover disable-route <family>
+  omnimemora recover uninstall <family>
+  omnimemora connect-codex
+  omnimemora connect-claude
+  omnimemora validate openclaw [--profile p0-3] [--runs 3]
+`, Version)
+}
+
+func serveRuntime() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	log.Printf("OmniMemora Local Runtime v%s starting...", Version)
 
@@ -64,9 +136,9 @@ func main() {
 	// Create runtime context
 	rtCtx := &lifecycle.RuntimeContext{
 		Config:    cfg,
-		Store:      s,
-		Version:    Version,
-		StartedAt:  time.Now(),
+		Store:     s,
+		Version:   Version,
+		StartedAt: time.Now(),
 	}
 
 	// Resolve port (8765 or next available, see pkg/constants.go for canonical ports)

@@ -104,7 +104,7 @@ func (s *Server) handleGatewayDecisionDisableRoute(w http.ResponseWriter, r *htt
 		return
 	}
 	familyID := controlFamilyID(agentType)
-	result, err := applyDisableRouteDecision(familyID)
+	result, err := ApplyDisableRouteDecision(familyID)
 	if err != nil {
 		writeError(w, 500, "DISABLE_ROUTE_DECISION_FAILED", err.Error())
 		return
@@ -129,7 +129,7 @@ func (s *Server) handleGatewayDecisionUninstall(w http.ResponseWriter, r *http.R
 		return
 	}
 	familyID := controlFamilyID(agentType)
-	result, err := applyUninstallDecision(agentType, familyID)
+	result, err := ApplyUninstallDecision(agentType, familyID)
 	if err != nil {
 		writeError(w, 500, "UNINSTALL_DECISION_FAILED", err.Error())
 		return
