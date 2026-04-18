@@ -116,14 +116,19 @@ func (s *Server) handleGatewayDecisionUninstall(w http.ResponseWriter, r *http.R
 		writeError(w, 400, "UNKNOWN_AGENT", err.Error())
 		return
 	}
+	familyID := controlFamilyID(agentType)
+	if err := disableRouteForFamily(familyID); err != nil {
+		writeError(w, 500, "UNINSTALL_ROUTE_STATE_FAILED", err.Error())
+		return
+	}
 	if err := attach.DetachAgent(agentType, 8765); err != nil {
 		writeError(w, 500, "UNINSTALL_FAILED", err.Error())
 		return
 	}
 	writeJSON(w, 200, map[string]any{
-		"family_id": controlFamilyID(agentType),
+		"family_id": familyID,
 		"action":    "uninstall",
 		"applied":   true,
-		"message":   "agent detached and backup restore attempted; gateway restart may still be required",
+		"message":   "route state persisted as off; agent detached and backup restore attempted; gateway restart may still be required",
 	})
 }

@@ -328,6 +328,19 @@ last_verified_commit: ""
 | 结论适用范围 | `候选成立`：Track B 现在已有最小用户动作接口，可在 gateway 故障时通过 runtime internal plane 执行 `disable-route`，且不依赖 adapter 存活 |
 | 备注 | 本记录只覆盖 `disable-route`；`/gateway/decision/uninstall` 已实现但未做在线候选验证，以避免在未完全隔离 agent config 前触碰真实用户配置 |
 
+### RECORD-B-021
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-021` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；以隔离 `HOME=.tmp/candidate-home-claude-uninstall`、`PORT=18016`、`RUNTIME_PORT=18769`、`OMNIMEMORA_RUNTIME_DATA_DIR=.tmp/candidate-runtime-data-b6`、`OMNIMEMORA_AGENT_MODES_PATH=.tmp/candidate-runtime-data-b6/agent_modes.json` 启动；仅操作隔离 `.claude/settings.json` 与隔离 backup 目录 |
+| 验证动作 | 1. 预写隔离 Claude Code 配置 `theme=dark` 与隔离 `agent_modes.json (claude_code=force_if_possible)`；2. 通过候选 adapter `POST /agents/control/install` 安装 `claude_code`，确认 backup 已生成；3. 手动杀掉候选 adapter，使 runtime 进入 `user-decision-required`；4. 通过 runtime internal plane 调用 `POST /gateway/decision/uninstall`；5. 读取隔离 `.claude/settings.json`、隔离 backup 目录与隔离 `agent_modes.json` |
+| 观察结果 | `install` 后隔离 Claude 配置被注入 `memory.provider=omnimemora`，同时生成 `claude.backup / claude.meta.json`。adapter 掉线后，runtime `GET /gateway/status` 进入 `user-decision-required`。随后 runtime `POST /gateway/decision/uninstall` 返回 `200`，并且隔离 `.claude/settings.json` 恢复为原始 `theme=dark`；隔离 backup 目录被清空；隔离 `agent_modes.json` 同步从 `force_if_possible` 变为 `off` |
+| 结论适用范围 | `候选成立`：Track B 现在可在入口层故障下通过 runtime internal plane 执行显式 `uninstall`，且动作会同时完成 `restore backup` 与 `route state -> off`，不依赖 adapter 存活，也不触碰真实用户配置 |
+| 备注 | 本记录使用的是隔离 `HOME` 与隔离 agent config，只验证 `Claude Code` 路径；按当前安全约束，未对 `codex` 执行同类在线验证 |
+
 ## 五、Gate B 完成判据
 
 当满足以下条件时，`Gate B` 可视为通过：
@@ -358,3 +371,4 @@ last_verified_commit: ""
   - `RECORD-B-018` 已确认 Track B 能力层最小自愈闭环已在候选实例上成立
   - `RECORD-B-019` 已确认 Track B 入口层故障已有最小 `user-decision-required` 承载面
   - `RECORD-B-020` 已确认 Track B 可在入口层故障时通过 runtime internal plane 执行 `disable-route`
+  - `RECORD-B-021` 已确认 Track B 可在入口层故障时通过 runtime internal plane 执行 `uninstall`，并同步完成 `restore backup` 与 `route state -> off`
