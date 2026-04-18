@@ -823,3 +823,16 @@ last_verified_commit: ""
 | 观察结果 | `recover --help` 正常输出 usage；隔离环境下执行 `tools/omnimemora-runtime recover disable-route claude` 后，隔离 `agent_modes.json` 中 `claude_code` 已持久化为 `off`，隔离 `gateway_decision.json` 中出现 `"action": "disable-route"` 决策记录。`go test ./...` 全部通过 |
 | 结论适用范围 | `仓库现实成立`：Track C 第二批 offline fallback entry 已落地，`runtime dead` 场景现在已经具备不依赖 runtime HTTP 面的最小本地恢复入口，至少 `disable-route` 路径可正式承载 |
 | 备注 | 本记录证明的是 offline fallback entry 已具备代码级、测试级和二进制离线冒烟证据；`runtime dead + uninstall` 的候选实例级完整闭环仍待后续批次继续补强 |
+
+### RECORD-B-056
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-056` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库现实 / 脚本级实现与语法校验` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；涉及 `start.sh` |
+| 验证动作 | 1. 在 `start.sh` 中新增 `RECOVERY_HINT_PATH`、`write_recovery_hint()`、`clear_recovery_hint()`；2. 在 gateway 自动恢复耗尽、gateway 用户动作后重启失败、runtime restart 失败、等待用户决策期间 runtime 退出等极端故障分支写入统一 recovery hint；3. 运行 `bash -n start.sh` |
+| 观察结果 | `start.sh` 现在会在极端故障分支下写出统一 recovery hint，内容明确指向 `omnimemora recover disable-route <family>` / `omnimemora recover uninstall <family>`；`bash -n start.sh` 通过 |
+| 结论适用范围 | `仓库现实成立`：Track C 第三批 supervisor hint 已落地，极端故障时已经具备确定性的下一步动作提示承载 |
+| 备注 | 本记录证明的是脚本级 recovery hint 承载已实现，不等同于 `runtime dead + uninstall` 的候选实例级完整闭环已完成 |

@@ -23,6 +23,7 @@ INTERNAL_API_TOKEN="${OMNIMEMORA_INTERNAL_API_TOKEN:-track-b-$$-$(date +%s)}"
 TRACK_B_DATA_DIR="${OMNIMEMORA_RUNTIME_DATA_DIR:-${OMNIMEMORA_DATA_DIR:-$HOME/.omnimemora}}"
 TRACK_B_STATUS_PATH="${OMNIMEMORA_TRACK_B_STATUS_PATH:-${TRACK_B_DATA_DIR}/track_b_status.json}"
 GATEWAY_DECISION_PATH="${OMNIMEMORA_GATEWAY_DECISION_PATH:-${TRACK_B_DATA_DIR}/gateway_decision.json}"
+RECOVERY_HINT_PATH="${OMNIMEMORA_RECOVERY_HINT_PATH:-${TRACK_B_DATA_DIR}/recovery_hint.txt}"
 AGENT_MODES_PATH="${OMNIMEMORA_AGENT_MODES_PATH:-$ROOT_DIR/5_connectors/adapter/config/agent_modes.json}"
 STOPPING=0
 
@@ -150,6 +151,31 @@ clear_track_b_status_file() {
 clear_gateway_decision_file() {
   log_supervisor "clearing gateway decision file path=${GATEWAY_DECISION_PATH}"
   rm -f "$GATEWAY_DECISION_PATH" >/dev/null 2>&1 || true
+}
+
+write_recovery_hint() {
+  local reason="$1"
+  mkdir -p "$(dirname "$RECOVERY_HINT_PATH")"
+  cat >"$RECOVERY_HINT_PATH" <<EOF
+OmniMemora recovery hint
+reason: ${reason}
+
+If runtime HTTP actions are unavailable, use the offline recovery entry:
+
+  omnimemora recover disable-route <family>
+  omnimemora recover uninstall <family>
+
+Supported family values:
+  codex | codex_cli
+  claude | claude_code
+  cursor
+  openclaw
+EOF
+  log_supervisor "recovery hint written path=${RECOVERY_HINT_PATH} reason=${reason}"
+}
+
+clear_recovery_hint() {
+  rm -f "$RECOVERY_HINT_PATH" >/dev/null 2>&1 || true
 }
 
 route_mode_for_family() {
@@ -422,9 +448,11 @@ runtime_self_heal_loop() {
       sleep "$TRACK_B_RECOVERY_SETTLE_SECONDS"
       clear_track_b_override
       clear_track_b_status_file
+      clear_recovery_hint
     else
       set_track_b_override '{"status":"degraded-capability","status_source":"runtime-restart-monitor","transition_reason":"runtime_restart_failed","gateway_health":"healthy","capability_health":"degraded","routing_effective":false,"recommended_action":"degrade_to_passthrough","error_code":"runtime_restart_failed"}'
       write_track_b_status_file '{"status":"degraded-capability","status_source":"runtime-restart-monitor","transition_reason":"runtime_restart_failed","gateway_health":"healthy","capability_health":"degraded","routing_effective":false,"user_action_required":false,"recommended_action":"degrade_to_passthrough","error_code":"runtime_restart_failed"}'
+      write_recovery_hint "runtime_restart_failed"
     fi
 
     sleep 2
@@ -468,12 +496,15 @@ while true; do
   case "${TRACK_B_GATEWAY_RECOVERY_RESULT:-attempts-exhausted}" in
     disabled)
       write_user_decision_required_status "gateway_auto_recovery_disabled" "gateway_unreachable"
+      write_recovery_hint "gateway_auto_recovery_disabled"
       ;;
     window-expired)
       write_user_decision_required_status "gateway_auto_recovery_window_expired" "gateway_restart_window_expired"
+      write_recovery_hint "gateway_auto_recovery_window_expired"
       ;;
     *)
       write_user_decision_required_status "gateway_auto_recovery_attempts_exhausted" "gateway_restart_attempts_exhausted"
+      write_recovery_hint "gateway_auto_recovery_attempts_exhausted"
       ;;
   esac
 
@@ -525,6 +556,7 @@ while true; do
       echo "[TRACK_B] Gateway recovered after user decision."
       log_supervisor "gateway restart succeeded after action='${ACTION}' family='${FAMILY_ID}'"
       sleep "$TRACK_B_RECOVERY_SETTLE_SECONDS"
+      clear_recovery_hint
       handle_gateway_recovery_postcheck "gateway_recovered_after_user_action_runtime_still_unhealthy"
       break
     fi
@@ -532,9 +564,11 @@ while true; do
     echo "[TRACK_B] Gateway restart failed after user decision."
     log_supervisor "gateway restart failed after action='${ACTION}' family='${FAMILY_ID}'"
     write_user_decision_required_status "gateway_restart_failed_after_user_action" "gateway_restart_failed"
+    write_recovery_hint "gateway_restart_failed_after_user_action"
   done
 
   if ! kill -0 "$RUNTIME_PID" >/dev/null 2>&1; then
+    write_recovery_hint "runtime_process_exited_while_waiting_for_user_decision"
     break
   fi
 done
