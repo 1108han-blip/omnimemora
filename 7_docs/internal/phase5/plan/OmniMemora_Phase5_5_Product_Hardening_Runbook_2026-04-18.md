@@ -119,7 +119,9 @@ last_verified_commit: ""
 - [x] `Track B` 状态机本体已拆成独立模块，状态、来源、转移与 override 应用不再混在读写层
 - [x] `Track B` 已具备“用户动作 -> 决策文件 -> gateway 重启编排 -> 成功/失败转移”的完整高层编排路径（当前为代码与单元级成立）
 - [x] 候选实例重测阻塞已定位为 adapter 运行依赖缺失，`start.sh` 已补前置依赖预检
-- [ ] 还没有完整的故障状态机实现
+- [x] 候选实例已补齐 `gateway failure -> user action -> gateway restart` 的在线闭环证据
+- [x] `start.sh` 已补 runtime 二进制陈旧检测，避免源码更新后继续复用旧 runtime 造成假阴性
+- [ ] 还没有完整的自动修复窗口/重试策略实现
 
 ### 下一步动作
 
@@ -139,7 +141,8 @@ last_verified_commit: ""
 - [x] 建立 gateway failure -> `status_source / transition_reason` 责任边界的候选实例证据
 - [x] 建立 gateway failure -> user action decision file -> gateway restart orchestration 的代码与单元级证据
 - [x] 定位候选实例重测阻塞的真实根因，并将其从状态机逻辑问题中分离出来
-- [ ] 在 adapter 运行依赖满足后，补一条 gateway failure -> user action -> gateway restart 的候选实例级闭环记录
+- [x] 在 adapter 运行依赖满足后，补一条 gateway failure -> user action -> gateway restart 的候选实例级闭环记录
+- [x] 避免 runtime 二进制陈旧导致候选实例验证读取旧行为
 
 ### 停止条件
 
@@ -167,4 +170,4 @@ last_verified_commit: ""
 4. `B2` 候选实例故障场景验证批
 5. `C1` 责任边界图批
 
-当前下一步：`Track B` 若继续推进，应进入更高一层的自动修复编排与恢复窗口实现；当前状态机本体、最小编排器、终态锁定和 route-off 语义已收口
+当前下一步：`Track B` 若继续推进，应进入更高一层的自动修复窗口与重试策略实现；当前状态机本体、用户决策闭环、候选实例重启闭环和 route-off 语义已收口

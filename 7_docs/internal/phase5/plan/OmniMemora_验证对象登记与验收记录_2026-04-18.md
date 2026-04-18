@@ -402,6 +402,7 @@ last_verified_commit: ""
   - `RECORD-B-023` 已确认 Track B 运行时状态面现在显式输出 `status_source / transition_reason`，可区分故障状态责任方
   - `RECORD-B-024` 已确认 Track B 现在会把 runtime 用户动作写成共享决策文件，并由 `start.sh` 接管 gateway 重启编排；当前证据为代码与单元测试级，候选实例需补重测
   - `RECORD-B-025` 已确认本机候选实例阻塞来自 adapter 运行依赖缺失，而非 Track B 状态机逻辑；`start.sh` 已补前置依赖预检
+  - `RECORD-B-026` 已确认先前候选实例重测失败的真实根因是 runtime 二进制未随源码更新自动重建；`start.sh` 现已补“源码较新则自动重建 runtime”约束，并在候选实例上完成 `gateway failure -> user action -> gateway restart` 闭环
 
 ### RECORD-B-024
 
@@ -428,3 +429,16 @@ last_verified_commit: ""
 | 观察结果 | runtime 在 `18770` 可正常启动并通过 `/health`；adapter 在 `_run_adapter.py` 入口直接因 `ModuleNotFoundError: No module named 'uvicorn'` 退出。因此当前候选实例无法补齐在线闭环的直接原因是 adapter 运行依赖缺失，而不是 Track B 状态机或 gateway 决策编排逻辑错误 |
 | 结论适用范围 | `候选阻塞已定位`：本机当前需要先满足 adapter Python 依赖，才能继续 Track B 的候选实例级闭环验收 |
 | 备注 | 为避免再次出现“runtime 已启动但 adapter 半失败”的假象，`start.sh` 已补 `uvicorn` 前置依赖预检；这不改变产品语义，只改善候选实例诊断路径 |
+
+### RECORD-B-026
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-026` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例 / 隔离在线闭环` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；以隔离 `HOME=.tmp/candidate-home-trackb-restart-9`、`PORT=18025`、`RUNTIME_PORT=18778`、`OMNIMEMORA_DATA_DIR=.tmp/candidate-data-trackb-restart-9` 启动 |
+| 验证动作 | 1. 更新 `start.sh`，当 `4_core/local-runtime` 源码比 `tools/omnimemora-runtime` 更新时自动执行 `go build`；2. 启动隔离候选实例；3. 手动杀掉候选 adapter，使系统进入 `user-decision-required`；4. 通过 runtime internal plane `POST /gateway/decision/disable-route` 写入用户动作；5. 观察 supervisor 日志、状态文件和端口恢复 |
+| 观察结果 | `track_b_supervisor.log` 明确记录：`runtime binary is stale -> building runtime binary -> adapter exited -> raw decision lines captured -> gateway restart requested -> gateway restart succeeded`。候选实例数据目录中 `track_b_status.json` 被清除，`gateway_decision.json` 被消费后删除，`agent_modes.json` 持久化为 `claude_code=off`，端口 `18025` 上的 adapter 重新监听成功 |
+| 结论适用范围 | `候选成立`：Track B 现在已具备 `gateway failure -> user action -> gateway restart` 的候选实例级闭环证据；先前重测失败不是状态机错误，而是 runtime 二进制与当前源码脱节导致的假阴性 |
+| 备注 | 本记录使用隔离 `Claude Code` 配置与隔离数据目录，不触碰真实 `codex`；当前候选实例仍依赖本机 user-site 中的 `uvicorn`，因此通过 `PYTHONPATH` 继承该依赖，仅用于验证，不改变产品语义 |

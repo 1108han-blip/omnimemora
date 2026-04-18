@@ -5,12 +5,14 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUNTIME_PORT="${RUNTIME_PORT:-8765}"
 ADAPTER_PORT="${PORT:-18011}"
 LOG_DIR="$ROOT_DIR/tools/verification/logs"
+SUPERVISOR_LOG="$LOG_DIR/track_b_supervisor.log"
 TRACK_B_SELF_HEAL_ENABLED="${TRACK_B_SELF_HEAL_ENABLED:-1}"
 TRACK_B_RUNTIME_RESTART_ATTEMPTS="${TRACK_B_RUNTIME_RESTART_ATTEMPTS:-1}"
 TRACK_B_RECOVERY_SETTLE_SECONDS="${TRACK_B_RECOVERY_SETTLE_SECONDS:-3}"
 
 RUNTIME_BIN="${RUNTIME_BIN:-$ROOT_DIR/tools/omnimemora-runtime}"
 RUNTIME_EXE_LEGACY="$ROOT_DIR/tools/omnimemora.exe"
+RUNTIME_SOURCE_DIR="$ROOT_DIR/4_core/local-runtime"
 ADAPTER_SCRIPT="$ROOT_DIR/tools/_run_adapter.py"
 INTERNAL_API_TOKEN="${OMNIMEMORA_INTERNAL_API_TOKEN:-track-b-$$-$(date +%s)}"
 TRACK_B_DATA_DIR="${OMNIMEMORA_RUNTIME_DATA_DIR:-${OMNIMEMORA_DATA_DIR:-$HOME/.omnimemora}}"
@@ -18,6 +20,13 @@ TRACK_B_STATUS_PATH="${OMNIMEMORA_TRACK_B_STATUS_PATH:-${TRACK_B_DATA_DIR}/track
 GATEWAY_DECISION_PATH="${OMNIMEMORA_GATEWAY_DECISION_PATH:-${TRACK_B_DATA_DIR}/gateway_decision.json}"
 AGENT_MODES_PATH="${OMNIMEMORA_AGENT_MODES_PATH:-$ROOT_DIR/5_connectors/adapter/config/agent_modes.json}"
 STOPPING=0
+
+mkdir -p "$LOG_DIR"
+: >"$SUPERVISOR_LOG"
+
+log_supervisor() {
+  printf '%s %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$*" >>"$SUPERVISOR_LOG"
+}
 
 if ! command -v curl >/dev/null 2>&1; then
   echo "[ERROR] curl is required."
@@ -52,16 +61,28 @@ if [ ! -f "$RUNTIME_BIN" ]; then
   if [ -f "$RUNTIME_EXE_LEGACY" ]; then
     RUNTIME_BIN="$RUNTIME_EXE_LEGACY"
   else
-    if ! command -v go >/dev/null 2>&1; then
-      echo "[ERROR] Go is required to build runtime binary."
-      exit 1
-    fi
-    echo "[INFO] Runtime binary not found, building from source ..."
-    (
-      cd "$ROOT_DIR/4_core/local-runtime"
-      go build -o "$RUNTIME_BIN" .
-    )
+    RUNTIME_BIN_NEEDS_BUILD=1
   fi
+fi
+
+if [ -f "$RUNTIME_BIN" ] && [ -d "$RUNTIME_SOURCE_DIR" ]; then
+  if find "$RUNTIME_SOURCE_DIR" \( -name '*.go' -o -name 'go.mod' -o -name 'go.sum' \) -newer "$RUNTIME_BIN" -print -quit | grep -q .; then
+    RUNTIME_BIN_NEEDS_BUILD=1
+    log_supervisor "runtime binary is stale; source newer than binary path=${RUNTIME_BIN}"
+  fi
+fi
+
+if [ "${RUNTIME_BIN_NEEDS_BUILD:-0}" = "1" ]; then
+  if ! command -v go >/dev/null 2>&1; then
+    echo "[ERROR] Go is required to build runtime binary."
+    exit 1
+  fi
+  echo "[INFO] Runtime binary missing or stale, building from source ..."
+  log_supervisor "building runtime binary path=${RUNTIME_BIN}"
+  (
+    cd "$RUNTIME_SOURCE_DIR"
+    go build -o "$RUNTIME_BIN" .
+  )
 fi
 
 if [ ! -f "$ADAPTER_SCRIPT" ]; then
@@ -69,9 +90,8 @@ if [ ! -f "$ADAPTER_SCRIPT" ]; then
   exit 1
 fi
 
-mkdir -p "$LOG_DIR"
-
 echo "[1/2] Starting runtime on :$RUNTIME_PORT ..."
+log_supervisor "runtime start requested port=${RUNTIME_PORT}"
 OMNIMEMORA_RUNTIME_PORT="$RUNTIME_PORT" \
 OMNIMEMORA_AGENT_MODES_PATH="$AGENT_MODES_PATH" \
 "$RUNTIME_BIN" serve >"$LOG_DIR/runtime_start.out.log" 2>"$LOG_DIR/runtime_start.err.log" &
@@ -79,6 +99,7 @@ RUNTIME_PID=$!
 
 echo "[2/2] Starting adapter on :$ADAPTER_PORT ..."
 start_adapter_process() {
+  log_supervisor "adapter start requested port=${ADAPTER_PORT}"
   PORT="$ADAPTER_PORT" \
   MEMORY_BACKEND_URL="http://127.0.0.1:${RUNTIME_PORT}" \
   OMNIMEMORA_INTERNAL_API_TOKEN="$INTERNAL_API_TOKEN" \
@@ -122,6 +143,7 @@ clear_track_b_status_file() {
 }
 
 clear_gateway_decision_file() {
+  log_supervisor "clearing gateway decision file path=${GATEWAY_DECISION_PATH}"
   rm -f "$GATEWAY_DECISION_PATH" >/dev/null 2>&1 || true
 }
 
@@ -155,6 +177,7 @@ PY
 }
 
 start_runtime_process() {
+  log_supervisor "runtime restart requested port=${RUNTIME_PORT}"
   OMNIMEMORA_RUNTIME_PORT="$RUNTIME_PORT" \
   "$RUNTIME_BIN" serve >>"$LOG_DIR/runtime_start.out.log" 2>>"$LOG_DIR/runtime_start.err.log" &
   RUNTIME_PID=$!
@@ -277,6 +300,7 @@ while true; do
   fi
 
   echo "[TRACK_B] Adapter exited with code ${ADAPTER_EXIT_CODE}; entering user-decision-required state."
+  log_supervisor "adapter exited code=${ADAPTER_EXIT_CODE}; waiting for user decision"
   write_user_decision_required_status "gateway_process_exited" "gateway_unreachable"
 
   while kill -0 "$RUNTIME_PID" >/dev/null 2>&1; do
@@ -285,18 +309,23 @@ while true; do
       sleep 1
       continue
     fi
+    log_supervisor "raw decision lines captured: $(printf '%s' "$DECISION_LINES" | tr '\n' '|' )"
 
     ACTION="$(printf '%s\n' "$DECISION_LINES" | sed -n '1p')"
     FAMILY_ID="$(printf '%s\n' "$DECISION_LINES" | sed -n '2p')"
     TRANSITION_REASON="$(printf '%s\n' "$DECISION_LINES" | sed -n '3p')"
+    DECISION_SOURCE="$(printf '%s\n' "$DECISION_LINES" | sed -n '4p')"
+    log_supervisor "decision payload received action='${ACTION}' family='${FAMILY_ID}' reason='${TRANSITION_REASON}' source='${DECISION_SOURCE}'"
     clear_gateway_decision_file
 
     if [ -z "$ACTION" ]; then
+      log_supervisor "decision ignored because action is empty"
       sleep 1
       continue
     fi
 
     echo "[TRACK_B] Received user decision '${ACTION}' for family '${FAMILY_ID}'. Restarting gateway ..."
+    log_supervisor "gateway restart requested after action='${ACTION}' family='${FAMILY_ID}'"
     write_manual_recovery_status "${TRANSITION_REASON:-user_requested_gateway_restart}" "gateway_restart_requested"
     start_adapter_process
     if wait_for_health \
@@ -307,12 +336,14 @@ while true; do
       "$LOG_DIR/adapter_start.err.log" \
       15; then
       echo "[TRACK_B] Gateway recovered after user decision."
+      log_supervisor "gateway restart succeeded after action='${ACTION}' family='${FAMILY_ID}'"
       sleep "$TRACK_B_RECOVERY_SETTLE_SECONDS"
       clear_track_b_status_file
       break
     fi
 
     echo "[TRACK_B] Gateway restart failed after user decision."
+    log_supervisor "gateway restart failed after action='${ACTION}' family='${FAMILY_ID}'"
     write_user_decision_required_status "gateway_restart_failed_after_user_action" "gateway_restart_failed"
   done
 
