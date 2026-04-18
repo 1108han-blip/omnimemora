@@ -164,8 +164,9 @@ last_verified_commit: ""
 - [x] Track C bounded global scan 已完成
 - [x] 当前 `18011` / compile / strategy / V2 遗产散点已完成第一轮责任盘点
 - [x] Track C 责任边界图与迁移顺序草案已建立
+- [x] `main.py` slimming candidate 清单已建立
 - [ ] 暂不进入实现
-- [ ] 下一步只允许做 `main.py` slimming candidate 清单，不进入大规模代码迁移
+- [ ] 下一步只允许决定第一批小范围迁移是否从 `startup probe / quota-path helper / MCP-SSE / diagnostics surface` 开始
 
 ## 七、Track D: 候选实例补强验证
 
@@ -180,4 +181,4 @@ last_verified_commit: ""
 4. `B2` 候选实例故障场景验证批
 5. `C1` 责任边界图批
 
-当前下一步：`Track C` 已进入拆分准备阶段；应先产出 `main.py` slimming candidate 清单，再决定是否进入第一批小范围迁移
+当前下一步：`Track C` 已完成拆分准备；应决定第一批小范围迁移是否从 `main.py` 的低风险表层职责开始
