@@ -120,6 +120,45 @@ last_verified_commit: ""
 | 结论适用范围 | `候选不成立`：当前只足以支持“先补文档记录、暂不进入 M3 实现/验收”，不足以声明 M3 已开始正式验收 |
 | 备注 | 进入 M3 前，必须先追加一条新的实例声明记录，写明本次控制面验收到底绑定哪个验证对象 |
 
+### RECORD-B-005
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-005` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `外部运行实例` |
+| 实例路径/来源 | `~/.omnimemora/service/current` 对应的 `http://127.0.0.1:18011` |
+| 验证动作 | 访问 `GET http://127.0.0.1:18011/agents/control` 与 `GET http://127.0.0.1:18011/proxy/status` |
+| 观察结果 | `/agents/control` 返回 `404` 与 `{\"detail\":\"Not Found\"}`；`/proxy/status` 返回 `200`，说明当前在线网关可用，但外部运行实例未暴露 M3 所需控制面接口 |
+| 结论适用范围 | `外部运行实例不成立`：当前外部运行实例不适合作为 `M3` 控制面验收对象；后续 `M3` 验收应绑定 `仓库候选实例`，不得把外部运行实例当作控制面已落地的证据 |
+| 备注 | 本记录只决定 `M3` 验收对象选择，不证明当前仓库候选实例已可用 |
+
+### RECORD-B-006
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-006` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；候选启动尝试使用 adapter `18012` 与 runtime `18765` |
+| 验证动作 | 1. 使用当前源码构建 `tools/omnimemora-runtime`；2. 以 `RUNTIME_BIN=... RUNTIME_PORT=18765 PORT=18012 ./start.sh` 启动候选实例；3. 读取 runtime / adapter 启动日志 |
+| 观察结果 | adapter 可在 `18012` 启动，但 runtime 仍尝试绑定 `127.0.0.1:8765` 并失败；日志显示 `Server listening on 127.0.0.1:8765` 后立即报 `bind: address already in use`。说明当前 `start.sh -> runtime serve` 路径未把候选 runtime 端口安全带入进程，候选实例无法在不干扰现网 runtime 的前提下独立拉起 |
+| 结论适用范围 | `候选不成立`：当前仓库候选实例尚不具备安全启动条件，因此 `M3` 仍不能进入正式验收；若要继续，只能先修复候选 runtime 的双端口启动路径 |
+| 备注 | 该阻塞属于候选实例启动链路问题，不是外部运行实例问题，也不直接等同于控制面语义错误 |
+
+### RECORD-B-007
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-007` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；候选实例以 adapter `18012`、runtime `18765`、隔离数据目录 `.tmp/candidate-runtime-data` 启动 |
+| 验证动作 | 1. 构建当前源码 `tools/omnimemora-runtime`；2. 以 `OMNIMEMORA_RUNTIME_DATA_DIR=$PWD/.tmp/candidate-runtime-data OMNIMEMORA_DATA_DIR=$PWD/.tmp/candidate-runtime-data RUNTIME_BIN=$PWD/tools/omnimemora-runtime RUNTIME_PORT=18765 PORT=18012 bash ./start.sh` 启动候选实例；3. 访问 `GET http://127.0.0.1:18012/agents/control`、`GET http://127.0.0.1:18012/proxy/status`；4. 读取 `.tmp/candidate-runtime-data/runtime.state` |
+| 观察结果 | 候选 runtime 与 adapter 均通过健康检查；`/agents/control` 返回 `200` 与 agent 列表；`/proxy/status` 返回 `200`；隔离状态文件写入 `port=18765`，未污染现网默认 runtime state |
+| 结论适用范围 | `候选成立`：当前仓库候选实例已具备安全启动条件，并且可作为 `M3` 控制面正式验收对象 |
+| 备注 | 本记录解除 `RECORD-B-006` 所述启动阻塞，但不等同于 `M3` 已完成，只表示可以进入 `M3` 正式验收准备 |
+
 ## 五、Gate B 完成判据
 
 当满足以下条件时，`Gate B` 可视为通过：
@@ -133,3 +172,7 @@ last_verified_commit: ""
 - 进入 `M3 / M4 / M5` 前，先在本文件追加对应验证记录
 - 若后续显式启动 `仓库候选实例`，必须新增一条候选实例启动记录，再开始候选行为验证
 - 若外部运行实例来源改变，必须先更新本文件，再继续验收
+- 当前冻结结论：
+  - `M3` 控制面验收不得绑定外部运行实例
+  - `M3` 若继续推进，只能绑定显式启动后的 `仓库候选实例`
+  - `RECORD-B-006` 的候选启动阻塞已由 `RECORD-B-007` 解除
