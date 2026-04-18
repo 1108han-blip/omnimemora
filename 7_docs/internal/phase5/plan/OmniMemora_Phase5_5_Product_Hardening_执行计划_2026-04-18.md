@@ -140,6 +140,21 @@ scan 完成后，执行期只允许做定向核对，不再扩成全局重考古
 - 有责任边界图
 - 有迁移顺序与禁止事项
 - 本阶段不直接大规模搬迁逻辑
+- 可先完成 `main.py` 的低到中风险表层职责外移，并将更高耦合业务轴线后置
+
+当前阶段性结论：
+
+- `startup probe`
+- `quota/path observation helper`
+- `MCP/SSE surface`
+- diagnostics surface
+- `token-savings / meter query surface`
+
+以上已完成外移，足以支撑本阶段的 `Track C` 阶段性收口。
+
+以下明确后置，不并入当前 `Track C` 入口瘦身：
+
+- `trial / internal admin surface`
 
 ### Track D: 候选实例补强验证
 

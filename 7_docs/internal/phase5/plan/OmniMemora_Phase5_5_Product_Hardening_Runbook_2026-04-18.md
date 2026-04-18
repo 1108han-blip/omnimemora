@@ -35,7 +35,8 @@ last_verified_commit: ""
   - [x] `Track C` bounded global scan 完成
   - [x] `Track C` 第一批低风险迁移完成
   - [x] `Track C` 第二批中风险表层迁移完成
-  - [ ] 决定 `Track C` 第三批是否继续进入更高耦合 surface / contract 收口
+  - [x] `Track C` 第三批低风险子集迁移完成
+  - [x] `Track C` 阶段性完成，`trial / internal admin surface` 后置
 
 ## 三、固定总规则
 
@@ -169,8 +170,8 @@ last_verified_commit: ""
 - [x] 第二批中风险表层迁移已落地：`MCP/SSE surface` 与 diagnostics surface 已从 `main.py` 外移为独立 router
 - [x] 第三批定向风险判断已完成：`token-savings / meter query surface` 可继续小批次迁移，`trial / internal admin surface` 后置
 - [x] 第三批子集已落地：`token-savings / meter query surface` 已从 `main.py` 外移为独立 router
-- [ ] 暂不进入高耦合迁移
-- [ ] 下一步只允许决定是否继续处理 `trial / internal admin surface`，或将 `Track C` 视为阶段性完成
+- [x] 当前不进入高耦合迁移
+- [x] `Track C` 当前按阶段性完成收口；`trial / internal admin surface` 不并入当前入口瘦身批次
 
 ## 七、Track D: 候选实例补强验证
 
