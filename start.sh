@@ -11,7 +11,9 @@ TRACK_B_RUNTIME_RESTART_ATTEMPTS="${TRACK_B_RUNTIME_RESTART_ATTEMPTS:-1}"
 TRACK_B_RECOVERY_SETTLE_SECONDS="${TRACK_B_RECOVERY_SETTLE_SECONDS:-3}"
 TRACK_B_GATEWAY_RESTART_ATTEMPTS="${TRACK_B_GATEWAY_RESTART_ATTEMPTS:-2}"
 TRACK_B_GATEWAY_RESTART_BACKOFF_SECONDS="${TRACK_B_GATEWAY_RESTART_BACKOFF_SECONDS:-2}"
+TRACK_B_GATEWAY_RESTART_MAX_BACKOFF_SECONDS="${TRACK_B_GATEWAY_RESTART_MAX_BACKOFF_SECONDS:-8}"
 TRACK_B_GATEWAY_RECOVERY_WINDOW_SECONDS="${TRACK_B_GATEWAY_RECOVERY_WINDOW_SECONDS:-20}"
+TRACK_B_GATEWAY_HEALTH_TIMEOUT_SECONDS="${TRACK_B_GATEWAY_HEALTH_TIMEOUT_SECONDS:-15}"
 
 RUNTIME_BIN="${RUNTIME_BIN:-$ROOT_DIR/tools/omnimemora-runtime}"
 RUNTIME_EXE_LEGACY="$ROOT_DIR/tools/omnimemora.exe"
@@ -212,6 +214,7 @@ attempt_gateway_auto_recovery() {
 
   if [ "$TRACK_B_SELF_HEAL_ENABLED" != "1" ]; then
     log_supervisor "gateway auto recovery skipped because TRACK_B_SELF_HEAL_ENABLED=${TRACK_B_SELF_HEAL_ENABLED}"
+    TRACK_B_GATEWAY_RECOVERY_RESULT="disabled"
     return 1
   fi
 
@@ -220,6 +223,7 @@ attempt_gateway_auto_recovery() {
     now="$(date +%s)"
     if [ "$now" -gt "$deadline" ]; then
       log_supervisor "gateway auto recovery window expired after $TRACK_B_GATEWAY_RECOVERY_WINDOW_SECONDS seconds"
+      TRACK_B_GATEWAY_RECOVERY_RESULT="window-expired"
       break
     fi
 
@@ -237,19 +241,29 @@ attempt_gateway_auto_recovery() {
       "$ADAPTER_PID" \
       "$LOG_DIR/adapter_start.out.log" \
       "$LOG_DIR/adapter_start.err.log" \
-      15; then
+      "$TRACK_B_GATEWAY_HEALTH_TIMEOUT_SECONDS"; then
       log_supervisor "gateway auto recovery succeeded on attempt=${attempt_no}"
       sleep "$TRACK_B_RECOVERY_SETTLE_SECONDS"
       clear_track_b_status_file
+      TRACK_B_GATEWAY_RECOVERY_RESULT="recovered"
       return 0
     fi
 
     log_supervisor "gateway auto recovery failed on attempt=${attempt_no}"
     if [ "$attempts_left" -gt 0 ]; then
-      sleep "$TRACK_B_GATEWAY_RESTART_BACKOFF_SECONDS"
+      local backoff_seconds
+      backoff_seconds=$((TRACK_B_GATEWAY_RESTART_BACKOFF_SECONDS * (2 ** (attempt_no - 1))))
+      if [ "$backoff_seconds" -gt "$TRACK_B_GATEWAY_RESTART_MAX_BACKOFF_SECONDS" ]; then
+        backoff_seconds="$TRACK_B_GATEWAY_RESTART_MAX_BACKOFF_SECONDS"
+      fi
+      log_supervisor "gateway auto recovery backoff=${backoff_seconds}s before next attempt"
+      sleep "$backoff_seconds"
     fi
   done
 
+  if [ -z "${TRACK_B_GATEWAY_RECOVERY_RESULT:-}" ]; then
+    TRACK_B_GATEWAY_RECOVERY_RESULT="attempts-exhausted"
+  fi
   return 1
 }
 
@@ -365,8 +379,18 @@ while true; do
   fi
 
   echo "[TRACK_B] Gateway auto recovery exhausted; entering user-decision-required state."
-  log_supervisor "gateway auto recovery exhausted; waiting for user decision"
-  write_user_decision_required_status "gateway_process_exited" "gateway_unreachable"
+  log_supervisor "gateway auto recovery exhausted result=${TRACK_B_GATEWAY_RECOVERY_RESULT:-unknown}; waiting for user decision"
+  case "${TRACK_B_GATEWAY_RECOVERY_RESULT:-attempts-exhausted}" in
+    disabled)
+      write_user_decision_required_status "gateway_auto_recovery_disabled" "gateway_unreachable"
+      ;;
+    window-expired)
+      write_user_decision_required_status "gateway_auto_recovery_window_expired" "gateway_restart_window_expired"
+      ;;
+    *)
+      write_user_decision_required_status "gateway_auto_recovery_attempts_exhausted" "gateway_restart_attempts_exhausted"
+      ;;
+  esac
 
   while kill -0 "$RUNTIME_PID" >/dev/null 2>&1; do
     DECISION_LINES="$(read_gateway_decision || true)"

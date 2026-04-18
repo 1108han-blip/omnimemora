@@ -404,6 +404,7 @@ last_verified_commit: ""
   - `RECORD-B-025` 已确认本机候选实例阻塞来自 adapter 运行依赖缺失，而非 Track B 状态机逻辑；`start.sh` 已补前置依赖预检
   - `RECORD-B-026` 已确认先前候选实例重测失败的真实根因是 runtime 二进制未随源码更新自动重建；`start.sh` 现已补“源码较新则自动重建 runtime”约束，并在候选实例上完成 `gateway failure -> user action -> gateway restart` 闭环
   - `RECORD-B-027` 已确认 Track B 的 gateway 自动修复窗口已在候选实例上成立；gateway 退出后会先自动重启，再在窗口耗尽后才进入用户决策态
+  - `RECORD-B-028` 已确认当自动修复被显式关闭时，Track B 会直接进入 `user-decision-required`，并带出精确的 `transition_reason`
 
 ### RECORD-B-024
 
@@ -456,3 +457,16 @@ last_verified_commit: ""
 | 观察结果 | supervisor 记录：`adapter exited -> gateway auto recovery attempt=1/2 -> adapter start requested -> gateway auto recovery succeeded on attempt=1`。`track_b_status.json` 被清除，端口 `18026` 上的 adapter 自动恢复监听成功，`GET /health` 返回 `system_status.status=healthy` |
 | 结论适用范围 | `候选成立`：Track B 现在已具备“gateway 退出后先进入自动修复窗口，自动恢复成功则不进入用户决策态”的候选实例证据 |
 | 备注 | 本记录仍使用隔离 `Claude Code` 配置与隔离数据目录，不触碰真实 `codex`；当前自动修复窗口的次数与时长由 `TRACK_B_GATEWAY_RESTART_ATTEMPTS / TRACK_B_GATEWAY_RECOVERY_WINDOW_SECONDS` 控制 |
+
+### RECORD-B-028
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-028` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例 / 隔离在线闭环` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；以隔离 `HOME=.tmp/candidate-home-trackb-disabled-1`、`PORT=18027`、`RUNTIME_PORT=18780`、`OMNIMEMORA_DATA_DIR=.tmp/candidate-data-trackb-disabled-1` 启动 |
+| 验证动作 | 1. 以 `TRACK_B_SELF_HEAL_ENABLED=0` 启动隔离候选实例；2. 手动杀掉候选 adapter；3. 读取 supervisor 日志、`track_b_status.json` 和 runtime `GET /gateway/status` |
+| 观察结果 | supervisor 记录：`adapter exited -> gateway auto recovery skipped because TRACK_B_SELF_HEAL_ENABLED=0 -> gateway auto recovery exhausted result=disabled`。状态文件和 runtime internal plane 一致返回：`status=user-decision-required`、`transition_reason=gateway_auto_recovery_disabled`、`error_code=gateway_unreachable` |
+| 结论适用范围 | `候选成立`：Track B 当前不仅区分“自动恢复成功”与“进入用户决策”，还会对“自动恢复被关闭”给出明确的终止原因，便于后续 UI 和运维诊断消费 |
+| 备注 | 本记录验证的是关闭自动修复的失败分支；`window_expired / attempts_exhausted` 仍属于后续可补的更细分候选实例证据 |

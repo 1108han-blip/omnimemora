@@ -224,8 +224,15 @@ Track B 的状态写入责任方固定为：
 
 - `gateway` 进程退出后，先进入自动修复窗口
 - 在窗口内按有限次数重启 `18011`
+- 重启失败时按退避间隔等待，再进入下一次尝试
 - 任一次重启成功即回到 `healthy`
 - 只有自动修复窗口耗尽后，才允许进入 `user-decision-required`
+
+当前实现会显式区分至少三类终止原因：
+
+- `gateway_auto_recovery_disabled`
+- `gateway_auto_recovery_window_expired`
+- `gateway_auto_recovery_attempts_exhausted`
 
 这条规则的目的，是把“可自动恢复的瞬时入口故障”和“需要用户决策的不可恢复故障”分开，避免系统过早打断用户。
 
