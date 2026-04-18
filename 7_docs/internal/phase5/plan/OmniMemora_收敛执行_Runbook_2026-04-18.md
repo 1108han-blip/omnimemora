@@ -52,6 +52,7 @@ last_verified_commit: ""
   - `.mcp.json.disabled` 已转为本地忽略
   - `.git/gc.log` 与对象清理异常已完成治理
   - `git gc` 与串行 `git fsck --full` 已恢复正常
+  - `M3` 候选实例：`18012/18765` 启动已验证；`openclaw` 的 `enable/disable` 已完成一轮候选实例闭环并确认可落盘
 
 ### 必须遵守
 
@@ -226,6 +227,7 @@ last_verified_commit: ""
 
 - [x] `/agents/control*` 在三层语义一致
 - [x] enable/disable 不再只是写状态文件
+- [x] `openclaw` 在候选实例上已验证 `enable -> force_if_possible`、`disable -> off`
 
 ### 停止条件
 

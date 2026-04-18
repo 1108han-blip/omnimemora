@@ -159,6 +159,19 @@ last_verified_commit: ""
 | 结论适用范围 | `候选成立`：当前仓库候选实例已具备安全启动条件，并且可作为 `M3` 控制面正式验收对象 |
 | 备注 | 本记录解除 `RECORD-B-006` 所述启动阻塞，但不等同于 `M3` 已完成，只表示可以进入 `M3` 正式验收准备 |
 
+### RECORD-B-008
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-008` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；候选实例以 adapter `18012`、runtime `18765`、隔离数据目录 `.tmp/candidate-runtime-data` 启动 |
+| 验证动作 | 1. 访问 `GET http://127.0.0.1:18012/agents/control` 读取当前状态；2. 依次调用 `POST /agents/control/disable` 与 `POST /agents/control/enable`；3. 每次调用后直接读取 `5_connectors/adapter/config/agent_modes.json`；4. 再次访问 `GET /agents/control` 复核返回状态 |
+| 观察结果 | `disable` 后 API 返回 `routing_enabled=false`，并且 `agent_modes.json` 中 `openclaw` 写为 `off`；随后 `enable` 后 API 返回 `routing_enabled=true`，并且 `agent_modes.json` 中 `openclaw` 写为 `force_if_possible`；受控复现下未再次出现“API 状态与磁盘状态分叉” |
+| 结论适用范围 | `候选成立`：在当前仓库候选实例上，`enable/disable` 已同时影响控制面返回值和 route state 持久化文件；此前观察到的持久化不一致暂未复现，不能再作为当前 `M3` 阻塞项 |
+| 备注 | 本记录只覆盖 `openclaw` 的候选实例闭环；不自动外推到其他 family，也不等同于 `M3` 全部验收完成 |
+
 ## 五、Gate B 完成判据
 
 当满足以下条件时，`Gate B` 可视为通过：
@@ -176,3 +189,4 @@ last_verified_commit: ""
   - `M3` 控制面验收不得绑定外部运行实例
   - `M3` 若继续推进，只能绑定显式启动后的 `仓库候选实例`
   - `RECORD-B-006` 的候选启动阻塞已由 `RECORD-B-007` 解除
+  - `RECORD-B-008` 已确认当前候选实例下 `openclaw` 的 `enable/disable` 可正确落盘
