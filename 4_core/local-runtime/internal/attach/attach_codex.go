@@ -4,13 +4,17 @@ package attach
 import (
 	"fmt"
 	"os"
-	"path/filepath"
+	"regexp"
 	"strings"
 )
 
-// AttachCodex attaches OmniMemora to Codex via MCP shim.
-// Codex uses a TOML config at ~/.codex/config.toml.
-// The MCP shim (tools/mcp_omnimemora.py) proxies stdio JSON-RPC to adapter :18011.
+const (
+	codexProviderBaseURL = "http://127.0.0.1:18011/v1"
+	codexProviderName    = "omnimemora"
+)
+
+// AttachCodex attaches OmniMemora to Codex via the Responses-compatible model provider.
+// This keeps Codex's LLM traffic on the product path instead of using MCP as the primary route.
 func AttachCodex() *AttachResult {
 	result := &AttachResult{Agent: AgentCodex, Success: false}
 
@@ -29,28 +33,12 @@ func AttachCodex() *AttachResult {
 		return result
 	}
 
-	// Detect python executable for the shim
-	pyExe := ShimPythonExe()
-	if pyExe == "" {
-		result.Message = "Python executable not found in PATH — cannot launch MCP shim"
-		return result
-	}
-
-	// Resolve absolute path to the shim relative to the omnimemora binary
-	shimPath := resolveShimPath()
-	if shimPath == "" {
-		result.Message = "Cannot resolve path to tools/mcp_omnimemora.py — run from project root"
-		return result
-	}
-
-	// Read existing TOML content
 	content := ""
 	if data, err := os.ReadFile(configPath); err == nil {
 		content = string(data)
 	}
 
-	updated := upsertCodexMCPBlock(content, pyExe, shimPath)
-
+	updated := upsertCodexProviderConfig(content, codexProviderBaseURL)
 	if err := os.WriteFile(configPath, []byte(updated), 0644); err != nil {
 		result.Message = "Failed to write config"
 		return result
@@ -65,7 +53,7 @@ func AttachCodex() *AttachResult {
 	return result
 }
 
-// DetachCodex removes OmniMemora MCP server from Codex config
+// DetachCodex removes OmniMemora provider and legacy MCP config from Codex config.
 func DetachCodex() error {
 	if restored, err := RestoreBackup(AgentCodex); err != nil {
 		return err
@@ -83,7 +71,7 @@ func DetachCodex() error {
 		return err
 	}
 
-	updated := removeCodexMCPBlock(string(data))
+	updated := removeCodexProviderConfig(string(data))
 	if updated == string(data) {
 		return fmt.Errorf("config not found")
 	}
@@ -91,63 +79,71 @@ func DetachCodex() error {
 	return os.WriteFile(configPath, []byte(updated), 0644)
 }
 
-// resolveShimPath returns an absolute path to tools/mcp_omnimemora.py.
-// It is computed relative to the directory containing the running omnimemora binary.
-func resolveShimPath() string {
-	execPath, err := os.Executable()
-	if err != nil {
-		return ""
-	}
-	// omnimemora.exe lives in tools/; shim is in tools/mcp_omnimemora.py
-	toolsDir := filepath.Dir(execPath)
-	shimPath := filepath.Join(toolsDir, "mcp_omnimemora.py")
-	if _, err := os.Stat(shimPath); err == nil {
-		return shimPath
-	}
-	// Fallback: try relative to current working directory
-	cwd, _ := os.Getwd()
-	fallback := filepath.Join(cwd, "tools", "mcp_omnimemora.py")
-	if _, err := os.Stat(fallback); err == nil {
-		return fallback
-	}
-	return shimPath
-}
+func upsertCodexProviderConfig(content string, baseURL string) string {
+	updated := removeCodexProviderConfig(content)
+	updated = setTopLevelTomlString(updated, "model_provider", codexProviderName)
 
-// upsertCodexMCPBlock replaces or inserts the [mcp.servers.omnimemora] TOML block.
-// Codex MCP config format: mcp_servers.omnimemora = { command = "python", args = [...] }
-func upsertCodexMCPBlock(content string, pyExe string, shimPath string) string {
-	trimmed := strings.TrimRight(content, "\r\n\t ")
+	providerBlock := fmt.Sprintf(`[model_providers.%s]
+name = "OmniMemora"
+base_url = "%s"
+wire_api = "responses"
+http_headers = { "X-OmniMemora-Agent" = "codex_cli" }
+env_http_headers = { "X-Provider-Base-URL" = "OMNIMEMORA_CODEX_UPSTREAM_BASE_URL", "Authorization" = "OMNIMEMORA_CODEX_AUTHORIZATION" }
+`, codexProviderName, baseURL)
+
+	trimmed := strings.TrimRight(updated, "\r\n\t ")
 	if trimmed != "" {
 		trimmed += "\n\n"
 	}
-
-	block := fmt.Sprintf(`[mcp_servers.omnimemora]
-command = "%s"
-args = ["%s"]
-env = { OMNIMEMORA_ADAPTER_URL = "http://127.0.0.1:18011" }
-`, pyExe, strings.ReplaceAll(shimPath, "\\", "\\\\"))
-
-	without := removeCodexMCPBlock(trimmed)
-	without = strings.TrimRight(without, "\r\n\t ")
-	if without != "" {
-		without += "\n\n"
-	}
-	return without + block
+	return trimmed + providerBlock
 }
 
-// removeCodexMCPBlock removes the [mcp_servers.omnimemora] section from TOML content.
-// Handles both TOML section and legacy [omnimemora] block.
-func removeCodexMCPBlock(content string) string {
-	// Remove [mcp_servers.omnimemora] section
+func removeCodexProviderConfig(content string) string {
+	updated := removeTomlSections(content,
+		"[model_providers.omnimemora]",
+		"[mcp_servers.omnimemora]",
+		"[omnimemora]",
+	)
+	updated = removeTopLevelTomlString(updated, "model_provider", codexProviderName)
+	return normalizeTomlTrailingNewline(updated)
+}
+
+func setTopLevelTomlString(content string, key string, value string) string {
+	pattern := regexp.MustCompile(fmt.Sprintf(`(?m)^%s\s*=\s*"[^"]*"\s*$`, regexp.QuoteMeta(key)))
+	line := fmt.Sprintf(`%s = "%s"`, key, value)
+	if pattern.MatchString(content) {
+		return pattern.ReplaceAllString(content, line)
+	}
+
+	trimmed := strings.TrimLeft(content, "\r\n")
+	if trimmed == "" {
+		return line + "\n"
+	}
+	return line + "\n" + trimmed
+}
+
+func removeTopLevelTomlString(content string, key string, value string) string {
+	pattern := regexp.MustCompile(
+		fmt.Sprintf(`(?m)^%s\s*=\s*"%s"\s*(\r?\n)?`, regexp.QuoteMeta(key), regexp.QuoteMeta(value)),
+	)
+	return pattern.ReplaceAllString(content, "")
+}
+
+func removeTomlSections(content string, sectionNames ...string) string {
+	targets := make(map[string]struct{}, len(sectionNames))
+	for _, name := range sectionNames {
+		targets[name] = struct{}{}
+	}
+
 	lines := strings.Split(content, "\n")
 	out := make([]string, 0, len(lines))
 	inBlock := false
 
 	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		// Start of a new section
 		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
-			if trimmed == "[mcp_servers.omnimemora]" || trimmed == "[omnimemora]" {
+			_, removeThis := targets[trimmed]
+			if removeThis {
 				inBlock = true
 				continue
 			}
@@ -158,5 +154,9 @@ func removeCodexMCPBlock(content string) string {
 		}
 	}
 
-	return strings.TrimRight(strings.Join(out, "\n"), "\n") + "\n"
+	return strings.Join(out, "\n")
+}
+
+func normalizeTomlTrailingNewline(content string) string {
+	return strings.TrimRight(content, "\n") + "\n"
 }
