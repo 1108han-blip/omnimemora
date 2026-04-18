@@ -26,6 +26,13 @@ def _apply_combined_recovery_contract(*, payload: dict, routing_requested: bool)
     if str(normalized.get("gateway_health") or "").strip().lower() != "healthy":
         return normalized
 
+    explicit_capability_degraded = (
+        str(normalized.get("status") or "").strip().lower() == "degraded-capability"
+        and bool(normalized.get("routing_requested"))
+    )
+    if explicit_capability_degraded:
+        return normalized
+
     # Once the user has disabled route or uninstalled, the steady state must
     # converge to passthrough rather than drifting back into an enhanced path.
     if not routing_requested:

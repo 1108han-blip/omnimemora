@@ -306,7 +306,7 @@ attempt_gateway_auto_recovery() {
     return 1
   fi
 
-  while [ "$attempts_left" -gt 0 ] && kill -0 "$RUNTIME_PID" >/dev/null 2>&1; do
+  while [ "$attempts_left" -gt 0 ]; do
     local now
     now="$(date +%s)"
     if [ "$now" -gt "$deadline" ]; then
@@ -453,9 +453,6 @@ while true; do
   ADAPTER_EXIT_CODE=0
   wait "$ADAPTER_PID" || ADAPTER_EXIT_CODE=$?
   if [ "$STOPPING" = "1" ]; then
-    break
-  fi
-  if ! kill -0 "$RUNTIME_PID" >/dev/null 2>&1; then
     break
   fi
 

@@ -524,3 +524,29 @@ last_verified_commit: ""
 | 观察结果 | 脚本语法检查通过，Python 31 项测试全部通过，Go `./tests ./api` 通过。`start.sh` 现在在两类 gateway 恢复成功分支后都会执行统一 postcheck：若 runtime 已健康则清状态；若 runtime 仍不健康但 route 已关闭，则也清状态并回到 passthrough；若 runtime 仍不健康且 route 仍开启，则写入 `status=degraded-capability`、`transition_reason=gateway_recovered_runtime_still_unhealthy` 或 `gateway_recovered_after_user_action_runtime_still_unhealthy`，避免出现“gateway 恢复即假健康”的短暂错误窗口 |
 | 结论适用范围 | `代码与单元级成立`：Track B 现在已具备入口层恢复成功后对能力层健康的最小联合恢复后检查，但尚缺新的候选实例级联合恢复证据 |
 | 备注 | 本记录仍不新增在线候选实例验证；验证面控制在当前计划内的脚本与回归测试 |
+
+### RECORD-B-033
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-033` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例 / 隔离在线闭环` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；以隔离 `HOME=.tmp/candidate-home-trackb-combined-4`、`OMNIMEMORA_DATA_DIR=.tmp/candidate-data-trackb-combined-4`、`PORT=18035`、`RUNTIME_PORT=18788` 启动；仅临时继承 `PYTHONPATH=/Users/sc/Library/Python/3.9/lib/python/site-packages` 以满足本机已有 `uvicorn` 依赖，不改变项目 Python 基线 |
+| 验证动作 | 1. 以 `TRACK_B_RUNTIME_RESTART_ATTEMPTS=0` 启动隔离候选实例，并让 `claude_code` route state 保持 `force_if_possible`；2. 手动杀掉候选 runtime，再手动杀掉候选 adapter，制造“能力层先失效、入口层随后失效”的联合故障；3. 等待 gateway 自动恢复；4. 读取 `GET /proxy/system-status`、`GET /health`、隔离 `track_b_status.json` 与 supervisor 日志 |
+| 观察结果 | gateway 在 `18035` 上自动恢复监听成功，runtime 仍保持失效；`/proxy/system-status` 与 `/health.system_status` 一致返回 `status=degraded-capability`、`status_source=runtime-restart-monitor`、`transition_reason=gateway_recovered_runtime_still_unhealthy`、`routing_requested=true`、`routing_effective=false`、`recommended_action=degrade_to_passthrough`。隔离 `track_b_status.json` 与 supervisor 日志也一致记录了 `gateway recovered but runtime remains unhealthy; degrading capability`。隔离 `agent_modes.json` 保持 `claude_code=force_if_possible`，未被错误改写为 `off` |
+| 结论适用范围 | `候选成立`：Track B 现在已具备 `route=on` 下“入口层恢复成功但能力层仍失效”时收敛到 `degraded-capability` 的联合恢复证据，不会误清成健康 passthrough |
+| 备注 | 本记录对应的隔离 `.tmp/candidate-*` 工件已在验证后清理；在验证前还发现一个独立启动回归：`main.py` 中 diagnostics surface 配置调用顺序错误导致 `SUPPORT_SCHEMA_VERSION` 未定义，该问题已在本批修复，不属于联合恢复语义本身 |
+
+### RECORD-B-034
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-034` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例 / 隔离在线闭环` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；以隔离 `HOME=.tmp/candidate-home-trackb-combined-off-1`、`OMNIMEMORA_DATA_DIR=.tmp/candidate-data-trackb-combined-off-1`、`PORT=18036`、`RUNTIME_PORT=18789` 启动；仅临时继承 `PYTHONPATH=/Users/sc/Library/Python/3.9/lib/python/site-packages` 以满足本机已有 `uvicorn` 依赖 |
+| 验证动作 | 1. 让 `claude_code` route state 保持 `off`；2. 以 `TRACK_B_RUNTIME_RESTART_ATTEMPTS=0` 启动隔离候选实例；3. 手动杀掉候选 runtime，再手动杀掉候选 adapter，制造联合故障；4. 读取 `GET /proxy/system-status`、`GET /health`、隔离 `track_b_status.json`、`agent_modes.json` 与 supervisor 日志 |
+| 观察结果 | gateway 在 `18036` 上自动恢复监听成功；最终 `GET /proxy/system-status` 与 `GET /health.system_status` 一致返回 `status=healthy`、`routing_requested=false`、`routing_effective=false`、`recommended_action=none`，隔离 `track_b_status.json` 已不存在，隔离 `agent_modes.json` 仍保持 `claude_code=off`。supervisor 日志显示 gateway 自动恢复成功；本次运行最终未留下 `degraded-capability` 残留 |
+| 结论适用范围 | `候选成立`：Track B 现在已具备 `route=off` 下联合故障后的稳定收敛证据，最终会回到健康 passthrough，而不会把 route-off 用户置于故障状态 |
+| 备注 | 该记录证明的是 `route=off` 的稳定收敛结果，不主张 runtime 必然持续失效；对应隔离 `.tmp/candidate-*` 工件已在验证后清理 |

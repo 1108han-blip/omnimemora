@@ -241,6 +241,33 @@ class TrackBStatusTests(unittest.TestCase):
         self.assertEqual(payload["gateway_health"], "unhealthy")
         self.assertTrue(payload["user_action_required"])
 
+    def test_orchestrator_preserves_explicit_degraded_capability_after_gateway_recovery(self) -> None:
+        capability_override = {
+            "status": "degraded-capability",
+            "status_source": "runtime-restart-monitor",
+            "transition_reason": "gateway_recovered_runtime_still_unhealthy",
+            "gateway_health": "healthy",
+            "capability_health": "degraded",
+            "routing_requested": True,
+            "routing_effective": False,
+            "recommended_action": "degrade_to_passthrough",
+            "error_code": "runtime_unreachable",
+        }
+        with mock.patch.object(track_b_status, "read_status_override", return_value=capability_override):
+            payload = track_b_orchestrator.build_system_status_from_backend_health(
+                backend_health=BackendHealth(
+                    healthy=False,
+                    backend_type="omnimemora_runtime",
+                    details={"status": "runtime_unreachable"},
+                ),
+                per_agent_modes={"claude_code": "off"},
+            )
+
+        self.assertEqual(payload["status"], "degraded-capability")
+        self.assertTrue(payload["routing_requested"])
+        self.assertFalse(payload["routing_effective"])
+        self.assertEqual(payload["recommended_action"], "degrade_to_passthrough")
+
 
 class TrackBStatusApiTests(unittest.TestCase):
     def test_proxy_system_status_endpoint(self) -> None:
