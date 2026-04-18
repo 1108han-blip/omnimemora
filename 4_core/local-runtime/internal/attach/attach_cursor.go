@@ -33,6 +33,10 @@ func AttachCursor() *AttachResult {
 		result.Message = "Failed to create Cursor config directory"
 		return result
 	}
+	if err := BackupConfig(AgentCursor); err != nil {
+		result.Message = "Failed to back up Cursor config"
+		return result
+	}
 
 	// Read existing config or create new
 	var cfg map[string]interface{}
@@ -47,11 +51,11 @@ func AttachCursor() *AttachResult {
 	// Add/Update memory section with omnimemora provider
 	// All MCP clients connect to Python Adapter at 18011, not Go Runtime at 8765
 	cfg["memory"] = map[string]interface{}{
-		"provider": "omnimemora",
-		"endpoint": "http://127.0.0.1:18011",
+		"provider":         "omnimemora",
+		"endpoint":         "http://127.0.0.1:18011",
 		"assemble_context": true,
 		"context_strategy": "auto",
-		"context_mode":    "balanced",
+		"context_mode":     "balanced",
 	}
 
 	// Write back
@@ -78,6 +82,12 @@ func AttachCursor() *AttachResult {
 
 // DetachCursor removes OmniMemora from Cursor config
 func DetachCursor() error {
+	if restored, err := RestoreBackup(AgentCursor); err != nil {
+		return err
+	} else if restored {
+		return nil
+	}
+
 	var cursorDir string
 	if runtime.GOOS == "windows" {
 		cursorDir = filepath.Join(os.Getenv("APPDATA"), "Cursor")

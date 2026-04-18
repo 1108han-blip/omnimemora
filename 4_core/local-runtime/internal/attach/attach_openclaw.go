@@ -23,6 +23,10 @@ func AttachOpenClaw() *AttachResult {
 		result.Message = "Failed to create OpenClaw config directory"
 		return result
 	}
+	if err := BackupConfig(AgentOpenClaw); err != nil {
+		result.Message = "Failed to back up OpenClaw config"
+		return result
+	}
 
 	// Read existing config or create new
 	var cfg map[string]interface{}
@@ -120,6 +124,12 @@ func AttachOpenClaw() *AttachResult {
 
 // DetachOpenClaw removes OmniMemora from OpenClaw config
 func DetachOpenClaw() error {
+	if restored, err := RestoreBackup(AgentOpenClaw); err != nil {
+		return err
+	} else if restored {
+		return nil
+	}
+
 	configPath, err := GetConfigPath(AgentOpenClaw)
 	if err != nil {
 		return err

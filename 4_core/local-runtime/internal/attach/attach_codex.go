@@ -24,6 +24,10 @@ func AttachCodex() *AttachResult {
 		result.Message = "Failed to create Codex config directory"
 		return result
 	}
+	if err := BackupConfig(AgentCodex); err != nil {
+		result.Message = "Failed to back up existing config"
+		return result
+	}
 
 	// Detect python executable for the shim
 	pyExe := ShimPythonExe()
@@ -63,6 +67,12 @@ func AttachCodex() *AttachResult {
 
 // DetachCodex removes OmniMemora MCP server from Codex config
 func DetachCodex() error {
+	if restored, err := RestoreBackup(AgentCodex); err != nil {
+		return err
+	} else if restored {
+		return nil
+	}
+
 	configPath, err := GetConfigPath(AgentCodex)
 	if err != nil {
 		return err

@@ -26,6 +26,10 @@ func AttachClaude() *AttachResult {
 		result.Message = "Failed to create Claude config directory"
 		return result
 	}
+	if err := BackupConfig(AgentClaude); err != nil {
+		result.Message = "Failed to back up Claude config"
+		return result
+	}
 
 	// Read existing config or create new
 	var cfg map[string]interface{}
@@ -40,11 +44,11 @@ func AttachClaude() *AttachResult {
 	// Add/Update memory section with omnimemora provider
 	// All MCP clients connect to Python Adapter at 18011, not Go Runtime at 8765
 	cfg["memory"] = map[string]interface{}{
-		"provider": "omnimemora",
-		"endpoint": "http://127.0.0.1:18011",
+		"provider":         "omnimemora",
+		"endpoint":         "http://127.0.0.1:18011",
 		"assemble_context": true,
 		"context_strategy": "auto",
-		"context_mode":    "balanced",
+		"context_mode":     "balanced",
 	}
 
 	// Write back
@@ -71,6 +75,12 @@ func AttachClaude() *AttachResult {
 
 // DetachClaude removes OmniMemora from Claude Code config
 func DetachClaude() error {
+	if restored, err := RestoreBackup(AgentClaude); err != nil {
+		return err
+	} else if restored {
+		return nil
+	}
+
 	configPath, err := GetConfigPath(AgentClaude)
 	if err != nil {
 		return err

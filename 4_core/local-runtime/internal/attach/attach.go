@@ -118,6 +118,12 @@ func RestartAgent(agent AgentType) error {
 
 // DetachAgent removes OmniMemora configuration from an agent
 func DetachAgent(agent AgentType, port int) error {
+	if restored, err := RestoreBackup(agent); err != nil {
+		return err
+	} else if restored {
+		return nil
+	}
+
 	if agent == AgentCodex {
 		return DetachCodex()
 	}
@@ -235,7 +241,7 @@ func IsAttached(agent AgentType, port int) bool {
 			if servers, ok := mcp["servers"].(map[string]interface{}); ok {
 				if entry, ok := servers["omnimemora"].(map[string]interface{}); ok {
 					if u, ok := entry["url"].(string); ok {
-						return strings.Contains(u, RuntimeEndpoint(port))
+						return strings.Contains(u, "127.0.0.1:18011/mcp") || strings.Contains(strings.ToLower(u), "omnimemora")
 					}
 					return true
 				}
