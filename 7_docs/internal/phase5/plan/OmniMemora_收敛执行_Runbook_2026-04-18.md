@@ -33,6 +33,7 @@ last_verified_commit: ""
 - 工作区切批方案见 [OmniMemora 工作区分批切割清单](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_工作区分批切割清单_2026-04-18.md)
 - `V2` 历史依赖与后备优化定位见 [OmniMemora V2遗产映射与后备优化清单](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_V2遗产映射与后备优化清单_2026-04-18.md)
 - `M5` 的最小数据边界口径见 [OmniMemora M5 云端最小数据上报口径](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_M5_云端最小数据上报口径_2026-04-18.md)
+- 当前轮次的阶段性收口见 [OmniMemora Phase5 收口总结](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Phase5_收口总结_2026-04-18.md)
 
 ## 二、总执行规则
 
