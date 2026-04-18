@@ -1,13 +1,12 @@
 """
 配置模块 v2.2
 """
+import json
 import os
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional
 
 
-<<<<<<< HEAD
-=======
 def _env_bool(name: str, default: bool) -> bool:
     raw = os.getenv(name)
     if raw is None:
@@ -96,7 +95,6 @@ def _default_openai_timeout_seconds() -> float:
     return float(os.getenv("OMNIMEMORA_OPENAI_TIMEOUT_SECONDS", "240"))
 
 
->>>>>>> 0a5d2f8 (feat: default telemetry consent to cloud policy updates)
 class MemoryBackendConfig(BaseModel):
     """Memory Backend 配置"""
     backend_type: str = os.getenv("MEMORY_BACKEND_TYPE", "omnimemora_runtime")
@@ -208,7 +206,7 @@ class Config(BaseModel):
 
     # Adapter 配置
     adapter_host: str = "0.0.0.0"
-    adapter_port: int = int(os.getenv("PORT", "8000"))
+    adapter_port: int = int(os.getenv("PORT", "18011"))
 
     # ========== 超时治理配置 ==========
     viking_connect_timeout_seconds: float = float(os.getenv("VIKING_CONNECT_TIMEOUT_SECONDS", "5"))
@@ -272,6 +270,28 @@ class Config(BaseModel):
     agent_events_flush_interval_seconds: float = float(os.getenv("OMNIMEMORA_AGENT_EVENTS_FLUSH", "5"))
     agent_events_max_file_size_mb: int = int(os.getenv("OMNIMEMORA_AGENT_EVENTS_MAX_MB", "50"))
     agent_events_retention_days: int = int(os.getenv("OMNIMEMORA_AGENT_EVENTS_RETENTION_DAYS", "30"))
+    trace_anthropic_payload: bool = os.getenv(
+        "OMNIMEMORA_TRACE_ANTHROPIC_PAYLOAD",
+        "false",
+    ).lower() == "true"
+    trace_redact: bool = os.getenv(
+        "OMNIMEMORA_TRACE_REDACT",
+        "true",
+    ).lower() == "true"
+    anthropic_payload_trace_path: str = os.getenv(
+        "OMNIMEMORA_ANTHROPIC_PAYLOAD_TRACE_PATH",
+        os.path.join(os.path.expanduser("~/.omnimemora/adapter"), "anthropic_payload_trace.jsonl"),
+    )
+    trace_events_enabled: bool = os.getenv(
+        "OMNIMEMORA_TRACE_EVENTS_ENABLED",
+        "true",
+    ).lower() == "true"
+    trace_events_path: str = os.getenv(
+        "OMNIMEMORA_TRACE_EVENTS_PATH",
+        os.path.join(os.path.expanduser("~/.omnimemora/adapter"), "trace_events.jsonl"),
+    )
+    path_mode: str = os.getenv("OMNIMEMORA_PATH_MODE", "baseline").strip().lower() or "baseline"
+    primary_ratio: float = float(os.getenv("OMNIMEMORA_PRIMARY_RATIO", "0.0"))
 
     # Per-agent control modes (loaded from agent_modes.json at startup)
     agent_control: dict = {}  # {agent_id: mode} — filled by main.py from agent_modes.json
@@ -288,6 +308,52 @@ class Config(BaseModel):
         "OMNIMEMORA_MCP_AUTO_BOOTSTRAP_QUERY",
         "session bootstrap context handshake",
     )
+
+    # ========== LLM Proxy 配置（Phase 1 — 请求路径接管）============
+    # 每个 provider 代表一个 LLM 上游，Agent 的请求经过 OmniMemora 时會轉發到這裡
+    llm_proxy_enabled: bool = os.getenv("OMNIMEMORA_LLM_PROXY_ENABLED", "true").lower() == "true"
+
+    # 默认 Anthropic 上游（Claude Code 等使用 Anthropic API 的 Agent）
+    anthropic_base_url: str = _default_anthropic_upstream_base_url()
+    anthropic_api_key: str = _default_anthropic_api_key()
+    anthropic_default_model: str = _default_anthropic_model()
+
+    # 默认 OpenAI/Ollama 上游（OpenClaw 等使用 OpenAI 格式的 Agent）
+    openai_base_url: str = os.getenv(
+        "OMNIMEMORA_OPENAI_BASE_URL",
+        "http://127.0.0.1:11434/v1",  # 默认 Ollama 本地
+    )
+    openai_api_key: str = os.getenv("OMNIMEMORA_OPENAI_API_KEY", "ollama")
+    openai_default_model: str = _default_openai_model()
+
+    # Phase 2: UPSTREAMS 配置（显式结构化配置）
+    # 用法：upstreams["anthropic"]["base_url"] 等
+    upstreams: dict = {
+        "anthropic": {
+            "provider": "anthropic",
+            "base_url": _default_anthropic_upstream_base_url(),
+            "api_key_env": "OMNIMEMORA_ANTHROPIC_API_KEY",
+            "api_key": _default_anthropic_api_key(),
+            "model_map": {
+                "claude-sonnet-4-20250514": _default_anthropic_model(),
+                "claude-sonnet-4-6": _default_anthropic_model(),
+                "claude-opus-4-5": _default_anthropic_model(),
+                "MiniMax-M2.7": "MiniMax-M2.7",
+            },
+            "supports_stream": True,
+            "timeout_seconds": _default_anthropic_timeout_seconds(),
+        },
+        "openai": {
+            "provider": "openai_compatible",
+            "base_url": os.getenv("OMNIMEMORA_OPENAI_BASE_URL", "http://127.0.0.1:11434/v1"),
+            "api_key_env": "OMNIMEMORA_OPENAI_API_KEY",
+            "api_key": os.getenv("OMNIMEMORA_OPENAI_API_KEY", "ollama"),
+            "default_model": _default_openai_model(),
+            "model_map": _default_openai_model_map(),
+            "supports_stream": True,
+            "timeout_seconds": _default_openai_timeout_seconds(),
+        },
+    }
 
 
 config = Config()
