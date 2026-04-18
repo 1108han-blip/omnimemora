@@ -11,7 +11,7 @@ Memory Adapter v2.2 - OpenViking 中间层
 标准化 → 过滤 → 去重 → 限流 → 路由 → 转换 → OpenViking
 """
 import asyncio
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
@@ -30,6 +30,8 @@ from pathlib import PurePosixPath
 from collections import deque
 
 from .config import config
+from .trace_context import REQUEST_HEADER, TRACE_HEADER, build_trace_event, ensure_request_context
+from .trace_events import append_trace_event
 from .cloud import load_policy, load_flags, report_usage_async
 
 # 兼容数字开头包：逐个子模块动态导入（避免语法错误）
@@ -47,6 +49,7 @@ _5_tc       = importlib.import_module("5_connectors.adapter.task_classifier")
 _5_trace    = importlib.import_module("5_connectors.adapter.trace_store")
 _5_agent_id = importlib.import_module("5_connectors.adapter.agent_identity")
 _5_ctrl     = importlib.import_module("5_connectors.adapter.control_mode")
+_5_route_state = importlib.import_module("5_connectors.adapter.agent_routing_state")
 _5_agnet_m  = importlib.import_module("5_connectors.adapter.agent_metrics")
 _5_it       = importlib.import_module("5_connectors.adapter.internal_transport")
 _5_agnet_m.get_agent_metrics_store(
@@ -56,29 +59,7 @@ _5_agnet_m.get_agent_metrics_store(
     retention_days=config.agent_events_retention_days,
 )
 
-# ADR-0005 v1.2: Load per-agent control modes from agent_modes.json
-# Keys normalized to canonical_agent_id per ADR-0005 Rule 2.
-_agent_modes_cache: tuple[dict, str] = ({}, "observe")
-
-def _reload_agent_modes():
-    """Reload agent_modes.json from disk (canonicalizes keys)."""
-    global _agent_modes_cache
-    import json as _json_alias
-    try:
-        path = os.path.join(os.path.dirname(__file__), "config", "agent_modes.json")
-        with open(path, "r", encoding="utf-8") as f:
-            cfg = _json_alias.load(f)
-        raw_dict = cfg.get("per_agent_modes", {})
-        canonical_dict = {
-            _5_agent_id.resolve_canonical_agent_id(k): v
-            for k, v in raw_dict.items()
-        }
-        default_mode = cfg.get("default_mode", "observe")
-        _agent_modes_cache = (canonical_dict, default_mode)
-    except Exception:
-        pass  # Keep existing cache on error
-
-_reload_agent_modes()
+_5_route_state.reload_agent_modes()
 
 _adapter_started_at = datetime.utcnow().isoformat() + "Z"
 _adapter_hostname = socket.gethostname()
@@ -106,7 +87,6 @@ get_tenant_usage         = _5_meter.get_tenant_usage
 get_trend_data           = _5_meter.get_trend_data
 get_tenant_current_usage = _5_meter.get_tenant_current_usage
 classify_task            = _5_tc.classify_task
-should_bypass_context    = _5_tc.should_bypass_context
 from .access import get_tenant_registry_entry, resolve_query_access
 from .backends.factory import create_backend, get_memory_backend, set_memory_backend
 from .backends.base import MemoryBackend, MemorySearchRequest, MemoryWriteRequest
@@ -179,13 +159,134 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Phase 2: 註冊 LLM Proxy 和 Status API routers
+import importlib
+_llm_proxy_mod = importlib.import_module("5_connectors.adapter.llm_proxy")
+_status_api_mod = importlib.import_module("5_connectors.adapter.status_api")
+_agent_control_api_mod = importlib.import_module("5_connectors.adapter.agent_control_api")
+app.include_router(_llm_proxy_mod.router, prefix="")
+app.include_router(_status_api_mod.router, prefix="")
+app.include_router(_agent_control_api_mod.router, prefix="")
+del _llm_proxy_mod, _status_api_mod, _agent_control_api_mod
+
+_QUOTA_ROUTE_KEYWORDS = (
+    "account",
+    "usage",
+    "limit",
+    "billing",
+    "subscription",
+    "entitlement",
+    "quota",
+    "credit",
+    "remaining",
+)
+
+_PROXY_INGRESS_PATHS = {
+    "/llm/chat",
+    "/llm/chat/completions",
+    "/llm/v1/chat/completions",
+    "/llm/api/chat",
+    "/llm/anthropic",
+    "/llm/v1/messages",
+    "/v1/messages",
+    "/v1/responses",
+    "/v1/codex/responses",
+    "/v1/chat/completions",
+}
+
+
+def _is_quota_related_path(path: str) -> bool:
+    lowered = (path or "").lower()
+    if lowered in _PROXY_INGRESS_PATHS:
+        return True
+    return any(token in lowered for token in _QUOTA_ROUTE_KEYWORDS)
+
+
+def _quota_marker(request: Request) -> Dict[str, str]:
+    marker = getattr(request.state, "quota_audit", None)
+    if isinstance(marker, dict):
+        return {
+            "upstream_url": str(marker.get("upstream_url") or ""),
+            "action": str(marker.get("action") or "").strip(),
+        }
+    return {"upstream_url": "", "action": ""}
+
+
+def _classify_quota_observation(request: Request, path: str, status_code: int, content_length: str) -> str:
+    marker = _quota_marker(request)
+    if marker["action"]:
+        return marker["action"]
+    if path in _PROXY_INGRESS_PATHS:
+        return "intercepted"
+    if status_code in {404, 405}:
+        return "intercepted"
+    if str(content_length).strip() in {"0", ""} and status_code in {200, 204}:
+        return "empty"
+    return "bypassed"
+
+
+def _upstream_url_for_observation(request: Request, path: str) -> str:
+    marker = _quota_marker(request)
+    if marker["upstream_url"]:
+        return marker["upstream_url"]
+    normalized = (path or "").strip()
+    if normalized in {"/v1/responses", "/v1/codex/responses"}:
+        return "unknown(codex_responses_chain)"
+    return ""
+
 
 @app.middleware("http")
 async def attach_request_id(request: Request, call_next):
-    request.state.request_id = uuid4().hex
+    context = ensure_request_context(request)
+    if config.trace_events_enabled:
+        append_trace_event(
+            build_trace_event(
+                trace_id=context["trace_id"],
+                request_id=context["request_id"],
+                stage="entry",
+                path=context["path"],
+                status="received",
+                agent_id=request.headers.get("x-omnimemora-agent") or "unknown",
+                details={
+                    "method": request.method,
+                    "path_mode": config.path_mode,
+                    "primary_ratio": config.primary_ratio,
+                },
+            )
+        )
     response = await call_next(request)
-    response.headers["X-Request-ID"] = request.state.request_id
+    response.headers["X-Request-ID"] = context["request_id"]
+    response.headers[REQUEST_HEADER] = context["request_id"]
+    response.headers[TRACE_HEADER] = context["trace_id"]
+    request_path = str(getattr(getattr(request, "url", None), "path", "") or "")
+    if _is_quota_related_path(request_path):
+        content_length = response.headers.get("content-length", "")
+        action = _classify_quota_observation(request, request_path, response.status_code, content_length)
+        upstream_url = _upstream_url_for_observation(request, request_path)
+        loguru.logger.info(
+            "[QUOTA_PATH_OBS] "
+            f"request_id={context['request_id']} "
+            f"method={request.method} "
+            f"path={request_path} "
+            f"status_code={response.status_code} "
+            f"upstream_url={upstream_url} "
+            f"action={action}"
+        )
+    if config.trace_events_enabled:
+        append_trace_event(
+            build_trace_event(
+                trace_id=context["trace_id"],
+                request_id=context["request_id"],
+                stage="entry",
+                path=context["path"],
+                status="ok" if response.status_code < 400 else "error",
+                agent_id=request.headers.get("x-omnimemora-agent") or "unknown",
+                error_type=None if response.status_code < 400 else f"http_{response.status_code}",
+                details={"status_code": response.status_code},
+            )
+        )
     return response
+
 
 
 # ==================== MCP Protocol Endpoints (for OpenClaw integration) ====================
@@ -1094,7 +1195,7 @@ async def viking_request(
     """统一封装对 OpenViking 的下游调用，提供分层超时与有限重试。"""
     attempts = 1 + max(0, config.viking_retry_attempts if retryable else 0)
     backoff = max(0.0, config.viking_retry_backoff_seconds)
-    last_exc: Exception | None = None
+    last_exc: Optional[Exception] = None
     request_headers = build_headers_with_tenant(tenant_id, user_id) if tenant_id and user_id else build_headers()
 
     for attempt in range(1, attempts + 1):
@@ -1876,9 +1977,29 @@ async def runtime_fingerprint():
     """
     Runtime fingerprint for fast operator verification.
     Helps confirm whether dashboard and clients are hitting the same adapter instance.
+    Includes code source paths so operators can instantly tell if the running
+    code matches the files they edited (avoids "I changed X but it didn't take effect").
     """
+    import importlib
+    import inspect as _inspect
+
     live_5m = _5_agnet_m.get_live_agents(window_minutes=5)
     live_24h = _5_agnet_m.get_live_agents(window_minutes=1440)
+
+    _KEY_MODULES = [
+        "5_connectors.adapter.main",
+        "5_connectors.adapter.metrics_aggregator",
+        "5_connectors.adapter.agent_identity",
+        "5_connectors.adapter.agent_metrics",
+    ]
+    code_source = {}
+    for _name in _KEY_MODULES:
+        try:
+            _mod = importlib.import_module(_name)
+            code_source[_name] = _inspect.getfile(_mod)
+        except Exception as _e:
+            code_source[_name] = f"import failed: {_e}"
+
     return {
         "service": "Memory Adapter v2.2",
         "version": "2.2.0",
@@ -1893,6 +2014,7 @@ async def runtime_fingerprint():
             "memory_backend_url": config.memory_backend.base_url,
             "agent_events_path": config.agent_events_path,
         },
+        "code_source": code_source,
         "live_counts": {
             "window_5m": len(live_5m),
             "window_24h": len(live_24h),
@@ -2551,7 +2673,7 @@ async def query_memory_v2(request: MemoryQueryRequest, http_request: Request):
         integration_type="wrapper",
         source="body",
     )
-    per_agent_dict, default_mode = _agent_modes_cache
+    per_agent_dict, default_mode = _5_route_state.get_agent_modes_cache()
     control_mode = _5_ctrl.load_control_mode(
         identity.canonical_agent_id, identity.integration_type, per_agent_dict, default_mode
     )
@@ -2622,80 +2744,14 @@ async def query_memory_v2(request: MemoryQueryRequest, http_request: Request):
 
     candidate_memories = search_result.get("memories", [])
 
-    # --- Policy v1: Task Classification ---
-    # Classify task BEFORE deciding whether to call optimize_context
-    bypass_context, classification = should_bypass_context(request.query)
+    # --- Task classification (observability only) ---
+    classification = classify_task(request.query)
     task_type = classification.task_type
     matched_keywords = classification.matched_keywords
-    context_bypass = False  # default
-    bypassed_context_tokens = 0  # default
+    context_bypass = False
+    bypassed_context_tokens = 0
 
-    if bypass_context:
-        # Implementation task: SHORT-CIRCUIT context injection
-        # Estimate bypassed tokens based on what would have been injected
-        # Use max_local_cards as proxy for how many memories would have been selected
-        estimated_memories_count = min(len(candidate_memories), max_local_cards)
-        if packing_enabled and estimated_memories_count > 0:
-            # Rough estimate: avg 200 chars per memory, 4 chars per token
-            bypassed_context_tokens = (estimated_memories_count * 200) // 4
-        else:
-            bypassed_context_tokens = 0
-
-        loguru.logger.info(
-            f"[POLICY_V1_BYPASS] request_id={request_id}, task_type={task_type}, "
-            f"matched_keywords={matched_keywords}, bypassed_tokens={bypassed_context_tokens}"
-        )
-
-        # Create synthetic result for bypass case
-        # (TokenSavingsMeter already available via module-level importlib shim)
-        from datetime import datetime as dt
-
-        meter_for_bypass = TokenSavingsMeter(
-            request_id="engine-local",
-            tenant="engine",
-            user="engine",
-            agent=request.agent,
-            client=client,
-            timestamp=dt.utcnow().isoformat() + "Z",
-            query_shape="mixed",
-            query_chars=len(request.query),
-            query=request.query[:100],
-            baseline_chars=bypassed_context_tokens * 4,
-            actual_chars=0,
-            saved_chars=bypassed_context_tokens * 4,
-            baseline_tokens_estimate=bypassed_context_tokens,
-            actual_tokens_estimate=0,
-            saved_tokens_estimate=bypassed_context_tokens,
-            savings_ratio=1.0,
-            packed_memory_count=0,
-            local_cards_used=0,
-            remote_candidates_considered=0,
-            remote_candidates_skipped=0,
-            remote_used_count=0,
-            skipped_remote_reason="implementation_task_bypass",
-            coverage_satisfied=True,
-            packing_enabled=False,
-            abstract_preferred=False,
-            dedup_applied=False,
-            task_type=task_type,
-            context_bypass=True,
-            bypassed_context_tokens=bypassed_context_tokens,
-        )
-
-        # Create synthetic OptimizationResult-like structure
-        class BypassResult:
-            def __init__(self, meter):
-                self.selected_memories = []
-                self.packed_context = ""  # Empty - bypassed!
-                self.token_savings = meter
-                self.quota_result = check_quota_enforcement(current_usage, monthly_quota)
-                self.meter_artifact = meter.to_dict()
-                self.candidate_count = 0
-                self.selected_count = 0
-
-        result = BypassResult(meter_for_bypass)
-        context_bypass = True
-    elif not flags.optimization_enabled:
+    if not flags.optimization_enabled:
         # Feature flag: optimization disabled, but still go through unified path
         loguru.logger.info(
             f"[OPTIMIZATION_PASSTHROUGH] request_id={request_id}, optimization_enabled=false, preserving metrics/trace"
@@ -2746,7 +2802,7 @@ async def query_memory_v2(request: MemoryQueryRequest, http_request: Request):
                 self.call_chain = None
         result = PassthroughResult(passthrough_meter, candidate_memories)
     else:
-        # Decision or continuation: proceed with normal optimize_context flow
+        # All task types share the same context-optimization path.
         input_data = OptimizationInput(
             query=request.query,
             candidate_memories=candidate_memories,
@@ -3007,7 +3063,7 @@ async def mcp_query(request: Request):
             source="body",
         )
         # ADR-0005 v1.2: use cached per-agent modes with canonical key lookup
-        per_agent_dict, default_mode = _agent_modes_cache
+        per_agent_dict, default_mode = _5_route_state.get_agent_modes_cache()
         control_mode = _5_ctrl.load_control_mode(
             identity.canonical_agent_id, identity.integration_type, per_agent_dict, default_mode
         )
@@ -3047,80 +3103,34 @@ async def mcp_query(request: Request):
         search_result = await search_memory(retrieve_req, request)
         candidate_memories = search_result.get("memories", [])
 
-        # Policy v1: task classification
-        bypass_context, classification = should_bypass_context(query)
+        # Task classification is retained for observability only.
+        classification = classify_task(query)
         task_type = classification.task_type
         matched_keywords = classification.matched_keywords
         context_bypass = False
         bypassed_context_tokens = 0
 
-        if bypass_context:
-            estimated_memories_count = min(len(candidate_memories), limit)
-            bypassed_context_tokens = (estimated_memories_count * 200) // 4 if estimated_memories_count > 0 else 0
-            meter_for_bypass = TokenSavingsMeter(
-                request_id="engine-local",
-                tenant="engine",
-                user="engine",
-                agent=agent,
-                client="openclaw-mcp",
-                timestamp=datetime.utcnow().isoformat() + "Z",
-                query_shape="mixed",
-                query_chars=len(query),
-                query=query[:100],
-                baseline_chars=bypassed_context_tokens * 4,
-                actual_chars=0,
-                saved_chars=bypassed_context_tokens * 4,
-                baseline_tokens_estimate=bypassed_context_tokens,
-                actual_tokens_estimate=0,
-                saved_tokens_estimate=bypassed_context_tokens,
-                savings_ratio=1.0,
-                packed_memory_count=0,
-                local_cards_used=0,
-                remote_candidates_considered=0,
-                remote_candidates_skipped=0,
-                remote_used_count=0,
-                skipped_remote_reason="implementation_task_bypass",
-                coverage_satisfied=True,
-                packing_enabled=False,
-                abstract_preferred=False,
-                dedup_applied=False,
-                task_type=task_type,
-                context_bypass=True,
-                bypassed_context_tokens=bypassed_context_tokens,
-            )
-            class BypassResult:
-                def __init__(self, meter):
-                    self.selected_memories = []
-                    self.packed_context = ""
-                    self.token_savings = meter
-                    self.quota_result = check_quota_enforcement(current_usage, monthly_quota)
-                    self.meter_artifact = meter.to_dict()
-                    self.candidate_count = 0
-                    self.selected_count = 0
-            result = BypassResult(meter_for_bypass)
-            context_bypass = True
-        else:
-            input_data = OptimizationInput(
-                query=query,
-                candidate_memories=candidate_memories,
-                filter_rules=filter_rules,
-                routing_rules=routing_rules,
-                agent=agent,
-                client="openclaw-mcp",
-                current_usage=current_usage,
-                monthly_quota=monthly_quota,
-                packing_enabled=True,
-                max_local_cards=limit,
-                candidate_limit=16,
-                task_type=task_type,
-                context_bypass=False,
-                bypassed_context_tokens=0,
-                # Multi-source final compile gate (Phase 4)
-                native_compiled_context=body.get("native_compiled_context"),
-                current_session_context=body.get("current_session_context"),
-                raw_candidates=body.get("raw_candidates"),
-            )
-            result = optimize_context(input_data)
+        input_data = OptimizationInput(
+            query=query,
+            candidate_memories=candidate_memories,
+            filter_rules=filter_rules,
+            routing_rules=routing_rules,
+            agent=agent,
+            client="openclaw-mcp",
+            current_usage=current_usage,
+            monthly_quota=monthly_quota,
+            packing_enabled=True,
+            max_local_cards=limit,
+            candidate_limit=16,
+            task_type=task_type,
+            context_bypass=False,
+            bypassed_context_tokens=0,
+            # Multi-source final compile gate (Phase 4)
+            native_compiled_context=body.get("native_compiled_context"),
+            current_session_context=body.get("current_session_context"),
+            raw_candidates=body.get("raw_candidates"),
+        )
+        result = optimize_context(input_data)
 
         # Persist meter artifact
         result.meter_artifact["request_id"] = request_id
@@ -3191,15 +3201,46 @@ async def mcp_query(request: Request):
 
 
 @app.get("/metrics/summary")
-async def get_metrics_summary(tenant: str = "default"):
+async def get_metrics_summary(response: Response, tenant: str = "all"):
     """
-    Hero metrics: token saving ratio, tokens saved, request count, avg context reduction.
-    Data from real meter_store aggregation — no mocks.
+    Phase 2 Dashboard Refactor: Unified Metrics Summary Endpoint.
+
+    This is the ONLY endpoint the dashboard should consume for KPI data.
+    All time windows and agent IDs are canonicalized.
+
+    Response structure:
+        {
+            "generated_at": float,
+            "tenant": "all",
+            "windows": {
+                "5m": { active_agents, proxied_requests, compile_success, ... },
+                "24h": { ... },
+                "all_time": { requests_processed, tokens_saved, avg_reduction_ratio, history_agents },
+            },
+            "agents": {
+                "realtime": [{ agent_id, last_seen, connected, proxied_requests_5m, ... }],
+                "all_time": [{ agent_id, requests, tokens_saved, avg_reduction_ratio }],
+            },
+            "events": [{ request_id, ts, agent_id, kind, mode, saved_ratio, mem_count, query_preview }],
+        }
     """
     import importlib
-    _5_ms = importlib.import_module("5_connectors.adapter.metrics_service")
-    summary = _5_ms.compute_metrics_summary(tenant)
-    return summary
+    _5_agg = importlib.import_module("5_connectors.adapter.metrics_aggregator")
+    response.headers["X-OmniMemora-Surface-Role"] = "kpi"
+    response.headers["X-OmniMemora-KPI-Source"] = "/metrics/summary"
+    return _5_agg.compute_unified_summary()
+
+
+@app.get("/metrics/debug/sources")
+async def get_metrics_debug_sources():
+    """
+    Engineering diagnostic: return field-to-source mapping.
+    Documents where each field in /metrics/summary comes from.
+    Not shown to end users — for debugging only.
+    """
+    import importlib
+    _5_agg = importlib.import_module("5_connectors.adapter.metrics_aggregator")
+    return _5_agg.get_metrics_debug_sources()
 
 
 @app.get("/metrics/recent_requests")
@@ -3281,17 +3322,26 @@ async def get_call_chain(request_id: str):
 # ==================== Agent Observability Endpoints ====================
 
 @app.get("/agents/live")
-async def get_agents_live(window_minutes: int = 30):
+async def get_agents_live(response: Response, window_minutes: int = 30):
     """
     Return list of active agents with recent activity.
     Active = last_seen_at within window_minutes.
     """
     live = _5_agnet_m.get_live_agents(window_minutes=window_minutes)
-    return {"agents": live, "count": len(live)}
+    response.headers["X-OmniMemora-Surface-Role"] = "diagnostic"
+    response.headers["X-OmniMemora-KPI-Source"] = "/metrics/summary"
+    return {
+        "surface_role": "diagnostic",
+        "kpi_source": "/metrics/summary",
+        "diagnostic_scope": "agent session snapshots reconstructed from agent_events JSONL",
+        "agents": live,
+        "count": len(live),
+    }
 
 
 @app.get("/agents/metrics")
 async def get_agent_metrics_get(
+    response: Response,
     agent_id: Optional[str] = None,
     session_id: Optional[str] = None,
 ):
@@ -3306,7 +3356,15 @@ async def get_agent_metrics_get(
     if agent_id:
         canonical_id = _5_agent_id.resolve_canonical_agent_id(agent_id)
     metrics = _5_agnet_m.get_agent_metrics(agent_id=canonical_id, session_id=session_id)
-    return {"metrics": [m.dict() for m in metrics], "count": len(metrics)}
+    response.headers["X-OmniMemora-Surface-Role"] = "diagnostic"
+    response.headers["X-OmniMemora-KPI-Source"] = "/metrics/summary"
+    return {
+        "surface_role": "diagnostic",
+        "kpi_source": "/metrics/summary",
+        "diagnostic_scope": "agent/session aggregates replayed from agent_events JSONL",
+        "metrics": [m.dict() for m in metrics],
+        "count": len(metrics),
+    }
 
 
 # ==================== Trial Provisioning (Protected Admin) ====================
@@ -3483,7 +3541,7 @@ async def internal_trial_query(request: InternalTrialQueryRequest, http_request:
         integration_type="wrapper",
         source="body",
     )
-    per_agent_dict, default_mode = _agent_modes_cache
+    per_agent_dict, default_mode = _5_route_state.get_agent_modes_cache()
     control_mode = _5_ctrl.load_control_mode(
         identity.canonical_agent_id, identity.integration_type, per_agent_dict, default_mode
     )
@@ -3530,8 +3588,8 @@ async def internal_trial_query(request: InternalTrialQueryRequest, http_request:
         search_result = await search_memory(retrieve_req, http_request)
         candidate_memories = search_result.get("memories", [])
 
-        # ---- Policy v1: Task Classification ----
-        bypass_context, classification = should_bypass_context(request.query)
+        # ---- Task classification (observability only) ----
+        classification = classify_task(request.query)
         task_type = classification.task_type
         matched_keywords = classification.matched_keywords
         context_bypass = False
@@ -3539,85 +3597,23 @@ async def internal_trial_query(request: InternalTrialQueryRequest, http_request:
 
         request_id = f"trial-{uuid4().hex[:8]}"
 
-        if bypass_context:
-            # Implementation task: SHORT-CIRCUIT context injection
-            estimated_memories_count = min(len(candidate_memories), max_local_cards)
-            if packing_enabled and estimated_memories_count > 0:
-                bypassed_context_tokens = (estimated_memories_count * 200) // 4
-            else:
-                bypassed_context_tokens = 0
-
-            loguru.logger.info(
-                f"[POLICY_V1_BYPASS] request_id={request_id}, task_type={task_type}, "
-                f"matched_keywords={matched_keywords}, bypassed_tokens={bypassed_context_tokens}"
-            )
-
-            # (TokenSavingsMeter already available via module-level importlib shim)
-            from datetime import datetime as dt
-
-            meter_for_bypass = TokenSavingsMeter(
-                request_id="engine-local",
-                tenant="engine",
-                user="engine",
-                agent=request.agent,
-                client=client,
-                timestamp=dt.utcnow().isoformat() + "Z",
-                query_shape="mixed",
-                query_chars=len(request.query),
-                query=request.query[:100],
-                baseline_chars=0,
-                actual_chars=0,
-                saved_chars=0,
-                baseline_tokens_estimate=bypassed_context_tokens,
-                actual_tokens_estimate=0,
-                saved_tokens_estimate=bypassed_context_tokens,
-                savings_ratio=1.0,
-                packed_memory_count=0,
-                local_cards_used=0,
-                remote_candidates_considered=0,
-                remote_candidates_skipped=0,
-                remote_used_count=0,
-                skipped_remote_reason="implementation_task_bypass",
-                coverage_satisfied=True,
-                packing_enabled=False,
-                abstract_preferred=False,
-                dedup_applied=False,
-                task_type=task_type,
-                context_bypass=True,
-                bypassed_context_tokens=bypassed_context_tokens,
-            )
-
-            class BypassResult:
-                def __init__(self, meter):
-                    self.selected_memories = []
-                    self.packed_context = ""
-                    self.token_savings = meter
-                    self.quota_result = check_quota_enforcement(trial_usage, trial_quota)
-                    self.meter_artifact = meter.to_dict()
-                    self.candidate_count = 0
-                    self.selected_count = 0
-
-            result = BypassResult(meter_for_bypass)
-            context_bypass = True
-        else:
-            # Decision or continuation: proceed with normal optimize_context flow
-            input_data = OptimizationInput(
-                query=request.query,
-                candidate_memories=candidate_memories,
-                filter_rules=filter_rules,
-                routing_rules=routing_rules,
-                agent=request.agent,
-                client=client,
-                current_usage=trial_usage,
-                monthly_quota=trial_quota,
-                packing_enabled=packing_enabled,
-                max_local_cards=max_local_cards,
-                candidate_limit=16,
-                task_type=task_type,
-                context_bypass=False,
-                bypassed_context_tokens=0,
-            )
-            result = optimize_context(input_data)
+        input_data = OptimizationInput(
+            query=request.query,
+            candidate_memories=candidate_memories,
+            filter_rules=filter_rules,
+            routing_rules=routing_rules,
+            agent=request.agent,
+            client=client,
+            current_usage=trial_usage,
+            monthly_quota=trial_quota,
+            packing_enabled=packing_enabled,
+            max_local_cards=max_local_cards,
+            candidate_limit=16,
+            task_type=task_type,
+            context_bypass=False,
+            bypassed_context_tokens=0,
+        )
+        result = optimize_context(input_data)
 
         # ---- Quota enforcement ----
         if result.quota_result.quota_exceeded:
