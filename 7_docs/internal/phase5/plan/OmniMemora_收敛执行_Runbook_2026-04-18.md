@@ -47,7 +47,7 @@ last_verified_commit: ""
   - 当前结论：允许小范围定点推进，禁止扩大到 UI 或云端新实现面
 - `M3` 候选实例：`18012/18765` 启动已验证；`openclaw` 的 `enable/disable` 已完成候选实例落盘闭环；`route=on` 已在候选实例下进入 `runtime_compile`
   - `M3` 恢复语义：`uninstall/detach -> restore original config` 已有隔离测试证据，见 `RECORD-B-009`
-  - `M4` 最新证据：`RECORD-B-010`
+  - `M4` 最新证据：`RECORD-B-010`、`RECORD-B-011`
 
 ### 必须遵守
 
@@ -255,7 +255,7 @@ last_verified_commit: ""
 - [x] 验证 `route=off -> passthrough path`
 - [x] 验证 `route=off` 不调用 compile
 - [x] 验证 agent 在 `route=on` 时不可自主绕过
-- [ ] 验证 `uninstall -> restore original upstream config`
+- [x] 验证 `uninstall -> restore original upstream config`
 
 ### 输出
 
@@ -267,7 +267,7 @@ last_verified_commit: ""
 - [x] `route=off = passthrough`
 - [x] `route=on = compile path`
 - [x] `openclaw` 在候选实例上 `route=on` 不再落入 `agent_route_disabled` 透明直通
-- [ ] `uninstall = restore original upstream config`
+- [x] `codex_cli` 在候选实例隔离 `HOME` 下已在线验证 `install -> uninstall -> restore original config`
 
 ### 停止条件
 

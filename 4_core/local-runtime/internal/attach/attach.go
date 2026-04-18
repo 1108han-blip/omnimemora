@@ -211,7 +211,10 @@ func IsAttached(agent AgentType, port int) bool {
 		if err != nil {
 			return false
 		}
-		return strings.Contains(string(data), "[mcp_servers.omnimemora]")
+		content := string(data)
+		return strings.Contains(content, `model_provider = "omnimemora"`) ||
+			strings.Contains(content, "[model_providers.omnimemora]") ||
+			strings.Contains(content, "[mcp_servers.omnimemora]")
 	}
 
 	cfg, err := ReadConfig(path)

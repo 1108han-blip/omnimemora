@@ -98,3 +98,30 @@ func TestAttachThenDetachCodexRestoresOriginalConfig(t *testing.T) {
 		t.Fatalf("expected backup to be removed after restore")
 	}
 }
+
+func TestIsAttachedCodexRecognizesProviderConfig(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	configDir := filepath.Join(tmpDir, ".codex")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("mkdir failed: %v", err)
+	}
+
+	configPath := filepath.Join(configDir, "config.toml")
+	content := `model_provider = "omnimemora"
+model = "gpt-5.4"
+
+[model_providers.omnimemora]
+name = "OmniMemora"
+base_url = "http://127.0.0.1:18011/v1"
+wire_api = "responses"
+`
+	if err := os.WriteFile(configPath, []byte(content), 0644); err != nil {
+		t.Fatalf("write config failed: %v", err)
+	}
+
+	if !IsAttached(AgentCodex, 8765) {
+		t.Fatalf("expected codex provider config to count as attached")
+	}
+}
