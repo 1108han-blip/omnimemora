@@ -152,6 +152,94 @@ clear_gateway_decision_file() {
   rm -f "$GATEWAY_DECISION_PATH" >/dev/null 2>&1 || true
 }
 
+route_mode_for_family() {
+  local family_id="$1"
+  AGENT_MODES_PATH="$AGENT_MODES_PATH" FAMILY_ID="$family_id" "$PYTHON_BIN" - <<'PY'
+import json
+import os
+import sys
+
+path = os.environ["AGENT_MODES_PATH"]
+family_id = os.environ["FAMILY_ID"]
+try:
+    with open(path, "r", encoding="utf-8") as fh:
+        payload = json.load(fh)
+except Exception:
+    sys.exit(1)
+
+per_agent = payload.get("per_agent_modes") or {}
+mode = str(per_agent.get(family_id) or payload.get("default_mode") or "").strip()
+if not mode:
+    sys.exit(1)
+print(mode)
+PY
+}
+
+any_routing_requested() {
+  AGENT_MODES_PATH="$AGENT_MODES_PATH" "$PYTHON_BIN" - <<'PY'
+import json
+import os
+import sys
+
+path = os.environ["AGENT_MODES_PATH"]
+try:
+    with open(path, "r", encoding="utf-8") as fh:
+        payload = json.load(fh)
+except Exception:
+    sys.exit(1)
+
+per_agent = payload.get("per_agent_modes") or {}
+if any(str(mode).strip() == "force_if_possible" for mode in per_agent.values()):
+    print("true")
+    sys.exit(0)
+
+default_mode = str(payload.get("default_mode") or "").strip()
+if default_mode == "force_if_possible":
+    print("true")
+    sys.exit(0)
+
+print("false")
+PY
+}
+
+decision_route_contract_satisfied() {
+  local action="$1"
+  local family_id="$2"
+  case "$action" in
+    disable-route|uninstall)
+      local current_mode
+      current_mode="$(route_mode_for_family "$family_id" 2>/dev/null || true)"
+      [ "$current_mode" = "off" ]
+      ;;
+    *)
+      return 0
+      ;;
+  esac
+}
+
+runtime_is_healthy() {
+  curl -sf "http://127.0.0.1:${RUNTIME_PORT}/health" >/dev/null 2>&1
+}
+
+handle_gateway_recovery_postcheck() {
+  local recovery_reason="$1"
+  if runtime_is_healthy; then
+    clear_track_b_status_file
+    return 0
+  fi
+
+  local routing_requested
+  routing_requested="$(any_routing_requested 2>/dev/null || true)"
+  if [ "$routing_requested" = "true" ]; then
+    log_supervisor "gateway recovered but runtime remains unhealthy; degrading capability reason=${recovery_reason}"
+    write_track_b_status_file "{\"status\":\"degraded-capability\",\"status_source\":\"runtime-restart-monitor\",\"transition_reason\":\"${recovery_reason}\",\"gateway_health\":\"healthy\",\"capability_health\":\"degraded\",\"routing_requested\":true,\"routing_effective\":false,\"user_action_required\":false,\"recommended_action\":\"degrade_to_passthrough\",\"error_code\":\"runtime_unreachable\"}"
+    return 0
+  fi
+
+  clear_track_b_status_file
+  return 0
+}
+
 read_gateway_decision() {
   if [ ! -f "$GATEWAY_DECISION_PATH" ]; then
     return 1
@@ -244,7 +332,7 @@ attempt_gateway_auto_recovery() {
       "$TRACK_B_GATEWAY_HEALTH_TIMEOUT_SECONDS"; then
       log_supervisor "gateway auto recovery succeeded on attempt=${attempt_no}"
       sleep "$TRACK_B_RECOVERY_SETTLE_SECONDS"
-      clear_track_b_status_file
+      handle_gateway_recovery_postcheck "gateway_recovered_runtime_still_unhealthy"
       TRACK_B_GATEWAY_RECOVERY_RESULT="recovered"
       return 0
     fi
@@ -413,6 +501,13 @@ while true; do
       continue
     fi
 
+    if ! decision_route_contract_satisfied "$ACTION" "$FAMILY_ID"; then
+      log_supervisor "decision rejected because route state is not persisted off action='${ACTION}' family='${FAMILY_ID}'"
+      write_user_decision_required_status "gateway_decision_route_state_not_persisted" "gateway_decision_route_state_not_persisted"
+      sleep 1
+      continue
+    fi
+
     echo "[TRACK_B] Received user decision '${ACTION}' for family '${FAMILY_ID}'. Restarting gateway ..."
     log_supervisor "gateway restart requested after action='${ACTION}' family='${FAMILY_ID}'"
     write_manual_recovery_status "${TRANSITION_REASON:-user_requested_gateway_restart}" "gateway_restart_requested"
@@ -424,10 +519,16 @@ while true; do
       "$LOG_DIR/adapter_start.out.log" \
       "$LOG_DIR/adapter_start.err.log" \
       15; then
+      if ! decision_route_contract_satisfied "$ACTION" "$FAMILY_ID"; then
+        echo "[TRACK_B] Gateway recovered, but route-off contract was not preserved."
+        log_supervisor "gateway restart recovered but route-off contract failed after action='${ACTION}' family='${FAMILY_ID}'"
+        write_user_decision_required_status "gateway_decision_route_state_not_preserved" "gateway_decision_route_state_not_preserved"
+        continue
+      fi
       echo "[TRACK_B] Gateway recovered after user decision."
       log_supervisor "gateway restart succeeded after action='${ACTION}' family='${FAMILY_ID}'"
       sleep "$TRACK_B_RECOVERY_SETTLE_SECONDS"
-      clear_track_b_status_file
+      handle_gateway_recovery_postcheck "gateway_recovered_after_user_action_runtime_still_unhealthy"
       break
     fi
 

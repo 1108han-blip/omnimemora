@@ -498,3 +498,29 @@ last_verified_commit: ""
 | 观察结果 | supervisor 记录：`gateway auto recovery attempt=1/1 -> failed on attempt=1 -> result=attempts-exhausted`。状态文件和 runtime internal plane 一致返回：`status=user-decision-required`、`transition_reason=gateway_auto_recovery_attempts_exhausted`、`error_code=gateway_restart_attempts_exhausted` |
 | 结论适用范围 | `候选成立`：Track B 现在可区分“重试次数耗尽”这一失败分支，并给出明确终止原因 |
 | 备注 | 本记录同样通过临时移走 `_run_adapter.py` 制造可控失败，验证完成后文件已恢复；不触碰真实用户环境 |
+
+### RECORD-B-031
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-031` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库现实 / 代码与单元级` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区 |
+| 验证动作 | 1. 在 `track_b_orchestrator.py` 增加联合恢复 contract 合并规则；2. 在 `start.sh` 中为 `disable-route / uninstall` 增加启动前后 route-off 持久化约束；3. 在 runtime `/gateway/decision/*` 响应消息中固定恢复语义；4. 运行 `python3 -m unittest 5_connectors.adapter.tests.test_track_b_status 5_connectors.adapter.tests.test_agent_control_api 5_connectors.adapter.tests.test_llm_proxy_agent_detection`、`go test ./tests ./api`、`bash -n start.sh` |
+| 观察结果 | Python 31 项测试全部通过，Go `./tests ./api` 通过，`start.sh` 语法检查通过。新增断言覆盖两类关键场景：1. route 已关闭时，陈旧 override 不得把系统重新抬回 `routing_requested=true / routing_effective=true`；2. `user-decision-required` 的 gateway 级故障优先级高于能力层故障，不会因 route 已关闭而被静默清除。`start.sh` 现在在消费 `disable-route / uninstall` 决策前后都会验证目标 family 的 route 是否已持久化为 `off`，否则拒绝继续恢复并回写 `user-decision-required`。runtime `/gateway/decision/*` 返回文案已与 contract 对齐：`disable-route` 成功后收敛到健康 passthrough，`uninstall` 成功后保持在非产品增强路径 |
+| 结论适用范围 | `代码与单元级成立`：Track B 的联合恢复优先级 contract 已落到 `start.sh / track_b_orchestrator.py / runtime decision flow`，但能力层故障与入口层故障的更高层联合恢复编排仍是后续批次 |
+| 备注 | 本记录不包含新的候选实例在线闭环；该批次只收实现级 contract，不扩大验证面 |
+
+### RECORD-B-032
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-032` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库现实 / 代码与单元级` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区 |
+| 验证动作 | 1. 在 `start.sh` 中增加 gateway 恢复后的 runtime postcheck；2. 当 gateway 已恢复但 runtime 仍不健康且 route 仍开启时，写回 `degraded-capability` 而不是直接清空状态；3. 运行 `bash -n start.sh`、`python3 -m unittest 5_connectors.adapter.tests.test_track_b_status 5_connectors.adapter.tests.test_agent_control_api 5_connectors.adapter.tests.test_llm_proxy_agent_detection`、`go test ./tests ./api` |
+| 观察结果 | 脚本语法检查通过，Python 31 项测试全部通过，Go `./tests ./api` 通过。`start.sh` 现在在两类 gateway 恢复成功分支后都会执行统一 postcheck：若 runtime 已健康则清状态；若 runtime 仍不健康但 route 已关闭，则也清状态并回到 passthrough；若 runtime 仍不健康且 route 仍开启，则写入 `status=degraded-capability`、`transition_reason=gateway_recovered_runtime_still_unhealthy` 或 `gateway_recovered_after_user_action_runtime_still_unhealthy`，避免出现“gateway 恢复即假健康”的短暂错误窗口 |
+| 结论适用范围 | `代码与单元级成立`：Track B 现在已具备入口层恢复成功后对能力层健康的最小联合恢复后检查，但尚缺新的候选实例级联合恢复证据 |
+| 备注 | 本记录仍不新增在线候选实例验证；验证面控制在当前计划内的脚本与回归测试 |

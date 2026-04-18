@@ -197,6 +197,50 @@ class TrackBStatusTests(unittest.TestCase):
         self.assertEqual(saved["status"], "healthy")
         self.assertEqual(saved["status_source"], "manual-override")
 
+    def test_orchestrator_route_off_converges_to_passthrough_even_with_stale_healthy_override(self) -> None:
+        stale_override = {
+            "status": "healthy",
+            "status_source": "manual-override",
+            "transition_reason": "stale_manual_override",
+            "routing_requested": True,
+            "routing_effective": True,
+            "recommended_action": "wait_for_recovery",
+        }
+        with mock.patch.object(track_b_status, "read_status_override", return_value=stale_override):
+            payload = track_b_orchestrator.build_system_status_from_backend_health(
+                backend_health=BackendHealth(healthy=True, backend_type="omnimemora_runtime"),
+                per_agent_modes={"claude_code": "off"},
+            )
+
+        self.assertEqual(payload["status"], "healthy")
+        self.assertFalse(payload["routing_requested"])
+        self.assertFalse(payload["routing_effective"])
+        self.assertFalse(payload["user_action_required"])
+        self.assertEqual(payload["recommended_action"], "none")
+
+    def test_orchestrator_keeps_gateway_failure_priority_even_when_route_off(self) -> None:
+        gateway_failure_override = {
+            "status": "user-decision-required",
+            "status_source": "gateway-exit-monitor",
+            "transition_reason": "gateway_process_exited",
+            "gateway_health": "unhealthy",
+            "routing_effective": False,
+            "user_action_required": True,
+        }
+        with mock.patch.object(track_b_status, "read_status_override", return_value=gateway_failure_override):
+            payload = track_b_orchestrator.build_system_status_from_backend_health(
+                backend_health=BackendHealth(
+                    healthy=False,
+                    backend_type="omnimemora_runtime",
+                    details={"status": "runtime_unreachable"},
+                ),
+                per_agent_modes={"claude_code": "off"},
+            )
+
+        self.assertEqual(payload["status"], "user-decision-required")
+        self.assertEqual(payload["gateway_health"], "unhealthy")
+        self.assertTrue(payload["user_action_required"])
+
 
 class TrackBStatusApiTests(unittest.TestCase):
     def test_proxy_system_status_endpoint(self) -> None:

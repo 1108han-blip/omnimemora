@@ -130,6 +130,8 @@ last_verified_commit: ""
 - [x] `window_expired` 与 `attempts_exhausted` 两类失败分支已具备候选实例证据
 - [x] 退避策略已落地为指数回退并受上限约束
 - [x] 联合恢复优先级 contract 已写入状态机定义
+- [x] 联合恢复优先级 contract 已落到 `start.sh / track_b_orchestrator.py / runtime decision flow`
+- [x] 联合恢复 postcheck 已落到 `start.sh`，避免 gateway 恢复成功但 runtime 仍失效时误清状态为健康
 
 ### 下一步动作
 
@@ -156,14 +158,19 @@ last_verified_commit: ""
 - [x] 建立 gateway failure + recovery window expired -> user-decision-required 的候选实例证据
 - [x] 建立 gateway failure + retry attempts exhausted -> user-decision-required 的候选实例证据
 - [x] 联合恢复策略 bounded scan 已完成
+- [x] 落实 `gateway unreachable` 高于能力层故障的合并优先级
+- [x] 落实 `disable-route` 后收敛到 `healthy + routing_effective=false`
+- [x] 落实 `uninstall` 后不回到产品增强路径的启动前后约束
+- [x] 落实 gateway 恢复后的 runtime postcheck：route 仍开启且 runtime 不健康时，收敛到 `degraded-capability`
 
 ### 下一步候选
 
-- [ ] 将联合恢复优先级 contract 落到实现：
-  - `gateway unreachable` 优先于能力层故障
-  - `disable-route` 后恢复到 `healthy + routing_effective=false`
-  - `uninstall` 后不再回到产品增强路径
+- [x] 将联合恢复优先级 contract 落到实现：
+  - [x] `gateway unreachable` 优先于能力层故障
+  - [x] `disable-route` 后恢复到 `healthy + routing_effective=false`
+  - [x] `uninstall` 后不再回到产品增强路径
 - [ ] 暂不继续扩新接口或新状态字段
+- [ ] 若继续 Track B，下一步应转入候选实例级联合恢复证据补齐，而不是再扩状态字段
 
 ### 停止条件
 
@@ -199,4 +206,4 @@ last_verified_commit: ""
 4. `B2` 候选实例故障场景验证批
 5. `C1` 责任边界图批
 
-当前下一步：`Track B` 已完成联合恢复优先级 contract；应决定是否把这三条优先级规则落到 `start.sh / orchestrator / runtime decision flow`
+当前下一步：`Track B` 已完成联合恢复优先级 contract 与 gateway-recovery postcheck 的实现级收口；若继续，应补能力层故障与入口层故障联合恢复的候选实例证据

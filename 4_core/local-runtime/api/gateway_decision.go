@@ -110,7 +110,7 @@ func (s *Server) handleGatewayDecisionDisableRoute(w http.ResponseWriter, r *htt
 		"family_id": familyID,
 		"action":    "disable_route",
 		"applied":   true,
-		"message":   "route state persisted as off; gateway restart may still be required",
+		"message":   "route state persisted as off; successful gateway recovery will converge to healthy passthrough (routing_effective=false)",
 	})
 }
 
@@ -147,6 +147,6 @@ func (s *Server) handleGatewayDecisionUninstall(w http.ResponseWriter, r *http.R
 		"family_id": familyID,
 		"action":    "uninstall",
 		"applied":   true,
-		"message":   "route state persisted as off; agent detached and backup restore attempted; gateway restart may still be required",
+		"message":   "route state persisted as off; agent detached and backup restore attempted; successful gateway recovery will remain outside product-enhanced routing",
 	})
 }

@@ -318,20 +318,6 @@ class RateLimiter:
 # 全局限流器
 _rate_limiter = RateLimiter(max_per_minute=config.rate_limit_per_minute)
 
-configure_diagnostics_surface(
-    config_obj=config,
-    get_backend_fn=_get_backend,
-    get_dedup_cache_fn=get_dedup_cache,
-    rate_limiter=_rate_limiter,
-    adapter_hostname=_adapter_hostname,
-    adapter_started_at=_adapter_started_at,
-    agent_metrics_module=_5_agnet_m,
-    agent_identity_module=_5_agent_id,
-    get_meter_fn=get_meter,
-    support_schema_version=SUPPORT_SCHEMA_VERSION,
-    support_error_catalog=SUPPORT_ERROR_CATALOG,
-)
-
 configure_usage_surface(
     config_obj=config,
     get_tenant_usage_fn=get_tenant_usage,
@@ -504,6 +490,20 @@ SUPPORT_ERROR_CATALOG: Dict[str, Dict[str, Any]] = {
         "suggested_action": "升级订阅计划或等待下个计费周期重置配额。",
     },
 }
+
+configure_diagnostics_surface(
+    config_obj=config,
+    get_backend_fn=_get_backend,
+    get_dedup_cache_fn=get_dedup_cache,
+    rate_limiter=_rate_limiter,
+    adapter_hostname=_adapter_hostname,
+    adapter_started_at=_adapter_started_at,
+    agent_metrics_module=_5_agnet_m,
+    agent_identity_module=_5_agent_id,
+    get_meter_fn=get_meter,
+    support_schema_version=SUPPORT_SCHEMA_VERSION,
+    support_error_catalog=SUPPORT_ERROR_CATALOG,
+)
 
 
 def get_request_id(request: Optional[Request]) -> Optional[str]:
