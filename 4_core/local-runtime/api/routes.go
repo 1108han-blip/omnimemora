@@ -26,6 +26,10 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, 200, health)
 }
 
+func (s *Server) handleGatewayStatus(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, 200, loadGatewayStatus())
+}
+
 // handleMetrics handles GET /metrics
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	metrics, err := s.service.GetMetrics(r.Context())
@@ -265,6 +269,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 	mcpHandshakes, mcpToolCalls := s.getMCPStats()
 	hasMCPConnected := mcpHandshakes > 0
 	hasMCPActive := mcpToolCalls > 0
+	gatewayStatus := loadGatewayStatus()
 
 	// Build polished HTML dashboard
 	html := `<!DOCTYPE html>
@@ -317,6 +322,16 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 		.status-icon.success { background: #d4edda; color: #155724; }
 		.status-icon.warning { background: #fff3cd; color: #856404; }
 		.status-icon.inactive { background: #e2e8f0; color: #718096; }
+		.gateway-alert {
+			background: #fff4e5;
+			border: 1px solid #f6ad55;
+			color: #7b341e;
+			border-radius: 14px;
+			padding: 16px 20px;
+			margin-bottom: 20px;
+			box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+		}
+		.gateway-alert strong { display: block; margin-bottom: 6px; }
 		.hero {
 			background: white;
 			border-radius: 16px;
@@ -468,6 +483,23 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 <body>
 	<div class="container">
 `
+
+	if gatewayStatus.Status != "healthy" {
+		html += `		<div class="gateway-alert">
+			<strong>Gateway status: ` + escapeHTML(gatewayStatus.Status) + `</strong>
+			<div>Recommended action: ` + escapeHTML(gatewayStatus.RecommendedAction) + `</div>
+`
+		if gatewayStatus.UserActionRequired {
+			html += `			<div>User decision required before changing install state.</div>
+`
+		}
+		if gatewayStatus.ErrorCode != "" {
+			html += `			<div>Error code: ` + escapeHTML(gatewayStatus.ErrorCode) + `</div>
+`
+		}
+		html += `		</div>
+`
+	}
 
 	// Phase 3.6: Status Card (configured -> connected -> active)
 	statusCard := `

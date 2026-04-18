@@ -302,6 +302,19 @@ last_verified_commit: ""
 | 结论适用范围 | `候选成立`：Track B 的能力层最小自愈闭环已在候选实例上成立，能够完成 `degraded-capability -> recovering-gateway -> healthy`，且仍未引入自动 `restore backup`、自动 `uninstall/detach` |
 | 备注 | 本记录只覆盖 `start.sh` 管理的能力层恢复路径，不覆盖 gateway 自身不可达时的 `user-decision-required` 分支；入口层故障仍需后续单独实现与验证 |
 
+### RECORD-B-019
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-019` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；runtime 重新编译后，以 `PORT=18014 RUNTIME_PORT=18767 OMNIMEMORA_RUNTIME_DATA_DIR=.tmp/candidate-runtime-data-b4 OMNIMEMORA_DATA_DIR=.tmp/candidate-runtime-data-b4 bash ./start.sh` 启动 |
+| 验证动作 | 1. 先验证 `GET http://127.0.0.1:18767/gateway/status` 返回 `healthy`；2. 通过 `lsof -iTCP:18014` 找到候选 adapter pid 并手动 `kill`；3. 轮询 runtime internal plane 的 `GET /gateway/status`；4. 读取 `GET /dashboard` 中的故障提示文本 |
+| 观察结果 | adapter 被杀后，runtime internal plane 仍保持可用，`/gateway/status` 在短暂窗口后进入 `user-decision-required`，字段为 `gateway_health=unhealthy`、`user_action_required=true`、`recommended_action=disable_route_or_uninstall`、`error_code=gateway_unreachable`。runtime dashboard 顶部同步出现 `Gateway status: user-decision-required` 与 `User decision required before changing install state.` 提示 |
+| 结论适用范围 | `候选成立`：Track B 入口层故障现在已有最小 `user-decision-required` 承载面，且该承载面位于 internal plane（runtime `/gateway/status` + dashboard），不依赖已失效的 adapter |
+| 备注 | 本记录证明的是“承载与提示”已存在，不代表用户动作接口已完备；当前仍未提供 UI 内直接执行 `disable route` 或 `uninstall/detach` 的 runtime 侧动作接口 |
+
 ## 五、Gate B 完成判据
 
 当满足以下条件时，`Gate B` 可视为通过：
@@ -330,3 +343,4 @@ last_verified_commit: ""
   - `RECORD-B-016` 已确认 Track B 最小统一状态输出接口已落地，可承载 `degraded-capability / recovering-gateway / user-decision-required`
   - `RECORD-B-017` 已确认 Track B override 写入边界与控制面消费路径已落地
   - `RECORD-B-018` 已确认 Track B 能力层最小自愈闭环已在候选实例上成立
+  - `RECORD-B-019` 已确认 Track B 入口层故障已有最小 `user-decision-required` 承载面

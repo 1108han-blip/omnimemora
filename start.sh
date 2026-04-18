@@ -13,6 +13,9 @@ RUNTIME_BIN="${RUNTIME_BIN:-$ROOT_DIR/tools/omnimemora-runtime}"
 RUNTIME_EXE_LEGACY="$ROOT_DIR/tools/omnimemora.exe"
 ADAPTER_SCRIPT="$ROOT_DIR/tools/_run_adapter.py"
 INTERNAL_API_TOKEN="${OMNIMEMORA_INTERNAL_API_TOKEN:-track-b-$$-$(date +%s)}"
+TRACK_B_DATA_DIR="${OMNIMEMORA_RUNTIME_DATA_DIR:-${OMNIMEMORA_DATA_DIR:-$HOME/.omnimemora}}"
+TRACK_B_STATUS_PATH="${OMNIMEMORA_TRACK_B_STATUS_PATH:-${TRACK_B_DATA_DIR}/track_b_status.json}"
+STOPPING=0
 
 if ! command -v curl >/dev/null 2>&1; then
   echo "[ERROR] curl is required."
@@ -62,6 +65,7 @@ OMNIMEMORA_INTERNAL_API_TOKEN="$INTERNAL_API_TOKEN" \
 ADAPTER_PID=$!
 
 cleanup() {
+  STOPPING=1
   kill "${SUPERVISOR_PID:-}" "$ADAPTER_PID" "$RUNTIME_PID" >/dev/null 2>&1 || true
 }
 trap cleanup EXIT INT TERM
@@ -81,6 +85,16 @@ clear_track_b_override() {
     -X DELETE \
     -H "X-Internal-Token: ${INTERNAL_API_TOKEN}" \
     "http://127.0.0.1:${ADAPTER_PORT}/proxy/system-status/override" >/dev/null || true
+}
+
+write_track_b_status_file() {
+  local json_payload="$1"
+  mkdir -p "$(dirname "$TRACK_B_STATUS_PATH")"
+  printf '%s\n' "$json_payload" >"$TRACK_B_STATUS_PATH"
+}
+
+clear_track_b_status_file() {
+  rm -f "$TRACK_B_STATUS_PATH" >/dev/null 2>&1 || true
 }
 
 start_runtime_process() {
@@ -155,8 +169,10 @@ runtime_self_heal_loop() {
       echo "[TRACK_B] Runtime recovered."
       sleep "$TRACK_B_RECOVERY_SETTLE_SECONDS"
       clear_track_b_override
+      clear_track_b_status_file
     else
       set_track_b_override '{"status":"degraded-capability","gateway_health":"healthy","capability_health":"degraded","routing_effective":false,"recommended_action":"degrade_to_passthrough","error_code":"runtime_restart_failed"}'
+      write_track_b_status_file '{"status":"degraded-capability","gateway_health":"healthy","capability_health":"degraded","routing_effective":false,"user_action_required":false,"recommended_action":"degrade_to_passthrough","error_code":"runtime_restart_failed"}'
     fi
 
     sleep 2
@@ -181,5 +197,11 @@ echo "Press Ctrl+C to stop both services."
 
 runtime_self_heal_loop &
 SUPERVISOR_PID=$!
-wait "$ADAPTER_PID"
+ADAPTER_EXIT_CODE=0
+wait "$ADAPTER_PID" || ADAPTER_EXIT_CODE=$?
+if [ "$STOPPING" != "1" ] && kill -0 "$RUNTIME_PID" >/dev/null 2>&1; then
+  echo "[TRACK_B] Adapter exited with code ${ADAPTER_EXIT_CODE}; entering user-decision-required state."
+  write_track_b_status_file '{"status":"user-decision-required","gateway_health":"unhealthy","capability_health":"healthy","routing_effective":false,"user_action_required":true,"recommended_action":"disable_route_or_uninstall","error_code":"gateway_unreachable"}'
+  wait "$RUNTIME_PID"
+fi
 kill "$SUPERVISOR_PID" "$RUNTIME_PID" >/dev/null 2>&1 || true
