@@ -62,12 +62,13 @@ last_verified_commit: ""
 - [x] adapter 控制面已经以 `18011 -> runtime(/agents/control)` 代理方式存在
 - [x] 第一批对外文档残留已开始收口：插件 README 已改为只展示 `18011` 为用户可见入口
 - [x] runtime README 已补 internal-only 说明并去除失效 `CANONICAL_FACTS.md` 引用
-- [ ] 旧插件/旧文档里仍有把 `8765` 具象展示给用户的残留
+- [x] `README.txt` 中 `8765/dashboard` 的对外展示已收掉
+- [ ] archive / 审计记录之外，仍需确认是否还有活跃对外文档把 `8765` 误写成产品面
 - [ ] runtime HTTP contract 仍暴露可被误抬升的内部控制接口叙事
 
 ### 下一步动作
 
-- [ ] 继续收敛剩余对外文档中的 `8765` 展示面
+- [x] 第一轮收敛剩余对外文档中的 `8765` 展示面
 - [ ] 列出需要继续保留的内部 runtime HTTP contract
 - [ ] 列出应从“正式产品接口叙事”中退场的 `8765` 路径
 - [ ] 为 `Track A` 建立过渡兼容说明
@@ -129,4 +130,4 @@ last_verified_commit: ""
 4. `B2` 候选实例故障场景验证批
 5. `C1` 责任边界图批
 
-当前只允许进入：`A1`
+当前下一步：`A2`

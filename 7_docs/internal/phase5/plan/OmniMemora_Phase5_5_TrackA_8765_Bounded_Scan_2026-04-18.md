@@ -33,9 +33,11 @@ last_verified_commit: ""
 ## 需要清理
 
 - [5_connectors/omni-omnimemora-plugin/README.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/5_connectors/omni-omnimemora-plugin/README.md)
-  - 仍把 `Runtime (Host:8765)` 具象展示给用户
+  - 已在本轮改为只展示 `18011` 为用户可见入口
 - [4_core/local-runtime/README.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/4_core/local-runtime/README.md)
-  - 虽然声明 internal only，但仍列出了完整 runtime HTTP contract；后续需区分“内部可用 contract”与“正式产品叙事”
+  - 已补 internal-only 说明；后续仍需继续区分“内部可用 contract”与“正式产品叙事”
+- [4_core/local-runtime/README.txt](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/4_core/local-runtime/README.txt)
+  - 已去掉 `8765/dashboard` 的对外展示，改为 internal runtime health
 - 旧 phase2 / legacy 文档中仍有 `8765` 作为显式接入面的历史描述
 
 ## 当前实现入口
@@ -55,6 +57,6 @@ Track A 不是“删除 8765”，而是“收掉把 8765 当对外产品面的�
 
 当前最安全的第一批动作应是：
 
-1. 先收敛对外文档和插件说明
-2. 再标注 runtime README 中哪些 contract 仅供内部调用
+1. 对外文档和插件说明的第一批收口已完成
+2. 下一步应转入 runtime contract 的内部标注与退场清单整理
 3. 暂不触碰 `18011 -> runtime` 的内部调用链
