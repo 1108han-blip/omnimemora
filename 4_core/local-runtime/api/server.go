@@ -86,6 +86,8 @@ func NewServer(cfg *config.RuntimeConfig, store storepkg.Store, rtCtx *lifecycle
 	mux.HandleFunc("GET /metrics", server.handleMetrics)
 	mux.HandleFunc("GET /dashboard", server.handleDashboard)
 	mux.HandleFunc("GET /gateway/status", server.handleGatewayStatus)
+	mux.HandleFunc("POST /gateway/decision/disable-route", server.handleGatewayDecisionDisableRoute)
+	mux.HandleFunc("POST /gateway/decision/uninstall", server.handleGatewayDecisionUninstall)
 	mux.HandleFunc("GET /agents/control", server.handleAgentControlList)
 	mux.HandleFunc("POST /agents/control/rescan", server.handleAgentControlRescan)
 	mux.HandleFunc("POST /agents/control/install", server.handleAgentControlInstall)

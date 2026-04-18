@@ -315,6 +315,19 @@ last_verified_commit: ""
 | 结论适用范围 | `候选成立`：Track B 入口层故障现在已有最小 `user-decision-required` 承载面，且该承载面位于 internal plane（runtime `/gateway/status` + dashboard），不依赖已失效的 adapter |
 | 备注 | 本记录证明的是“承载与提示”已存在，不代表用户动作接口已完备；当前仍未提供 UI 内直接执行 `disable route` 或 `uninstall/detach` 的 runtime 侧动作接口 |
 
+### RECORD-B-020
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-020` |
+| 日期 | `2026-04-18` |
+| 实例分类 | `仓库候选实例` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；以 `PORT=18015 RUNTIME_PORT=18768 OMNIMEMORA_RUNTIME_DATA_DIR=.tmp/candidate-runtime-data-b5 OMNIMEMORA_DATA_DIR=.tmp/candidate-runtime-data-b5 OMNIMEMORA_AGENT_MODES_PATH=.tmp/candidate-runtime-data-b5/agent_modes.json bash ./start.sh` 启动 |
+| 验证动作 | 1. 预写隔离 `agent_modes.json` 为 `openclaw=force_if_possible`；2. 验证 runtime `POST /gateway/decision/disable-route` 在线可用；3. 手动杀掉候选 adapter，使 runtime 进入 `user-decision-required`；4. 再通过 runtime internal plane 调用 `POST /gateway/decision/disable-route`；5. 读取隔离 `agent_modes.json` |
+| 观察结果 | 在 adapter 存活与 adapter 已失效两种情况下，runtime `POST /gateway/decision/disable-route` 都返回 `200`；adapter 失效后，runtime `GET /gateway/status` 维持 `user-decision-required`，同时隔离 `agent_modes.json` 被写为 `openclaw=off`。因此入口层故障下，用户仍可通过 internal plane 明确执行“关闭路由、保留 attach”动作 |
+| 结论适用范围 | `候选成立`：Track B 现在已有最小用户动作接口，可在 gateway 故障时通过 runtime internal plane 执行 `disable-route`，且不依赖 adapter 存活 |
+| 备注 | 本记录只覆盖 `disable-route`；`/gateway/decision/uninstall` 已实现但未做在线候选验证，以避免在未完全隔离 agent config 前触碰真实用户配置 |
+
 ## 五、Gate B 完成判据
 
 当满足以下条件时，`Gate B` 可视为通过：
@@ -344,3 +357,4 @@ last_verified_commit: ""
   - `RECORD-B-017` 已确认 Track B override 写入边界与控制面消费路径已落地
   - `RECORD-B-018` 已确认 Track B 能力层最小自愈闭环已在候选实例上成立
   - `RECORD-B-019` 已确认 Track B 入口层故障已有最小 `user-decision-required` 承载面
+  - `RECORD-B-020` 已确认 Track B 可在入口层故障时通过 runtime internal plane 执行 `disable-route`

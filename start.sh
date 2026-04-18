@@ -15,6 +15,7 @@ ADAPTER_SCRIPT="$ROOT_DIR/tools/_run_adapter.py"
 INTERNAL_API_TOKEN="${OMNIMEMORA_INTERNAL_API_TOKEN:-track-b-$$-$(date +%s)}"
 TRACK_B_DATA_DIR="${OMNIMEMORA_RUNTIME_DATA_DIR:-${OMNIMEMORA_DATA_DIR:-$HOME/.omnimemora}}"
 TRACK_B_STATUS_PATH="${OMNIMEMORA_TRACK_B_STATUS_PATH:-${TRACK_B_DATA_DIR}/track_b_status.json}"
+AGENT_MODES_PATH="${OMNIMEMORA_AGENT_MODES_PATH:-$ROOT_DIR/5_connectors/adapter/config/agent_modes.json}"
 STOPPING=0
 
 if ! command -v curl >/dev/null 2>&1; then
@@ -54,6 +55,7 @@ mkdir -p "$LOG_DIR"
 
 echo "[1/2] Starting runtime on :$RUNTIME_PORT ..."
 OMNIMEMORA_RUNTIME_PORT="$RUNTIME_PORT" \
+OMNIMEMORA_AGENT_MODES_PATH="$AGENT_MODES_PATH" \
 "$RUNTIME_BIN" serve >"$LOG_DIR/runtime_start.out.log" 2>"$LOG_DIR/runtime_start.err.log" &
 RUNTIME_PID=$!
 
@@ -61,6 +63,7 @@ echo "[2/2] Starting adapter on :$ADAPTER_PORT ..."
 PORT="$ADAPTER_PORT" \
 MEMORY_BACKEND_URL="http://127.0.0.1:${RUNTIME_PORT}" \
 OMNIMEMORA_INTERNAL_API_TOKEN="$INTERNAL_API_TOKEN" \
+OMNIMEMORA_AGENT_MODES_PATH="$AGENT_MODES_PATH" \
 "$PYTHON_BIN" "$ADAPTER_SCRIPT" >"$LOG_DIR/adapter_start.out.log" 2>"$LOG_DIR/adapter_start.err.log" &
 ADAPTER_PID=$!
 

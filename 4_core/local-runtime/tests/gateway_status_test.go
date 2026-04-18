@@ -120,3 +120,41 @@ func TestDashboardShowsGatewayAlertWhenDecisionRequired(t *testing.T) {
 		t.Fatalf("expected dashboard decision text, got body %s", body)
 	}
 }
+
+func TestGatewayDecisionDisableRouteWritesAgentModes(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("OMNIMEMORA_RUNTIME_DATA_DIR", tmpDir)
+	agentModesPath := filepath.Join(tmpDir, "agent_modes.json")
+	t.Setenv("OMNIMEMORA_AGENT_MODES_PATH", agentModesPath)
+	err := os.WriteFile(agentModesPath, []byte(`{"per_agent_modes":{"openclaw":"force_if_possible"},"default_mode":"off"}`), 0644)
+	if err != nil {
+		t.Fatalf("failed to write agent modes: %v", err)
+	}
+
+	s, err := store.NewSQLiteStore(tmpDir)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+	defer s.Close()
+
+	cfg := config.DefaultRuntimeConfig()
+	rtCtx := &lifecycle.RuntimeContext{Config: cfg, Store: s, Version: "1.0.0"}
+	server := api.NewServer(cfg, s, rtCtx, 18765)
+
+	req := httptest.NewRequest("POST", "/gateway/decision/disable-route", strings.NewReader(`{"family_id":"openclaw"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	server.Handler().ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	raw, err := os.ReadFile(agentModesPath)
+	if err != nil {
+		t.Fatalf("failed to read agent modes: %v", err)
+	}
+	if !strings.Contains(string(raw), `"openclaw": "off"`) {
+		t.Fatalf("expected openclaw off in agent modes, got %s", string(raw))
+	}
+}

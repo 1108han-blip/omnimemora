@@ -491,6 +491,7 @@ func (s *Server) handleDashboard(w http.ResponseWriter, r *http.Request) {
 `
 		if gatewayStatus.UserActionRequired {
 			html += `			<div>User decision required before changing install state.</div>
+			<div>Internal actions: POST /gateway/decision/disable-route or POST /gateway/decision/uninstall with {"family_id":"..."}</div>
 `
 		}
 		if gatewayStatus.ErrorCode != "" {

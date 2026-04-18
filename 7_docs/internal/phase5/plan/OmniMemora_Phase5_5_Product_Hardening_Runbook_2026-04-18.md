@@ -101,6 +101,7 @@ last_verified_commit: ""
 - [x] `Track B` override 写入入口与控制面消费路径已落地
 - [x] `Track B` 能力层最小自愈闭环已在候选实例上成立
 - [x] `Track B` 入口层故障最小 `user-decision-required` 承载面已在候选实例上成立
+- [x] `Track B` 已具备最小用户动作接口（disable-route via runtime internal plane）
 - [ ] 还没有正式的故障状态机实现
 
 ### 下一步动作
@@ -115,6 +116,7 @@ last_verified_commit: ""
 - [x] 明确 override 写入约束与控制面消费路径
 - [x] 建立 capability failure -> recovering-gateway -> healthy 的候选实例证据
 - [x] 建立 gateway failure -> user-decision-required 的候选实例证据
+- [x] 建立 gateway failure -> disable-route 用户动作的候选实例证据
 
 ### 停止条件
 
@@ -142,4 +144,4 @@ last_verified_commit: ""
 4. `B2` 候选实例故障场景验证批
 5. `C1` 责任边界图批
 
-当前下一步：`Track B` 用户动作接口与责任边界前置
+当前下一步：`Track B` uninstall 动作隔离验证与 UI 动作承载前置
