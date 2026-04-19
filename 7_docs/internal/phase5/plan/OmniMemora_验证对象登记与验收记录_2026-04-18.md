@@ -966,3 +966,42 @@ last_verified_commit: ""
 | 观察结果 | compile events 主导 control card activity：`openclaw.active=true`；`last_seen_at` 随新请求从 `10:54:40` 推进到 `11:02:56`；`claude_code` 仍由 metrics fallback 维持 `active=true`；`codex_cli` 无活动保持 `active=false` |
 | 结论适用范围 | `真实客户端 + 外部运行实例联合成立`：`Control Activity Semantics` 阶段完成，compile events 已成为 `active / last_seen_at` 主 truth source，metrics/live 只作为缺省回退 |
 | 备注 | `service/current` 是独立目录而非 repo symlink，代码修改需手动同步到该目录；这是下一阶段 `Running Topology Clarification` 的讨论范围，不影响本阶段验证结论 |
+
+### RECORD-B-067
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-067` |
+| 日期 | `2026-04-19` |
+| 实例分类 | `拓扑澄清 / 三层现实定义` |
+| 实例路径/来源 | `~/.omnimemora/service/current`（外部运行实例）；`/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora`（仓库现实） |
+| 验证动作 | 1. 执行 `ls -ld ~/.omnimemora/service/current` 与 `realpath ~/.omnimemora/service/current` 确认目录类型；2. 执行 `launchctl print gui/$(id -u)/com.omnimemora.runtime` 确认 runtime launch reality；3. 读取 `~/Library/LaunchAgents/com.omnimemora.adapter.plist` 与 `ps aux | grep _run_adapter` 确认 adapter plist 与进程现实；4. 读取 `~/.omnimemora/service/current/tools/omnimemora-runtime` 与 `~/.omnimemora/service/current/tools/_run_adapter.py` 确认实际运行入口 |
+| 观察结果 | `service/current` 是独立目录而非 symlink；runtime 由 launchd 从 `~/.omnimemora/service/current/tools/omnimemora-runtime serve` 启动，working directory 为 `~/.omnimemora/service/current`，环境变量含 `RUNTIME_PORT=8765`；adapter plist 存在且进程正在运行 `python3 /Users/sc/.omnimemora/service/current/tools/_run_adapter.py`，但 `launchctl print gui/$(id -u)/com.omnimemora.adapter` 返回 "Bad request: Could not find service"；runtime 进程存在且可观察，但 adapter 在 launchctl 可见性层面与 runtime 不对等 |
+| 结论适用范围 | `拓扑事实已确认`：当前三层现实结构已明确定义——repo reality（仓库代码与文档）、candidate reality（基于 repo 隔离验证的实例）、running reality（`~/.omnimemora/service/current` + launchd 在线服务）；running reality 默认不从 repo 直接读取代码；running reality 的成功行为不能反推 repo 已自动具备同等行为；`service/current` 保持独立目录为正式结构 |
+| 备注 | 本记录是拓扑澄清，不是行为验证；adapter 的 launchctl 可见性差异是已知事实，不属于 bug，不在本阶段修复范围内 |
+
+### RECORD-B-068
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-068` |
+| 日期 | `2026-04-19` |
+| 实例分类 | `拓扑澄清 / promotion 模型固定` |
+| 实例路径/来源 | `~/.omnimemora/service/current`（外部运行实例）；`/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora`（仓库现实） |
+| 验证动作 | 1. 确认当前 runtime 二进制路径 `~/.omnimemora/service/current/tools/omnimemora-runtime` 的更新时间；2. 确认当前 adapter Python 文件路径 `~/.omnimemora/service/current/tools/_run_adapter.py` 与 repo 内源文件的关系；3. 确认 `RECORD-B-065/066` 中 runtime 和 adapter 的 promotion 动作 |
+| 观察结果 | 当前 `service/current/tools/omnimemora-runtime` 最近更新时间 `Apr 19 18:09`；当前 `service/current/tools/_run_adapter.py` 内容来自 `RECORD-B-065` 的手动同步；runtime promotion 需要从 `4_core/local-runtime` 构建并部署到 `service/current/tools/omnimemora-runtime`；adapter promotion 需要同步 `service/current` 中实际运行的 Python 文件到最新 repo 版本；promotion 后必须重新验证 running reality，不能只凭部署动作宣布成功 |
+| 结论适用范围 | `promotion 模型已固定`：promotion 是显式动作而非隐式同步；runtime 标准输入是 `4_core/local-runtime` 构建产物；adapter 标准输入是 repo 内最新 Python 文件；promotion 后必须验证 running reality；当前 promotion 仍为手动操作，未进入自动化 |
+| 备注 | 本记录固定当前 promotion 规则，不包括自动化 promotion 管道；自动化 promotion 是后续独立议题 |
+
+### RECORD-B-069
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-069` |
+| 日期 | `2026-04-19` |
+| 实例分类 | `拓扑澄清 / 观察模型固定` |
+| 实例路径/来源 | `~/.omnimemora/service/current` |
+| 验证动作 | 1. 确认 runtime launch reality 的观察命令 `launchctl print gui/$(id -u)/com.omnimemora.runtime`；2. 确认 adapter launch reality 的观察层次：plist 文件、实际进程、launchctl 可见性；3. 确认 product API reality 的端口：`18011`（adapter）、`8765`（runtime）、`5173`（UI） |
+| 观察结果 | runtime launch reality 稳定可用 `launchctl print gui/$(id -u)/com.omnimemora.runtime` 返回一致状态；adapter launch reality 存在三层差异：plist 文件存在、进程正在运行、但 launchctl print 不能稳定枚举 service；product API reality：`18011` 暴露 adapter 控制面与产品入口，`8765` 暴露 runtime 内部面，`5173` 暴露 UI 控制入口 |
+| 结论适用范围 | `观察模型已固定`：runtime launch reality 与 adapter launch reality 必须分开观察；"adapter 进程存在"与"launchctl print 能稳定枚举 adapter service"不是同一层信号；以后报告里不得把这两者混用为"adapter 由 launchd 正常托管" |
+| 备注 | adapter 在 launchctl 层面的可见性差异是已知观测限制，不在本阶段修复范围内；后续如需统一观察模型，应在 adapter plist 调试专项中处理 |
