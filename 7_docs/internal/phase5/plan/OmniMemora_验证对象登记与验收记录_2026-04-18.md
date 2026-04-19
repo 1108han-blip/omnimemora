@@ -1034,3 +1034,17 @@ last_verified_commit: ""
 | 观察结果 | **方案 C（分层常驻）已确立**：18011/8765 为基础 running reality，必须常驻；5173 为"正式控制入口层"，默认应可启动并可验证，但不强制 24/7 常驻；当前 5173 实际运行态需单独验证 |
 | 结论适用范围 | **UI Running Strategy 已明确**：5173 不再是悬空状态；方案 C 已写入正式文档；能力层（UI 工程已恢复）≠ 运行层（5173 当前是否在线）≠ 托管层（正式运行方式）；基础 running reality 成立判断：8765+18011 在线；完整 running reality 成立判断：基础层 + 5173 在线 |
 | 备注 | 方案 C 不强迫当前把 dev server 方式硬塞进 launchd 常驻托管，保留产品地位同时符合当前工程现实；后续若需自动托管，可在此基础上升级 |
+
+
+### RECORD-B-072
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-072` |
+| 日期 | `2026-04-19` |
+| 实例分类 | `UI Availability Closure / 实时 running reality 验证` |
+| 实例路径/来源 | `localhost:8765`；`localhost:18011`；`localhost:5173` |
+| 验证动作 | 1. `curl localhost:8765/health`；2. `curl localhost:18011/health`；3. `curl localhost:5173/` |
+| 观察结果 | 8765: `{"status":"ok"...}` → **在线**；18011: `{"status":"healthy"...}` → **在线**；5173: `Connection refused` → **离线** |
+| 结论适用范围 | **基础 running reality 成立**（8765+18011 在线）；**完整 running reality 未成立**（5173 离线）；UI 启动路径：`6_console/demo-dashboard` + `npm run dev` |
+| 备注 | 5173 离线不影响基础 running reality 成立；方案 C（分层常驻）定义有效；后续如需完整 running reality，需手动启动 5173 |

@@ -226,33 +226,31 @@ git status
 #### 2. 构建（若需构建）
 
 ```bash
-cd /Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/4_core/ui
+cd /Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/6_console/demo-dashboard
 
-# 执行前端构建（根据项目实际构建命令调整）
-# npm run build
+# 执行前端构建
+npm run build
 
 # 验证构建产物
 ls -la dist/
 ```
 
-#### 3. 同步（若需同步）
+#### 3. 同步（方案 C 分层常驻无需同步构建产物）
 
-```bash
-# 根据实际部署方式同步构建产物
-# 示例：rsync 或手动复制到 5173 启动目录
-```
+方案 C 下 UI 使用 vite dev server 直接启动，不需同步到 service/current。
 
 #### 4. 启动/检查 UI
 
 ```bash
 # 检查 5173 是否在线
-curl -s http://127.0.0.1:5173/ | head -c 100
+curl -s http://127.0.0.1:5173/ 2>&1 | head -c 100
 
-# 若未启动，手动启动（根据实际项目调整）
-# cd /path/to/ui && npm run dev -- --port 5173
+# 若未启动，手动启动
+cd /Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/6_console/demo-dashboard
+npm run dev
 
 # 确认进程已启动
-ps aux | grep "vite\|next\|react-scripts" | grep -v grep
+ps aux | grep vite | grep -v grep
 ```
 
 #### 5. 复验

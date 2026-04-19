@@ -12,13 +12,13 @@
 
 ## Current Phase Boundary
 
-- 当前执行主线：`UI Running Strategy Clarification`
+- 当前执行主线：`UI Availability Closure`
 - 阶段状态：**进行中**
 - 当前阶段目标：
-  - 明确 `5173` 在正式 running reality 中的运行策略
-  - 固定 UI 的托管边界
-  - 固定 UI promotion 的真实完成标准
-  - 收敛 active docs 对 `5173` 的表述不再冲突
+  - 完成 UI Running Strategy Clarification 收口（方案 C 已确立）
+  - 固定 5173 运行层完成定义
+  - 执行一轮正式 running reality 的 UI 在线验证
+  - 让 active docs 能明确区分基础 running reality 与完整 running reality
 
 ### 拓扑契约（三层现实）
 
@@ -81,23 +81,47 @@
 
 **重要**：若托管层未定义完成，不能声称”running reality 完整成立”。
 
-### UI 当前运行状态
+### UI 当前运行状态（2026-04-19 实测）
 
 | 层级 | 状态 | 说明 |
 |------|------|------|
 | 能力层 | ✅ 已恢复 | UI 工程可构建、可启动、路由正确 |
-| 运行层 | ⏳ 待验证 | 5173 当前是否在线需单独确认 |
+| 运行层 | ❌ 离线 | 5173 当前未启动 |
 | 托管层 | ✅ 已定义（方案 C） | 分层常驻，5173 可手动启动，不强制常驻 |
 
-### 当前 5173 实际状态
+### 实时 Running Reality 状态
+
+| 组件 | 端口 | 在线状态 | 备注 |
+|------|------|----------|------|
+| runtime | 8765 | ✅ 在线 | `curl localhost:8765/health` 返回 `{"status":"ok"}` |
+| adapter | 18011 | ✅ 在线 | `curl localhost:18011/health` 返回 `{"status":"healthy"}` |
+| UI | 5173 | ❌ 离线 | `curl localhost:5173/` 连接失败 |
+
+### Running Reality 成立判断
+
+- **基础 running reality**：✅ **成立**（8765 + 18011 在线）
+- **完整 running reality**：❌ **未成立**（5173 离线）
+
+### 5173 启动方式
 
 ```bash
-# 检查 5173 在线状态
-curl -s http://127.0.0.1:5173/ | head -c 100
+cd /Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/6_console/demo-dashboard
+npm run dev
 ```
 
-- 若返回 HTML → **运行层在线**
-- 若连接失败 → **运行层离线**，但不影响基础 running reality 成立
+启动后验证：
+```bash
+curl -s http://localhost:5173/
+curl -s http://localhost:5173/agents?tenant=all
+```
+
+## UI Running Strategy Clarification 收口结论
+
+- **方案 C（分层常驻）已确立**：
+  - 18011/8765 = 基础 running reality（必须常驻）
+  - 5173 = 控制入口层（分层常驻，可手动启动）
+- **双层表达已固化**：能力层 ≠ 运行层 ≠ 托管层
+- **RECORD-B-071** 已记录方案 C 结论
 
 ## 上一阶段（OpenClaw-first）收口结论
 
