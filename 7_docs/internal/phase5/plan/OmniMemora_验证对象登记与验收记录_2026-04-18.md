@@ -1076,3 +1076,17 @@ last_verified_commit: ""
 | 观察结果 | 5173 在线并返回 HTML；`curl -H "Accept: application/json" localhost:5173/agents/control` 正确代理到 18011 并返回 JSON；字段对位：installed/routing_enabled/active 与 18011 API 一致 |
 | 结论适用范围 | **完整 running reality 成立**：5173 在线，UI 可访问，代理正常，基础 running reality 之上完整 running reality 已确认 |
 | 备注 | 环境要求：PATH 必须包含 `/usr/local/bin`；方案 C 分层常驻验证完成 |
+
+
+### RECORD-B-075
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-075` |
+| 日期 | `2026-04-19` |
+| 实例分类 | `展示契约固定 + 外部运行实例对位` |
+| 实例路径/来源 | `http://127.0.0.1:5173/agents/control`；`http://127.0.0.1:18011/agents/control`；phase5 active docs；`ADR-0005-agent-identity-fields.md`；产品边界基线文档 |
+| 验证动作 | 1. 固定 `Dashboard Display and Diagnostics Contract` 文档；2. 读取 `PRODUCT_DEFINITION.md`、`PRODUCT_CONFIGURATION_AND_BOUNDARY_BASELINE.md`、`ADR-0005-agent-identity-fields.md`、`6_console/README.md` 作为权威依据；3. 读取 `GET /agents/control`（分别从 5173 代理入口与 18011 adapter 入口）核对当前展示身份口径 |
+| 观察结果 | `5173` 与 `18011` 的 `/agents/control` 当前都返回同一组 canonical family：`claude_code`、`openclaw`、`codex_cli`；当前控制卡对外身份未暴露 raw/internal id；展示契约已固定：用户面默认显示 canonical family / canonical_agent_id，raw/internal 身份、session、bootstrap / handshake / transport / internal call-chain 等字段只允许进入 diagnostics |
+| 结论适用范围 | `外部运行实例 + 文档契约成立`：phase5 已固定 dashboard 的用户面/diagnostics 展示边界；后续 dashboard 验收必须以 canonical identity 和 diagnostics 隔离规则为准，不得把 raw/internal 标识重新泄漏回默认用户路径 |
+| 备注 | 本记录绑定的是当前控制面 API 对位与展示契约固定，不等同于 overview / breakdown / live flow 的逐字段可视验收；若后续某个 panel 仍越界，应视为展示层 drift 并单开补丁批次修正 |

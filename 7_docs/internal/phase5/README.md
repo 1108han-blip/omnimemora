@@ -9,6 +9,7 @@
 - [OmniMemora Decision Carrier / Control-Plane Decoupling Bounded Scan](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Decision_Carrier_Control_Plane_Decoupling_Bounded_Scan_2026-04-18.md)
 - [OmniMemora Promotion Workflow 执行计划](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Promotion_Workflow_执行计划_2026-04-19.md)
 - [OmniMemora Promotion Workflow Runbook](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Promotion_Workflow_Runbook_2026-04-19.md)
+- [OmniMemora Dashboard Display and Diagnostics Contract](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Dashboard_Display_and_Diagnostics_Contract_2026-04-19.md)
 
 ## Current Phase Boundary
 
@@ -34,6 +35,24 @@
 | Internal Event Filtering | ✅ 成立 | `session bootstrap context handshake` 已从 Live Request Flow 过滤 |
 | Activity Truth Alignment | ✅ 成立 | overview active(5m)/active(24h) 与 Agent 控制卡 active 状态一致 |
 | 5173 运行时验证 | ✅ 通过 | UI 在线，family 展示归并正确，无 internal handshake 刷屏 |
+
+### Dashboard Display and Diagnostics Contract
+
+**固定时间**：2026-04-19
+
+| 检查项 | 状态 | 说明 |
+|--------|------|------|
+| `5173` 展示边界 | ✅ 固定 | `5173` 是控制入口与用户控制台，不是产品数据入口 |
+| canonical identity 权威位 | ✅ 固定 | 用户面默认显示 canonical family / canonical_agent_id |
+| diagnostics 白名单 | ✅ 固定 | raw/internal 身份与 trace 字段只允许进入 diagnostics |
+| 分块字段白名单 | ✅ 固定 | Agent 控制、Breakdown、Flow、Before/After、overview、Call Chain 均已收敛 |
+| 运行对位 | ✅ 成立 | 当前 `5173 /agents/control` 与 `18011 /agents/control` 返回同一组 canonical family：`claude_code` / `openclaw` / `codex_cli` |
+
+本契约是后续 dashboard 代码验收的正式口径：
+
+- 用户面默认显示 canonical family / canonical_agent_id
+- raw/internal 字段只允许进入 diagnostics
+- 若后续实现与本契约冲突，以本契约认定为展示层 drift 并单开补丁批次修正
 
 ### Claude Code Cross Validation 记录
 
