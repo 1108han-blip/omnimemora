@@ -7,6 +7,62 @@
 | Workstream | Status |
 |------------|--------|
 | Promotion Workflow Adoption | **已收口 ✓** |
+| Promotion Evidence Routing | **已收口 ✓** |
+
+---
+
+## Promotion Evidence Routing
+
+**狀態：** 已收口
+**收口日期：** 2026-04-20
+
+### 目標
+
+把「已經成立的 adoption 結果」接進 phase docs、驗證記錄、running reality 宣告規則，形成正式 evidence routing。
+
+### 核心變更
+
+1. **三層落點固定**
+   - Layer 1：`tools/verification/logs/promotion_*.log`（原始日誌）
+   - Layer 2：`OmniMemora_Adoption_Verification_Records_*.md`（執行記錄）
+   - Layer 3：phase6 README / 主計劃（只有正式宣告條件滿足時才寫入）
+
+2. **結果路由矩陣固定**
+   - `running_reality_promoted` → 寫 Layer 1 + Layer 2，若 full stack 成功可提升到 Layer 3
+   - `running_reality_partial` → 寫 Layer 1 + Layer 2，不得寫 Layer 3
+   - `promotion_failed` → 寫 Layer 1 + Layer 2，若觸及主線目標需形成 finding
+   - `prerequisite_failed` → 寫 Layer 1 + Layer 2，不自動歸類為產品失敗
+
+3. **正式宣告條件固定**
+   - 必須是 `runtime+adapter+ui`
+   - `8765/health = 200`, `18011/health = 200`, `5173` 可訪問
+   - UI 與 adapter 基本對位成立
+   - primary breakpoint = `none`
+   - 所有 warning 都是契約化非阻塞
+
+4. **Warning 升級規則固定**
+   - 契約化非阻塞 warning：僅有 `adapter plist reality`（API/process 正常時）
+   - 未契約化 warning → 自動升級為 finding（至少 P2）
+
+### Evidence Routing 文檔
+
+| 文檔 | 說明 |
+|------|------|
+| [OmniMemora_Promotion_Evidence_Routing.md](./OmniMemora_Promotion_Evidence_Routing.md) | 完整路由規則、快速參考卡、驗證樣例 |
+
+### 路由驗證樣例
+
+| 場景 | Layer 1 | Layer 2 | Layer 3 |
+|------|---------|---------|---------|
+| runtime 單組件成功 | ✓ 寫 | ✓ 寫 | ✗ 不寫 |
+| adapter 單組件成功（帶 plist warning） | ✓ 寫 | ✓ 寫 | ✗ 不寫 |
+| runtime+adapter+ui 全鏈路成功 | ✓ 寫 | ✓ 寫 | ✓ 寫（正式宣告） |
+
+### 後續執行者無需判斷
+
+- promotion 成功後寫哪份記錄 ✓
+- 哪些 warning 可以忽略 ✓
+- 什麼條件下能在 phase6 中正式宣告成功 ✓
 
 ---
 

@@ -98,3 +98,7 @@ Promotion 只負責把構建物部署到運行環境，不負責判斷產品/功
 
 - **僅在必要時**回填 phase5 README / 驗證記錄
 - **不默認每次都改**
+
+### Evidence Routing
+
+完整路由規則見 [OmniMemora_Promotion_Evidence_Routing.md](./OmniMemora_Promotion_Evidence_Routing.md)，包括三層落點、路由矩陣、正式宣告條件、warning 升級規則。

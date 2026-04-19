@@ -75,6 +75,36 @@ last_verified_commit: 5ff812c
 
 ---
 
+## 第二子線：Promotion Evidence Routing
+
+### 狀態：**已收口 ✓**
+
+| 完成標準 | 狀態 |
+|----------|------|
+| 三層落點固定 | ✓ |
+| 結果路由矩陣固定 | ✓ |
+| 正式宣告條件固定 | ✓ |
+| Warning 升級規則固定 | ✓ |
+
+**收口日期：** 2026-04-20
+**Repo Revision：** d627029
+
+### Evidence Routing 文檔
+
+| 文檔 | 說明 |
+|------|------|
+| `OmniMemora_Promotion_Evidence_Routing.md` | 三層落點、路由矩陣、宣告條件、Warning 規則、快速參考卡 |
+
+### 收口結論
+
+1. 三層落點已固定：原始日誌 → 執行記錄 → 階段結論
+2. 結果路由矩陣已固定：四種結果各有所歸
+3. 正式宣告 `running_reality_promoted` 的條件已固定（七項必要條件）
+4. Warning 升級規則已固定：只有契約化 warning 才能繼續作為 warning
+5. 後續執行者不需要再臨場判斷寫哪裡、何時能宣告成功
+
+---
+
 ## 憲法 / Roadmap 關係說明
 
 | 層 | 狀態 |
