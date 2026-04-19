@@ -1005,3 +1005,18 @@ last_verified_commit: ""
 | 观察结果 | runtime launch reality 稳定可用 `launchctl print gui/$(id -u)/com.omnimemora.runtime` 返回一致状态；adapter launch reality 存在三层差异：plist 文件存在、进程正在运行、但 launchctl print 不能稳定枚举 service；product API reality：`18011` 暴露 adapter 控制面与产品入口，`8765` 暴露 runtime 内部面，`5173` 暴露 UI 控制入口 |
 | 结论适用范围 | `观察模型已固定`：runtime launch reality 与 adapter launch reality 必须分开观察；"adapter 进程存在"与"launchctl print 能稳定枚举 adapter service"不是同一层信号；以后报告里不得把这两者混用为"adapter 由 launchd 正常托管" |
 | 备注 | adapter 在 launchctl 层面的可见性差异是已知观测限制，不在本阶段修复范围内；后续如需统一观察模型，应在 adapter plist 调试专项中处理 |
+
+
+### RECORD-B-070
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-070` |
+| 日期 | `2026-04-19` |
+| 实例分类 | `拓扑澄清 / Running Reality 三组件定义（含 5173 UI）` |
+| 实例路径/来源 | `~/.omnimemora/service/current`；`http://127.0.0.1:5173` |
+| 验证动作 | 1. 确认当前 `5173` 的在线状态（手动检查）；2. 确认 UI 的启动方式是否为手动；3. 确认 `5173` 在当前 running reality 中的定位 |
+| 观察结果 | `5173` 是正式用户控制入口；但当前 UI 由手动启动保持，尚未纳入 launchd 托管体系；`5173` 必须被定义为正式 running reality 的必验组件；`5173` 不在线时，不能把 running reality 描述成"正式控制入口完整成立" |
+| 结论适用范围 | `Running Reality 三组件已定义`：runtime(8765)、adapter(18011)、UI(5173) 共同构成正式 running reality；三者必须全部验证；`5173` 在线状态必须单独记录；不能把"UI 工程能力已恢复"等同于"UI 当前在线" |
+| 备注 | UI 当前是必验组件，但其 running strategy 仍需手动启动/手动保持，不能假装已纳入 launchd 正式托管；这是已知限制，后续若实现 UI 自动化托管，应更新本记录 |
+

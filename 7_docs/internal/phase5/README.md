@@ -7,16 +7,19 @@
 - [OmniMemora OpenClaw-first Real Client Recovery + Visual Validation Runbook](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_OpenClaw_First_Real_Client_Recovery_Visual_Validation_Runbook_2026-04-19.md)
 - [OmniMemora 验证对象登记与验收记录](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_验证对象登记与验收记录_2026-04-18.md)
 - [OmniMemora Decision Carrier / Control-Plane Decoupling Bounded Scan](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Decision_Carrier_Control_Plane_Decoupling_Bounded_Scan_2026-04-18.md)
+- [OmniMemora Promotion Workflow 执行计划](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Promotion_Workflow_执行计划_2026-04-19.md)
+- [OmniMemora Promotion Workflow Runbook](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/plan/OmniMemora_Promotion_Workflow_Runbook_2026-04-19.md)
 
 ## Current Phase Boundary
 
-- 当前执行主线：`Running Topology Clarification`
+- 当前执行主线：`Promotion Workflow Formalization`
 - 阶段状态：**进行中**
 - 当前阶段目标：
-  - 明确三层现实（repo reality / candidate reality / running reality）的关系与边界
-  - 固定 promotion 的触发条件与最小步骤
-  - 固定运行观察模型，避免观察口径混乱
-  - 明确 dev-mode 是后续选项，不是默认结构
+  - 将 promotion 规则收敛成正式 SOP
+  - 固定 runtime promotion 流程与验证矩阵
+  - 固定 adapter promotion 流程与验证矩阵
+  - 固定 UI promotion 流程与验证矩阵（新增）
+  - 固定 promotion 失败分支与回滚口径
 
 ### 拓扑契约（三层现实）
 
@@ -42,9 +45,26 @@
 
 - runtime launch reality：`launchctl print gui/$(id -u)/com.omnimemora.runtime`
 - adapter launch reality：plist 文件 + 实际进程 + launchctl 可见性（注意：launchctl print 不能稳定枚举 adapter service）
-- product API reality：`18011`（adapter）、`8765`（runtime）、`5173`（UI）
+- **UI reality**：`5173`（**必须单独验证在线状态**）
 
-**重要**：”adapter 进程存在”与”launchctl print 能稳定枚举 adapter service”不是同一层信号，以后报告里不得把这两者混用。
+### Running Reality 正式组件集合
+
+| 组件 | 端口 | 托管方式 | 备注 |
+|------|------|----------|------|
+| runtime | 8765 | launchd | `launchctl print` 可作为强观察面 |
+| adapter | 18011 | launchd | plist + 进程，launchctl print 不稳定 |
+| UI | 5173 | **手动启动** | 尚未正式托管，必须单独验证在线状态 |
+
+**重要**：
+- `5173` 是正式用户控制入口，不是可有可无的观察面
+- 如果 `5173` 未在线，不能把 running reality 描述成”正式控制入口完整成立”
+
+### 双层表达约定
+
+- **能力层结论**：`5173` 作为正式控制入口的工程能力已恢复
+- **运行层结论**：`5173` 是否在线，属于 running reality 的当前状态，必须单独验证
+
+**禁止**把”UI 工程已修好”和”正式 running reality 中 5173 当前在线”写成一句话。
 
 ## 上一阶段（OpenClaw-first）收口结论
 
@@ -61,8 +81,7 @@
 
 ## 下一阶段候选
 
-- **`Promotion Workflow Formalization`**（默认推荐）：把 runtime/adapter promotion 做成正式 SOP，包括标准输入、标准命令、标准重载、标准验证
-- **`Adapter Launch Visibility Clarification`**：收口 adapter plist/进程/launchctl 可见性三层不对等现象
+（将在本阶段结束后更新）
 
 明确排除：继续改 OpenClaw attach（已收口）、GUI 物理独立、`trial / internal admin`、compile/strategy 大拆、dev-mode 提速方案（本阶段结论为 dev-mode 如需存在，后续单开主线规划）
 
