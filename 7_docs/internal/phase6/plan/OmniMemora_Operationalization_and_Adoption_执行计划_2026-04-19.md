@@ -39,20 +39,39 @@ last_verified_commit: 5ff812c
 
 ## 第一子線：Promotion Workflow Adoption
 
-### 目標
-讓 `tools/promotion/` 成為真實工作流，驗證運轉起來的效果。
+### 狀態：**已收口 ✓**
 
-### 成功標準（四個問題）
+| 完成標準 | 狀態 |
+|----------|------|
+| 四個問題已回答 | ✓ |
+| 六個組合驗證通過 | ✓ |
+| adoption 文檔四件套落地 | ✓ |
+| `running_reality_promoted` 可正式宣告 | ✓ |
 
-1. **誰可以用**：哪些人/角色有權限調用 `tools/promotion/`
-2. **哪些場景必須用**：哪些變更必須走 promotion，哪些場景不該用
-3. **promotion 成功後必須回填哪些記錄**：哪些文件需要更新，什麼內容不能遺漏
-4. **什麼條件下可以正式宣告 `running_reality_promoted`**：成功的判斷基準是什麼
+**收口日期：** 2026-04-20
+**Repo Revision：** d627029
 
-### 明確排除
-- 再新建 promotion automation（已落地）
-- 再改 `tools/promotion/` 的基礎架構
-- 把 promotion 變成 ci/cd 強制流程（當前沒有這個需求）
+### Adoption 文檔四件套
+
+| 文檔 | 說明 |
+|------|------|
+| `OmniMemora_Adoption_Contract.md` | 誰可以用、哪些場景必須用、不該用的場景 |
+| `OmniMemora_Promotion_Success_Definition.md` | runtime/adapter/ui 成功標準、組合標準、失敗定義 |
+| `OmniMemora_Adoption_Runbook.md` | 入口命令、推薦順序、驗證命令、記錄模板 |
+| `OmniMemora_Adoption_Verification_Records_2026-04-20.md` | 三批六組驗證記錄 |
+
+### 已知非阻塞 Warning
+
+| 組件 | Warning | 狀態 |
+|------|---------|------|
+| Adapter | `plist reality` 未通過 launchctl 檢查 | 已知非阻塞，不影響 `running_reality_promoted` 結論 |
+
+### 收口結論
+
+1. `running_reality_promoted` 已可正式宣告
+2. 後續執行者不需要再重新定義 adoption 規則
+3. adapter 的 plist warning 屬於已知非阻塞 warning
+4. 執行 `tools/promotion/promotion.sh <target>` 即完成 promotion 工作流
 
 ---
 
