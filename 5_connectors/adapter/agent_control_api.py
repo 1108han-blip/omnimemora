@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -9,6 +9,7 @@ from pydantic import BaseModel
 
 from . import agent_metrics as _agent_metrics
 from . import agent_routing_state as _route_state
+from . import compile_store as _compile_store
 from .config import config
 
 router = APIRouter()
@@ -66,6 +67,21 @@ def _build_metrics_index() -> dict[str, dict[str, Any]]:
     all_metrics = _agent_metrics.get_agent_metrics()
     by_family: dict[str, dict[str, Any]] = {}
 
+    # Phase 1: Primary activity source — compile/request-level product activity
+    # compile events reflect真实产品请求进入 18011, taking precedence over subagent metrics
+    compile_summary = _compile_store.summarize_compile_status(window_minutes=30)
+    for family, stat in compile_summary.items():
+        by_family[family] = {
+            "active": True,
+            "last_seen_at": datetime.fromtimestamp(stat["last_seen"], tz=timezone.utc).isoformat()
+            if stat.get("last_seen")
+            else None,
+            "subagent_count_active": 0,
+            "subagent_count_total_visible": 0,
+        }
+
+    # Phase 2: Fallback — agent_metrics only for families NOT already set by compile
+    # compile sets active/last_seen_at; metrics fills subagent_count and provides fallback truth
     for item in all_metrics:
         family = item.agent_id
         state = by_family.setdefault(
@@ -80,8 +96,12 @@ def _build_metrics_index() -> dict[str, dict[str, Any]]:
         state["subagent_count_total_visible"] += 1
         ts = _parse_iso(item.last_seen_at)
         current_ts = _parse_iso(state["last_seen_at"])
-        if ts > current_ts:
-            state["last_seen_at"] = item.last_seen_at
+        # Only override if compile hasn't already set truth for this family
+        if family not in compile_summary:
+            if ts > current_ts:
+                state["last_seen_at"] = item.last_seen_at
+            if ts > 0:
+                state["active"] = True
 
     for item in live:
         family = str(item.get("agent_id") or "unknown")
@@ -94,12 +114,14 @@ def _build_metrics_index() -> dict[str, dict[str, Any]]:
                 "subagent_count_total_visible": 0,
             },
         )
-        state["active"] = True
         state["subagent_count_active"] += 1
         ts = _parse_iso(item.get("last_seen_at"))
         current_ts = _parse_iso(state["last_seen_at"])
-        if ts > current_ts:
-            state["last_seen_at"] = item.get("last_seen_at")
+        # Only override if compile hasn't already set truth for this family
+        if family not in compile_summary:
+            state["active"] = True
+            if ts > current_ts:
+                state["last_seen_at"] = item.get("last_seen_at")
 
     return by_family
 

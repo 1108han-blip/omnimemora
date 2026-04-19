@@ -25,12 +25,16 @@
   - 当前阶段结论覆盖控制面、接入层、路由层与真实请求路径
   - 当前主线不拆 `trial / internal admin surface`
   - 当前主线不做 GUI 物理独立
-  - `active / last_seen_at` 不一致是后续独立主线，不影响本阶段完成结论
+  - **`Control Activity Semantics` 已完成**：控制卡 `active / last_seen_at` 语义已与真实产品请求对齐
+    - compile events 是 `active / last_seen_at` 主 truth source
+    - metrics/live 只在 family 无 compile 活动时才作为回退
+    - `installed / routing_enabled / active` 三者保持独立
+    - route off 和 route on 的真实请求都可推进 activity
 
 ## 下一阶段候选
 
-- `Control Activity Semantics`（默认推荐）：修 `active / last_seen_at` 语义
-- `Claude Code Cross Validation`：Claude Code 第二验证面交叉验证
+- **`Running Topology Clarification`**（默认推荐，唯一入口）：澄清 `~/.omnimemora/service/current` 独立部署结构与 repo reality 的关系
+- 明确排除：`Control Activity Semantics`（已完成）、`Claude Code Cross Validation`（优先级低于运行拓扑问题）
 
 明确排除：继续改 OpenClaw attach、GUI 物理独立、`trial / internal admin`、compile/strategy 大拆
 

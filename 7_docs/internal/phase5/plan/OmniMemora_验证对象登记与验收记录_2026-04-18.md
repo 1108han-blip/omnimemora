@@ -953,3 +953,16 @@ last_verified_commit: ""
 | 观察结果 | OpenClaw CLI 不再报 “Config invalid”；`installed=True` 从 marker 文件读取成功；routing_enabled=false 时 compile event 为 `agent_route_disabled`；routing_enabled=true 时 compile event 为 `runtime_compile`；真实 OpenClaw 请求进入 `18011` 且产生 compile 事件记录 |
 | 结论适用范围 | `真实客户端 + 外部运行实例联合成立`：OpenClaw-first 主链路已完全成立，包括 CLI 不再因 config invalid 失败、`installed=true` 成立、真实请求进入 `18011`、`route off/on` 语义分别对应 `agent_route_disabled` 和 `runtime_compile` |
 | 备注 | marker 已从 `openclaw.json` 根键迁移到独立文件 `~/.openclaw/.omnimemora.attach.marker`，解决了 OpenClaw CLI schema 验证冲突；`active / last_seen_at` 仍未推进，但这是后续独立主线问题，不影响本阶段完成结论 |
+
+### RECORD-B-066
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-066` |
+| 日期 | `2026-04-19` |
+| 实例分类 | `真实客户端 + 控制面语义对齐验证` |
+| 实例路径/来源 | `~/.omnimemora/service/current`（同步了 `agent_control_api.py` 修改）；`~/.omnimemora/adapter/compile_events.jsonl` |
+| 验证动作 | 1. 更新 `agent_control_api.py` 的 `_build_metrics_index()`，引入 compile events 作为 `active / last_seen_at` 主源；2. 将修改同步到 `~/.omnimemora/service/current/5_connectors/adapter/agent_control_api.py`；3. 重启 adapter（`launchctl remove com.omnimemora.adapter` 后手动启动）；4. 发送 `POST /llm/v1/chat/completions` 生成新 compile 事件；5. 读取 `GET /agents/control` 验证 `openclaw.active=true` 和 `last_seen_at` 推进 |
+| 观察结果 | compile events 主导 control card activity：`openclaw.active=true`；`last_seen_at` 随新请求从 `10:54:40` 推进到 `11:02:56`；`claude_code` 仍由 metrics fallback 维持 `active=true`；`codex_cli` 无活动保持 `active=false` |
+| 结论适用范围 | `真实客户端 + 外部运行实例联合成立`：`Control Activity Semantics` 阶段完成，compile events 已成为 `active / last_seen_at` 主 truth source，metrics/live 只作为缺省回退 |
+| 备注 | `service/current` 是独立目录而非 repo symlink，代码修改需手动同步到该目录；这是下一阶段 `Running Topology Clarification` 的讨论范围，不影响本阶段验证结论 |
