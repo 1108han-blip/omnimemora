@@ -1020,3 +1020,17 @@ last_verified_commit: ""
 | 结论适用范围 | `Running Reality 三组件已定义`：runtime(8765)、adapter(18011)、UI(5173) 共同构成正式 running reality；三者必须全部验证；`5173` 在线状态必须单独记录；不能把"UI 工程能力已恢复"等同于"UI 当前在线" |
 | 备注 | UI 当前是必验组件，但其 running strategy 仍需手动启动/手动保持，不能假装已纳入 launchd 正式托管；这是已知限制，后续若实现 UI 自动化托管，应更新本记录 |
 
+
+
+### RECORD-B-071
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-071` |
+| 日期 | `2026-04-19` |
+| 实例分类 | `UI Running Strategy Clarification / 方案 C（分层常驻）确定` |
+| 实例路径/来源 | `5173` 运行态确认；`/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase5/README.md` |
+| 验证动作 | 1. 确认当前 5173 在线状态（`curl http://127.0.0.1:5173/`）；2. 评估三种运行策略候选（手动组件 / 正式常驻 / 分层常驻）；3. 选定方案 C（分层常驻）作为正式 UI 运行策略 |
+| 观察结果 | **方案 C（分层常驻）已确立**：18011/8765 为基础 running reality，必须常驻；5173 为"正式控制入口层"，默认应可启动并可验证，但不强制 24/7 常驻；当前 5173 实际运行态需单独验证 |
+| 结论适用范围 | **UI Running Strategy 已明确**：5173 不再是悬空状态；方案 C 已写入正式文档；能力层（UI 工程已恢复）≠ 运行层（5173 当前是否在线）≠ 托管层（正式运行方式）；基础 running reality 成立判断：8765+18011 在线；完整 running reality 成立判断：基础层 + 5173 在线 |
+| 备注 | 方案 C 不强迫当前把 dev server 方式硬塞进 launchd 常驻托管，保留产品地位同时符合当前工程现实；后续若需自动托管，可在此基础上升级 |

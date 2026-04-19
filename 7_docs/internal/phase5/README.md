@@ -12,14 +12,13 @@
 
 ## Current Phase Boundary
 
-- 当前执行主线：`Promotion Workflow Formalization`
+- 当前执行主线：`UI Running Strategy Clarification`
 - 阶段状态：**进行中**
 - 当前阶段目标：
-  - 将 promotion 规则收敛成正式 SOP
-  - 固定 runtime promotion 流程与验证矩阵
-  - 固定 adapter promotion 流程与验证矩阵
-  - 固定 UI promotion 流程与验证矩阵（新增）
-  - 固定 promotion 失败分支与回滚口径
+  - 明确 `5173` 在正式 running reality 中的运行策略
+  - 固定 UI 的托管边界
+  - 固定 UI promotion 的真实完成标准
+  - 收敛 active docs 对 `5173` 的表述不再冲突
 
 ### 拓扑契约（三层现实）
 
@@ -47,17 +46,23 @@
 - adapter launch reality：plist 文件 + 实际进程 + launchctl 可见性（注意：launchctl print 不能稳定枚举 adapter service）
 - **UI reality**：`5173`（**必须单独验证在线状态**）
 
-### Running Reality 正式组件集合
+### Running Reality 正式组件集合（方案 C：分层常驻）
 
-| 组件 | 端口 | 托管方式 | 备注 |
+| 组件 | 端口 | 托管层级 | 备注 |
 |------|------|----------|------|
-| runtime | 8765 | launchd | `launchctl print` 可作为强观察面 |
-| adapter | 18011 | launchd | plist + 进程，launchctl print 不稳定 |
-| UI | 5173 | **手动启动** | 尚未正式托管，必须单独验证在线状态 |
+| runtime | 8765 | 基础层 · launchd 常驻 | `launchctl print` 可作为强观察面 |
+| adapter | 18011 | 基础层 · launchd 常驻 | plist + 进程，launchctl print 不稳定 |
+| UI | 5173 | **控制入口层 · 分层常驻** | 可手动启动，默认应可验证，但不强制常驻 |
 
-**重要**：
-- `5173` 是正式用户控制入口，不是可有可无的观察面
-- 如果 `5173` 未在线，不能把 running reality 描述成”正式控制入口完整成立”
+**方案 C（分层常驻）的定义**：
+- `18011/8765` 构成**基础 running reality**，必须常驻在线
+- `5173` 是”正式控制入口层”，默认应可启动并可验证
+- `5173` 不要求 24/7 常驻，但要求在使用时可快速启动并验证
+- 本方案保留 `5173` 作为正式用户控制入口的产品地位，不强迫当前把 dev server 方式硬塞进 launchd 常驻托管
+
+**Running Reality 完整成立的判断**：
+- 基础层在线（8765 + 18011）→ **基础 running reality 成立**
+- 基础层在线 + 5173 在线 → **完整 running reality 成立**
 
 ### 双层表达约定
 
@@ -66,10 +71,38 @@
 
 **禁止**把”UI 工程已修好”和”正式 running reality 中 5173 当前在线”写成一句话。
 
+### UI Promotion 完成标准（三层）
+
+| 层级 | 内容 | 验收方式 |
+|------|------|----------|
+| **能力层** | UI 工程可构建、可启动、路由正确、控制卡正确 | `npm run build` + 代码审查 |
+| **运行层** | 当前 `5173` 在线，`/` 与 `/agents?tenant=all` 可访问 | `curl http://127.0.0.1:5173/` |
+| **托管层** | UI 当前的正式运行方式已被文档承认并固定 | 本文档确认 |
+
+**重要**：若托管层未定义完成，不能声称”running reality 完整成立”。
+
+### UI 当前运行状态
+
+| 层级 | 状态 | 说明 |
+|------|------|------|
+| 能力层 | ✅ 已恢复 | UI 工程可构建、可启动、路由正确 |
+| 运行层 | ⏳ 待验证 | 5173 当前是否在线需单独确认 |
+| 托管层 | ✅ 已定义（方案 C） | 分层常驻，5173 可手动启动，不强制常驻 |
+
+### 当前 5173 实际状态
+
+```bash
+# 检查 5173 在线状态
+curl -s http://127.0.0.1:5173/ | head -c 100
+```
+
+- 若返回 HTML → **运行层在线**
+- 若连接失败 → **运行层离线**，但不影响基础 running reality 成立
+
 ## 上一阶段（OpenClaw-first）收口结论
 
 - `Decision Carrier / Control-Plane Decoupling` 已阶段性完成并转为结构前置成果
-- `5173` 已恢复为正式用户控制入口
+- **`5173` 能力层已恢复**：作为正式用户控制入口的工程能力已具备（但当前运行层状态需单独验证）
 - `OpenClaw` 已完成接入层 / 路由层控制闭环
 - OpenClaw 的”安装成立”标准已升级为：`MCP 接入 + main 实际生效请求入口接入 18011`
 - OpenClaw 的 MCP 运行期端点已定位为 `/sse`

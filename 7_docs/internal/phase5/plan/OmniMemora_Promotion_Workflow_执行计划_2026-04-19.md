@@ -9,10 +9,10 @@
 - `service/current` 是独立目录，不是 symlink
 - runtime 运行入口：`~/.omnimemora/service/current/tools/omnimemora-runtime serve`
 - adapter 运行入口：`~/.omnimemora/service/current/tools/_run_adapter.py`
-- UI 运行入口：`5173`（当前为手动启动方式，尚未正式托管）
+- UI 运行入口：`5173`（分层常驻，可手动启动）
 - runtime 的 `launchctl print` 可作为强观察面
 - adapter 当前存在 plist + 进程，但 `launchctl print` 不能稳定作为唯一强观察面
-- UI 当前由手动启动保持，尚未纳入 launchd 托管体系
+- UI 当前为分层常驻策略（方案 C），不强制 24/7 常驻
 
 ## 拓扑契约
 
@@ -28,20 +28,21 @@ running reality       →  ~/.omnimemora/service/current + launchd 当前实际�
 - running reality 的成功行为不能反推 repo 已自动具备同等行为
 - repo 修改不会自动进入 running reality，除非显式 promotion
 
-## Running Reality 正式组件集合
+## Running Reality 正式组件集合（方案 C：分层常驻）
 
-running reality 正式定义为**三组件**：
+running reality 正式定义为**分层组件**：
 
-| 组件 | 端口 | 托管方式 | 备注 |
+| 组件 | 端口 | 托管层级 | 备注 |
 |------|------|----------|------|
-| runtime | 8765 | launchd | `launchctl print` 可作为强观察面 |
-| adapter | 18011 | launchd | plist + 进程，launchctl print 不稳定 |
-| UI | 5173 | **手动启动** | 尚未正式托管，必须单独验证在线状态 |
+| runtime | 8765 | 基础层 · launchd 常驻 | `launchctl print` 可作为强观察面 |
+| adapter | 18011 | 基础层 · launchd 常驻 | plist + 进程，launchctl print 不稳定 |
+| UI | 5173 | **控制入口层 · 分层常驻** | 可手动启动，默认应可验证，但不强制常驻 |
 
-**重要**：
-- `5173` 是正式用户控制入口
-- 在正式 running reality 中，`5173` 不是可有可无的观察面
-- 如果 `5173` 未在线，不能把 running reality 描述成"正式控制入口完整成立"
+**方案 C（分层常驻）的定义**：
+- `18011/8765` 构成**基础 running reality**，必须常驻在线
+- `5173` 是"正式控制入口层"，默认应可启动并可验证
+- `5173` 不要求 24/7 常驻，但要求在使用时可快速启动并验证
+- 本方案保留 `5173` 作为正式用户控制入口的产品地位，不强迫当前把 dev server 方式硬塞进 launchd 常驻托管
 
 ### 双层表达约定
 
@@ -53,6 +54,21 @@ running reality 正式定义为**三组件**：
 和
 - "正式 running reality 中 5173 当前在线"
 写成一句话。
+
+### UI Promotion 完成标准（三层）
+
+| 层级 | 内容 | 验收方式 |
+|------|------|----------|
+| **能力层** | UI 工程可构建、可启动、路由正确、控制卡正确 | `npm run build` + 代码审查 |
+| **运行层** | 当前 `5173` 在线，`/` 与 `/agents?tenant=all` 可访问 | `curl http://127.0.0.1:5173/` |
+| **托管层** | UI 当前的正式运行方式已被文档承认并固定 | 本文档确认 |
+
+**重要**：若托管层未定义完成，不能声称"running reality 完整成立"。
+
+### Running Reality 完整成立的判断
+
+- 基础层在线（8765 + 18011）→ **基础 running reality 成立**
+- 基础层在线 + 5173 在线 → **完整 running reality 成立**
 
 ## promotion 触发条件（必须全部满足）
 
@@ -147,24 +163,25 @@ adapter 当前观察口径固定为三层并列：
 - 在 adapter launchctl 可见性未稳定前，不把 `launchctl print gui/$(id -u)/com.omnimemora.adapter` 作为唯一成功标准
 - "进程存在"与"launchctl print 可枚举"不可混写成一句"adapter 由 launchd 正常托管"
 
-## UI Promotion SOP
+## UI Promotion SOP（方案 C：分层常驻）
 
 ### 触发输入
 
 - 组件：`ui`
 - 同步来源：前端构建产物
 - 部署目标：`5173` 启动目录
+- 运行策略：**方案 C（分层常驻）**，`5173` 可手动启动，不强制 24/7 常驻
 
 ### 标准步骤
 
 1. **明确输入**
    - 前端代码或构建产物
-   - 运行方式（当前为手动启动）
+   - 运行方式：手动启动（方案 C 分层常驻）
 
 2. **明确启动方式**
    - UI 组件当前是**必验组件**
-   - 但其 running strategy **仍需手动启动 / 手动保持**
-   - 不能假装它已经被 launchd 或其他 supervisor 正式托管
+   - running strategy 为**分层常驻**：可手动启动，默认应可验证，但不强制常驻
+   - 不能假装它已经被 launchd 正式托管
 
 3. **启动/复验**
    ```bash
@@ -175,17 +192,21 @@ adapter 当前观察口径固定为三层并列：
    cd /path/to/ui && npm run dev -- --port 5173
    ```
 
-4. **验证（必须逐项通过）**
-   - `http://127.0.0.1:5173/` — UI 首页可访问
-   - `http://127.0.0.1:5173/agents?tenant=all` — 控制面可渲染
-   - 页面能正确消费正式 `18011` API
-   - 验证 UI 与 control API 一致：`installed`、`routing_enabled`、`active`
+4. **验证（三层必须逐项通过）**
+   - **能力层**：`npm run build` 成功，代码审查通过
+   - **运行层**：`http://127.0.0.1:5173/` — UI 首页可访问
+   - **运行层**：`http://127.0.0.1:5173/agents?tenant=all` — 控制面可渲染
+   - **运行层**：页面能正确消费正式 `18011` API
+   - **运行层**：验证 UI 与 control API 一致：`installed`、`routing_enabled`、`active`
 
 ### 若 5173 不在线时的处理
 
-- 必须在验证记录中明确记录"UI 当前离线"
+- 必须在验证记录中明确记录"UI 当前离线（运行层未就绪）"
 - 不能将"UI 工程能力已恢复"等同于"UI 当前在线"
-- running reality 结论应描述为："UI 离线，能力已具备但运行态未就绪"
+- running reality 结论应描述为：
+  - **基础 running reality 成立**（8765 + 18011 在线）
+  - **完整 running reality 未成立**（5173 离线）
+- UI 离线不影响基础 running reality，但不满足完整 running reality
 
 ## Promotion 后复验矩阵（三组件）
 
@@ -206,14 +227,17 @@ adapter 当前观察口径固定为三层并列：
 | API reality | `GET /health` | 18011 |
 | 本次变更涉及的控制面/API | 按本次变更涉及接口 | 18011 |
 
-### ui-only
+### ui-only（分层常驻）
 
-| 验证项 | 方法 | 端口 |
-|--------|------|------|
-| UI 在线 | `curl -s http://127.0.0.1:5173/` | 5173 |
-| UI 首页 | `curl -s http://127.0.0.1:5173/` | 5173 |
-| 控制面渲染 | `curl -s http://127.0.0.1:5173/agents?tenant=all` | 5173 |
-| UI 与 API 一致性 | 检查 `installed/routing_enabled/active` 显示 | - |
+| 验证项 | 层级 | 方法 | 端口 |
+|--------|------|------|------|
+| UI 能力层 | 能力层 | `npm run build` 成功 | - |
+| UI 在线 | 运行层 | `curl -s http://127.0.0.1:5173/` | 5173 |
+| UI 首页 | 运行层 | `curl -s http://127.0.0.1:5173/` | 5173 |
+| 控制面渲染 | 运行层 | `curl -s http://127.0.0.1:5173/agents?tenant=all` | 5173 |
+| UI 与 API 一致性 | 运行层 | 检查 `installed/routing_enabled/active` 显示 | - |
+
+**注意**：ui-only promotion 后，若 5173 不在线，只记录"运行层未就绪"，不阻塞 promotion 结论。
 
 ### adapter + ui
 
@@ -225,14 +249,19 @@ adapter 当前观察口径固定为三层并列：
 | UI 在线 | `curl -s http://127.0.0.1:5173/` | 5173 |
 | UI 与 `/agents/control` 一致 | 验证控制面数据 | - |
 
-### runtime + adapter + ui
+### runtime + adapter + ui（完整 running reality）
 
-| 验证项 | 方法 | 端口 |
-|--------|------|------|
-| runtime 所有项 | 见 runtime-only 矩阵 | 8765 |
-| adapter 所有项 | 见 adapter-only 矩阵 | 18011 |
-| UI 所有项 | 见 ui-only 矩阵 | 5173 |
-| 端到端产品路径 | 控制面可见 → 控制动作可触发 → 产品行为变化 | - |
+| 验证项 | 层级 | 方法 | 端口 |
+|--------|------|------|------|
+| runtime 所有项 | 基础层 | 见 runtime-only 矩阵 | 8765 |
+| adapter 所有项 | 基础层 | 见 adapter-only 矩阵 | 18011 |
+| UI 所有项 | 控制入口层 | 见 ui-only 矩阵 | 5173 |
+| 端到端产品路径 | 控制入口层 | 控制面可见 → 控制动作可触发 → 产品行为变化 | - |
+
+**Running Reality 成立判断**：
+- 基础层（8765 + 18011）全部在线 → **基础 running reality 成立**
+- 基础层 + 5173 在线 → **完整 running reality 成立**
+- 5173 离线时 → **基础 running reality 成立，完整 running reality 未成立**
 
 ### 记录要求
 
@@ -259,10 +288,12 @@ adapter 当前观察口径固定为三层并列：
 - 如需回滚，只回滚本次提升的组件，不混入其他修复
 - 回滚后重新验证 running reality，不能只看进程存活
 
-### UI 特有处理
+### UI 特有处理（方案 C 分层常驻）
 
-- 若 UI promotion 后 5173 不达标准，但 adapter/runtime 正常，应记录为"UI 运行态未就绪"
+- 若 UI promotion 后 5173 不在线，只记录为"UI 运行层未就绪"
+- UI 运行层未就绪不影响基础 running reality 成立
 - UI 的失败不算 runtime/adapter 失败，不触发整个系统的回滚
+- 但不能声称"完整 running reality 成立"
 
 ## 输出文档
 
