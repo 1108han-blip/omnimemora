@@ -4,11 +4,11 @@ title: OmniMemora Audit Trigger Rules and Scheme
 owner: doc-team
 reviewers: [arch-lead]
 status: active
-version: 1.0.0
-effective_date: 2026-04-19
+version: 1.1.0
+effective_date: 2026-04-20
 depends_on: []
 supersedes: []
-last_verified_commit: 2f67f40
+last_verified_commit: 7dc3045
 ---
 
 # AUDIT_SCHEME.md
@@ -151,15 +151,116 @@ last_verified_commit: 2f67f40
 
 ---
 
-# 九、開放項（待確認）
+# 九、明顯衝突判定標準
 
-以下項目需在下一階段確認後再補入本文件：
+「明顯衝突」是指 active docs 的階段結論與 A/B/C 級證據之間存在直接且可驗證的矛盾，無需主觀解讀即可判定。
 
-- **「明顯衝突」的客觀判定標準** — 影響 Phase 5 輕審計的 `Pass / Conditional Pass / Fail` 判斷
-  - active docs 明显冲突
-  - running reality 明显冲突
-  - promotion automation 明显冲突
-  - dashboard contract 明显冲突
+---
+
+## 9.1 四類明顯衝突
+
+### Ⅰ. Active Docs 明顯衝突
+
+**定義：** active docs / phase README 明確宣告某結論成立，但同一階段內更高等級證據（A/B/C）直接否定該結論。
+
+**典型場景：**
+- README 寫「完整 running reality 成立」，但 live curl 證明 `5173` 離線
+- Phase README 聲稱某組件處於健康狀態，但同時期 A 級實測返回非 200
+
+**默認等級：** 至少 `P1`
+
+### Ⅱ. Running Reality 明顯衝突
+
+**定義：** README 或階段結論聲稱基礎/完整 running reality 成立，但對應組件 health / UI / control API 不可達，或關鍵端口狀態不符。
+
+**典型場景：**
+- 文檔聲稱 `8765/health = 200`，但 A 級 curl 實際返回 500 或超時
+- 文檔聲稱 UI 已上線，但 `5173` 完全不可達
+
+**注意：** 必須有 A 級實測才能判定 running reality 明顯衝突。沒有實測的情況下，僅因「未驗證」不能直接判為明顯衝突（參見 RECORD-B-076 校準案例）。
+
+**默認等級：** 至少 `P1`
+
+### Ⅲ. Promotion Automation 明顯衝突
+
+**定義：** automation 文檔或腳本宣稱某 target 成功，但輸出結論與 adoption contract / success definition 的正式條件明顯不一致。
+
+**典型場景：**
+- 腳本輸出 `running_reality_promoted`，但 `primary_breakpoint ≠ none`
+- 腳本輸出 `running_reality_promoted`，但存在未契約化的 warning
+- 文檔聲稱「full stack promotion verified」，但未滿足 `runtime+adapter+ui` 七項正式宣告條件（見 `OmniMemora_Promotion_Evidence_Routing.md`）
+- 單組件 promotion 被錯誤地當作 full-stack 結論寫入 phase README
+
+**默認等級：** 至少 `P1`
+
+### Ⅳ. Dashboard Contract 明顯衝突
+
+**定義：** 用戶面默認路徑仍暴露 raw/internal identity，或 canonical identity / diagnostics 隔離規則被當前 UI 直接違反，或 overview / control / flow 在已固定 truth source 上出現直接矛盾。
+
+**典型場景：**
+- 默認首頁暴露內部 identity字段，而非 canonical identity
+- Overview 與 Control 使用的 truth source 不一致且直接矛盾
+
+**默認等級：**
+- 若只在展示層（不影響控制判斷）：`P2`
+- 若導致控制判斷失真：`P1`
+
+---
+
+## 9.2 等級映射速查
+
+| 明顯衝突類型 | 默認等級 | 升級條件 |
+|-------------|---------|---------|
+| Active Docs 直接推翻階段結論 | `P0` | — |
+| Active Docs 不推翻階段結論 | `P1` | — |
+| Running Reality 端口不可達 | `P1` | 直接推翻階段結論時升至 `P0` |
+| Promotion Automation 結論與 success definition 不符 | `P1` | 直接推翻階段結論時升至 `P0` |
+| Dashboard Contract 展示層漂移 | `P2` | 控制判斷失真時升至 `P1` |
+
+---
+
+## 9.3 校準案例
+
+### 案例 A：RECORD-B-076（Phase 5 輕審計）
+
+**背景：** Phase 5 輕審計得出 Conditional Pass，發現 F-01（P2 文檔內部結論自洽性問題）。
+
+**為何 F-01 不是明顯衝突：**
+- F-01 的問題是「文檔內部有失真引用」（如 README 指向不存在的 SSOT 文件）
+- 這屬於「文檔內部一致性漂移」，不是「文檔結論與更高級證據直接矛盾」
+- 同場景的 A 級實測結果（8765+18011+5173 均在線，口徑一致）**支持**了 phase5 主結論
+- 因此 F-01 是 `P2`（文檔/展示漂移），不是明顯衝突
+
+**若在當前標準下重新審視：**
+- 該審計發現的「README 指向不存在文件」→ 文檔內部引用失真 → 構成 active docs 漂移
+- 但 phase5 README 的核心結論（running reality 成立）與 A 級證據一致 → 不構成 active docs 明顯衝突
+- 故 F-01 定為 `P2` 仍然成立
+
+### 案例 B：Promotion Evidence Routing 的 Full-Stack Success
+
+**背景：** `runtime+adapter+ui` 全鏈路 promotion 成功，可提升至 phase6 層結論。
+
+**什麼情況會構成 Promotion Automation 明顯衝突：**
+- 若腳本輸出 `running_reality_promoted`，但 `primary_breakpoint` 記為 `build` → 結論與 success definition 不符 → 明顯衝突 `P1`
+- 若文檔聲稱「full running reality promotion verified」，但未滿足七項正式宣告條件（如 UI 未達 200）→ 結論超越實際 → 明顯衝突 `P1`
+- 若存在未契約化 warning（如新出現的 adapter 層面 plist 以外 warning）且未被記錄 → warning 未被認領 → 明顯衝突 `P1`
+
+**什麼情況 NOT 構成明顯衝突：**
+- `plist reality` warning 已存在，API/process 正常，符合契約 → 不是衝突，是契約化 warning
+- 單組件 promotion 結論寫入 adoption verification records → 符合三層落點規則 → 不是衝突
+
+---
+
+## 9.4 非明顯衝突的邊界說明
+
+以下情況**不是**明顯衝突：
+
+| 情況 | 為何不是 |
+|------|---------|
+| 尚未做 A 級實測，只能用 C/D 級證據 | 證據等級不夠，不能直接判定衝突 |
+| 文檔內部引用失真但核心結論被更高級證據支持 | 文檔漂移，不是結論衝突 |
+| 候選現實領先於已提交現實 | 候選不等於事實，需收斂後才能作準 |
+| 已知非阻塞 warning 已契約化記錄 | 契約化 warning 是已知狀態，不是衝突 |
 
 ---
 
