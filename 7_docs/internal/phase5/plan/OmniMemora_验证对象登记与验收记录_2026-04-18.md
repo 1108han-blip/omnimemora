@@ -939,4 +939,17 @@ last_verified_commit: ""
 | 验证动作 | 1. 使用当前 repo `go run . attach openclaw` 再次应用最新 OpenClaw attach 逻辑；2. 读取真实 OpenClaw 配置，确认 `mcp.servers.omnimemora.url` 与 `main` 实际 provider 入口；3. 读取 `GET http://127.0.0.1:18011/agents/control` 观察正式运行实例对 OpenClaw 的 installed 判定 |
 | 观察结果 | 真实配置当前已为：`mcp.servers.omnimemora.url=http://127.0.0.1:18011/sse`，`main` 仍使用 `minimax/MiniMax-M2.7`，且 `~/.openclaw/agents/main/agent/models.json` 中 `minimax.baseUrl=http://127.0.0.1:18011/llm`。这说明 repo reality 与真实 OpenClaw 配置 reality 已对齐。但同时，正式 `18011` 的 `/agents/control` 仍返回 `openclaw.installed=false`、`routing_enabled=true`、`active=false` |
 | 结论适用范围 | `真实客户端现实成立 + 外部运行实例成立`：当前剩余断点不再位于 OpenClaw attach 写入层，而位于正式 running reality 尚未提升到最新 repo reality；因此下一步应进入 `Candidate-to-Running Promotion + Validation`，而不是继续修改 OpenClaw attach 逻辑 |
-| 备注 | 本记录只固定“真实配置已对齐、running reality 未对齐”的现状，不等同于 OpenClaw 已完成真实可使用闭环 |
+| 备注 | 本记录只固定”真实配置已对齐、running reality 未对齐”的现状，不等同于 OpenClaw 已完成真实可使用闭环 |
+
+### RECORD-B-065
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-065` |
+| 日期 | `2026-04-19` |
+| 实例分类 | `真实客户端 + 外部运行实例联合验证` |
+| 实例路径/来源 | 真实 OpenClaw 用户配置 `~/.openclaw/openclaw.json`；marker 文件 `~/.openclaw/.omnimemora.attach.marker`；正式运行实例 `http://127.0.0.1:18011` |
+| 验证动作 | 1. 编译 `4_core/local-runtime` 并部署到 `~/.omnimemora/service/current/tools/omnimemora-runtime`；2. 重启 OmniMemora 服务使新代码生效；3. 创建独立 marker 文件 `~/.openclaw/.omnimemora.attach.marker`（存储 `attached`、`agent_id`、`provider_id`、`product_entry`、`mcp_url`）；4. 从 `openclaw.json` 移除 `omnimemora` 根键以消除 CLI config schema 冲突；5. 验证 `openclaw agent --agent main --message “test”` 不再报 “Config invalid”；6. 验证 `GET /agents/control` 返回 `openclaw.installed=True`；7. 发送 `POST /llm/chat`（routing_enabled=false）验证 compile event 出现 `compile_path=agent_route_disabled`；8. 发送 `POST /agents/control/enable`（routing_enabled=true）后发送 `POST /llm/chat` 验证 compile event 出现 `compile_path=runtime_compile` |
+| 观察结果 | OpenClaw CLI 不再报 “Config invalid”；`installed=True` 从 marker 文件读取成功；routing_enabled=false 时 compile event 为 `agent_route_disabled`；routing_enabled=true 时 compile event 为 `runtime_compile`；真实 OpenClaw 请求进入 `18011` 且产生 compile 事件记录 |
+| 结论适用范围 | `真实客户端 + 外部运行实例联合成立`：OpenClaw-first 主链路已完全成立，包括 CLI 不再因 config invalid 失败、`installed=true` 成立、真实请求进入 `18011`、`route off/on` 语义分别对应 `agent_route_disabled` 和 `runtime_compile` |
+| 备注 | marker 已从 `openclaw.json` 根键迁移到独立文件 `~/.openclaw/.omnimemora.attach.marker`，解决了 OpenClaw CLI schema 验证冲突；`active / last_seen_at` 仍未推进，但这是后续独立主线问题，不影响本阶段完成结论 |

@@ -3,7 +3,7 @@ doc_id: PLAN-PHASE5-OPENCLAW-FIRST-REAL-CLIENT-RECOVERY-2026-04-19
 title: OmniMemora OpenClaw-first Real Client Recovery + Visual Validation 执行计划
 owner: arch-lead
 reviewers: [product-lead]
-status: active
+status: completed
 version: 1.0.0
 effective_date: 2026-04-19
 depends_on:

@@ -216,7 +216,7 @@ async def enable_agent_control(request: AgentControlRequest):
     if not card:
         raise HTTPException(status_code=404, detail=f"family not found: {request.family_id}")
     if not card["installed"]:
-        raise HTTPException(status_code=409, detail="agent must be connected before enabling routing")
+        raise HTTPException(status_code=409, detail="agent must be installed before enabling routing")
     if card["health_state"] != "healthy":
         raise HTTPException(status_code=409, detail="OmniMemora is not healthy enough to enable routing")
 

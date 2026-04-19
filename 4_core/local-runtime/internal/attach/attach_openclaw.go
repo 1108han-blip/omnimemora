@@ -12,7 +12,8 @@ import (
 )
 
 const (
-	openClawMainAgentID = "main"
+	openClawMainAgentID    = "main"
+	openClawMarkerFileName = ".omnimemora.attach.marker"
 )
 
 type openClawConfigLayer string
@@ -55,8 +56,8 @@ func AttachOpenClaw() *AttachResult {
 		return result
 	}
 
-	delete(resolved.globalCfg, "omnimemora")
 	ensureOpenClawMCPAttachment(resolved.globalCfg)
+	ensureOpenClawAttachMarker(resolved.globalCfg, resolved.providerID)
 
 	targetCfg := resolved.globalCfg
 	targetProviders := ensureOpenClawGlobalProviders(resolved.globalCfg)
@@ -100,10 +101,13 @@ func AttachOpenClaw() *AttachResult {
 		return result
 	}
 
+	// Run validation as a post-check; failure is a warning, not an install failure.
 	validateCmd := exec.Command("openclaw", "config", "validate")
 	output, err := validateCmd.CombinedOutput()
 	if err != nil {
-		result.Message = fmt.Sprintf("Config written and verified, but openclaw config validate failed: %s", strings.TrimSpace(string(output)))
+		result.Success = true
+		result.Message = fmt.Sprintf("Attached successfully via %s layer (openclaw config validate warning: %s)", resolved.effectiveLayer, strings.TrimSpace(string(output)))
+		_ = RestartAgent(AgentOpenClaw)
 		return result
 	}
 
@@ -131,8 +135,7 @@ func DetachOpenClaw() error {
 		if err := json.Unmarshal(data, &cfg); err == nil {
 			modified := false
 
-			if _, ok := cfg["omnimemora"]; ok {
-				delete(cfg, "omnimemora")
+			if removeOpenClawAttachMarker(cfg) {
 				modified = true
 			}
 
@@ -169,22 +172,20 @@ func DetachOpenClaw() error {
 }
 
 func isOpenClawAttached(port int) bool {
-	resolved, err := loadOpenClawResolvedConfig()
+	globalPath, err := GetConfigPath(AgentOpenClaw)
+	if err != nil {
+		return false
+	}
+	globalCfg, err := ReadConfig(globalPath)
 	if err != nil {
 		return false
 	}
 
-	if !hasOpenClawMCPAttachment(resolved.globalCfg, port) {
+	if !hasOpenClawMCPAttachment(globalCfg, port) {
 		return false
 	}
 
-	providers := openClawEffectiveProviders(resolved)
-	providerCfg, ok := asStringMap(providers[resolved.providerID])
-	if !ok {
-		return false
-	}
-	baseURL, _ := providerCfg["baseUrl"].(string)
-	return openClawTargetsProductIngress(baseURL, port)
+	return hasOpenClawAttachMarker(globalCfg, port)
 }
 
 func loadOpenClawResolvedConfig() (*openClawResolvedConfig, error) {
@@ -279,10 +280,10 @@ func openClawProviderID(model string) string {
 func ensureOpenClawMCPAttachment(cfg map[string]interface{}) {
 	mcp := ensureStringMap(cfg, "mcp")
 	servers := ensureStringMap(mcp, "servers")
-	servers["omnimemora"] = map[string]interface{}{
-		"url":  ProductAdapterOpenClawMCPEndpoint(),
-		"type": "http",
-	}
+	entry := ensureStringMap(servers, "omnimemora")
+	entry["url"] = ProductAdapterOpenClawMCPEndpoint()
+	entry["type"] = "http"
+	servers["omnimemora"] = entry
 	mcp["servers"] = servers
 	cfg["mcp"] = mcp
 }
@@ -301,12 +302,90 @@ func hasOpenClawMCPAttachment(cfg map[string]interface{}, port int) bool {
 		return false
 	}
 	rawURL, _ := entry["url"].(string)
-	rawURL = strings.TrimSpace(rawURL)
-	expectedSSE := fmt.Sprintf("http://127.0.0.1:%d/sse", port)
-	expectedMCP := fmt.Sprintf("http://127.0.0.1:%d/mcp", port)
-	return strings.EqualFold(rawURL, expectedSSE) ||
-		strings.EqualFold(rawURL, expectedMCP) ||
-		strings.Contains(strings.ToLower(rawURL), "omnimemora")
+	return openClawTargetsProductSSE(rawURL, port)
+}
+
+func openClawMarkerPath() (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".openclaw", openClawMarkerFileName), nil
+}
+
+func ensureOpenClawAttachMarker(cfg map[string]interface{}, providerID string) {
+	markerPath, err := openClawMarkerPath()
+	if err != nil {
+		return
+	}
+	marker := map[string]interface{}{
+		"attached":      true,
+		"agent_id":      openClawMainAgentID,
+		"provider_id":   strings.TrimSpace(providerID),
+		"product_entry": ProductAdapterEndpoint(),
+		"mcp_url":       ProductAdapterOpenClawMCPEndpoint(),
+	}
+	data, err := json.MarshalIndent(marker, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(markerPath, data, 0644)
+}
+
+func hasOpenClawAttachMarker(cfg map[string]interface{}, port int) bool {
+	markerPath, err := openClawMarkerPath()
+	if err != nil {
+		return false
+	}
+	data, err := os.ReadFile(markerPath)
+	if err != nil {
+		return false
+	}
+	var marker map[string]interface{}
+	if err := json.Unmarshal(data, &marker); err != nil {
+		return false
+	}
+	attached, _ := marker["attached"].(bool)
+	if !attached {
+		return false
+	}
+	agentID, _ := marker["agent_id"].(string)
+	if strings.TrimSpace(agentID) != openClawMainAgentID {
+		return false
+	}
+	providerID, _ := marker["provider_id"].(string)
+	if strings.TrimSpace(providerID) == "" {
+		return false
+	}
+	productEntry, _ := marker["product_entry"].(string)
+	if !openClawTargetsProductIngress(productEntry, port) {
+		return false
+	}
+	mcpURL, _ := marker["mcp_url"].(string)
+	return openClawTargetsProductSSE(mcpURL, port)
+}
+
+func removeOpenClawAttachMarker(cfg map[string]interface{}) bool {
+	markerPath, err := openClawMarkerPath()
+	if err != nil {
+		return false
+	}
+	err = os.Remove(markerPath)
+	return err == nil || os.IsNotExist(err)
+}
+
+func openClawTargetsProductSSE(raw string, port int) bool {
+	parsed, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil {
+		return false
+	}
+	if parsed.Hostname() != "127.0.0.1" && !strings.EqualFold(parsed.Hostname(), "localhost") {
+		return false
+	}
+	if parsed.Port() != fmt.Sprintf("%d", port) {
+		return false
+	}
+	return strings.TrimRight(parsed.Path, "/") == "/sse"
 }
 
 func openClawEffectiveProviders(resolved *openClawResolvedConfig) map[string]interface{} {

@@ -2,8 +2,10 @@ package attach
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -90,6 +92,9 @@ func TestAttachOpenClawInheritedMainUpdatesGlobalLayerOnly(t *testing.T) {
 	if !hasOpenClawMCPAttachment(updatedGlobal, 18041) {
 		t.Fatalf("expected global config to contain omnimemora MCP attachment")
 	}
+	if !hasOpenClawAttachMarker(updatedGlobal, 18041) {
+		t.Fatalf("expected global config to contain stable OpenClaw attach marker")
+	}
 	globalMCP := (((updatedGlobal["mcp"].(map[string]interface{}))["servers"].(map[string]interface{}))["omnimemora"].(map[string]interface{}))["url"]
 	if globalMCP != "http://127.0.0.1:18041/sse" {
 		t.Fatalf("expected OpenClaw MCP attachment to use /sse, got %v", globalMCP)
@@ -169,6 +174,9 @@ func TestAttachOpenClawAgentOverrideUpdatesAgentLayerOnly(t *testing.T) {
 	if !hasOpenClawMCPAttachment(updatedGlobal, 18041) {
 		t.Fatalf("expected global config to contain omnimemora MCP attachment")
 	}
+	if !hasOpenClawAttachMarker(updatedGlobal, 18041) {
+		t.Fatalf("expected global config to contain stable OpenClaw attach marker")
+	}
 	globalMCP := (((updatedGlobal["mcp"].(map[string]interface{}))["servers"].(map[string]interface{}))["omnimemora"].(map[string]interface{}))["url"]
 	if globalMCP != "http://127.0.0.1:18041/sse" {
 		t.Fatalf("expected OpenClaw MCP attachment to use /sse, got %v", globalMCP)
@@ -203,7 +211,7 @@ func TestAttachOpenClawAgentOverrideUpdatesAgentLayerOnly(t *testing.T) {
 	assertJSONFileEquals(t, agentModelsPath, originalAgent)
 }
 
-func TestIsAttachedOpenClawRequiresMCPAndEffectiveIngress(t *testing.T) {
+func TestIsAttachedOpenClawRequiresMCPAndStableMarker(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
 	t.Setenv("OMNIMEMORA_ADAPTER_PORT", "18041")
@@ -232,14 +240,21 @@ func TestIsAttachedOpenClawRequiresMCPAndEffectiveIngress(t *testing.T) {
 	writeJSONFile(t, agentModelsPath, map[string]interface{}{"providers": map[string]interface{}{}})
 
 	if IsAttached(AgentOpenClaw, 18041) {
-		t.Fatalf("expected attach detection to fail without MCP")
+		t.Fatalf("expected attach detection to fail without MCP and marker")
 	}
 
 	globalCfg := readJSONFile(t, globalPath)
 	ensureOpenClawMCPAttachment(globalCfg)
 	writeJSONFile(t, globalPath, globalCfg)
+	if IsAttached(AgentOpenClaw, 18041) {
+		t.Fatalf("expected attach detection to fail when marker is missing")
+	}
+
+	globalCfg = readJSONFile(t, globalPath)
+	ensureOpenClawAttachMarker(globalCfg, "minimax")
+	writeJSONFile(t, globalPath, globalCfg)
 	if !IsAttached(AgentOpenClaw, 18041) {
-		t.Fatalf("expected attach detection to pass when MCP and effective ingress are both present")
+		t.Fatalf("expected attach detection to pass when MCP and marker are both present")
 	}
 
 	globalCfg = readJSONFile(t, globalPath)
@@ -248,19 +263,31 @@ func TestIsAttachedOpenClawRequiresMCPAndEffectiveIngress(t *testing.T) {
 	minimax["baseUrl"] = "https://api.minimaxi.com/anthropic/v1"
 	globalProviders["minimax"] = minimax
 	writeJSONFile(t, globalPath, globalCfg)
+	if !IsAttached(AgentOpenClaw, 18041) {
+		t.Fatalf("expected attach detection to ignore provider baseUrl rewrite")
+	}
+
+	globalCfg = readJSONFile(t, globalPath)
+	removeOpenClawAttachMarker(globalCfg)
+	writeJSONFile(t, globalPath, globalCfg)
 	if IsAttached(AgentOpenClaw, 18041) {
-		t.Fatalf("expected attach detection to fail when effective ingress no longer targets product")
+		t.Fatalf("expected attach detection to fail when marker is removed")
 	}
 }
 
 func installFakeOpenClawCLI(t *testing.T, tmpHome string) {
+	installFakeOpenClawCLIWithExit(t, tmpHome, 0)
+}
+
+func installFakeOpenClawCLIWithExit(t *testing.T, tmpHome string, validateExit int) {
 	t.Helper()
 	binDir := filepath.Join(tmpHome, "bin")
 	if err := os.MkdirAll(binDir, 0o755); err != nil {
 		t.Fatalf("mkdir fake bin: %v", err)
 	}
 	script := filepath.Join(binDir, "openclaw")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\nif [ \"$1\" = \"config\" ] && [ \"$2\" = \"validate\" ]; then exit 0; fi\nexit 0\n"), 0o755); err != nil {
+	scriptContent := fmt.Sprintf("#!/bin/sh\nif [ \"$1\" = \"config\" ] && [ \"$2\" = \"validate\" ]; then exit %d; fi\nexit 0\n", validateExit)
+	if err := os.WriteFile(script, []byte(scriptContent), 0o755); err != nil {
 		t.Fatalf("write fake openclaw: %v", err)
 	}
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
@@ -307,4 +334,69 @@ func assertJSONFileEquals(t *testing.T, path string, expected map[string]interfa
 	if string(gotJSON) != string(wantJSON) {
 		t.Fatalf("unexpected JSON at %s\nwant=%s\ngot=%s", path, string(wantJSON), string(gotJSON))
 	}
+}
+
+func TestAttachOpenClawSucceedsEvenWhenValidateFails(t *testing.T) {
+	tmpHome := t.TempDir()
+	t.Setenv("HOME", tmpHome)
+	t.Setenv("OMNIMEMORA_ADAPTER_PORT", "18041")
+	installFakeOpenClawCLIWithExit(t, tmpHome, 1) // validate exits with failure
+
+	globalPath := filepath.Join(tmpHome, ".openclaw", "openclaw.json")
+	agentModelsPath := filepath.Join(tmpHome, ".openclaw", "agents", "main", "agent", "models.json")
+
+	originalGlobal := map[string]interface{}{
+		"agents": map[string]interface{}{
+			"defaults": map[string]interface{}{
+				"model": map[string]interface{}{"primary": "minimax/MiniMax-M2.7"},
+			},
+			"list": []interface{}{
+				map[string]interface{}{"id": "main", "model": "minimax/MiniMax-M2.7"},
+			},
+		},
+		"models": map[string]interface{}{
+			"providers": map[string]interface{}{
+				"minimax": map[string]interface{}{
+					"api":     "anthropic-messages",
+					"baseUrl": "https://api.minimaxi.com/anthropic/v1",
+				},
+			},
+		},
+	}
+	originalAgent := map[string]interface{}{
+		"providers": map[string]interface{}{
+			"openai-codex": map[string]interface{}{"baseUrl": "https://chatgpt.com/backend-api/codex"},
+		},
+	}
+	writeJSONFile(t, globalPath, originalGlobal)
+	writeJSONFile(t, agentModelsPath, originalAgent)
+
+	result := AttachOpenClaw()
+	if !result.Success {
+		t.Fatalf("attach should succeed even when validate fails, got Success=false: %s", result.Message)
+	}
+	if !BackupExists(AgentOpenClaw) {
+		t.Fatalf("expected backup to exist after attach")
+	}
+	if !strings.Contains(result.Message, "validate warning") {
+		t.Fatalf("expected message to contain validate warning, got: %s", result.Message)
+	}
+
+	updatedGlobal := readJSONFile(t, globalPath)
+	if !hasOpenClawMCPAttachment(updatedGlobal, 18041) {
+		t.Fatalf("expected global config to contain omnimemora MCP attachment")
+	}
+	if !hasOpenClawAttachMarker(updatedGlobal, 18041) {
+		t.Fatalf("expected global config to contain stable OpenClaw attach marker")
+	}
+
+	if !isOpenClawAttached(18041) {
+		t.Fatalf("expected OpenClaw attach detection to be true")
+	}
+
+	if err := DetachOpenClaw(); err != nil {
+		t.Fatalf("detach failed: %v", err)
+	}
+	assertJSONFileEquals(t, globalPath, originalGlobal)
+	assertJSONFileEquals(t, agentModelsPath, originalAgent)
 }

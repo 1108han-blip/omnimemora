@@ -11,18 +11,28 @@
 ## Current Phase Boundary
 
 - 当前执行主线：`OpenClaw-first Real Client Recovery + Visual Validation`
+- 阶段状态：**已收口**
 - 当前阶段结论：
   - `Decision Carrier / Control-Plane Decoupling` 已阶段性完成并转为结构前置成果
   - `5173` 已恢复为正式用户控制入口
   - `OpenClaw` 已完成接入层 / 路由层控制闭环
-  - OpenClaw 的“安装成立”标准已升级为：`MCP 接入 + main 实际生效请求入口接入 18011`
+  - OpenClaw 的”安装成立”标准已升级为：`MCP 接入 + main 实际生效请求入口接入 18011`
   - OpenClaw 的 MCP 运行期端点已定位为 `/sse`；`/mcp` 不再作为其唯一正确 attach 入口
-  - 当前 repo reality 与真实 OpenClaw 配置 reality 已对齐：真实配置已写成 `MCP=/sse`、`main` 实际 provider 入口=`18011/llm`
-  - 当前剩余断点位于 `running reality`：正式 `18011` 仍返回 `openclaw.installed=false`
-  - 当前阶段结论只覆盖控制面、接入层与可用性断点定位，不覆盖“真实可使用”结论
+  - OpenClaw marker 已迁移到独立文件 `~/.openclaw/.omnimemora.attach.marker`，解决 CLI schema 冲突
+  - 真实 OpenClaw 请求已进入 `18011`
+  - `route off -> agent_route_disabled` 语义成立
+  - `route on -> runtime_compile` 语义成立
+  - 当前阶段结论覆盖控制面、接入层、路由层与真实请求路径
   - 当前主线不拆 `trial / internal admin surface`
   - 当前主线不做 GUI 物理独立
-  - 下一主线：`Candidate-to-Running Promotion + Validation`
+  - `active / last_seen_at` 不一致是后续独立主线，不影响本阶段完成结论
+
+## 下一阶段候选
+
+- `Control Activity Semantics`（默认推荐）：修 `active / last_seen_at` 语义
+- `Claude Code Cross Validation`：Claude Code 第二验证面交叉验证
+
+明确排除：继续改 OpenClaw attach、GUI 物理独立、`trial / internal admin`、compile/strategy 大拆
 
 ## Supplemental Docs
 
