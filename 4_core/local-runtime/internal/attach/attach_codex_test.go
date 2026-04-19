@@ -12,7 +12,7 @@ func TestUpsertCodexProviderConfigSetsResponsesProvider(t *testing.T) {
 
 [mcp_servers.omnimemora]
 command = "python"
-`, codexProviderBaseURL)
+`, ProductAdapterResponsesEndpoint())
 
 	if !strings.Contains(updated, `model_provider = "omnimemora"`) {
 		t.Fatalf("expected model_provider to be set to omnimemora, got:\n%s", updated)

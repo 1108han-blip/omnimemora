@@ -1,17 +1,23 @@
-import { useState, useEffect, useCallback } from 'react';
-import type { LiveAgent } from '../types';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { AgentControlCard, SystemStatus } from '../types';
+import {
+  disableAgentRoute,
+  enableAgentRoute,
+  fetchAgentControls,
+  installAgent,
+  rescanAgentControls,
+  uninstallAgent,
+} from '../api';
 
-type SortKey = 'saved_tokens' | 'entry_rate' | 'request_count' | 'quality_delta_pct' | 'last_seen_at';
-type SortDir = 'asc' | 'desc';
+const MODE_ACTIONS = {
+  install: '接入 OmniMemora',
+  uninstall: '恢復原配置',
+  enable: '使用 OmniMemora',
+  disable: '停用產品路由',
+} as const;
 
-const MODE_LABELS: Record<string, string> = {
-  observe: '观察',
-  guided: '引导',
-  force_if_possible: '强制优化',
-  off: '关闭',
-};
-
-function formatRelativeTime(iso: string): string {
+function formatRelativeTime(iso?: string | null): string {
+  if (!iso) return '—';
   try {
     const diff = Date.now() - new Date(iso).getTime();
     const secs = Math.floor(diff / 1000);
@@ -26,21 +32,22 @@ function formatRelativeTime(iso: string): string {
   }
 }
 
+function isHealthySystem(systemStatus: SystemStatus | null): boolean {
+  return !!systemStatus && systemStatus.status === 'healthy' && systemStatus.gateway_health === 'healthy';
+}
+
 export function AgentsDashboard() {
-  const [agents, setAgents] = useState<LiveAgent[]>([]);
+  const [cards, setCards] = useState<AgentControlCard[]>([]);
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [modeFilter, setModeFilter] = useState<string>('all');
-  const [sortKey, setSortKey] = useState<SortKey>('saved_tokens');
-  const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [busyAction, setBusyAction] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (mode: 'normal' | 'rescan' = 'normal') => {
     try {
-      const res = await fetch('/agents/live?window_minutes=1440'); // 24h window for overview
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = await res.json();
-      setAgents(data.agents ?? []);
+      const payload = mode === 'rescan' ? await rescanAgentControls() : await fetchAgentControls();
+      setCards(payload.agents ?? []);
+      setSystemStatus(payload.system_status ?? null);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -50,217 +57,175 @@ export function AgentsDashboard() {
   }, []);
 
   useEffect(() => {
-    load();
-    const interval = setInterval(load, 10000);
-    return () => clearInterval(interval);
+    void load();
+    const interval = window.setInterval(() => {
+      void load();
+    }, 10000);
+    return () => window.clearInterval(interval);
   }, [load]);
 
-  // Derived totals
-  const totalAgents = agents.length;
-  const totalRequests = agents.reduce((s, a) => s + a.request_count, 0);
-  const totalSaved = agents.reduce((s, a) => s + a.saved_tokens, 0);
-  const avgEntryRate = totalRequests > 0
-    ? agents.reduce((s, a) => s + a.entry_rate * a.request_count, 0) / totalRequests
-    : 0;
+  const healthy = useMemo(() => isHealthySystem(systemStatus), [systemStatus]);
 
-  // Filter
-  const filtered = agents.filter(a => {
-    const matchSearch = !search || a.agent_id.toLowerCase().includes(search.toLowerCase());
-    const matchMode = modeFilter === 'all' || a.mode === modeFilter;
-    return matchSearch && matchMode;
-  });
-
-  // Sort
-  const sorted = [...filtered].sort((a, b) => {
-    let va: number | string = 0;
-    let vb: number | string = 0;
-    if (sortKey === 'saved_tokens') { va = a.saved_tokens; vb = b.saved_tokens; }
-    else if (sortKey === 'entry_rate') { va = a.entry_rate; vb = b.entry_rate; }
-    else if (sortKey === 'request_count') { va = a.request_count; vb = b.request_count; }
-    else if (sortKey === 'quality_delta_pct') { va = a.quality_delta_pct; vb = b.quality_delta_pct; }
-    else if (sortKey === 'last_seen_at') { va = a.last_seen_at; vb = b.last_seen_at; }
-    if (va < vb) return sortDir === 'asc' ? -1 : 1;
-    if (va > vb) return sortDir === 'asc' ? 1 : -1;
-    return 0;
-  });
-
-  function toggleSort(key: SortKey) {
-    if (sortKey === key) {
-      setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortKey(key);
-      setSortDir('desc');
+  const applyAction = useCallback(async (action: 'install' | 'uninstall' | 'enable' | 'disable', familyId: string) => {
+    const key = `${action}:${familyId}`;
+    setBusyAction(key);
+    try {
+      if (action === 'install') await installAgent(familyId);
+      if (action === 'uninstall') await uninstallAgent(familyId);
+      if (action === 'enable') await enableAgentRoute(familyId);
+      if (action === 'disable') await disableAgentRoute(familyId);
+      await load();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusyAction(null);
     }
-  }
-
-  function SortIcon({ col }: { col: SortKey }) {
-    if (sortKey !== col) return <span className="text-zinc-600 ml-1">↕</span>;
-    return <span className="text-zinc-900 dark:text-zinc-100 ml-1">{sortDir === 'asc' ? '↑' : '↓'}</span>;
-  }
+  }, [load]);
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
-          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">Agent 监控面板</h2>
-          <p className="text-xs text-zinc-400 mt-0.5">实时 · 10秒自动刷新</p>
+          <h2 className="text-lg font-semibold text-zinc-900 dark:text-zinc-100">正式控制入口</h2>
+          <p className="text-xs text-zinc-400 mt-0.5">接入层与路由层分离；控制动作统一经 :18011</p>
         </div>
-        <div className={`w-2 h-2 rounded-full ${error ? 'bg-red-500' : 'bg-emerald-500'}`} />
-        <span className="text-xs text-zinc-500">{error ? '连接异常' : '已连接'}</span>
-      </div>
-
-      {/* Overview Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <MetricCard label="活跃 Agent" value={totalAgents} unit="个" />
-        <MetricCard label="累计请求" value={totalRequests} unit="次" />
-        <MetricCard label="累计节省 Token" value={totalSaved} unit=" tokens" accent />
-        <MetricCard label="平均入口占比" value={Math.round(avgEntryRate * 100)} unit="%" />
-      </div>
-
-      {/* Controls */}
-      <div className="flex flex-wrap gap-3 items-center">
-        <input
-          type="text"
-          placeholder="搜索 agent_id..."
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          className="text-sm border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-1.5 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 placeholder-zinc-400 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <select
-          value={modeFilter}
-          onChange={e => setModeFilter(e.target.value)}
-          className="text-sm border border-zinc-300 dark:border-zinc-700 rounded-lg px-3 py-1.5 bg-white dark:bg-zinc-900 text-zinc-800 dark:text-zinc-200 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        <button
+          type="button"
+          onClick={() => void load('rescan')}
+          className="rounded-lg border border-zinc-300 dark:border-zinc-700 px-3 py-2 text-xs text-zinc-700 dark:text-zinc-200 hover:bg-zinc-50 dark:hover:bg-zinc-800"
         >
-          <option value="all">全部模式</option>
-          <option value="observe">观察</option>
-          <option value="guided">引导</option>
-          <option value="force_if_possible">强制优化</option>
-          <option value="off">关闭</option>
-        </select>
-        <span className="text-xs text-zinc-400">
-          {sorted.length} / {agents.length} 个 agent
-        </span>
+          重新扫描
+        </button>
       </div>
 
-      {/* Table */}
-      {loading && agents.length === 0 ? (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-8">
-          <div className="animate-pulse space-y-3">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-8 bg-zinc-200 dark:bg-zinc-700 rounded w-full" />
+      {systemStatus && (
+        <section className="rounded-xl border border-zinc-200 dark:border-zinc-700 bg-white dark:bg-zinc-900 p-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-[11px] uppercase tracking-wider text-zinc-400">System Status</div>
+              <div className="mt-1 text-base font-semibold text-zinc-900 dark:text-zinc-100">{systemStatus.status}</div>
+            </div>
+            <div className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-medium ${
+              healthy ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' : 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+            }`}>
+              gateway={systemStatus.gateway_health} / capability={systemStatus.capability_health}
+            </div>
+          </div>
+          <div className="mt-3 grid grid-cols-1 gap-2 text-xs text-zinc-600 dark:text-zinc-300 md:grid-cols-2">
+            <div>routing_requested: <span className="font-mono">{String(systemStatus.routing_requested)}</span></div>
+            <div>routing_effective: <span className="font-mono">{String(systemStatus.routing_effective)}</span></div>
+            <div>recommended_action: <span className="font-mono">{systemStatus.recommended_action || 'none'}</span></div>
+            <div>error_code: <span className="font-mono">{systemStatus.error_code || '—'}</span></div>
+          </div>
+          {(systemStatus.transition_reason || systemStatus.status_source) && (
+            <div className="mt-3 rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">
+              source={systemStatus.status_source || 'unknown'} · reason={systemStatus.transition_reason || '—'}
+            </div>
+          )}
+        </section>
+      )}
+
+      {error && (
+        <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs text-red-700 dark:border-red-900 dark:bg-red-950 dark:text-red-300">
+          {error}
+        </div>
+      )}
+
+      {loading && cards.length === 0 ? (
+        <div className="rounded-xl border border-zinc-200 bg-white p-8 dark:border-zinc-700 dark:bg-zinc-900">
+          <div className="space-y-3 animate-pulse">
+            {[...Array(3)].map((_, index) => (
+              <div key={index} className="h-24 rounded bg-zinc-200 dark:bg-zinc-700" />
             ))}
           </div>
         </div>
-      ) : sorted.length === 0 ? (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-8 text-center">
-          <div className="text-zinc-400 text-sm">暂无 Agent 数据</div>
-        </div>
       ) : (
-        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead className="bg-zinc-50 dark:bg-zinc-800 text-zinc-500 border-b border-zinc-200 dark:border-zinc-700">
-                <tr>
-                  <th className="text-left px-4 py-3 font-medium">Agent</th>
-                  <th className="text-left px-4 py-3 font-medium hidden md:table-cell">Session</th>
-                  <th
-                    className="text-right px-4 py-3 font-medium cursor-pointer select-none"
-                    onClick={() => toggleSort('request_count')}
-                  >
-                    请求数<SortIcon col="request_count" />
-                  </th>
-                  <th
-                    className="text-right px-4 py-3 font-medium cursor-pointer select-none"
-                    onClick={() => toggleSort('saved_tokens')}
-                  >
-                    累计节省 Token<SortIcon col="saved_tokens" />
-                  </th>
-                  <th
-                    className="text-right px-4 py-3 font-medium cursor-pointer select-none"
-                    onClick={() => toggleSort('entry_rate')}
-                  >
-                    产品入口占比<SortIcon col="entry_rate" />
-                  </th>
-                  <th
-                    className="text-right px-4 py-3 font-medium cursor-pointer select-none hidden sm:table-cell"
-                    onClick={() => toggleSort('quality_delta_pct')}
-                  >
-                    质量代理提升<SortIcon col="quality_delta_pct" />
-                  </th>
-                  <th className="text-center px-4 py-3 font-medium">运行模式</th>
-                  <th
-                    className="text-right px-4 py-3 font-medium cursor-pointer select-none"
-                    onClick={() => toggleSort('last_seen_at')}
-                  >
-                    最近活动<SortIcon col="last_seen_at" />
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-zinc-100 dark:divide-zinc-800">
-                {sorted.map(agent => (
-                  <tr key={`${agent.agent_id}-${agent.session_id}`} className="hover:bg-zinc-50 dark:hover:bg-zinc-800/50">
-                    <td className="px-4 py-3 font-mono text-zinc-800 dark:text-zinc-200 font-medium">
-                      {agent.agent_id}
-                    </td>
-                    <td className="px-4 py-3 font-mono text-zinc-500 text-[11px] hidden md:table-cell">
-                      {agent.session_id}
-                    </td>
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400">
-                      {agent.request_count.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-right font-medium text-emerald-600 dark:text-emerald-400">
-                      {agent.saved_tokens.toLocaleString()}
-                    </td>
-                    <td className="px-4 py-3 text-right">
-                      <span className="text-zinc-700 dark:text-zinc-300">
-                        {Math.round(agent.entry_rate * 100)}%
-                      </span>
-                    </td>
-                    <td className="px-4 py-3 text-right text-zinc-600 dark:text-zinc-400 hidden sm:table-cell">
-                      {agent.quality_delta_pct > 0
-                        ? <span className="text-blue-600">+{agent.quality_delta_pct.toFixed(1)}%</span>
-                        : <span className="text-zinc-400">—</span>
-                      }
-                    </td>
-                    <td className="px-4 py-3 text-center">
-                      <ModeBadge mode={agent.mode} />
-                    </td>
-                    <td className="px-4 py-3 text-right text-zinc-400 text-[11px]">
-                      {formatRelativeTime(agent.last_seen_at)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {cards.map((card) => {
+            const disableInstall = busyAction !== null;
+            const canEnable = card.installed && healthy && !card.routing_enabled;
+            const canDisable = card.installed && card.routing_enabled;
+            const actionKey = (action: string) => `${action}:${card.family_id}`;
+            return (
+              <article
+                key={card.family_id}
+                className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{card.display_name}</h3>
+                    <p className="mt-1 text-xs font-mono text-zinc-500">{card.family_id}</p>
+                  </div>
+                  <div className={`rounded-full px-3 py-1 text-xs font-medium ${
+                    card.routing_enabled
+                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                      : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
+                  }`}>
+                    {card.routing_enabled ? 'route on' : 'route off'}
+                  </div>
+                </div>
+
+                <div className="mt-4 grid grid-cols-2 gap-2 text-xs text-zinc-600 dark:text-zinc-300">
+                  <div>installed: <span className="font-mono">{String(card.installed)}</span></div>
+                  <div>detected: <span className="font-mono">{String(card.detected)}</span></div>
+                  <div>active: <span className="font-mono">{String(card.active)}</span></div>
+                  <div>backup: <span className="font-mono">{String(card.backup_available)}</span></div>
+                  <div>health: <span className="font-mono">{card.health_state}</span></div>
+                  <div>last_seen: <span className="font-mono">{formatRelativeTime(card.last_seen_at)}</span></div>
+                </div>
+
+                <div className="mt-3 rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">
+                  {card.message || 'ready'}
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  <div className="text-[11px] uppercase tracking-wider text-zinc-400">接入层</div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={disableInstall || card.installed}
+                      onClick={() => void applyAction('install', card.family_id)}
+                      className="rounded-lg bg-zinc-900 px-3 py-2 text-xs text-white disabled:cursor-not-allowed disabled:bg-zinc-300 dark:bg-zinc-100 dark:text-zinc-900 dark:disabled:bg-zinc-700"
+                    >
+                      {busyAction === actionKey('install') ? '处理中...' : MODE_ACTIONS.install}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={disableInstall || !card.installed}
+                      onClick={() => void applyAction('uninstall', card.family_id)}
+                      className="rounded-lg border border-zinc-300 px-3 py-2 text-xs text-zinc-700 disabled:cursor-not-allowed disabled:text-zinc-400 dark:border-zinc-700 dark:text-zinc-200 dark:disabled:text-zinc-500"
+                    >
+                      {busyAction === actionKey('uninstall') ? '处理中...' : MODE_ACTIONS.uninstall}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="mt-4 space-y-2">
+                  <div className="text-[11px] uppercase tracking-wider text-zinc-400">路由层</div>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      disabled={disableInstall || !canEnable}
+                      onClick={() => void applyAction('enable', card.family_id)}
+                      className="rounded-lg bg-blue-600 px-3 py-2 text-xs text-white disabled:cursor-not-allowed disabled:bg-blue-300 dark:disabled:bg-blue-900"
+                    >
+                      {busyAction === actionKey('enable') ? '处理中...' : MODE_ACTIONS.enable}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={disableInstall || !canDisable}
+                      onClick={() => void applyAction('disable', card.family_id)}
+                      className="rounded-lg border border-blue-300 px-3 py-2 text-xs text-blue-700 disabled:cursor-not-allowed disabled:text-blue-300 dark:border-blue-800 dark:text-blue-300 dark:disabled:text-blue-900"
+                    >
+                      {busyAction === actionKey('disable') ? '处理中...' : MODE_ACTIONS.disable}
+                    </button>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
     </div>
-  );
-}
-
-function MetricCard({ label, value, unit, accent }: { label: string; value: number; unit: string; accent?: boolean }) {
-  return (
-    <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl px-5 py-4">
-      <div className="text-[11px] text-zinc-400 uppercase tracking-wider mb-1">{label}</div>
-      <div className={`text-2xl font-bold ${accent ? 'text-emerald-600' : 'text-zinc-900 dark:text-zinc-100'}`}>
-        {value.toLocaleString()}{unit}
-      </div>
-    </div>
-  );
-}
-
-function ModeBadge({ mode }: { mode: string }) {
-  const styles: Record<string, string> = {
-    observe: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
-    guided: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
-    force_if_possible: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
-    off: 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
-  };
-  return (
-    <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-medium ${styles[mode] ?? styles.off}`}>
-      {MODE_LABELS[mode] ?? mode}
-    </span>
   );
 }

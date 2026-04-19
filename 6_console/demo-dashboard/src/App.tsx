@@ -56,30 +56,33 @@ export default function App() {
   const loadMetrics = useCallback(async () => {
     const failures: string[] = [];
     try {
+      const controlTab = activeTab === 'agents';
       const [sRes, rRes, uRes, l24Res, l5Res] = await Promise.allSettled([
-        fetchMetricsSummary(tenant),
-        fetchRecentRequests(tenant, 30),
+        controlTab ? Promise.resolve(null) : fetchMetricsSummary(tenant),
+        controlTab ? Promise.resolve(null) : fetchRecentRequests(tenant, 30),
         fetchUsageSummary(tenant),
         fetchLiveAgents(1440),
         fetchLiveAgents(5),
       ]);
 
-      if (sRes.status === 'fulfilled') {
+      if (!controlTab && sRes.status === 'fulfilled' && sRes.value) {
         setSummary(sRes.value);
-      } else {
-        failures.push(`summary: ${sRes.reason instanceof Error ? sRes.reason.message : String(sRes.reason)}`);
+      } else if (!controlTab) {
+        const reason = sRes.status === 'rejected' ? sRes.reason : new Error('empty summary response');
+        failures.push(`summary: ${reason instanceof Error ? reason.message : String(reason)}`);
       }
 
-      if (rRes.status === 'fulfilled') {
+      if (!controlTab && rRes.status === 'fulfilled' && rRes.value) {
         setRequests(rRes.value.requests);
-      } else {
-        failures.push(`recent: ${rRes.reason instanceof Error ? rRes.reason.message : String(rRes.reason)}`);
+      } else if (!controlTab) {
+        const reason = rRes.status === 'rejected' ? rRes.reason : new Error('empty recent response');
+        failures.push(`recent: ${reason instanceof Error ? reason.message : String(reason)}`);
       }
 
       if (uRes.status === 'fulfilled') {
         const usageValue = uRes.value;
         const requestCounts: Record<string, number> = {};
-        if (rRes.status === 'fulfilled') {
+        if (!controlTab && rRes.status === 'fulfilled' && rRes.value) {
           for (const req of rRes.value.requests) {
             requestCounts[req.agent] = (requestCounts[req.agent] ?? 0) + 1;
           }
@@ -114,7 +117,7 @@ export default function App() {
     } finally {
       setLoadingMetrics(false);
     }
-  }, [tenant]);
+  }, [tenant, activeTab]);
 
   useEffect(() => {
     fetchTenants()
@@ -245,7 +248,7 @@ export default function App() {
                   : 'border-transparent text-zinc-500 hover:text-zinc-700 dark:hover:text-zinc-300'
               }`}
             >
-              Agent 监控
+              Agent 控制
             </a>
           </nav>
         </div>
@@ -280,7 +283,7 @@ export default function App() {
               ) : null}
             </section>
 
-            {/* Module 2: Live Request Flow */}
+            {/* Module 2: Agent Usage */}
             <section>
               <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">
                 ② Agent Breakdown

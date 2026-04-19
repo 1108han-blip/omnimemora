@@ -51,9 +51,10 @@ func AttachOpenClaw() *AttachResult {
 	if !ok || servers == nil {
 		servers = make(map[string]interface{})
 	}
-	// OmniMemora Python Adapter (port 18011) — full control plane with token savings
+	// OmniMemora Python Adapter MCP endpoint — full control plane with token savings.
 	servers["omnimemora"] = map[string]interface{}{
-		"url": "http://127.0.0.1:18011",
+		"url":  ProductAdapterMCPEndpoint(),
+		"type": "http",
 	}
 	mcp["servers"] = servers
 	cfg["mcp"] = mcp

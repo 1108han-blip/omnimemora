@@ -9,12 +9,37 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 )
 
 // RuntimeEndpoint returns the OmniMemora runtime endpoint URL
 func RuntimeEndpoint(port int) string {
 	return fmt.Sprintf("http://127.0.0.1:%d", port)
+}
+
+func ProductAdapterPort() int {
+	raw := strings.TrimSpace(os.Getenv("OMNIMEMORA_ADAPTER_PORT"))
+	if raw == "" {
+		return 18011
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil || parsed <= 0 {
+		return 18011
+	}
+	return parsed
+}
+
+func ProductAdapterEndpoint() string {
+	return RuntimeEndpoint(ProductAdapterPort())
+}
+
+func ProductAdapterMCPEndpoint() string {
+	return fmt.Sprintf("%s/mcp", ProductAdapterEndpoint())
+}
+
+func ProductAdapterResponsesEndpoint() string {
+	return fmt.Sprintf("%s/v1", ProductAdapterEndpoint())
 }
 
 // ShimPythonExe returns the python executable to use for MCP shim.
@@ -244,7 +269,9 @@ func IsAttached(agent AgentType, port int) bool {
 			if servers, ok := mcp["servers"].(map[string]interface{}); ok {
 				if entry, ok := servers["omnimemora"].(map[string]interface{}); ok {
 					if u, ok := entry["url"].(string); ok {
-						return strings.Contains(u, "127.0.0.1:18011/mcp") || strings.Contains(strings.ToLower(u), "omnimemora")
+						expected := RuntimeEndpoint(port) + "/mcp"
+						return strings.EqualFold(strings.TrimSpace(u), expected) ||
+							strings.Contains(strings.ToLower(u), "omnimemora")
 					}
 					return true
 				}

@@ -14,6 +14,40 @@ export interface LiveAgent {
   last_seen_at: string;
 }
 
+export interface SystemStatus {
+  status: string;
+  status_source?: string;
+  transition_reason?: string;
+  gateway_health: string;
+  capability_health: string;
+  routing_requested: boolean;
+  routing_effective: boolean;
+  user_action_required: boolean;
+  recommended_action: string;
+  error_code?: string;
+}
+
+export interface AgentControlCard {
+  family_id: string;
+  display_name: string;
+  installed: boolean;
+  routing_enabled: boolean;
+  detected: boolean;
+  active: boolean;
+  last_seen_at?: string | null;
+  health_state: string;
+  backup_available: boolean;
+  subagent_count_active: number;
+  subagent_count_total_visible: number;
+  message?: string;
+}
+
+export interface AgentControlResponse {
+  agents: AgentControlCard[];
+  count: number;
+  system_status: SystemStatus;
+}
+
 export interface MetricsSummary {
   token_saving_ratio: number;
   tokens_saved: number;

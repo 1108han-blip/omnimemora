@@ -9,8 +9,7 @@ import (
 )
 
 const (
-	codexProviderBaseURL = "http://127.0.0.1:18011/v1"
-	codexProviderName    = "omnimemora"
+	codexProviderName = "omnimemora"
 )
 
 // AttachCodex attaches OmniMemora to Codex via the Responses-compatible model provider.
@@ -38,7 +37,7 @@ func AttachCodex() *AttachResult {
 		content = string(data)
 	}
 
-	updated := upsertCodexProviderConfig(content, codexProviderBaseURL)
+	updated := upsertCodexProviderConfig(content, ProductAdapterResponsesEndpoint())
 	if err := os.WriteFile(configPath, []byte(updated), 0644); err != nil {
 		result.Message = "Failed to write config"
 		return result

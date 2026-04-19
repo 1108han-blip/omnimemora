@@ -45,7 +45,7 @@ func AttachClaude() *AttachResult {
 	// All MCP clients connect to Python Adapter at 18011, not Go Runtime at 8765
 	cfg["memory"] = map[string]interface{}{
 		"provider":         "omnimemora",
-		"endpoint":         "http://127.0.0.1:18011",
+		"endpoint":         ProductAdapterEndpoint(),
 		"assemble_context": true,
 		"context_strategy": "auto",
 		"context_mode":     "balanced",

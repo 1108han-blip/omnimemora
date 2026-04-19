@@ -152,7 +152,7 @@ async def runtime_fingerprint():
     live_24h = _agent_metrics_module.get_live_agents(window_minutes=1440)
     key_modules = [
         "5_connectors.adapter.main",
-        "5_connectors.adapter.metrics_aggregator",
+        "5_connectors.adapter.metrics_service",
         "5_connectors.adapter.agent_identity",
         "5_connectors.adapter.agent_metrics",
     ]
@@ -212,17 +212,22 @@ async def support_error_codes():
 
 @router.get("/metrics/summary")
 async def get_metrics_summary(response: Response, tenant: str = "all"):
-    del tenant
-    aggregator = importlib.import_module("5_connectors.adapter.metrics_aggregator")
+    metrics_service = importlib.import_module("5_connectors.adapter.metrics_service")
     response.headers["X-OmniMemora-Surface-Role"] = "kpi"
     response.headers["X-OmniMemora-KPI-Source"] = "/metrics/summary"
-    return aggregator.compute_unified_summary()
+    return metrics_service.compute_metrics_summary(tenant)
 
 
 @router.get("/metrics/debug/sources")
 async def get_metrics_debug_sources():
-    aggregator = importlib.import_module("5_connectors.adapter.metrics_aggregator")
-    return aggregator.get_metrics_debug_sources()
+    metrics_service = importlib.import_module("5_connectors.adapter.metrics_service")
+    return {
+        "summary_source": "5_connectors.adapter.metrics_service.compute_metrics_summary",
+        "recent_requests_source": "5_connectors.adapter.metrics_service.get_recent_requests",
+        "tenant_source": "5_connectors.adapter.metrics_service.list_tenants",
+        "module_file": _inspect.getfile(metrics_service),
+        "agent_events_path": _config.agent_events_path,
+    }
 
 
 @router.get("/metrics/recent_requests")

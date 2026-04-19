@@ -1,4 +1,13 @@
-import type { MetricsSummary, RecentRequestsResponse, ContextDiff, CallChain, UsageSummary, LiveAgent } from './types';
+import type {
+  MetricsSummary,
+  RecentRequestsResponse,
+  ContextDiff,
+  CallChain,
+  UsageSummary,
+  LiveAgent,
+  AgentControlCard,
+  AgentControlResponse,
+} from './types';
 
 const API_BASE = '';
 
@@ -67,4 +76,49 @@ export async function fetchAgentMetrics(agentId?: string): Promise<LiveAgent[]> 
   if (!r.ok) throw new Error(`Failed to fetch agent metrics: ${r.statusText}`);
   const data = await r.json();
   return data.metrics ?? [];
+}
+
+export async function fetchAgentControls(): Promise<AgentControlResponse> {
+  const r = await fetch(`${API_BASE}/agents/control`);
+  if (!r.ok) throw new Error(`Failed to fetch agent controls: ${r.statusText}`);
+  return r.json();
+}
+
+export async function rescanAgentControls(): Promise<AgentControlResponse> {
+  const r = await fetch(`${API_BASE}/agents/control/rescan`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  if (!r.ok) throw new Error(`Failed to rescan agent controls: ${r.statusText}`);
+  return r.json();
+}
+
+async function postAgentControlAction(action: 'install' | 'uninstall' | 'enable' | 'disable', familyId: string): Promise<AgentControlCard> {
+  const r = await fetch(`${API_BASE}/agents/control/${action}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ family_id: familyId }),
+  });
+  if (!r.ok) {
+    const detail = await r.text();
+    throw new Error(detail || `Failed to ${action} ${familyId}`);
+  }
+  return r.json();
+}
+
+export function installAgent(familyId: string): Promise<AgentControlCard> {
+  return postAgentControlAction('install', familyId);
+}
+
+export function uninstallAgent(familyId: string): Promise<AgentControlCard> {
+  return postAgentControlAction('uninstall', familyId);
+}
+
+export function enableAgentRoute(familyId: string): Promise<AgentControlCard> {
+  return postAgentControlAction('enable', familyId);
+}
+
+export function disableAgentRoute(familyId: string): Promise<AgentControlCard> {
+  return postAgentControlAction('disable', familyId);
 }

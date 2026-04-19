@@ -61,6 +61,7 @@ func controlAgentByFamily(familyID string) (attach.AgentType, error) {
 
 func buildAgentControlStatuses() []agentControlStatus {
 	detected := attach.DetectAgents()
+	productPort := attach.ProductAdapterPort()
 	statuses := make([]agentControlStatus, 0, len(detected))
 	for _, info := range detected {
 		configPath := info.ConfigPath
@@ -73,7 +74,7 @@ func buildAgentControlStatuses() []agentControlStatus {
 			FamilyID:        controlFamilyID(info.Type),
 			DisplayName:     info.Name,
 			Detected:        true,
-			Installed:       attach.IsAttached(info.Type, 8765),
+			Installed:       attach.IsAttached(info.Type, productPort),
 			BackupAvailable: attach.BackupExists(info.Type),
 			ConfigPath:      configPath,
 		})
@@ -94,7 +95,7 @@ func statusForAgent(agentType attach.AgentType) agentControlStatus {
 		FamilyID:        desiredFamily,
 		DisplayName:     displayName,
 		Detected:        false,
-		Installed:       attach.IsAttached(agentType, 8765),
+		Installed:       attach.IsAttached(agentType, attach.ProductAdapterPort()),
 		BackupAvailable: attach.BackupExists(agentType),
 		ConfigPath:      configPath,
 		Message:         "agent not detected on this machine",

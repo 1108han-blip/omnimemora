@@ -99,6 +99,7 @@ fi
 echo "[1/2] Starting runtime on :$RUNTIME_PORT ..."
 log_supervisor "runtime start requested port=${RUNTIME_PORT}"
 OMNIMEMORA_RUNTIME_PORT="$RUNTIME_PORT" \
+OMNIMEMORA_ADAPTER_PORT="$ADAPTER_PORT" \
 OMNIMEMORA_AGENT_MODES_PATH="$AGENT_MODES_PATH" \
 "$RUNTIME_BIN" serve >"$LOG_DIR/runtime_start.out.log" 2>"$LOG_DIR/runtime_start.err.log" &
 RUNTIME_PID=$!
@@ -298,6 +299,7 @@ PY
 start_runtime_process() {
   log_supervisor "runtime restart requested port=${RUNTIME_PORT}"
   OMNIMEMORA_RUNTIME_PORT="$RUNTIME_PORT" \
+  OMNIMEMORA_ADAPTER_PORT="$ADAPTER_PORT" \
   "$RUNTIME_BIN" serve >>"$LOG_DIR/runtime_start.out.log" 2>>"$LOG_DIR/runtime_start.err.log" &
   RUNTIME_PID=$!
 }

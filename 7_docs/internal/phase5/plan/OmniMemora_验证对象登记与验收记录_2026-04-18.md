@@ -862,3 +862,29 @@ last_verified_commit: ""
 | 观察结果 | 两次联合故障验证都进入 `status=user-decision-required`，且 `recovery_hint.txt` 被写出，内容明确指向 `omnimemora recover disable-route <family>` / `omnimemora recover uninstall <family>`；`recover disable-route claude` 执行后，隔离 `agent_modes.json` 中 `claude_code=off` 且 `gateway_decision.json` 写入 `"action": "disable-route"`；`recover uninstall claude` 执行后，隔离 Claude 配置恢复为原始 `{\"theme\":\"dark\"}`，`agent_modes.json` 中 `claude_code=off`，`gateway_decision.json` 写入 `"action": "uninstall"`，backup 目录被清空 |
 | 结论适用范围 | `候选成立`：Track D 第二批联合故障验证已经成立，gateway/runtime 联合故障下，supervisor hint 与 offline fallback (`disable-route` / `uninstall`) 的组合路径可作为当前阶段的正式最小恢复方案 |
 | 备注 | 本记录证明的是联合故障下的最小恢复链路已经闭环，不等同于真实客户端修复或 `5173` 可视化验证已经完成 |
+
+### RECORD-B-059
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-059` |
+| 日期 | `2026-04-19` |
+| 实例分类 | `仓库候选实例 / 5173 正式控制入口恢复` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；候选实例 `http://127.0.0.1:18041`（adapter）/ `http://127.0.0.1:18811`（runtime），UI dev 入口 `http://127.0.0.1:5173` |
+| 验证动作 | 1. 清理残留 `start.sh` 半实例，重新启动单一候选实例；2. 修复 `diagnostics_surface.py` 中失效的 `metrics_aggregator` 引用，改回现有 `metrics_service`；3. 修复 Vite `/agents` 深链冲突；4. 验证 `GET /health`、`GET /agents/control`、`POST /agents/control/rescan`、`GET /metrics/summary`；5. 验证 `5173/` 与 `5173/agents?tenant=all` 均可稳定访问；6. 运行 `npm run build` 与 `go test ./internal/attach ./api ./tests` |
+| 观察结果 | 候选实例 `18041` 当前稳定返回 `GET /agents/control = 200`、`POST /agents/control/rescan = 200`、`GET /metrics/summary = 200`；`5173/` 与 `5173/agents?tenant=all` 均可稳定访问且不再出现深链 `404`；控制页已渲染正式控制卡与顶层 `system_status`。`npm run build` 与 runtime Go tests 均通过 |
+| 结论适用范围 | `候选成立`：`Track A` 到 `Track D` 的 UI/control 基线已经完成，`5173` 现可作为正式用户控制入口，且其 UI 结论可绑定当前候选实例现实 |
+| 备注 | 本记录证明的是候选实例级 `5173` 控制面恢复已经成立，不代表旧运行现实 `~/.omnimemora/service/current` 的 `18011` 已同步更新 |
+
+### RECORD-B-060
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-060` |
+| 日期 | `2026-04-19` |
+| 实例分类 | `真实客户端 / OpenClaw-first 可视化闭环验证` |
+| 实例路径/来源 | OpenClaw 真实用户配置 `~/.openclaw/openclaw.json`；正式控制入口 `http://127.0.0.1:5173/agents?tenant=all`；候选控制 API 来源 `http://127.0.0.1:18041/agents/control*` |
+| 验证动作 | 1. 先手工备份 `~/.openclaw/openclaw.json` 到 repo `.tmp/openclaw-manual-baseline-2026-04-19.json`；2. 通过 `5173` 控制卡执行 `uninstall`，验证 OpenClaw 回到未接入基线；3. 通过 `5173` 控制卡重新执行 `install`，验证 `mcp.servers.omnimemora.url = http://127.0.0.1:18041/mcp` 且 `backup_available=true`；4. 通过 `5173` 执行 `enable route`，验证 UI 状态、`/agents/control` 与 `5_connectors/adapter/config/agent_modes.json` 中 `openclaw=force_if_possible` 一致；5. 再执行 `disable route`，验证 UI 状态、`/agents/control` 与 `agent_modes.json` 中 `openclaw=off` 一致；6. 最后执行 `uninstall`，验证 OpenClaw 配置中 OmniMemora MCP 项被移除、控制卡回到 `installed=false`、`backup_available=false`；7. 运行 `openclaw config validate` |
+| 观察结果 | OpenClaw 真实客户端已完成 `uninstall -> install -> enable route -> disable route -> uninstall` 闭环；安装后 OpenClaw 配置中的 `mcp.servers.omnimemora.url` 已正确指向候选产品入口 `http://127.0.0.1:18041/mcp`，控制卡显示 `installed=true`、`backup_available=true`；启用路由后 UI 与 `/agents/control` 同步显示 `route on`，且 `agent_modes.json` 中 `openclaw=force_if_possible`；停用路由后 UI 与 `/agents/control` 同步回到 `route off`，且 `agent_modes.json` 中 `openclaw=off`；最终卸载后 OpenClaw 配置中的 OmniMemora 项被移除，控制卡显示 `installed=false`、`backup_available=false`；`openclaw config validate` 通过 |
+| 结论适用范围 | `真实客户端成立`：OpenClaw 已作为本阶段第一主验证面完成真实可视化闭环，`5173` 现已具备正式控制入口所要求的接入层、路由层与恢复退出基础能力 |
+| 备注 | 本记录只证明 OpenClaw 主验证面成立；Claude Code 交叉验证仍为后置补充项，Codex 仍明确排除出实例测试面 |
