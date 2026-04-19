@@ -1062,3 +1062,17 @@ last_verified_commit: ""
 | 观察结果 | **npm 不可用**：`command not found: npm`。前端依赖未安装，构建环境不完整，无法执行 UI bring-up |
 | 结论适用范围 | **完整 running reality 未成立**：唯一断点是"前端依赖未安装 / 构建环境问题"，不是 UI 代码或 18011 API 问题；基础 running reality（8765+18011）仍然成立 |
 | 备注 | 这是已知环境限制，不影响方案 C 本身的有效性；UI bring-up 需要 npm 环境，前端依赖安装后即可继续；当前 UI 运行层闭环暂时阻塞于此环境问题 |
+
+
+### RECORD-B-074
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-074` |
+| 日期 | `2026-04-19` |
+| 实例分类 | `UI Availability Closure / UI bring-up 成功` |
+| 实例路径/来源 | `localhost:5173`（UI）；`localhost:18011`（adapter） |
+| 验证动作 | 1. 设置 `PATH=/usr/local/bin:$PATH` 使 npm 可用；2. `cd 6_console/demo-dashboard && npm run dev`；3. `curl localhost:5173/`；4. `curl -H "Accept: application/json" localhost:5173/agents/control`；5. 对比 `localhost:18011/agents/control` |
+| 观察结果 | 5173 在线并返回 HTML；`curl -H "Accept: application/json" localhost:5173/agents/control` 正确代理到 18011 并返回 JSON；字段对位：installed/routing_enabled/active 与 18011 API 一致 |
+| 结论适用范围 | **完整 running reality 成立**：5173 在线，UI 可访问，代理正常，基础 running reality 之上完整 running reality 已确认 |
+| 备注 | 环境要求：PATH 必须包含 `/usr/local/bin`；方案 C 分层常驻验证完成 |

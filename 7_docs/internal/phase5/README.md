@@ -13,14 +13,14 @@
 ## Current Phase Boundary
 
 - 当前执行主线：`UI Availability Closure`
-- 阶段状态：**进行中（阻塞于环境问题）**
-- 当前阶段目标：
+- 阶段状态：**✅ 已完成**
+- 完成情况：
   - 完成 UI Running Strategy Clarification 收口（方案 C 已确立）✅
   - 固定 5173 运行层完成定义 ✅
-  - 执行一轮正式 running reality 的 UI 在线验证 ❌（阻塞于 npm 不可用）
+  - 执行一轮正式 running reality 的 UI 在线验证 ✅
   - 让 active docs 能明确区分基础 running reality 与完整 running reality ✅
 
-**阻塞原因**：`npm` 不可用，无法执行 `npm run dev` 启动 UI
+**完整 running reality 已成立**（8765 + 18011 + 5173 全部在线）
 
 ### 拓扑契约（三层现实）
 
@@ -88,7 +88,7 @@
 | 层级 | 状态 | 说明 |
 |------|------|------|
 | 能力层 | ✅ 已恢复 | UI 工程可构建、可启动、路由正确 |
-| 运行层 | ❌ 离线 | 5173 当前未启动 |
+| 运行层 | ✅ 在线 | 5173 已启动并验证 |
 | 托管层 | ✅ 已定义（方案 C） | 分层常驻，5173 可手动启动，不强制常驻 |
 
 ### 实时 Running Reality 状态
@@ -97,22 +97,27 @@
 |------|------|----------|------|
 | runtime | 8765 | ✅ 在线 | `curl localhost:8765/health` 返回 `{"status":"ok"}` |
 | adapter | 18011 | ✅ 在线 | `curl localhost:18011/health` 返回 `{"status":"healthy"}` |
-| UI | 5173 | ❌ 离线 | `curl localhost:5173/` 连接失败；**bring-up 阻塞于 npm 不可用** |
+| UI | 5173 | ✅ 在线 | `curl localhost:5173/` 返回 HTML；代理到 18011 正常 |
 
 ### Running Reality 成立判断
 
 - **基础 running reality**：✅ **成立**（8765 + 18011 在线）
-- **完整 running reality**：❌ **未成立**
+- **完整 running reality**：✅ **成立**（5173 在线）
 
-**唯一断点**：`npm` 不可用（前端依赖未安装 / 构建环境问题）
+### 5173 启动方式（已验证）
 
-### UI Bring-up 失败记录
+```bash
+# PATH 必须包含 /usr/local/bin
+export PATH=/usr/local/bin:$PATH
+cd /Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/6_console/demo-dashboard
+npm run dev
+```
 
-| 日期 | 断点 | 说明 |
-|------|------|------|
-| 2026-04-19 | npm 不可用 | `command not found: npm`，前端环境缺失 |
-
-**注**：此断点为环境问题，非 UI 代码或 18011 API 问题。基础 running reality 仍成立。
+验证：
+```bash
+curl http://localhost:5173/
+curl -H "Accept: application/json" http://localhost:5173/agents/control
+```
 
 ### 5173 启动方式
 
