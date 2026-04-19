@@ -211,9 +211,13 @@ curl -H "Accept: application/json" http://localhost:5173/agents/control
 - `route on -> runtime_compile` 语义成立
 - **`Control Activity Semantics` 已完成**：compile events 是 `active / last_seen_at` 主 truth source
 
-## 下一阶段候选
+## 下一主线
 
-（将在本阶段结束后更新）
+**`Operationalization and Adoption`** — internal Phase 6 workstream
+
+> **标签说明**：`Operationalization and Adoption` 当前是 **internal Phase 6 workstream**，用于表示 phase5 收口后的下一条执行主线；除非 `ROADMAP.md` 被正式更新，否则它不代表产品 roadmap 的正式 phase 改号。
+
+**第一子线**：`Promotion Workflow Adoption`
 
 明确排除：继续改 OpenClaw attach（已收口）、GUI 物理独立、`trial / internal admin`、compile/strategy 大拆、dev-mode 提速方案（本阶段结论为 dev-mode 如需存在，后续单开主线规划）
 
