@@ -107,7 +107,7 @@
 ### 5173 启动方式（已验证）
 
 ```bash
-# PATH 必须包含 /usr/local/bin
+# 前置条件：PATH 必须包含 /usr/local/bin
 export PATH=/usr/local/bin:$PATH
 cd /Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/6_console/demo-dashboard
 npm run dev
@@ -119,18 +119,11 @@ curl http://localhost:5173/
 curl -H "Accept: application/json" http://localhost:5173/agents/control
 ```
 
-### 5173 启动方式
+### Frontend Runtime Prerequisite Closure（已收口）
 
-```bash
-cd /Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/6_console/demo-dashboard
-npm run dev
-```
-
-启动后验证：
-```bash
-curl -s http://localhost:5173/
-curl -s http://localhost:5173/agents?tenant=all
-```
+- **前置条件**：`PATH=/usr/local/bin:$PATH`（shell/runtime path prerequisite）
+- **环境确认**：node v24.14.1，npm 11.11.0
+- **RECORD-B-074**：UI bring-up 成功，完整 running reality 成立
 
 ## UI Running Strategy Clarification 收口结论
 
