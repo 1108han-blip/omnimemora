@@ -927,3 +927,16 @@ last_verified_commit: ""
 | 观察结果 | `openclaw infer model run --gateway` 可返回结果，但不会推进 `18011` 的 `active/last_seen` 或新增 compile event，因此它不能作为 `main` 实际产品链路成立的证据。`openclaw agent --local --agent main` 的 stderr 明确报出：`bundle-mcp failed to start server "omnimemora" (http://127.0.0.1:18011/mcp): Error: SSE error: Invalid content type, expected "text/event-stream"`。同时，`GET /sse` 返回 `Content-Type: text/event-stream`，`GET /mcp` 返回 `application/json`，并在 body 中声明 `legacy_sse_endpoint=/sse`。基于该真实客户端定位，仓库内 OpenClaw attach 已改为对 OpenClaw 写入 `/sse` 作为 MCP 运行期端点，并保留 `hasOpenClawMCPAttachment()` 对旧 `/mcp` 的兼容接受；`go test ./internal/attach ./api ./tests` 全部通过 |
 | 结论适用范围 | `真实客户端定位成立 + 仓库现实成立`：OpenClaw 可用性缺口已至少锁定一个明确断点，即 OpenClaw 当前运行期会将 `mcp.servers.omnimemora.url` 作为 SSE 入口消费，而产品之前为其写入 `/mcp` 导致 transport 不兼容；仓库内该 attach 缺口已修正。该记录仍不等同于“OpenClaw 已完整形成真实可使用产品路径”，因为 provider 请求链是否在修正后稳定进入产品仍需单独复验 |
 | 备注 | 本记录对真实配置做过一次短时 `/sse` 试验后已恢复到原运行期 MCP URL；最终仓库修复尚未提升到 running reality，后续需在更新后的 attach 逻辑下重新做一轮真实 OpenClaw 请求复验 |
+
+### RECORD-B-064
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-064` |
+| 日期 | `2026-04-19` |
+| 实例分类 | `真实客户端现实 + 外部运行实例观察` |
+| 实例路径/来源 | 真实 OpenClaw 用户配置 `~/.openclaw/openclaw.json`、`~/.openclaw/agents/main/agent/models.json`；正式运行实例 `http://127.0.0.1:18011` |
+| 验证动作 | 1. 使用当前 repo `go run . attach openclaw` 再次应用最新 OpenClaw attach 逻辑；2. 读取真实 OpenClaw 配置，确认 `mcp.servers.omnimemora.url` 与 `main` 实际 provider 入口；3. 读取 `GET http://127.0.0.1:18011/agents/control` 观察正式运行实例对 OpenClaw 的 installed 判定 |
+| 观察结果 | 真实配置当前已为：`mcp.servers.omnimemora.url=http://127.0.0.1:18011/sse`，`main` 仍使用 `minimax/MiniMax-M2.7`，且 `~/.openclaw/agents/main/agent/models.json` 中 `minimax.baseUrl=http://127.0.0.1:18011/llm`。这说明 repo reality 与真实 OpenClaw 配置 reality 已对齐。但同时，正式 `18011` 的 `/agents/control` 仍返回 `openclaw.installed=false`、`routing_enabled=true`、`active=false` |
+| 结论适用范围 | `真实客户端现实成立 + 外部运行实例成立`：当前剩余断点不再位于 OpenClaw attach 写入层，而位于正式 running reality 尚未提升到最新 repo reality；因此下一步应进入 `Candidate-to-Running Promotion + Validation`，而不是继续修改 OpenClaw attach 逻辑 |
+| 备注 | 本记录只固定“真实配置已对齐、running reality 未对齐”的现状，不等同于 OpenClaw 已完成真实可使用闭环 |

@@ -70,9 +70,10 @@ last_verified_commit: ""
 - Claude Code 只做关键路径交叉验证
 - Codex 不参与实例测试
 
-### Next Gate: OpenClaw Usability Gap Localization
+### Next Gate: Candidate-to-Running Promotion + Validation
 
-- 目标不是继续扩展控制能力，而是锁定“已接入但不走产品”的断点位置
+- `OpenClaw Usability Gap Localization` 已完成，当前不再继续怀疑 attach 写入或客户端配置层级
+- 下一 gate 目标是把已成立的 repo reality 与真实 OpenClaw 配置 reality 提升成正式 running reality
 - 本 gate 的 OpenClaw 安装标准固定升级为：
   - `mcp.servers.omnimemora` 已建立
   - `main` 实际生效的 provider 入口已指向 `18011`
@@ -81,11 +82,11 @@ last_verified_commit: ""
   - `agents/main/agent/models.json` 作为 agent 覆盖层
   - install 只修改 `main` 当前实际生效的 provider 层，不新增无必要的 agent override
 - `enable/disable` 继续只写产品内 route state，不改任何 OpenClaw 用户配置文件
-- 断点定位范围固定为：
-  - OpenClaw 客户端未真正安装或生效
-  - 路由状态落盘与客户端实际状态不一致
-  - 请求未进入 OmniMemora 产品路径
-  - 请求进入产品后未形成可见使用结果
+- 下一 gate 的主要动作固定为：
+  - 提升正式 `18011` 到当前 repo reality
+  - 复验 `GET /agents/control` 对 OpenClaw 的 installed 判定
+  - 复验真实 OpenClaw 请求是否推进 `active / last_seen / compile events`
+  - 复验 `5173 -> 正式 18011` 的正式控制契约
 
 ## 验收标准
 
@@ -98,7 +99,7 @@ last_verified_commit: ""
 
 ## 明确后置
 
-- `OpenClaw Usability Gap Localization`
+- `Candidate-to-Running Promotion + Validation`
 - `trial / internal admin surface`
 - compile / strategy 大拆
 - GUI 美化重设计

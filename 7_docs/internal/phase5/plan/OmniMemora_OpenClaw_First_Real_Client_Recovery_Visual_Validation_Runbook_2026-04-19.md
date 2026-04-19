@@ -21,7 +21,7 @@ last_verified_commit: ""
 - `Track C`: 已完成
 - `Track D`: 已完成
 - `Track E`: 已完成（OpenClaw 接入层 / 路由层主验证面）
-- `Next Gate`: `OpenClaw Usability Gap Localization`
+- `Next Gate`: `Candidate-to-Running Promotion + Validation`
 
 ## 当前执行顺序
 
@@ -29,7 +29,7 @@ last_verified_commit: ""
 2. `5173` 深链与装配已修复，`/` 与 `/agents` 均可稳定访问
 3. 正式控制卡已落地，`install/uninstall` 与 `enable/disable` 已进入正式用户控制入口
 4. 控制契约已对齐，`/metrics/summary` 与 `/agents/control*` 不再依赖失效实现
-5. OpenClaw-first 已完成一轮接入 / 路由 / 恢复 / 退出控制闭环，但真实使用路径仍待补证
+5. OpenClaw-first 已完成一轮接入 / 路由 / 恢复 / 退出控制闭环，且可用性断点已完成定位
 
 ## 当前规则
 
@@ -59,14 +59,15 @@ last_verified_commit: ""
 - `Track D`：UI 已只依赖当前正式控制契约；候选实例上 `/metrics/summary` 与 `/agents/control*` 均返回当前仓库现实
 - `Track E`：OpenClaw 真实客户端已完成 `uninstall -> install -> enable route -> disable route -> uninstall` 控制闭环；该结论只证明接入层与路由层可控，不等同于“已可使用产品”
 - `仓库现实补充`：OpenClaw attach/detect 已升级为分层判定；`installed=true` 不再只看 MCP，而是同时要求 `main` 实际生效入口接入 `18011`
-- `OpenClaw Usability Gap Localization` 已锁定一个明确缺口：真实 `openclaw agent --local --agent main` 运行期会把 `mcp.servers.omnimemora.url=/mcp` 当成 SSE 端点并报 `Invalid content type, expected text/event-stream`；仓库内 attach 已改为对 OpenClaw 写入 `/sse`
-- `外部运行实例观察事实`：正式 `18011` 当前返回 `openclaw.installed=false`、`routing_enabled=true`、`active=false`；因此当前不能宣称 OpenClaw 已在使用产品
-- `Next Gate`：`OpenClaw Usability Gap Localization`，用于锁定“已接入但不走产品”的断点位于客户端生效、路由一致性、产品路径进入还是请求后结果可见性
+- `OpenClaw Usability Gap Localization` 已完成：真实 `openclaw agent --local --agent main` 运行期会将 `mcp.servers.omnimemora.url` 作为 SSE 入口消费；此前 `/mcp` 导致 `Invalid content type, expected "text/event-stream"`，仓库内 attach 已改为对 OpenClaw 写入 `/sse`
+- `真实配置现实`：当前真实 OpenClaw 配置已满足新安装标准，具体为 `mcp.servers.omnimemora.url=http://127.0.0.1:18011/sse`，且 `main` 实际 provider 入口已指向 `http://127.0.0.1:18011/llm`
+- `外部运行实例观察事实`：正式 `18011` 当前仍返回 `openclaw.installed=false`、`routing_enabled=true`、`active=false`；因此当前剩余问题不再归因于 attach 写入，而归因于 running reality 尚未提升到最新 repo reality
+- `Next Gate`：`Candidate-to-Running Promotion + Validation`，用于把当前 repo reality 提升到正式运行实例，并复验 `5173 -> 正式 18011 -> OpenClaw` 的一致性
 
 ## 当前后置项
 
 - 旧运行现实 `~/.omnimemora/service/current` 的 `18011` 仍未纳入本阶段结论范围
-- `OpenClaw Usability Gap Localization`
+- `Candidate-to-Running Promotion + Validation`
 - `Claude Code` 真实客户端交叉验证
 - `trial / internal admin surface`
 - compile / strategy 大拆

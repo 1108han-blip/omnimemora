@@ -14,13 +14,15 @@
 - 当前阶段结论：
   - `Decision Carrier / Control-Plane Decoupling` 已阶段性完成并转为结构前置成果
   - `5173` 已恢复为正式用户控制入口
-  - `OpenClaw` 已完成接入层 / 路由层控制闭环，但真实使用路径尚未成立
+  - `OpenClaw` 已完成接入层 / 路由层控制闭环
   - OpenClaw 的“安装成立”标准已升级为：`MCP 接入 + main 实际生效请求入口接入 18011`
-  - OpenClaw 的 MCP 运行期端点已定位为 `/sse` 兼容问题，不再继续把 `/mcp` 当成其唯一正确 attach 入口
-  - 当前阶段结论只覆盖控制面与接入层行为，不覆盖“真实可使用”结论
+  - OpenClaw 的 MCP 运行期端点已定位为 `/sse`；`/mcp` 不再作为其唯一正确 attach 入口
+  - 当前 repo reality 与真实 OpenClaw 配置 reality 已对齐：真实配置已写成 `MCP=/sse`、`main` 实际 provider 入口=`18011/llm`
+  - 当前剩余断点位于 `running reality`：正式 `18011` 仍返回 `openclaw.installed=false`
+  - 当前阶段结论只覆盖控制面、接入层与可用性断点定位，不覆盖“真实可使用”结论
   - 当前主线不拆 `trial / internal admin surface`
   - 当前主线不做 GUI 物理独立
-  - 下一 gate：`OpenClaw Usability Gap Localization`
+  - 下一主线：`Candidate-to-Running Promotion + Validation`
 
 ## Supplemental Docs
 
