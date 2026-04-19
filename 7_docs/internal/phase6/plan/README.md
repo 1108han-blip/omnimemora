@@ -4,10 +4,11 @@
 
 ### Sub-Workstreams
 
-| Workstream | Status |
-|------------|--------|
-| Promotion Workflow Adoption | **已收口 ✓** |
-| Promotion Evidence Routing | **已收口 ✓** |
+| Workstream | Status | 文档位置 |
+|------------|--------|----------|
+| Promotion Workflow Adoption | **已收口 ✓** | 本目录 |
+| Promotion Evidence Routing | **已收口 ✓** | 本目录 |
+| Promotion Workflow Usage Governance | **已收口 ✓** | `docs/phase6/PROMOTION_USAGE_GOVERNANCE.md` |
 
 ---
 
@@ -103,3 +104,39 @@ cd /Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora
 | 組件 | Warning |
 |------|---------|
 | Adapter | `plist reality` 未通過 launchctl 檢查（launchd 重啟覆蓋可見性，API/process 正常） |
+
+---
+
+## Promotion Workflow Usage Governance
+
+**狀態：** 已收口
+**收口日期：** 2026-04-20
+**文檔位置：** `docs/phase6/PROMOTION_USAGE_GOVERNANCE.md`
+
+### 核心變更
+
+1. **使用邊界三元組**
+   - 必須走 promotion：runtime/adapter/UI 變更影響在線行為
+   - 禁止繞過：手工複製、繞過 launchd、不經記錄回填
+   - 不需要走：純文檔、未準備提升到 running reality
+
+2. **執行前後檢查項固化**
+   - 執行前：15 項強制確認
+   - 執行後：結構化日誌 + 三層驗證 + 記錄回填
+
+3. **失敗即停住規則**
+   - 單組件失敗 = 停止，不繼續組合驗證
+   - 組合失敗 = 停止，不並行修多個面
+   - warning 未契約化 = 先升級 finding，再繼續
+
+4. **宣告職責規則**
+   - 運行成功 ≠ 階段完成
+   - 三層宣告（Layer 1/2/3）職責分離
+
+### Governance Validation Record
+
+| 驗證日期 | 場景 | 結果 |
+|----------|------|------|
+| 2026-04-20 | adapter-only 真實場景 | PASS |
+
+Validation Record：`docs/phase6/adoption_verification/20260420_adapter_only_validation.md`
