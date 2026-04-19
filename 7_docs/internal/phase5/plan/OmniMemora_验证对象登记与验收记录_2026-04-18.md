@@ -1048,3 +1048,17 @@ last_verified_commit: ""
 | 观察结果 | 8765: `{"status":"ok"...}` → **在线**；18011: `{"status":"healthy"...}` → **在线**；5173: `Connection refused` → **离线** |
 | 结论适用范围 | **基础 running reality 成立**（8765+18011 在线）；**完整 running reality 未成立**（5173 离线）；UI 启动路径：`6_console/demo-dashboard` + `npm run dev` |
 | 备注 | 5173 离线不影响基础 running reality 成立；方案 C（分层常驻）定义有效；后续如需完整 running reality，需手动启动 5173 |
+
+
+### RECORD-B-073
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-073` |
+| 日期 | `2026-04-19` |
+| 实例分类 | `UI Availability Closure / UI bring-up 失败` |
+| 实例路径/来源 | `6_console/demo-dashboard` |
+| 验证动作 | 1. 尝试 `cd 6_console/demo-dashboard && npm run dev`；2. 检查 npm 是否可用 |
+| 观察结果 | **npm 不可用**：`command not found: npm`。前端依赖未安装，构建环境不完整，无法执行 UI bring-up |
+| 结论适用范围 | **完整 running reality 未成立**：唯一断点是"前端依赖未安装 / 构建环境问题"，不是 UI 代码或 18011 API 问题；基础 running reality（8765+18011）仍然成立 |
+| 备注 | 这是已知环境限制，不影响方案 C 本身的有效性；UI bring-up 需要 npm 环境，前端依赖安装后即可继续；当前 UI 运行层闭环暂时阻塞于此环境问题 |

@@ -13,12 +13,14 @@
 ## Current Phase Boundary
 
 - 当前执行主线：`UI Availability Closure`
-- 阶段状态：**进行中**
+- 阶段状态：**进行中（阻塞于环境问题）**
 - 当前阶段目标：
-  - 完成 UI Running Strategy Clarification 收口（方案 C 已确立）
-  - 固定 5173 运行层完成定义
-  - 执行一轮正式 running reality 的 UI 在线验证
-  - 让 active docs 能明确区分基础 running reality 与完整 running reality
+  - 完成 UI Running Strategy Clarification 收口（方案 C 已确立）✅
+  - 固定 5173 运行层完成定义 ✅
+  - 执行一轮正式 running reality 的 UI 在线验证 ❌（阻塞于 npm 不可用）
+  - 让 active docs 能明确区分基础 running reality 与完整 running reality ✅
+
+**阻塞原因**：`npm` 不可用，无法执行 `npm run dev` 启动 UI
 
 ### 拓扑契约（三层现实）
 
@@ -95,12 +97,22 @@
 |------|------|----------|------|
 | runtime | 8765 | ✅ 在线 | `curl localhost:8765/health` 返回 `{"status":"ok"}` |
 | adapter | 18011 | ✅ 在线 | `curl localhost:18011/health` 返回 `{"status":"healthy"}` |
-| UI | 5173 | ❌ 离线 | `curl localhost:5173/` 连接失败 |
+| UI | 5173 | ❌ 离线 | `curl localhost:5173/` 连接失败；**bring-up 阻塞于 npm 不可用** |
 
 ### Running Reality 成立判断
 
 - **基础 running reality**：✅ **成立**（8765 + 18011 在线）
-- **完整 running reality**：❌ **未成立**（5173 离线）
+- **完整 running reality**：❌ **未成立**
+
+**唯一断点**：`npm` 不可用（前端依赖未安装 / 构建环境问题）
+
+### UI Bring-up 失败记录
+
+| 日期 | 断点 | 说明 |
+|------|------|------|
+| 2026-04-19 | npm 不可用 | `command not found: npm`，前端环境缺失 |
+
+**注**：此断点为环境问题，非 UI 代码或 18011 API 问题。基础 running reality 仍成立。
 
 ### 5173 启动方式
 
