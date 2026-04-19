@@ -12,13 +12,14 @@
 
 ## Current Phase Boundary
 
-- 当前执行主线：`Dashboard Semantics Reconciliation`
-- 阶段状态：**✅ 已完成**
+- 当前执行主线：`Claude Code Cross Validation`
+- 阶段状态：**⚠️ 受限完成**（环境限制）
 - 完成情况：
   - 完成 UI Availability Closure 收口 ✅
   - 完成 UI Running Strategy Clarification 收口（方案 C 已确立）✅
   - 完成 Frontend Runtime Prerequisite Closure 收口 ✅
   - 完成 Dashboard Semantics Reconciliation 收口 ✅
+  - Claude Code Cross Validation ⚠️ 受限完成
 
 **完整 running reality 已成立**（8765 + 18011 + 5173 全部在线）
 
@@ -33,6 +34,34 @@
 | Internal Event Filtering | ✅ 成立 | `session bootstrap context handshake` 已从 Live Request Flow 过滤 |
 | Activity Truth Alignment | ✅ 成立 | overview active(5m)/active(24h) 与 Agent 控制卡 active 状态一致 |
 | 5173 运行时验证 | ✅ 通过 | UI 在线，family 展示归并正确，无 internal handshake 刷屏 |
+
+### Claude Code Cross Validation 记录
+
+**验证时间**：2026-04-19
+
+| 检查项 | 状态 | 说明 |
+|--------|------|------|
+| Claude Code 检测 | ✅ 成立 | MCP 配置正确，事件正常接收 |
+| 控制卡状态 | ✅ 一致 | `active=True` 与事件数据吻合 |
+| 历史路由记录 | ✅ 存在 | `mode=guided` 事件证明曾启用路由 |
+| 完整 install→enable→request→disable 周期 | ⚠️ 受限 | Claude Code CLI 不可用，无法执行实时测试 |
+
+**当前 Claude Code 状态**：
+
+```
+installed: False (未通过控制面安装)
+routing_enabled: False (路由已关闭)
+active: True (MCP 连接中)
+```
+
+**历史事件证明双开关语义曾正确工作**：
+- `2026-04-18 16:07` - `mode=guided` (路由启用)
+- `2026-04-19 09:03` - `mode=off` (路由关闭)
+- 6 个请求已记录，3 个启用路由
+
+**唯一断点**：环境限制 - Claude Code CLI 不在 PATH 中，无法执行实时验证循环。这不是产品问题，是验证环境约束。
+
+**结论**：MCP 集成正常，双开关语义在历史数据中验证成立，当前无产品层面问题。
 
 ### 拓扑契约（三层现实）
 
