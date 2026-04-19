@@ -1,4 +1,5 @@
 import type { RecentRequest } from '../types';
+import { normalizeFamilyName, isInternalEvent } from '../utils/familyNormalization';
 
 interface LiveRequestFlowProps {
   requests: RecentRequest[];
@@ -6,21 +7,29 @@ interface LiveRequestFlowProps {
 }
 
 export function LiveRequestFlow({ requests, onSelect }: LiveRequestFlowProps) {
-  if (requests.length === 0) {
+  // Filter out internal events and normalize agent names
+  const userFacingRequests = requests.filter(req => !isInternalEvent(req.query, req.agent));
+  const normalizedRequests = userFacingRequests.map(req => ({
+    ...req,
+    agent: normalizeFamilyName(req.agent),
+  }));
+
+  if (normalizedRequests.length === 0) {
     return (
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6">
-        <div className="text-sm text-zinc-400">No recent requests</div>
+        <div className="text-sm text-zinc-400">No recent user requests</div>
       </div>
     );
   }
 
   return (
     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
-      <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-700">
+      <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Live Request Flow</h3>
+        <span className="text-xs text-zinc-400">{normalizedRequests.length} user requests</span>
       </div>
       <div className="divide-y divide-zinc-100 dark:divide-zinc-800 max-h-64 overflow-y-auto">
-        {requests.map((req) => (
+        {normalizedRequests.map((req) => (
           <button
             key={req.request_id}
             onClick={() => onSelect(req)}
@@ -28,6 +37,7 @@ export function LiveRequestFlow({ requests, onSelect }: LiveRequestFlowProps) {
           >
             <div className="flex items-center justify-between gap-4">
               <span className="text-zinc-400">{formatTime(req.timestamp)}</span>
+              <span className="font-medium text-zinc-600 dark:text-zinc-300">{req.agent}</span>
               <span className={req.bypass ? 'text-amber-600' : 'text-emerald-600'}>
                 {req.bypass ? 'bypass' : `saved ${Math.round(req.savings_ratio * 100)}%`}
               </span>

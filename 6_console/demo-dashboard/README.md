@@ -35,14 +35,25 @@ The UI must not treat historical observation widgets as a substitute for these c
 
 ## Header Metrics Semantics
 
-- `active(5m)`: count of agents returned by `/agents/live?window_minutes=5`
-- `active(24h)`: count of agents returned by `/agents/live?window_minutes=1440`
-- `history`: count of `usage.by_agent` from `/usage/token-savings`
+- `active(5m)`: count of agents from `/agents/control` where `active=true` and `last_seen_at` within 5 minutes
+- `active(24h)`: count of agents from `/agents/control` where `active=true` and `last_seen_at` within 24 hours
+- `history`: count of unique agents in `usage.by_agent` from `/usage/token-savings`
 
-These are intentionally different metrics:
+Activity truth is unified with the Agent control card surface via `AgentControlCard.active` field.
 
-- `active(*)` is windowed real-time activity.
-- `history` is cumulative historical participation.
+## Family Name Canonicalization
+
+Internal agent identifiers are normalized to canonical family names for user display:
+
+| Internal ID | Canonical Family |
+|-------------|------------------|
+| `openclaw`, `openclaw-agent`, `openclaw-bundle-mcp` | OpenClaw |
+| `claude_code`, `claude-code` | Claude Code |
+| `codex`, `codex_cli` | Codex |
+
+## Internal Event Filtering
+
+The Live Request Flow filters internal handshake events (`session bootstrap context handshake`) to show only user-facing requests.
 
 ## Header Status Light
 

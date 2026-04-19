@@ -5,8 +5,8 @@ import { ContextComparison } from './components/ContextComparison';
 import { CallChainViz } from './components/CallChainViz';
 import { AgentUsagePanel } from './components/AgentUsagePanel';
 import { AgentsDashboard } from './components/AgentsDashboard';
-import { fetchMetricsSummary, fetchRecentRequests, fetchContextDiff, fetchCallChain, fetchUsageSummary, fetchTenants, fetchLiveAgents } from './api';
-import type { MetricsSummary, RecentRequest, ContextDiff, CallChain, UsageSummary, LiveAgent } from './types';
+import { fetchMetricsSummary, fetchRecentRequests, fetchContextDiff, fetchCallChain, fetchUsageSummary, fetchTenants, fetchAgentControls } from './api';
+import type { MetricsSummary, RecentRequest, ContextDiff, CallChain, UsageSummary, AgentControlCard } from './types';
 
 function inferInitialTab(): 'overview' | 'agents' {
   const params = new URLSearchParams(window.location.search);
@@ -42,8 +42,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'overview' | 'agents'>(() => inferInitialTab());
   const [summary, setSummary] = useState<MetricsSummary | null>(null);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
-  const [liveAgents24h, setLiveAgents24h] = useState<LiveAgent[]>([]);
-  const [liveAgents5m, setLiveAgents5m] = useState<LiveAgent[]>([]);
+  const [agentControls, setAgentControls] = useState<AgentControlCard[]>([]);
   const [requests, setRequests] = useState<RecentRequest[]>([]);
   const [_selectedRequest, setSelectedRequest] = useState<RecentRequest | null>(null);
   const [contextDiff, setContextDiff] = useState<ContextDiff | null>(null);
@@ -57,12 +56,11 @@ export default function App() {
     const failures: string[] = [];
     try {
       const controlTab = activeTab === 'agents';
-      const [sRes, rRes, uRes, l24Res, l5Res] = await Promise.allSettled([
+      const [sRes, rRes, uRes, ctrlRes] = await Promise.allSettled([
         controlTab ? Promise.resolve(null) : fetchMetricsSummary(tenant),
         controlTab ? Promise.resolve(null) : fetchRecentRequests(tenant, 30),
         fetchUsageSummary(tenant),
-        fetchLiveAgents(1440),
-        fetchLiveAgents(5),
+        fetchAgentControls(),
       ]);
 
       if (!controlTab && sRes.status === 'fulfilled' && sRes.value) {
@@ -99,16 +97,11 @@ export default function App() {
         failures.push(`usage: ${uRes.reason instanceof Error ? uRes.reason.message : String(uRes.reason)}`);
       }
 
-      if (l24Res.status === 'fulfilled') {
-        setLiveAgents24h(l24Res.value);
-      } else {
-        failures.push(`live24h: ${l24Res.reason instanceof Error ? l24Res.reason.message : String(l24Res.reason)}`);
-      }
-
-      if (l5Res.status === 'fulfilled') {
-        setLiveAgents5m(l5Res.value);
-      } else {
-        failures.push(`live5m: ${l5Res.reason instanceof Error ? l5Res.reason.message : String(l5Res.reason)}`);
+      // Fetch agent controls for unified activity truth
+      if (ctrlRes.status === 'fulfilled' && ctrlRes.value) {
+        setAgentControls(ctrlRes.value.agents ?? []);
+      } else if (ctrlRes.status === 'rejected') {
+        failures.push(`controls: ${ctrlRes.reason instanceof Error ? ctrlRes.reason.message : String(ctrlRes.reason)}`);
       }
 
       setError(failures.length ? failures.join(' | ') : null);
@@ -158,9 +151,26 @@ export default function App() {
     }
   }, []);
 
+  // Calculate active counts from AgentControlCard.active field (unified activity truth)
+  // This ensures overview active(*) matches the Agent control card's active status
+  const now = Date.now();
+  const isWithinWindow = (isoTime: string | null | undefined, windowMinutes: number): boolean => {
+    if (!isoTime) return false;
+    try {
+      const lastSeen = new Date(isoTime).getTime();
+      return (now - lastSeen) <= windowMinutes * 60 * 1000;
+    } catch {
+      return false;
+    }
+  };
+
+  const activeAgentControls = agentControls.filter(ctrl => ctrl.active);
+  const live5mCount = activeAgentControls.filter(ctrl => isWithinWindow(ctrl.last_seen_at, 5)).length;
+  const live24hCount = activeAgentControls.filter(ctrl => isWithinWindow(ctrl.last_seen_at, 1440)).length;
+
+  // Historical count: count unique canonical families from usage
   const historicalAgentCount = usage?.by_agent.length ?? 0;
-  const live24hCount = liveAgents24h.length;
-  const live5mCount = liveAgents5m.length;
+
   const statusColor = error
     ? 'bg-red-500'
     : live5mCount > 0
