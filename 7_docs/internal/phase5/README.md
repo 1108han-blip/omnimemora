@@ -12,15 +12,27 @@
 
 ## Current Phase Boundary
 
-- 当前执行主线：`UI Availability Closure`
+- 当前执行主线：`Dashboard Semantics Reconciliation`
 - 阶段状态：**✅ 已完成**
 - 完成情况：
+  - 完成 UI Availability Closure 收口 ✅
   - 完成 UI Running Strategy Clarification 收口（方案 C 已确立）✅
-  - 固定 5173 运行层完成定义 ✅
-  - 执行一轮正式 running reality 的 UI 在线验证 ✅
-  - 让 active docs 能明确区分基础 running reality 与完整 running reality ✅
+  - 完成 Frontend Runtime Prerequisite Closure 收口 ✅
+  - 完成 Dashboard Semantics Reconciliation 收口 ✅
 
 **完整 running reality 已成立**（8765 + 18011 + 5173 全部在线）
+
+### Dashboard Semantics Reconciliation 收口记录
+
+**验证时间**：2026-04-19
+
+| 检查项 | 状态 | 说明 |
+|--------|------|------|
+| `npm run build` | ✅ 通过 | TypeScript 编译无错误 |
+| Family Canonicalization | ✅ 成立 | openclaw+openclaw-agent+openclaw-bundle-mcp → OpenClaw；claude_code/claude-code → Claude Code；codex+codex_cli → Codex |
+| Internal Event Filtering | ✅ 成立 | `session bootstrap context handshake` 已从 Live Request Flow 过滤 |
+| Activity Truth Alignment | ✅ 成立 | overview active(5m)/active(24h) 与 Agent 控制卡 active 状态一致 |
+| 5173 运行时验证 | ✅ 通过 | UI 在线，family 展示归并正确，无 internal handshake 刷屏 |
 
 ### 拓扑契约（三层现实）
 
