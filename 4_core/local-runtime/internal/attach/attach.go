@@ -38,6 +38,10 @@ func ProductAdapterMCPEndpoint() string {
 	return fmt.Sprintf("%s/mcp", ProductAdapterEndpoint())
 }
 
+func ProductAdapterOpenClawMCPEndpoint() string {
+	return fmt.Sprintf("%s/sse", ProductAdapterEndpoint())
+}
+
 func ProductAdapterResponsesEndpoint() string {
 	return fmt.Sprintf("%s/v1", ProductAdapterEndpoint())
 }

@@ -16,6 +16,9 @@ func TestProductAdapterEndpointsDefaultAndOverride(t *testing.T) {
 		if got := ProductAdapterMCPEndpoint(); got != "http://127.0.0.1:18011/mcp" {
 			t.Fatalf("expected default mcp endpoint, got %s", got)
 		}
+		if got := ProductAdapterOpenClawMCPEndpoint(); got != "http://127.0.0.1:18011/sse" {
+			t.Fatalf("expected default OpenClaw mcp endpoint, got %s", got)
+		}
 		if got := ProductAdapterResponsesEndpoint(); got != "http://127.0.0.1:18011/v1" {
 			t.Fatalf("expected default responses endpoint, got %s", got)
 		}
@@ -28,6 +31,9 @@ func TestProductAdapterEndpointsDefaultAndOverride(t *testing.T) {
 		}
 		if got := ProductAdapterMCPEndpoint(); got != "http://127.0.0.1:18041/mcp" {
 			t.Fatalf("expected overridden mcp endpoint, got %s", got)
+		}
+		if got := ProductAdapterOpenClawMCPEndpoint(); got != "http://127.0.0.1:18041/sse" {
+			t.Fatalf("expected overridden OpenClaw mcp endpoint, got %s", got)
 		}
 		if got := ProductAdapterResponsesEndpoint(); got != "http://127.0.0.1:18041/v1" {
 			t.Fatalf("expected overridden responses endpoint, got %s", got)
@@ -83,6 +89,10 @@ func TestAttachOpenClawInheritedMainUpdatesGlobalLayerOnly(t *testing.T) {
 
 	if !hasOpenClawMCPAttachment(updatedGlobal, 18041) {
 		t.Fatalf("expected global config to contain omnimemora MCP attachment")
+	}
+	globalMCP := (((updatedGlobal["mcp"].(map[string]interface{}))["servers"].(map[string]interface{}))["omnimemora"].(map[string]interface{}))["url"]
+	if globalMCP != "http://127.0.0.1:18041/sse" {
+		t.Fatalf("expected OpenClaw MCP attachment to use /sse, got %v", globalMCP)
 	}
 
 	globalProviders := openClawGlobalProviders(updatedGlobal)
@@ -158,6 +168,10 @@ func TestAttachOpenClawAgentOverrideUpdatesAgentLayerOnly(t *testing.T) {
 
 	if !hasOpenClawMCPAttachment(updatedGlobal, 18041) {
 		t.Fatalf("expected global config to contain omnimemora MCP attachment")
+	}
+	globalMCP := (((updatedGlobal["mcp"].(map[string]interface{}))["servers"].(map[string]interface{}))["omnimemora"].(map[string]interface{}))["url"]
+	if globalMCP != "http://127.0.0.1:18041/sse" {
+		t.Fatalf("expected OpenClaw MCP attachment to use /sse, got %v", globalMCP)
 	}
 
 	globalProviders := openClawGlobalProviders(updatedGlobal)

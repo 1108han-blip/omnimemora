@@ -40,6 +40,7 @@ last_verified_commit: ""
 - OpenClaw `installed=true` 必须同时满足：
   - `mcp.servers.omnimemora` 已建立
   - `main` 实际生效 provider 入口已指向 `18011`
+- 对 OpenClaw 当前客户端，MCP attach 运行期优先使用 `/sse` 兼容入口；`/mcp` 仍可作为产品 HTTP JSON-RPC 入口，但不能再当作 OpenClaw 的唯一 SSE 真相
 - OpenClaw attach 采用“分层保守”：
   - `openclaw.json` = 全局默认层
   - `agents/main/agent/models.json` = agent 覆盖层
@@ -58,6 +59,7 @@ last_verified_commit: ""
 - `Track D`：UI 已只依赖当前正式控制契约；候选实例上 `/metrics/summary` 与 `/agents/control*` 均返回当前仓库现实
 - `Track E`：OpenClaw 真实客户端已完成 `uninstall -> install -> enable route -> disable route -> uninstall` 控制闭环；该结论只证明接入层与路由层可控，不等同于“已可使用产品”
 - `仓库现实补充`：OpenClaw attach/detect 已升级为分层判定；`installed=true` 不再只看 MCP，而是同时要求 `main` 实际生效入口接入 `18011`
+- `OpenClaw Usability Gap Localization` 已锁定一个明确缺口：真实 `openclaw agent --local --agent main` 运行期会把 `mcp.servers.omnimemora.url=/mcp` 当成 SSE 端点并报 `Invalid content type, expected text/event-stream`；仓库内 attach 已改为对 OpenClaw 写入 `/sse`
 - `外部运行实例观察事实`：正式 `18011` 当前返回 `openclaw.installed=false`、`routing_enabled=true`、`active=false`；因此当前不能宣称 OpenClaw 已在使用产品
 - `Next Gate`：`OpenClaw Usability Gap Localization`，用于锁定“已接入但不走产品”的断点位于客户端生效、路由一致性、产品路径进入还是请求后结果可见性
 

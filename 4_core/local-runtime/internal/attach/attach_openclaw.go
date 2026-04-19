@@ -280,7 +280,7 @@ func ensureOpenClawMCPAttachment(cfg map[string]interface{}) {
 	mcp := ensureStringMap(cfg, "mcp")
 	servers := ensureStringMap(mcp, "servers")
 	servers["omnimemora"] = map[string]interface{}{
-		"url":  ProductAdapterMCPEndpoint(),
+		"url":  ProductAdapterOpenClawMCPEndpoint(),
 		"type": "http",
 	}
 	mcp["servers"] = servers
@@ -301,9 +301,12 @@ func hasOpenClawMCPAttachment(cfg map[string]interface{}, port int) bool {
 		return false
 	}
 	rawURL, _ := entry["url"].(string)
-	expected := fmt.Sprintf("http://127.0.0.1:%d/mcp", port)
 	rawURL = strings.TrimSpace(rawURL)
-	return strings.EqualFold(rawURL, expected) || strings.Contains(strings.ToLower(rawURL), "omnimemora")
+	expectedSSE := fmt.Sprintf("http://127.0.0.1:%d/sse", port)
+	expectedMCP := fmt.Sprintf("http://127.0.0.1:%d/mcp", port)
+	return strings.EqualFold(rawURL, expectedSSE) ||
+		strings.EqualFold(rawURL, expectedMCP) ||
+		strings.Contains(strings.ToLower(rawURL), "omnimemora")
 }
 
 func openClawEffectiveProviders(resolved *openClawResolvedConfig) map[string]interface{} {

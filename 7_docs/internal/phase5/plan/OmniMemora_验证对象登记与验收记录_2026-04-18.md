@@ -914,3 +914,16 @@ last_verified_commit: ""
 | 观察结果 | OpenClaw attach 现在会先解析 `agents.list.main.model` / `agents.defaults.model.primary`，再根据 `main` 的 provider 是否在 `agents/main/agent/models.json` 中被覆盖来决定修改全局层还是 agent 层；对当前 `anthropic-messages` provider，会把实际生效入口收敛到 `http://127.0.0.1:<port>/llm`，且不会为继承全局的 `main` 平白制造新的 agent override。OpenClaw installed 检测不再仅由 `mcp.servers.omnimemora` 决定，而是同时要求 `main` 实际生效 provider 入口指向 `18011/候选端口`。新增的 attach 单测覆盖了“继承全局仅改全局层”“已有 agent override 仅改 agent 层”“MCP + 实际入口双条件判定”三类场景；`go test ./internal/attach ./api ./tests` 全部通过 |
 | 结论适用范围 | `仓库现实成立`：当前仓库内，OpenClaw “安装成立”标准已升级为 `MCP + main 实际生效入口`，且 install/uninstall 已具备按配置层级最小修改、按备份恢复的实现基础；该记录不等同于真实 OpenClaw 客户端已再次完成“可使用产品”验证 |
 | 备注 | 本记录只证明 repo reality 与回归测试成立；下一步仍需在 `OpenClaw Usability Gap Localization` gate 下验证真实客户端请求是否确实先进入 `18011`，以及 `route off/on` 在该真实路径上是否分别落到 passthrough / compile path |
+
+### RECORD-B-063
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-063` |
+| 日期 | `2026-04-19` |
+| 实例分类 | `真实客户端定位 + 仓库现实修正` |
+| 实例路径/来源 | 真实 OpenClaw 用户配置 `~/.openclaw/openclaw.json`、`~/.openclaw/agents/main/agent/models.json`；正式运行实例 `http://127.0.0.1:18011`；当前工作区 `4_core/local-runtime/internal/attach/*` |
+| 验证动作 | 1. 读取真实 OpenClaw 当前配置，确认 `main` 模型为 `minimax/MiniMax-M2.7`、全局 MCP URL 为 `http://127.0.0.1:18011/mcp`、agent 层 `minimax` provider 原本仍指向外部 MiniMax；2. 使用当前 repo `go run . attach openclaw` 修正 `main` 实际生效 provider 层，确认 `agents/main/agent/models.json` 中 `minimax.baseUrl -> http://127.0.0.1:18011/llm`，同时保留全局 MCP 接入；3. 运行 `openclaw infer model run --gateway --json --model minimax/MiniMax-M2.7 --prompt ping` 与 `openclaw agent --local --agent main --message ping --timeout 20 --json` 做短实测；4. 读取 `GET http://127.0.0.1:18011/agents/control`、`GET http://127.0.0.1:18011/compile/events?limit=5`、`GET http://127.0.0.1:18011/sse`、`GET http://127.0.0.1:18011/mcp`；5. 将仓库内 OpenClaw attach 的 MCP URL 写入从 `/mcp` 改为 `/sse`，并执行 `go test ./internal/attach ./api ./tests` |
+| 观察结果 | `openclaw infer model run --gateway` 可返回结果，但不会推进 `18011` 的 `active/last_seen` 或新增 compile event，因此它不能作为 `main` 实际产品链路成立的证据。`openclaw agent --local --agent main` 的 stderr 明确报出：`bundle-mcp failed to start server "omnimemora" (http://127.0.0.1:18011/mcp): Error: SSE error: Invalid content type, expected "text/event-stream"`。同时，`GET /sse` 返回 `Content-Type: text/event-stream`，`GET /mcp` 返回 `application/json`，并在 body 中声明 `legacy_sse_endpoint=/sse`。基于该真实客户端定位，仓库内 OpenClaw attach 已改为对 OpenClaw 写入 `/sse` 作为 MCP 运行期端点，并保留 `hasOpenClawMCPAttachment()` 对旧 `/mcp` 的兼容接受；`go test ./internal/attach ./api ./tests` 全部通过 |
+| 结论适用范围 | `真实客户端定位成立 + 仓库现实成立`：OpenClaw 可用性缺口已至少锁定一个明确断点，即 OpenClaw 当前运行期会将 `mcp.servers.omnimemora.url` 作为 SSE 入口消费，而产品之前为其写入 `/mcp` 导致 transport 不兼容；仓库内该 attach 缺口已修正。该记录仍不等同于“OpenClaw 已完整形成真实可使用产品路径”，因为 provider 请求链是否在修正后稳定进入产品仍需单独复验 |
+| 备注 | 本记录对真实配置做过一次短时 `/sse` 试验后已恢复到原运行期 MCP URL；最终仓库修复尚未提升到 running reality，后续需在更新后的 attach 逻辑下重新做一轮真实 OpenClaw 请求复验 |
