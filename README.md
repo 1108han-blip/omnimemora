@@ -80,6 +80,10 @@ If KPI and diagnostics disagree, trust `/metrics/summary` first.
 ## Non-Goals
 
 - not a multi-entry product
+
+## Governance
+
+- [3_governance/AUDIT_SCHEME.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/3_governance/AUDIT_SCHEME.md) — 審計觸發規則、執行骨架、結論路由
 - not a plugin-first product surface
 - not a runtime-direct product
 - not a second control plane beside the gateway

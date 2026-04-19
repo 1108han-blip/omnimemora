@@ -20,9 +20,14 @@
   - 完成 UI Running Strategy Clarification 收口（方案 C 已确立）✅
   - 完成 Frontend Runtime Prerequisite Closure 收口 ✅
   - 完成 Dashboard Semantics Reconciliation 收口 ✅
-  - Claude Code Cross Validation ⚠️ 受限完成
+  - Claude Code Cross Validation ⚠️ 受限完成（验证环境限制，非产品问题）
 
 **完整 running reality 已成立**（8765 + 18011 + 5173 全部在线）
+
+> **逻辑关系说明**：Claude Code Cross Validation 受限完成 与 完整 running reality 成立 为 **AND 关系**，不互斥：
+> - `⚠️ 受限完成`：描述 Claude Code CLI 不在 PATH 导致无法执行实时验证循环，为验证环境约束，不影响 MCP 集成正常性和双开关语义在历史数据中的成立
+> - `完整 running reality 成立`：描述 8765 + 18011 + 5173 基础运行环境状态，A 级实测验证通过（见 RECORD-B-076）
+> - 两者同时成立即为当前 Phase 5 真实状态
 
 ### Dashboard Semantics Reconciliation 收口记录
 

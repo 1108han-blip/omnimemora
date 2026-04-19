@@ -1090,3 +1090,16 @@ last_verified_commit: ""
 | 观察结果 | `5173` 与 `18011` 的 `/agents/control` 当前都返回同一组 canonical family：`claude_code`、`openclaw`、`codex_cli`；当前控制卡对外身份未暴露 raw/internal id；展示契约已固定：用户面默认显示 canonical family / canonical_agent_id，raw/internal 身份、session、bootstrap / handshake / transport / internal call-chain 等字段只允许进入 diagnostics |
 | 结论适用范围 | `外部运行实例 + 文档契约成立`：phase5 已固定 dashboard 的用户面/diagnostics 展示边界；后续 dashboard 验收必须以 canonical identity 和 diagnostics 隔离规则为准，不得把 raw/internal 标识重新泄漏回默认用户路径 |
 | 备注 | 本记录绑定的是当前控制面 API 对位与展示契约固定，不等同于 overview / breakdown / live flow 的逐字段可视验收；若后续某个 panel 仍越界，应视为展示层 drift 并单开补丁批次修正 |
+
+### RECORD-B-076
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-076` |
+| 日期 | `2026-04-19` |
+| 实例分类 | `Phase 5 轻审计 / 审计结论归档` |
+| 实例路径/来源 | phase5 README；`8765/health`；`18011/health`；`5173/`；`5173/agents/control`；`18011/agents/control` |
+| 验证动作 | 1. 读取 phase5 README 当前状态；2. `git status --short` 判断 worktree；3. `curl 8765/health`（A 级）；4. `curl 18011/health`（A 级）；5. `curl 5173/`（A 级）；6. 核对 `5173/agents/control` vs `18011/agents/control`（A 级） |
+| 观察结果 | **8765**：200 `{"status":"ok"}`；**18011**：200 `{"status":"healthy"}`；**5173**：200 HTML；**控制面口径**：5173 代理入口与 18011 adapter 入口返回完全一致的 agent 列表（claude_code / openclaw / codex_cli）；**worktree**：有本次审计SESSION产生的 `AUDIT_SCHEME.md`（新建）+ `README.md`（更新），非开发侧遗留 |
+| 结论适用范围 | **Conditional Pass**：Phase 5 主结论成立；完整 running reality A 级实测成立（8765+18011+5173 在线，口径一致）；存在 **P2 × 1**（F-01：文档内部结论自洽性）需后续收口；无 P0/P1；不阻塞进入下一主线 |
+| 备注 | **Phase 5 轻审计补充说明**：Claude Code Cross Validation 受限完成（验证环境限制）与完整 running reality 成立（8765+18011+5173 在线）为 AND 关系，不互斥——前者描述 Claude Code CLI 不在 PATH 导致无法执行实时验证循环，后者描述基础运行环境状态；两者同时成立即为当前 Phase 5 真实状态 |
