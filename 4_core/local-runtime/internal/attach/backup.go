@@ -38,6 +38,9 @@ func backupMetaPath(agent AgentType) (string, error) {
 }
 
 func BackupExists(agent AgentType) bool {
+	if agent == AgentOpenClaw && openClawLayeredBackupExists() {
+		return true
+	}
 	metaPath, err := backupMetaPath(agent)
 	if err != nil {
 		return false
@@ -94,6 +97,13 @@ func BackupConfig(agent AgentType) error {
 }
 
 func RestoreBackup(agent AgentType) (bool, error) {
+	if agent == AgentOpenClaw {
+		restored, err := restoreOpenClawLayeredBackup()
+		if err != nil || restored {
+			return restored, err
+		}
+	}
+
 	metaPath, err := backupMetaPath(agent)
 	if err != nil {
 		return false, err

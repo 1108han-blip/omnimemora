@@ -65,9 +65,27 @@ last_verified_commit: ""
 
 ### Track E: OpenClaw-first 真实验证
 
-- OpenClaw 作为第一主验证面完成完整闭环
+- OpenClaw 作为第一主验证面先完成接入层 / 路由层控制闭环
+- 真实使用路径单独作为下一 gate 验证对象，不再由 install/uninstall + enable/disable 闭环直接外推
 - Claude Code 只做关键路径交叉验证
 - Codex 不参与实例测试
+
+### Next Gate: OpenClaw Usability Gap Localization
+
+- 目标不是继续扩展控制能力，而是锁定“已接入但不走产品”的断点位置
+- 本 gate 的 OpenClaw 安装标准固定升级为：
+  - `mcp.servers.omnimemora` 已建立
+  - `main` 实际生效的 provider 入口已指向 `18011`
+- OpenClaw attach 采用“分层保守”策略：
+  - `openclaw.json` 作为全局默认层
+  - `agents/main/agent/models.json` 作为 agent 覆盖层
+  - install 只修改 `main` 当前实际生效的 provider 层，不新增无必要的 agent override
+- `enable/disable` 继续只写产品内 route state，不改任何 OpenClaw 用户配置文件
+- 断点定位范围固定为：
+  - OpenClaw 客户端未真正安装或生效
+  - 路由状态落盘与客户端实际状态不一致
+  - 请求未进入 OmniMemora 产品路径
+  - 请求进入产品后未形成可见使用结果
 
 ## 验收标准
 
@@ -75,10 +93,12 @@ last_verified_commit: ""
 - 候选实例 `18011` 上 `/agents/control*` 全部可用
 - `5173` 可执行 install / uninstall / enable / disable
 - OpenClaw 完成一轮真实接入、路由、恢复、退出闭环
+- 当前 gate 只以接入层与路由层行为成立为验收标准，不把“真实可使用”纳入已完成结论
 - UI 状态与真实接口、真实行为一致
 
 ## 明确后置
 
+- `OpenClaw Usability Gap Localization`
 - `trial / internal admin surface`
 - compile / strategy 大拆
 - GUI 美化重设计

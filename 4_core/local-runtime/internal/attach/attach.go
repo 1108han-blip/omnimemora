@@ -265,20 +265,7 @@ func IsAttached(agent AgentType, port int) bool {
 			}
 		}
 	case AgentOpenClaw:
-		if mcp, ok := cfg["mcp"].(map[string]interface{}); ok {
-			if servers, ok := mcp["servers"].(map[string]interface{}); ok {
-				if entry, ok := servers["omnimemora"].(map[string]interface{}); ok {
-					if u, ok := entry["url"].(string); ok {
-						expected := RuntimeEndpoint(port) + "/mcp"
-						return strings.EqualFold(strings.TrimSpace(u), expected) ||
-							strings.Contains(strings.ToLower(u), "omnimemora")
-					}
-					return true
-				}
-			}
-		}
-		_, legacy := cfg["omnimemora"]
-		return legacy
+		return isOpenClawAttached(port)
 	}
 
 	return false

@@ -14,9 +14,12 @@
 - 当前阶段结论：
   - `Decision Carrier / Control-Plane Decoupling` 已阶段性完成并转为结构前置成果
   - `5173` 已恢复为正式用户控制入口
-  - `OpenClaw` 已完成第一主验证面闭环
+  - `OpenClaw` 已完成接入层 / 路由层控制闭环，但真实使用路径尚未成立
+  - OpenClaw 的“安装成立”标准已升级为：`MCP 接入 + main 实际生效请求入口接入 18011`
+  - 当前阶段结论只覆盖控制面与接入层行为，不覆盖“真实可使用”结论
   - 当前主线不拆 `trial / internal admin surface`
   - 当前主线不做 GUI 物理独立
+  - 下一 gate：`OpenClaw Usability Gap Localization`
 
 ## Supplemental Docs
 

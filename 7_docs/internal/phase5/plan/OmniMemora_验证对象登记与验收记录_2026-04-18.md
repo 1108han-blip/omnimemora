@@ -885,6 +885,32 @@ last_verified_commit: ""
 | 实例分类 | `真实客户端 / OpenClaw-first 可视化闭环验证` |
 | 实例路径/来源 | OpenClaw 真实用户配置 `~/.openclaw/openclaw.json`；正式控制入口 `http://127.0.0.1:5173/agents?tenant=all`；候选控制 API 来源 `http://127.0.0.1:18041/agents/control*` |
 | 验证动作 | 1. 先手工备份 `~/.openclaw/openclaw.json` 到 repo `.tmp/openclaw-manual-baseline-2026-04-19.json`；2. 通过 `5173` 控制卡执行 `uninstall`，验证 OpenClaw 回到未接入基线；3. 通过 `5173` 控制卡重新执行 `install`，验证 `mcp.servers.omnimemora.url = http://127.0.0.1:18041/mcp` 且 `backup_available=true`；4. 通过 `5173` 执行 `enable route`，验证 UI 状态、`/agents/control` 与 `5_connectors/adapter/config/agent_modes.json` 中 `openclaw=force_if_possible` 一致；5. 再执行 `disable route`，验证 UI 状态、`/agents/control` 与 `agent_modes.json` 中 `openclaw=off` 一致；6. 最后执行 `uninstall`，验证 OpenClaw 配置中 OmniMemora MCP 项被移除、控制卡回到 `installed=false`、`backup_available=false`；7. 运行 `openclaw config validate` |
-| 观察结果 | OpenClaw 真实客户端已完成 `uninstall -> install -> enable route -> disable route -> uninstall` 闭环；安装后 OpenClaw 配置中的 `mcp.servers.omnimemora.url` 已正确指向候选产品入口 `http://127.0.0.1:18041/mcp`，控制卡显示 `installed=true`、`backup_available=true`；启用路由后 UI 与 `/agents/control` 同步显示 `route on`，且 `agent_modes.json` 中 `openclaw=force_if_possible`；停用路由后 UI 与 `/agents/control` 同步回到 `route off`，且 `agent_modes.json` 中 `openclaw=off`；最终卸载后 OpenClaw 配置中的 OmniMemora 项被移除，控制卡显示 `installed=false`、`backup_available=false`；`openclaw config validate` 通过 |
-| 结论适用范围 | `真实客户端成立`：OpenClaw 已作为本阶段第一主验证面完成真实可视化闭环，`5173` 现已具备正式控制入口所要求的接入层、路由层与恢复退出基础能力 |
-| 备注 | 本记录只证明 OpenClaw 主验证面成立；Claude Code 交叉验证仍为后置补充项，Codex 仍明确排除出实例测试面 |
+| 观察结果 | OpenClaw 真实客户端已完成 `uninstall -> install -> enable route -> disable route -> uninstall` 控制闭环；安装后 OpenClaw 配置中的 `mcp.servers.omnimemora.url` 已正确指向候选产品入口 `http://127.0.0.1:18041/mcp`，控制卡显示 `installed=true`、`backup_available=true`；启用路由后 UI 与 `/agents/control` 同步显示 `route on`，且 `agent_modes.json` 中 `openclaw=force_if_possible`；停用路由后 UI 与 `/agents/control` 同步回到 `route off`，且 `agent_modes.json` 中 `openclaw=off`；最终卸载后 OpenClaw 配置中的 OmniMemora 项被移除，控制卡显示 `installed=false`、`backup_available=false`；`openclaw config validate` 通过 |
+| 结论适用范围 | `真实客户端成立`：OpenClaw 已作为本阶段第一主验证面完成接入层、路由层与恢复退出控制闭环；该记录不证明 OpenClaw 已形成“真实可使用产品”的行为结论 |
+| 备注 | 本记录只证明 OpenClaw 主验证面的控制能力成立；Claude Code 交叉验证仍为后置补充项，Codex 仍明确排除出实例测试面；OpenClaw 的真实使用路径需由后续 `OpenClaw Usability Gap Localization` 单独补证 |
+
+### RECORD-B-061
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-061` |
+| 日期 | `2026-04-19` |
+| 实例分类 | `外部运行实例 / 正式 18011 控制状态观察` |
+| 实例路径/来源 | `~/.omnimemora/service/current` 对应的 `http://127.0.0.1:18011` |
+| 验证动作 | 访问 `GET http://127.0.0.1:18011/agents/control`，读取正式运行实例下 OpenClaw 当前控制状态 |
+| 观察结果 | 正式 `18011` 当前返回 `openclaw.installed=false`、`routing_enabled=true`、`active=false`、`backup_available=true`、`health_state=healthy` |
+| 结论适用范围 | `外部运行实例成立`：当前正式运行实例下，OpenClaw 路由开关已存在，但 installed 与 active 不成立；该观察不能外推为“OpenClaw 已可使用产品” |
+| 备注 | 本记录只固定正式运行实例的当前控制状态，不替代真实使用验证；后续需进入 `OpenClaw Usability Gap Localization`，定位断点位于客户端安装生效、路由一致性、产品路径进入或请求结果可见性中的哪一层 |
+
+### RECORD-B-062
+
+| 字段 | 内容 |
+|------|------|
+| 记录编号 | `RECORD-B-062` |
+| 日期 | `2026-04-19` |
+| 实例分类 | `仓库现实 / OpenClaw attach 分层修正与回归测试` |
+| 实例路径/来源 | `/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora` 当前工作区；涉及 `4_core/local-runtime/internal/attach/attach_openclaw.go`、`attach.go`、`backup.go`、`backup_openclaw.go` 与新增 `attach_openclaw_test.go` |
+| 验证动作 | 1. 将 OpenClaw attach 从“只写全局 `openclaw.json` MCP”升级为“分层保守”实现：`openclaw.json` 作为全局默认层、`agents/main/agent/models.json` 作为 agent 覆盖层；2. install 时先解析 `main` 当前实际模型及 provider，若 `main` 继承全局则仅改全局 provider 入口，若已有 agent override 则仅改 agent 层，同时始终维护全局 `mcp.servers.omnimemora`；3. 将 OpenClaw backup/restore 扩展为双配置层恢复；4. 将 `IsAttached(openclaw)` 从“只看 MCP”升级为“同时要求 MCP + main 实际生效入口指向产品”；5. 运行 `gofmt -w internal/attach/*.go`（限本批文件）并执行 `go test ./internal/attach ./api ./tests` |
+| 观察结果 | OpenClaw attach 现在会先解析 `agents.list.main.model` / `agents.defaults.model.primary`，再根据 `main` 的 provider 是否在 `agents/main/agent/models.json` 中被覆盖来决定修改全局层还是 agent 层；对当前 `anthropic-messages` provider，会把实际生效入口收敛到 `http://127.0.0.1:<port>/llm`，且不会为继承全局的 `main` 平白制造新的 agent override。OpenClaw installed 检测不再仅由 `mcp.servers.omnimemora` 决定，而是同时要求 `main` 实际生效 provider 入口指向 `18011/候选端口`。新增的 attach 单测覆盖了“继承全局仅改全局层”“已有 agent override 仅改 agent 层”“MCP + 实际入口双条件判定”三类场景；`go test ./internal/attach ./api ./tests` 全部通过 |
+| 结论适用范围 | `仓库现实成立`：当前仓库内，OpenClaw “安装成立”标准已升级为 `MCP + main 实际生效入口`，且 install/uninstall 已具备按配置层级最小修改、按备份恢复的实现基础；该记录不等同于真实 OpenClaw 客户端已再次完成“可使用产品”验证 |
+| 备注 | 本记录只证明 repo reality 与回归测试成立；下一步仍需在 `OpenClaw Usability Gap Localization` gate 下验证真实客户端请求是否确实先进入 `18011`，以及 `route off/on` 在该真实路径上是否分别落到 passthrough / compile path |
