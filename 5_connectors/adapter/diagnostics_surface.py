@@ -218,6 +218,15 @@ async def get_metrics_summary(response: Response, tenant: str = "all"):
     return metrics_service.compute_metrics_summary(tenant)
 
 
+@router.get("/metrics/summary_24h")
+async def get_metrics_summary_24h(response: Response, tenant: str = "all"):
+    """24-hour window Core Metrics for overview HeroMetrics正面."""
+    metrics_service = importlib.import_module("5_connectors.adapter.metrics_service")
+    response.headers["X-OmniMemora-Surface-Role"] = "kpi"
+    response.headers["X-OmniMemora-KPI-Source"] = "/metrics/summary_24h"
+    return metrics_service.compute_metrics_summary_24h(tenant)
+
+
 @router.get("/metrics/debug/sources")
 async def get_metrics_debug_sources():
     metrics_service = importlib.import_module("5_connectors.adapter.metrics_service")

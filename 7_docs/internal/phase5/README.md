@@ -24,6 +24,10 @@
 
 **完整 running reality 已成立**（8765 + 18011 + 5173 全部在线）
 
+> **Phase 5 终态说明**：Phase 5 已于 2026-04-20 收口（commit `d9959e1`），正式 roadmap 停在 **Phase 5（已完成 — 可选）**。以下 enhancement line **不改变 terminal baseline**，不触发新的 phase advancement。
+>
+> - Enhancement line（2026-04-20）：`5173` overview/agents 信息架构与价值可视化补完 — 见 [OVERVIEW-AGENTS-VALUE-LAYER-CLOSEOUT-2026-04-20](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/3_governance/OVERVIEW-AGENTS-VALUE-LAYER-CLOSEOUT-2026-04-20.md)
+
 > **逻辑关系说明**：Claude Code Cross Validation 受限完成 与 完整 running reality 成立 为 **AND 关系**，不互斥：
 > - `⚠️ 受限完成`：描述 Claude Code CLI 不在 PATH 导致无法执行实时验证循环，为验证环境约束，不影响 MCP 集成正常性和双开关语义在历史数据中的成立
 > - `完整 running reality 成立`：描述 8765 + 18011 + 5173 基础运行环境状态，A 级实测验证通过（见 RECORD-B-076）
@@ -43,7 +47,7 @@
 
 ### Dashboard Display and Diagnostics Contract
 
-**固定时间**：2026-04-19
+**固定时间**：2026-04-19（更新至 2026-04-20）
 
 | 检查项 | 状态 | 说明 |
 |--------|------|------|
@@ -52,6 +56,12 @@
 | diagnostics 白名单 | ✅ 固定 | raw/internal 身份与 trace 字段只允许进入 diagnostics |
 | 分块字段白名单 | ✅ 固定 | Agent 控制、Breakdown、Flow、Before/After、overview、Call Chain 均已收敛 |
 | 运行对位 | ✅ 成立 | 当前 `5173 /agents/control` 与 `18011 /agents/control` 返回同一组 canonical family：`claude_code` / `openclaw` / `codex_cli` |
+| overview 上半区结构 | ✅ 固定 | ① Core Metrics（总体价值） + ② Agent Breakdown（应用卡收益投影） |
+| overview 下半区结构 | ✅ 固定 | ③ Live Request Flow + ④ Context Before/After + ⑤ Call Chain（运行证据层） |
+| `Agent Usage` 数据来源 | ✅ 固定 | 直接投影 `/agents/control` 卡片，不从独立 usage 名单决定"显示谁" |
+| Core Metrics 默认视图 | ✅ 固定 | 正面默认显示最近 24 小时；背面显示 7 天按天趋势 + 全历史累计对照 |
+| overview ↔ agents 一致性 | ✅ 固定 | 控制卡出现/消失同步反映在 overview Agent Usage 行 |
+| 跳转与 highlight | ✅ 固定 | 点击 Agent Usage 行 → 跳转 agents tab → 高亮对应卡片 → 3 秒清除 |
 
 本契约是后续 dashboard 代码验收的正式口径：
 
@@ -213,11 +223,12 @@ curl -H "Accept: application/json" http://localhost:5173/agents/control
 
 ## 下一主线
 
-**`Operationalization and Adoption`** — internal Phase 6 workstream
+> **Phase 5 终态说明**：正式 roadmap 已停在 **Phase 5（已完成 — 可选）**（见 `ROADMAP.md`）。当前 enhancement line 已于 2026-04-20 收口，不触发 roadmap advancement。若后续继续，以显式 enhancement line 方式处理。
 
-> **Phase 標籤說明**：本文檔所稱 `Phase 6` 為內部執行 workstream 標籤，不等於正式 roadmap phase。正式 roadmap phase 由 `0_blueprint/ROADMAP.md` 定義。Phase 3 已於 2026-04-20 收口（commit `7894b89`），當前為 **Phase 4（当前）**。除非 `ROADMAP.md` 被正式更新，否則內部階段標籤不變更產品階段編號。
+**可选下一线**（非 roadmap advancement）：
 
-**第一子线**：`Promotion Workflow Adoption`
+- 控制页对象生命周期管理
+- overview 下半区链路图形化（Live Request Flow / Context Before-After / Call Chain → 节点图/状态灯）
 
 明确排除：继续改 OpenClaw attach（已收口）、GUI 物理独立、`trial / internal admin`、compile/strategy 大拆、dev-mode 提速方案（本阶段结论为 dev-mode 如需存在，后续单开主线规划）
 

@@ -204,3 +204,68 @@ last_verified_commit: ""
 - 先按本契约认定为展示层 drift
 - 后续单开补丁批次修正
 - 不在展示契约文档里即兴重写规则
+
+## 7. 本批增补规则（2026-04-20 enhancement line 收口）
+
+本批对 overview 上半区的信息架构做了显式固定，与当前实现对位如下：
+
+### 7.1 overview 上半区结构（已固定）
+
+| 模块 | 定位 | 默认视图 |
+|------|------|----------|
+| ① Core Metrics | 总体价值总览 | 最近 24 小时 |
+| ② Agent Breakdown | 应用卡收益分布 | 最近 24 小时，按控制卡投影 |
+
+### 7.2 overview 下半区结构（已固定）
+
+| 模块 | 定位 |
+|------|------|
+| ③ Live Request Flow | 最近请求入口 + 运行证据 |
+| ④ Context Before/After | context 优化证据面 |
+| ⑤ Call Chain | 产品路径与故障线索面 |
+
+下半区三模块不拆成独立诊断页，保留在总览中作为运行证据层。
+
+### 7.3 `Agent Usage` 数据来源（已固定）
+
+- 数据来源：`/agents/control` 卡片级的 `requests_24h / saved_tokens_24h / savings_ratio_24h / last_request_at`
+- 不从独立 `/usage/token-savings/by_agent` 决定"显示谁"
+- 控制卡出现/消失时，overview 对应行同步消失
+
+### 7.4 Core Metrics 时间语义（已固定）
+
+- **正面（默认）**：最近 24 小时 — 4 个指标卡片
+- **背面（次级）**：最近 7 天按天趋势柱状图 + 全历史累计 Saved / 最近 24h 对照
+- 不做小时级趋势，不做复杂时间粒度切换器
+
+### 7.5 跳转与 highlight 规则（已固定）
+
+- `Agent Usage` 每行可点击
+- 点击后：切换到 `agents` tab + URL 写入 `highlight=<family_id>` + 目标卡片 amber 高亮
+- highlight 自动清除：3 秒后清除 state + URL param
+
+### 7.6 `rescan` 状态反馈（已固定）
+
+- 返回 `rescan_status`：`added` | `removed` | `no_change`
+- 返回 `rescan_message`：中文明确消息
+- 前端 banner：绿色=`added`、黄色=`removed`、灰色=`no_change`
+- Banner 5 秒后自动消失
+
+### 7.7 family alias 归并规则（已固定）
+
+用于卡片级 24h 收益聚合，不回写原 meter：
+
+| 原始 agent 标识 | 归并到 family |
+|----------------|---------------|
+| `openclaw` / `openclaw-agent` / `openclaw-bundle-mcp` / `openclaw_bundle_mcp` | `openclaw` |
+| `claude_code` / `claude-code` / `claude` | `claude_code` |
+| `codex` / `codex_cli` / `codex-cli` | `codex_cli` |
+| `cursor` | `cursor` |
+| `test` | `test` |
+
+### 7.8 本批验证等级声明
+
+- **Python 接口侧逻辑**：✅ 静态代码核对通过
+- **前端类型与接线逻辑**：✅ 静态代码核对通过
+- **TypeScript 编译构建**：⚠️ 环境限制（TS 编译环境不可用），不属于产品语义失败
+- **构建级验证**：❌ 未完成（环境约束）

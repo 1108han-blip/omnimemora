@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional
 
 import httpx
@@ -10,6 +10,7 @@ from pydantic import BaseModel
 from . import agent_metrics as _agent_metrics
 from . import agent_routing_state as _route_state
 from . import compile_store as _compile_store
+from . import meter_store as _meter_store
 from .config import config
 
 router = APIRouter()
@@ -135,6 +136,7 @@ async def _build_control_cards() -> List[Dict[str, Any]]:
     for raw in runtime_payload.get("agents", []):
         family_id = str(raw.get("family_id") or "")
         metric = metrics_index.get(family_id, {})
+        metrics_24h = _family_24h_metrics(family_id)
         cards.append(
             {
                 "family_id": family_id,
@@ -149,11 +151,79 @@ async def _build_control_cards() -> List[Dict[str, Any]]:
                 "subagent_count_active": int(metric.get("subagent_count_active", 0)),
                 "subagent_count_total_visible": int(metric.get("subagent_count_total_visible", 0)),
                 "message": raw.get("message", ""),
+                # 24h benefit fields for overview unification
+                "requests_24h": metrics_24h["requests_24h"],
+                "saved_tokens_24h": metrics_24h["saved_tokens_24h"],
+                "savings_ratio_24h": metrics_24h["savings_ratio_24h"],
+                "last_request_at": metrics_24h["last_request_at"],
             }
         )
 
     cards.sort(key=lambda item: (not item["active"], item["display_name"].lower()))
     return cards
+
+
+def _normalize_agent_to_family(agent: str) -> str:
+    """
+    Normalize an agent identifier from meter records to its canonical family.
+    Only used for 24h收益聚合；不回寫原 meter。
+    """
+    lower = agent.lower()
+    # openclaw family
+    if lower in {"openclaw", "openclaw-agent", "openclaw-bundle-mcp", "openclaw_bundle_mcp"}:
+        return "openclaw"
+    # claude_code family
+    if lower in {"claude_code", "claude-code", "claude"}:
+        return "claude_code"
+    # codex family
+    if lower in {"codex", "codex_cli", "codex-cli"}:
+        return "codex_cli"
+    # cursor — no alias
+    if lower == "cursor":
+        return "cursor"
+    # test — no alias
+    if lower == "test":
+        return "test"
+    # Fallback: treat as given (supports unknown agents)
+    return agent
+
+
+def _family_24h_metrics(family_id: str) -> Dict[str, Any]:
+    """
+    Compute 24-hour metrics for a given family_id from meter_store.
+    Agent identifiers are normalized via _normalize_agent_to_family before matching.
+    Returns zeros if no meters found.
+    """
+    _meter_store._ensure_persistence_loaded()
+    all_meters: List[Any] = []
+    for tenant_meters in _meter_store._usage_aggregates.values():
+        all_meters.extend(tenant_meters)
+
+    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    family_meters = []
+    for m in all_meters:
+        try:
+            m_time = datetime.fromisoformat(m.timestamp.replace("Z", "+00:00")).astimezone(timezone.utc)
+        except Exception:
+            continue
+        if m_time >= cutoff and _normalize_agent_to_family(m.agent) == family_id:
+            family_meters.append(m)
+
+    if not family_meters:
+        return {"requests_24h": 0, "saved_tokens_24h": 0, "savings_ratio_24h": 0.0, "last_request_at": None}
+
+    requests_24h = len(family_meters)
+    saved_tokens_24h = sum(m.saved_tokens_estimate for m in family_meters)
+    baseline_total = sum(m.baseline_tokens_estimate for m in family_meters)
+    savings_ratio_24h = saved_tokens_24h / baseline_total if baseline_total > 0 else 0.0
+    last_request_at = max((m.timestamp for m in family_meters), default=None)
+
+    return {
+        "requests_24h": requests_24h,
+        "saved_tokens_24h": saved_tokens_24h,
+        "savings_ratio_24h": round(savings_ratio_24h, 3),
+        "last_request_at": last_request_at,
+    }
 
 
 def _find_card(cards: List[Dict[str, Any]], family_id: str) -> Optional[Dict[str, Any]]:
@@ -175,11 +245,38 @@ async def get_agents_control():
 @router.post("/agents/control/rescan")
 async def rescan_agents_control():
     try:
+        # Capture state before rescan to diff
+        cards_before = await _build_control_cards()
+        families_before = {c["family_id"] for c in cards_before}
+
         await _runtime_request("POST", "/agents/control/rescan", {})
         cards = await _build_control_cards()
+        families_after = {c["family_id"] for c in cards}
+
+        added = families_after - families_before
+        removed = families_before - families_after
+
+        if added:
+            status_message = f"扫描完成：发现 {len(added)} 个新应用 ({', '.join(sorted(added))})"
+            status_type = "added"
+        elif removed:
+            status_message = f"扫描完成：{len(removed)} 个应用已消失 ({', '.join(sorted(removed))})"
+            status_type = "removed"
+        else:
+            status_message = "扫描完成，暂未发现新的应用"
+            status_type = "no_change"
+
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"runtime rescan unavailable: {exc}") from exc
-    return {"agents": cards, "count": len(cards), "system_status": await _build_system_status()}
+    return {
+        "agents": cards,
+        "count": len(cards),
+        "system_status": await _build_system_status(),
+        "rescan_status": status_type,
+        "rescan_message": status_message,
+        "rescan_added": list(added),
+        "rescan_removed": list(removed),
+    }
 
 
 @router.post("/agents/control/install")
@@ -226,6 +323,10 @@ async def uninstall_agent_control(request: AgentControlRequest):
             "subagent_count_active": 0,
             "subagent_count_total_visible": 0,
             "message": "agent no longer detected after uninstall",
+            "requests_24h": 0,
+            "saved_tokens_24h": 0,
+            "savings_ratio_24h": 0.0,
+            "last_request_at": None,
         }
     card["routing_enabled"] = False
     return card

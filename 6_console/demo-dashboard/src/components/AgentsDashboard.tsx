@@ -16,6 +16,13 @@ const MODE_ACTIONS = {
   disable: '停用產品路由',
 } as const;
 
+interface RescanResult {
+  status: 'added' | 'removed' | 'no_change';
+  message: string;
+  added: string[];
+  removed: string[];
+}
+
 function formatRelativeTime(iso?: string | null): string {
   if (!iso) return '—';
   try {
@@ -36,18 +43,31 @@ function isHealthySystem(systemStatus: SystemStatus | null): boolean {
   return !!systemStatus && systemStatus.status === 'healthy' && systemStatus.gateway_health === 'healthy';
 }
 
-export function AgentsDashboard() {
+interface AgentsDashboardProps {
+  highlightFamilyId?: string | null;
+}
+
+export function AgentsDashboard({ highlightFamilyId }: AgentsDashboardProps) {
   const [cards, setCards] = useState<AgentControlCard[]>([]);
   const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [rescanResult, setRescanResult] = useState<RescanResult | null>(null);
 
   const load = useCallback(async (mode: 'normal' | 'rescan' = 'normal') => {
     try {
       const payload = mode === 'rescan' ? await rescanAgentControls() : await fetchAgentControls();
       setCards(payload.agents ?? []);
       setSystemStatus(payload.system_status ?? null);
+      if (mode === 'rescan' && payload.rescan_status) {
+        setRescanResult({
+          status: payload.rescan_status,
+          message: payload.rescan_message ?? '',
+          added: payload.rescan_added ?? [],
+          removed: payload.rescan_removed ?? [],
+        });
+      }
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -63,6 +83,22 @@ export function AgentsDashboard() {
     }, 10000);
     return () => window.clearInterval(interval);
   }, [load]);
+
+  // Auto-clear rescan feedback after 5 seconds
+  useEffect(() => {
+    if (!rescanResult) return;
+    const timer = setTimeout(() => setRescanResult(null), 5000);
+    return () => clearTimeout(timer);
+  }, [rescanResult]);
+
+  // Auto-clear highlight after 3 seconds
+  useEffect(() => {
+    if (!highlightFamilyId) return;
+    const timer = setTimeout(() => {
+      // Parent should clear highlightFamilyId via state; we just render the highlight here
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [highlightFamilyId]);
 
   const healthy = useMemo(() => isHealthySystem(systemStatus), [systemStatus]);
 
@@ -131,6 +167,18 @@ export function AgentsDashboard() {
         </div>
       )}
 
+      {rescanResult && (
+        <div className={`rounded-xl border px-4 py-3 text-xs ${
+          rescanResult.status === 'added'
+            ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900 dark:bg-emerald-950 dark:text-emerald-300'
+            : rescanResult.status === 'removed'
+            ? 'border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-300'
+            : 'border-zinc-200 bg-zinc-50 text-zinc-600 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-300'
+        }`}>
+          {rescanResult.message}
+        </div>
+      )}
+
       {loading && cards.length === 0 ? (
         <div className="rounded-xl border border-zinc-200 bg-white p-8 dark:border-zinc-700 dark:bg-zinc-900">
           <div className="space-y-3 animate-pulse">
@@ -146,10 +194,15 @@ export function AgentsDashboard() {
             const canEnable = card.installed && healthy && !card.routing_enabled;
             const canDisable = card.installed && card.routing_enabled;
             const actionKey = (action: string) => `${action}:${card.family_id}`;
+            const isHighlighted = highlightFamilyId === card.family_id;
             return (
               <article
                 key={card.family_id}
-                className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm dark:border-zinc-700 dark:bg-zinc-900"
+                className={`rounded-xl border p-5 shadow-sm transition-all duration-500 ${
+                  isHighlighted
+                    ? 'border-amber-400 bg-amber-50 ring-2 ring-amber-400 dark:bg-amber-950'
+                    : 'border-zinc-200 bg-white dark:border-zinc-700 dark:bg-zinc-900'
+                }`}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div>

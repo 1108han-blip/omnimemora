@@ -3,6 +3,7 @@ import { normalizeAgentUsageList } from '../utils/familyNormalization';
 
 interface AgentUsagePanelProps {
   agents: AgentUsage[];
+  onAgentClick?: (familyId: string) => void;
 }
 
 export function AgentUsagePanel({ agents }: AgentUsagePanelProps) {
@@ -37,7 +38,11 @@ export function AgentUsagePanel({ agents }: AgentUsagePanelProps) {
               .slice()
               .sort((a, b) => b.requests - a.requests)
               .map((agent) => (
-                <tr key={agent.family}>
+                <tr
+                  key={agent.family}
+                  onClick={() => onAgentClick?.(agent.family)}
+                  className={onAgentClick ? 'cursor-pointer hover:bg-zinc-100 dark:hover:bg-zinc-800' : ''}
+                >
                   <td className="px-4 py-2 font-medium text-zinc-700 dark:text-zinc-300">
                     {agent.displayName}
                   </td>

@@ -40,12 +40,21 @@ export interface AgentControlCard {
   subagent_count_active: number;
   subagent_count_total_visible: number;
   message?: string;
+  // 24h benefit fields (unified with overview)
+  requests_24h?: number;
+  saved_tokens_24h?: number;
+  savings_ratio_24h?: number;
+  last_request_at?: string | null;
 }
 
 export interface AgentControlResponse {
   agents: AgentControlCard[];
   count: number;
   system_status: SystemStatus;
+  rescan_status?: 'added' | 'removed' | 'no_change';
+  rescan_message?: string;
+  rescan_added?: string[];
+  rescan_removed?: string[];
 }
 
 export interface MetricsSummary {
@@ -53,6 +62,21 @@ export interface MetricsSummary {
   tokens_saved: number;
   request_count: number;
   avg_context_reduction: number;
+  period?: '24h' | 'all';
+}
+
+export interface MetricsTrendPoint {
+  date: string;
+  requests: number;
+  saved_tokens: number;
+  savings_ratio: number;
+}
+
+export interface MetricsTrend {
+  tenant: string;
+  days: number;
+  trend: MetricsTrendPoint[];
+  total_saved_tokens_all_time?: number;
 }
 
 export interface AgentUsage {

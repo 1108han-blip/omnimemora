@@ -5,8 +5,8 @@ import { ContextComparison } from './components/ContextComparison';
 import { CallChainViz } from './components/CallChainViz';
 import { AgentUsagePanel } from './components/AgentUsagePanel';
 import { AgentsDashboard } from './components/AgentsDashboard';
-import { fetchMetricsSummary, fetchRecentRequests, fetchContextDiff, fetchCallChain, fetchUsageSummary, fetchTenants, fetchAgentControls } from './api';
-import type { MetricsSummary, RecentRequest, ContextDiff, CallChain, UsageSummary, AgentControlCard } from './types';
+import { fetchMetricsSummary, fetchMetricsSummary24h, fetchMetricsTrend, fetchRecentRequests, fetchContextDiff, fetchCallChain, fetchUsageSummary, fetchTenants, fetchAgentControls } from './api';
+import type { MetricsSummary, MetricsTrend, RecentRequest, ContextDiff, CallChain, UsageSummary, AgentControlCard } from './types';
 
 function inferInitialTab(): 'overview' | 'agents' {
   const params = new URLSearchParams(window.location.search);
@@ -51,23 +51,43 @@ export default function App() {
   const [loadingDiff, setLoadingDiff] = useState(false);
   const [loadingChain, setLoadingChain] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [highlightFamilyId, setHighlightFamilyId] = useState<string | null>(null);
+  const [summary24h, setSummary24h] = useState<MetricsSummary | null>(null);
+  const [trend7d, setTrend7d] = useState<MetricsTrend | null>(null);
+  const [showMetricsBack, setShowMetricsBack] = useState(false);
 
   const loadMetrics = useCallback(async () => {
     const failures: string[] = [];
     try {
       const controlTab = activeTab === 'agents';
-      const [sRes, rRes, uRes, ctrlRes] = await Promise.allSettled([
+      const [s24hRes, sAllRes, t7dRes, rRes, uRes, ctrlRes] = await Promise.allSettled([
+        controlTab ? Promise.resolve(null) : fetchMetricsSummary24h(tenant),
         controlTab ? Promise.resolve(null) : fetchMetricsSummary(tenant),
+        controlTab ? Promise.resolve(null) : fetchMetricsTrend(tenant, 7),
         controlTab ? Promise.resolve(null) : fetchRecentRequests(tenant, 30),
         fetchUsageSummary(tenant),
         fetchAgentControls(),
       ]);
 
-      if (!controlTab && sRes.status === 'fulfilled' && sRes.value) {
-        setSummary(sRes.value);
+      // 24h summary for HeroMetrics正面
+      if (!controlTab && s24hRes.status === 'fulfilled' && s24hRes.value) {
+        setSummary24h(s24hRes.value);
       } else if (!controlTab) {
-        const reason = sRes.status === 'rejected' ? sRes.reason : new Error('empty summary response');
+        const reason = s24hRes.status === 'rejected' ? s24hRes.reason : new Error('empty 24h summary response');
+        failures.push(`summary24h: ${reason instanceof Error ? reason.message : String(reason)}`);
+      }
+
+      // All-time summary (used as fallback / 全历史累计)
+      if (!controlTab && sAllRes.status === 'fulfilled' && sAllRes.value) {
+        setSummary(sAllRes.value);
+      } else if (!controlTab) {
+        const reason = sAllRes.status === 'rejected' ? sAllRes.reason : new Error('empty all-time summary response');
         failures.push(`summary: ${reason instanceof Error ? reason.message : String(reason)}`);
+      }
+
+      // 7-day trend for HeroMetrics背面
+      if (!controlTab && t7dRes.status === 'fulfilled' && t7dRes.value) {
+        setTrend7d(t7dRes.value);
       }
 
       if (!controlTab && rRes.status === 'fulfilled' && rRes.value) {
@@ -118,16 +138,23 @@ export default function App() {
       .catch(() => setTenants(['all']));
   }, []);
 
+  // Read highlight param on mount
+  useEffect(() => {
+    const highlightParam = new URLSearchParams(window.location.search).get('highlight');
+    if (highlightParam) setHighlightFamilyId(highlightParam);
+  }, []);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     params.set('tenant', tenant);
     params.set('tab', activeTab);
+    if (highlightFamilyId) params.set('highlight', highlightFamilyId);
     const targetPath = buildPathForTab(activeTab);
     window.history.replaceState({}, '', `${targetPath}?${params.toString()}`);
     loadMetrics();
     const interval = setInterval(loadMetrics, 5000);
     return () => clearInterval(interval);
-  }, [loadMetrics, tenant, activeTab]);
+  }, [loadMetrics, tenant, activeTab, highlightFamilyId]);
 
   const handleSelectRequest = useCallback(async (req: RecentRequest) => {
     setSelectedRequest(req);
@@ -150,6 +177,27 @@ export default function App() {
       setLoadingChain(false);
     }
   }, []);
+
+  const handleAgentUsageClick = useCallback((familyId: string) => {
+    setHighlightFamilyId(familyId);
+    setActiveTab('agents');
+    const params = new URLSearchParams(window.location.search);
+    params.set('tab', 'agents');
+    params.set('highlight', familyId);
+    window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+  }, []);
+
+  // Auto-clear highlight after 3 seconds
+  useEffect(() => {
+    if (!highlightFamilyId) return;
+    const timer = setTimeout(() => {
+      setHighlightFamilyId(null);
+      const params = new URLSearchParams(window.location.search);
+      params.delete('highlight');
+      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [highlightFamilyId]);
 
   // Calculate active counts from AgentControlCard.active field (unified activity truth)
   // This ensures overview active(*) matches the Agent control card's active status
@@ -276,9 +324,17 @@ export default function App() {
           <>
             {/* Module 1: Hero Metrics */}
             <section>
-              <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">
-                ① Core Metrics
-              </h2>
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">
+                  ① Core Metrics
+                </h2>
+                <button
+                  onClick={() => setShowMetricsBack(v => !v)}
+                  className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
+                >
+                  {showMetricsBack ? '← 正面 (24h)' : '背面 (7天趋势)'}
+                </button>
+              </div>
               {loadingMetrics ? (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[...Array(4)].map((_, i) => (
@@ -288,9 +344,15 @@ export default function App() {
                     </div>
                   ))}
                 </div>
-              ) : summary ? (
-                <HeroMetrics data={summary} />
-              ) : null}
+              ) : (
+                <HeroMetrics
+                  data={showMetricsBack ? summary : summary24h}
+                  trendData={showMetricsBack ? trend7d?.trend ?? [] : []}
+                  allTimeSavedTokens={summary?.tokens_saved ?? 0}
+                  recent24hSavedTokens={summary24h?.tokens_saved ?? 0}
+                  showBack={showMetricsBack}
+                />
+              )}
             </section>
 
             {/* Module 2: Agent Usage */}
@@ -298,7 +360,16 @@ export default function App() {
               <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">
                 ② Agent Breakdown
               </h2>
-              <AgentUsagePanel agents={usage?.by_agent ?? []} />
+              <AgentUsagePanel
+                agents={agentControls.map((ctrl) => ({
+                  agent: ctrl.family_id,
+                  requests: ctrl.requests_24h ?? 0,
+                  saved_tokens: ctrl.saved_tokens_24h ?? 0,
+                  savings_ratio: ctrl.savings_ratio_24h ?? 0,
+                  last_request_at: ctrl.last_request_at,
+                }))}
+                onAgentClick={handleAgentUsageClick}
+              />
             </section>
 
             <section>
@@ -328,7 +399,7 @@ export default function App() {
         )}
 
         {activeTab === 'agents' && (
-          <AgentsDashboard />
+          <AgentsDashboard highlightFamilyId={highlightFamilyId} />
         )}
       </div>
     </div>

@@ -1,5 +1,6 @@
 import type {
   MetricsSummary,
+  MetricsTrend,
   RecentRequestsResponse,
   ContextDiff,
   CallChain,
@@ -15,6 +16,28 @@ export async function fetchMetricsSummary(tenant: string = 'all'): Promise<Metri
   const r = await fetch(`${API_BASE}/metrics/summary?tenant=${encodeURIComponent(tenant)}`);
   if (!r.ok) throw new Error(`Failed to fetch metrics: ${r.statusText}`);
   return r.json();
+}
+
+export async function fetchMetricsSummary24h(tenant: string = 'all'): Promise<MetricsSummary> {
+  const r = await fetch(`${API_BASE}/metrics/summary_24h?tenant=${encodeURIComponent(tenant)}`);
+  if (!r.ok) throw new Error(`Failed to fetch 24h metrics: ${r.statusText}`);
+  return r.json();
+}
+
+export async function fetchMetricsTrend(tenant: string = 'all', days: number = 7): Promise<MetricsTrend> {
+  const r = await fetch(`${API_BASE}/usage/token-savings/trend?tenant=${encodeURIComponent(tenant)}&days=${days}`);
+  if (!r.ok) throw new Error(`Failed to fetch trend: ${r.statusText}`);
+  const raw = await r.json();
+  return {
+    tenant: raw.tenant,
+    days: raw.days ?? days,
+    trend: (raw.trend ?? []).map((p: Record<string, unknown>) => ({
+      date: p.date as string,
+      requests: p.requests as number,
+      saved_tokens: p.saved_tokens as number,
+      savings_ratio: p.savings_ratio as number,
+    })),
+  };
 }
 
 export async function fetchRecentRequests(tenant: string = 'default', limit = 20): Promise<RecentRequestsResponse> {
