@@ -69,7 +69,7 @@ Roadmap 愿景一致性锚点：
 
 ---
 
-## Phase 3（当前）
+## Phase 3（已完成）
 
 **目标**：Productization & Adoption
 
@@ -84,22 +84,24 @@ Roadmap 愿景一致性锚点：
 - Query understanding
 
 **验证**：
-- Console 展示总 token savings
-- 今日 / 本周 / 本月 token savings
-- 按 workspace breakdown
-- 按 agent breakdown
-- token savings 趋势图
-- scope 模型完整（user / workspace / agent / custom）
-- sharing mode 完整（isolated / shared / shared_read_only）
+- Console 展示总 token savings ✅
+- 今日 / 本周 / 本月 token savings ✅
+- 按 workspace breakdown ✅
+- 按 agent breakdown ✅
+- token savings 趋势图 ✅
+- scope 模型完整（user / workspace / agent / custom）✅
+- sharing mode 完整（isolated / shared / shared_read_only）✅
 
 **对应宪法**：
 - Token Savings 是核心产品能力
 - Scope Governance
 - Minimal Exposure to LLM（策略/候选/评分/控制面元信息不入 LLM）
 
+**收口日期**：2026-04-20（commit `7894b89`）
+
 ---
 
-## Phase 4（下一阶段）
+## Phase 4（当前）
 
 **目标**：Metering → Billing 闭环成立
 

@@ -215,7 +215,7 @@ curl -H "Accept: application/json" http://localhost:5173/agents/control
 
 **`Operationalization and Adoption`** — internal Phase 6 workstream
 
-> **Phase 標籤說明**：本文檔所稱 `Phase 6` 為內部執行 workstream 標籤，不等於正式 roadmap phase。正式 roadmap phase 由 `0_blueprint/ROADMAP.md` 定義，當前為 **Phase 3（当前）**。除非 `ROADMAP.md` 被正式更新，否則內部階段標籤不變更產品階段編號。
+> **Phase 標籤說明**：本文檔所稱 `Phase 6` 為內部執行 workstream 標籤，不等於正式 roadmap phase。正式 roadmap phase 由 `0_blueprint/ROADMAP.md` 定義。Phase 3 已於 2026-04-20 收口（commit `7894b89`），當前為 **Phase 4（当前）**。除非 `ROADMAP.md` 被正式更新，否則內部階段標籤不變更產品階段編號。
 
 **第一子线**：`Promotion Workflow Adoption`
 
