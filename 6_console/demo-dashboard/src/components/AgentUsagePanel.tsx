@@ -6,7 +6,7 @@ interface AgentUsagePanelProps {
   onAgentClick?: (familyId: string) => void;
 }
 
-export function AgentUsagePanel({ agents }: AgentUsagePanelProps) {
+export function AgentUsagePanel({ agents, onAgentClick }: AgentUsagePanelProps) {
   // Normalize and aggregate agent usage by canonical family
   const normalizedAgents = normalizeAgentUsageList(agents);
 
