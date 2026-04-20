@@ -42,6 +42,7 @@ from .startup_probe import run_startup_probe
 from .mcp_surface import configure_mcp_surface
 from .diagnostics_surface import configure_diagnostics_surface
 from .usage_surface import configure_usage_surface
+from .scope_surface import configure_scope_surface
 
 # 兼容数字开头包：逐个子模块动态导入（避免语法错误）
 import importlib
@@ -153,13 +154,15 @@ _agent_control_api_mod = importlib.import_module("5_connectors.adapter.agent_con
 _mcp_surface_mod = importlib.import_module("5_connectors.adapter.mcp_surface")
 _diagnostics_surface_mod = importlib.import_module("5_connectors.adapter.diagnostics_surface")
 _usage_surface_mod = importlib.import_module("5_connectors.adapter.usage_surface")
+_scope_surface_mod = importlib.import_module("5_connectors.adapter.scope_surface")
 app.include_router(_llm_proxy_mod.router, prefix="")
 app.include_router(_status_api_mod.router, prefix="")
 app.include_router(_agent_control_api_mod.router, prefix="")
 app.include_router(_mcp_surface_mod.router, prefix="")
 app.include_router(_diagnostics_surface_mod.router, prefix="")
 app.include_router(_usage_surface_mod.router, prefix="")
-del _llm_proxy_mod, _status_api_mod, _agent_control_api_mod, _mcp_surface_mod, _diagnostics_surface_mod, _usage_surface_mod
+app.include_router(_scope_surface_mod.router, prefix="")
+del _llm_proxy_mod, _status_api_mod, _agent_control_api_mod, _mcp_surface_mod, _diagnostics_surface_mod, _usage_surface_mod, _scope_surface_mod
 
 @app.middleware("http")
 async def attach_request_id(request: Request, call_next):
@@ -323,6 +326,11 @@ configure_usage_surface(
     get_tenant_usage_fn=get_tenant_usage,
     get_trend_data_fn=get_trend_data,
     get_meter_fn=get_meter,
+)
+
+configure_scope_surface(
+    config_obj=config,
+    scope_registry_path=os.path.expanduser("~/.omnimemora/config/scope_registry.json"),
 )
 
 

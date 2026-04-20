@@ -27,12 +27,13 @@ const (
 // ScopeRef is the governance body for memory access control
 // Aligns with RUNTIME_ARCHITECTURE.md Section 5.2
 type ScopeRef struct {
-	TenantID     string      `json:"tenant_id"`
-	UserID       string      `json:"user_id"`
-	WorkspaceID  string      `json:"workspace_id"`
-	AgentID      string      `json:"agent_id"`
-	Scope        ScopeType   `json:"scope"`
-	SharingMode  SharingMode `json:"sharing_mode"`
+	TenantID      string      `json:"tenant_id"`
+	UserID        string      `json:"user_id"`
+	WorkspaceID   string      `json:"workspace_id"`
+	AgentID       string      `json:"agent_id"`
+	Scope         ScopeType   `json:"scope"`
+	SharingMode   SharingMode `json:"sharing_mode"`
+	CustomScopeID string      `json:"custom_scope_id,omitempty"` // populated when Scope == ScopeCustom
 }
 
 // MemoryRecord represents a single memory entry

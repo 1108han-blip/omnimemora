@@ -3,25 +3,70 @@
 package scope
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/omnimemora/local-runtime/config"
 	"github.com/omnimemora/local-runtime/pkg"
 )
 
+// CustomScopeRegistry is the on-disk registry for named custom scopes.
+type CustomScopeRegistry struct {
+	CustomScopes []CustomScopeDef `json:"custom_scopes"`
+}
+
+// CustomScopeDef defines a named custom scope with its members and default sharing mode.
+type CustomScopeDef struct {
+	ID            string   `json:"id"`              // stable unique identifier
+	Name          string   `json:"name"`            // display name
+	AllowedUsers  []string `json:"allowed_users"`   // user IDs allowed in this scope
+	DefaultMode   string   `json:"default_mode"`   // "isolated", "shared", "shared_read_only"
+}
+
 // Model implements scope governance
 type Model struct {
 	cfg       *config.RuntimeConfig
 	startedAt time.Time
+	registry  *CustomScopeRegistry
 }
 
-// NewModel creates a new scope model
+// NewModel creates a new scope model and loads the custom scope registry.
 func NewModel(cfg *config.RuntimeConfig) *Model {
-	return &Model{
+	m := &Model{
 		cfg:       cfg,
 		startedAt: time.Now(),
 	}
+	m.loadRegistry()
+	return m
+}
+
+// loadRegistry loads the custom scope registry from disk.
+func (m *Model) loadRegistry() {
+	registryPath := os.ExpandEnv("~/.omnimemora/config/scope_registry.json")
+	data, err := os.ReadFile(registryPath)
+	if err != nil {
+		// File doesn't exist yet — start with empty registry
+		m.registry = &CustomScopeRegistry{CustomScopes: []CustomScopeDef{}}
+		return
+	}
+	var reg CustomScopeRegistry
+	if err := json.Unmarshal(data, &reg); err != nil {
+		m.registry = &CustomScopeRegistry{CustomScopes: []CustomScopeDef{}}
+		return
+	}
+	m.registry = &reg
+}
+
+// lookupCustomScope finds a custom scope definition by ID.
+func (m *Model) lookupCustomScope(id string) *CustomScopeDef {
+	for _, cs := range m.registry.CustomScopes {
+		if cs.ID == id {
+			return &cs
+		}
+	}
+	return nil
 }
 
 // StartedAt returns the runtime start time
@@ -50,7 +95,30 @@ func (m *Model) EnforceWrite(scopeRef *pkg.ScopeRef) error {
 			return fmt.Errorf("user_id required for user scope")
 		}
 	case pkg.ScopeCustom:
-		return fmt.Errorf("custom scope not yet implemented")
+		if scopeRef.CustomScopeID == "" {
+			return fmt.Errorf("custom_scope_id required for custom scope")
+		}
+		cs := m.lookupCustomScope(scopeRef.CustomScopeID)
+		if cs == nil {
+			return fmt.Errorf("custom scope %q not found in registry", scopeRef.CustomScopeID)
+		}
+		// Check user is in allowed list
+		if len(cs.AllowedUsers) > 0 {
+			found := false
+			for _, u := range cs.AllowedUsers {
+				if u == scopeRef.UserID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("user %q not in allowed list for custom scope %q", scopeRef.UserID, scopeRef.CustomScopeID)
+			}
+		}
+		// Reject writes to shared_read_only custom scopes
+		if cs.DefaultMode == string(pkg.SharingModeSharedReadOnly) {
+			return fmt.Errorf("custom scope %q is read-only", scopeRef.CustomScopeID)
+		}
 	}
 
 	return nil
@@ -77,7 +145,26 @@ func (m *Model) EnforceRead(scopeRef *pkg.ScopeRef) error {
 			return fmt.Errorf("user_id required for user scope")
 		}
 	case pkg.ScopeCustom:
-		return fmt.Errorf("custom scope not yet implemented")
+		if scopeRef.CustomScopeID == "" {
+			return fmt.Errorf("custom_scope_id required for custom scope")
+		}
+		cs := m.lookupCustomScope(scopeRef.CustomScopeID)
+		if cs == nil {
+			return fmt.Errorf("custom scope %q not found in registry", scopeRef.CustomScopeID)
+		}
+		// Check user is in allowed list
+		if len(cs.AllowedUsers) > 0 {
+			found := false
+			for _, u := range cs.AllowedUsers {
+				if u == scopeRef.UserID {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return fmt.Errorf("user %q not in allowed list for custom scope %q", scopeRef.UserID, scopeRef.CustomScopeID)
+			}
+		}
 	}
 
 	return nil

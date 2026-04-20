@@ -2,7 +2,7 @@
 Meter 持久化层 - 负责 meter artifact 的内存缓存与磁盘读写
 只属于 adapter 运行时，不属于 core 逻辑
 """
-from datetime import datetime
+from datetime import datetime, timezone, timedelta
 from typing import Optional, List, Dict, Any, Union
 import glob as _glob
 import os
@@ -207,13 +207,44 @@ def get_meter(request_id: str) -> Optional[TokenSavingsMeter]:
     return None
 
 
+def _token_savings_by_period(meters: List[TokenSavingsMeter]) -> Dict[str, int]:
+    """Compute saved_tokens totals for today/week/month windows."""
+    now = datetime.now(timezone.utc)
+    today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    week_start = today_start - timedelta(days=6)  # last 7 days including today
+    month_start = today_start - timedelta(days=29)  # last 30 days
+
+    today_total = 0
+    week_total = 0
+    month_total = 0
+
+    for m in meters:
+        try:
+            m_time = datetime.fromisoformat(m.timestamp.replace("Z", "+00:00")).astimezone(timezone.utc)
+        except Exception:
+            continue
+        saved = m.saved_tokens_estimate
+        if m_time >= today_start:
+            today_total += saved
+        if m_time >= week_start:
+            week_total += saved
+        if m_time >= month_start:
+            month_total += saved
+
+    return {
+        "today": today_total,
+        "week": week_total,
+        "month": month_total,
+    }
+
+
 def get_tenant_usage(
     tenant: str,
     agent: Optional[str] = None,
     start_time: Optional[datetime] = None,
     end_time: Optional[datetime] = None,
 ) -> Dict[str, Any]:
-    """Get aggregated usage for a tenant."""
+    """Get aggregated usage for a tenant with period_breakdown and by_workspace."""
     _ensure_persistence_loaded()
     if tenant == "all":
         meters = [m for tenant_meters in _usage_aggregates.values() for m in tenant_meters]
@@ -241,6 +272,8 @@ def get_tenant_usage(
             "last_request_at": None,
             "current_period_usage": 0,
             "by_agent": [],
+            "by_workspace": [],
+            "period_breakdown": {"today": 0, "week": 0, "month": 0},
             "recent_requests": [],
         }
 
@@ -253,6 +286,7 @@ def get_tenant_usage(
     avg_ratio = saved_total / baseline_total if baseline_total > 0 else 0.0
     last_request_at = sorted_meters[0].timestamp if sorted_meters else None
 
+    # By agent
     agent_map: Dict[str, List[TokenSavingsMeter]] = {}
     for m in meters:
         if m.agent not in agent_map:
@@ -272,6 +306,31 @@ def get_tenant_usage(
             "savings_ratio": round(agent_ratio, 3),
             "last_request_at": agent_last,
         })
+
+    # By workspace — use user field as workspace_id proxy (meter_store records user as workspace scope)
+    # Note: workspace_id field in meter is not populated by current adapter, so aggregate by user as proxy
+    workspace_map: Dict[str, List[TokenSavingsMeter]] = {}
+    for m in meters:
+        # Use tenant as workspace proxy when workspace_id is not explicitly set
+        ws_key = getattr(m, 'workspace_id', None) or m.tenant or "unknown"
+        if ws_key not in workspace_map:
+            workspace_map[ws_key] = []
+        workspace_map[ws_key].append(m)
+
+    by_workspace = []
+    for ws_id, ws_meters in workspace_map.items():
+        ws_saved = sum(m.saved_tokens_estimate for m in ws_meters)
+        ws_baseline = sum(m.baseline_tokens_estimate for m in ws_meters)
+        ws_ratio = ws_saved / ws_baseline if ws_baseline > 0 else 0.0
+        by_workspace.append({
+            "workspace_id": ws_id,
+            "requests": len(ws_meters),
+            "saved_tokens": ws_saved,
+            "savings_ratio": round(ws_ratio, 3),
+        })
+
+    # Period breakdown
+    period_breakdown = _token_savings_by_period(meters)
 
     recent_requests = []
     for m in sorted_meters[:10]:
@@ -310,16 +369,21 @@ def get_tenant_usage(
         "last_request_at": last_request_at,
         "current_period_usage": actual_total,
         "by_agent": by_agent,
+        "by_workspace": by_workspace,
+        "period_breakdown": period_breakdown,
         "recent_requests": recent_requests,
     }
 
 
 def get_trend_data(tenant: str, days: int = 7) -> Dict[str, Any]:
-    """Get trend data for the last N days."""
+    """Get trend data for the last N days. Supports tenant=all."""
     from datetime import timedelta
 
     _ensure_persistence_loaded()
-    meters = _usage_aggregates.get(tenant, [])
+    if tenant == "all":
+        meters = [m for tenant_meters in _usage_aggregates.values() for m in tenant_meters]
+    else:
+        meters = _usage_aggregates.get(tenant, [])
     end_date = datetime.utcnow().date()
     start_date = end_date - timedelta(days=days - 1)
 
