@@ -9,6 +9,7 @@
 | Promotion Workflow Adoption | **已收口 ✓** | 本目录 |
 | Promotion Evidence Routing | **已收口 ✓** | 本目录 |
 | Promotion Workflow Usage Governance | **已收口 ✓** | `docs/phase6/PROMOTION_USAGE_GOVERNANCE.md` |
+| Operational Drift Detection | **已收口 ✓** | `OmniMemora_Operational_Drift_Detection.md` |
 
 ---
 

@@ -422,6 +422,54 @@ promote_ui() {
     fi
 }
 
+# 写入 deployed-state marker
+write_deployed_state_marker() {
+    local final_status="$1"
+    local repo_rev="$2"
+
+    mkdir -p "$CURRENT_SERVICE_DIR"
+
+    local marker_file="$CURRENT_SERVICE_DIR/.omnimemora_promotion_state.json"
+    local timestamp
+    timestamp=$(date -u '+%Y-%m-%dT%H:%M:%S')
+
+    # Parse promotion log to find actual primary_breakpoint.
+    # Component-level failure lines look like:
+    #   runtime:failed:health_check
+    #   adapter:failed:api_unreachable
+    #   failed:build
+    #   ui:failed
+    # Valid breakpoint vocabulary: build, file_sync, reload, health_check,
+    #   ui_bringup, ui_alignment, prerequisite_failed, none
+    local primary_breakpoint="none"
+    if [ -f "$PROMOTION_LOG" ]; then
+        local failed_line
+        failed_line=$(grep -m1 -E '^(runtime|adapter|ui):failed(:|$)' "$PROMOTION_LOG" 2>/dev/null || true)
+        if [ -n "$failed_line" ]; then
+            # Extract the failure reason (last field after the last colon)
+            local reason="${failed_line##*:}"
+            # Bare "failed" with no reason is not actionable; map to "unknown"
+            if [ "$reason" = "failed" ] || [ -z "$reason" ]; then
+                primary_breakpoint="unknown"
+            else
+                primary_breakpoint="$reason"
+            fi
+        fi
+    fi
+
+    cat > "$marker_file" << EOF
+{
+  "timestamp": "$timestamp",
+  "target": "$TARGET",
+  "repo_revision": "$repo_rev",
+  "final_status": "$final_status",
+  "primary_breakpoint": "$primary_breakpoint",
+  "log_file": "$PROMOTION_LOG"
+}
+EOF
+    log_info "Deployed-state marker written: $marker_file"
+}
+
 # 输出结构化结果
 output_result() {
     local final_status="$1"
@@ -436,6 +484,9 @@ output_result() {
     echo "running_reality_after: $(read_running_reality_state)"
     echo "final_status: $final_status"
     echo "log_file: $PROMOTION_LOG"
+
+    # Write deployed-state marker
+    write_deployed_state_marker "$final_status" "$repo_rev"
 }
 
 # 主流程

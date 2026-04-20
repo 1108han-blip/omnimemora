@@ -127,7 +127,7 @@ pgrep -f "vite"
 - ui: <healthy|not_running|no_node>
 
 **result**: <running_reality_promoted|running_reality_partial|promotion_failed|prerequisite_failed>
-**primary_breakpoint**: <none|build|file_sync|reload|health_check|ui_bringup|ui_alignment|prerequisite_failed>
+**primary_breakpoint**: <none|build|file_sync|reload|health_check|ui_bringup|ui_alignment|prerequisite_failed|unknown>
 **evidence_level**: <high|medium|low>
 
 **log_file**: <path to promotion log>
@@ -159,9 +159,11 @@ pgrep -f "vite"
 - UI root: <curl result>
 - UI agents: <curl result>
 
-**primary_breakpoint**: <none|...>
+**primary_breakpoint**: <none|build|file_sync|reload|health_check|ui_bringup|ui_alignment|prerequisite_failed|unknown>
 **next_steps**: <if any>
 ```
+
+`unknown` 表示 promotion log 只給出 `component:failed`，沒有可操作的 failure reason；此時應人工回看對應 promotion log。
 
 ---
 

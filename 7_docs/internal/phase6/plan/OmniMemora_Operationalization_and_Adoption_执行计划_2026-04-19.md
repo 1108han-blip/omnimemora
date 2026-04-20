@@ -105,6 +105,38 @@ last_verified_commit: 5ff812c
 
 ---
 
+## 第三子線：Operational Drift Detection
+
+### 狀態：**已收口 ✓**
+
+| 完成標準 | 狀態 |
+|----------|------|
+| `operational_drift_check.py` 可執行並通過 smoke test | ✓ |
+| Drift register 模板創建 | ✓ |
+| `promotion.sh` 更新為寫入 deployed-state marker | ✓ |
+| 本文檔更新為引用本 workstream | ✓ |
+| Phase6 plan README 更新為引用本 workstream | ✓ |
+| 一次真實 promotion 整合驗證完成 | ✓ |
+
+**收口日期：** 2026-04-20
+**Repo Revision：** 843eea5
+**Adoption Gate：** `./tools/promotion/promotion.sh adapter` (RIR-1) — PASSED
+**Marker:** `~/.omnimemora/service/current/.omnimemora_promotion_state.json` — written and verified
+**Drift Check Post-Promotion:** 0 signals, exit 0
+**已解決信號：** ADE-001（root README phase entry → phase6）
+**已知非阻塞 Warning：** Adapter plist reality（per adoption contract）
+
+### 收口結論
+
+1. `operational_drift_check.py` 已完成並與 `promotion.sh` 整合
+2. Deployed-state marker 機制已驗證可用
+3. Drift checker 可正確讀取新 log/marker 組合
+4. ADE-001 已關閉
+5. Phase6 plan README 已更新為 `已收口 ✓`
+6. 後續執行者不需要再臨場判斷 drift check 路由
+
+---
+
 ## 憲法 / Roadmap 關係說明
 
 | 層 | 狀態 |

@@ -240,3 +240,49 @@ repo_revision: d627029
 - 什麼時候必須用 ✓
 - 成功後寫什麼記錄 ✓
 - 什麼才算 promotion 成功 ✓
+
+---
+
+## Real Integration Run — Operational Drift Detection Closeout Gate
+
+### RIR-1: Adapter Real Integration (2026-04-20 12:22:14)
+
+**Promotion Type:** adapter
+**Target:** adapter
+**Execution Time:** 2026-04-20 12:22:14
+**Repo Revision:** 843eea5
+
+**Running Reality Before:**
+- runtime: healthy
+- adapter: healthy
+- ui: healthy
+
+**Running Reality After:**
+- runtime: healthy
+- adapter: healthy
+- ui: healthy
+
+**Result:** `running_reality_promoted`
+**Primary Breakpoint:** none
+**Evidence Level:** high
+
+**Log File:** `tools/verification/logs/promotion_20260420_122214.log`
+
+**Deployed-State Marker:** `~/.omnimemora/service/current/.omnimemora_promotion_state.json`
+- timestamp: 2026-04-20T04:22:19
+- repo_revision: 843eea5
+- final_status: running_reality_promoted
+- primary_breakpoint: none
+
+**Drift Check After Promotion:**
+- `python3 tools/verification/operational_drift_check.py` → 0 signals, exit 0
+- ADE-001 (root README phase entry): resolved
+- No new P0/P1 introduced
+
+**Notes:**
+- First real adapter promotion against live running reality after Operational Drift Detection workstream activation
+- Plist reality warning (expected per adoption contract): present but non-blocking
+- Marker file successfully written and read back by drift checker
+- Gateway `:18011/health` confirmed healthy post-promotion
+- Gateway `:8765/health` confirmed healthy post-promotion
+- **Adoption gate for `Operational Drift Detection` sub-workstream: PASSED**
