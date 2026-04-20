@@ -10,6 +10,7 @@
 | Promotion Evidence Routing | **已收口 ✓** | 本目录 |
 | Promotion Workflow Usage Governance | **已收口 ✓** | `docs/phase6/PROMOTION_USAGE_GOVERNANCE.md` |
 | Operational Drift Detection | **已收口 ✓** | `OmniMemora_Operational_Drift_Detection.md` |
+| **Promotion Outcome Reporting** | **已收口 ✓** | `OmniMemora_Promotion_Outcome_Reporting_Contract.md` |
 
 ---
 
@@ -141,3 +142,42 @@ cd /Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora
 | 2026-04-20 | adapter-only 真實場景 | PASS |
 
 Validation Record：`docs/phase6/adoption_verification/20260420_adapter_only_validation.md`
+
+---
+
+## Promotion Outcome Reporting
+
+**狀態：** 已收口
+**收口日期：** 2026-04-20
+**文檔位置：** `OmniMemora_Promotion_Outcome_Reporting_Contract.md`
+
+### 目標
+
+定義 promotion 結果的讀者面向報告格式，規範：
+- 何時只寫 record（Layer 2）
+- 何時允許提升為 phase 結論（Layer 3）
+- 何時允許提升到根 README
+
+### 核心約定
+
+1. **Canonical Outcome Vocabulary**：四個固定值，`running_reality_promoted` / `running_reality_partial` / `promotion_failed` / `prerequisite_failed`
+2. **Layer 2 標準欄位**：`target` / `datetime` / `repo_revision` / `result` / `primary_breakpoint` / `warning_status` / `declaration_status`
+3. **Declaration Status 判定**：執行 §5 決策樹，產出 `record only` / `phase_conclusion_allowed` / `readme_surface_allowed`
+4. **Layer 3 觸發條件**：只有 `readme_surface_allowed` 時才能寫 phase plan/README
+5. **Root README 觸發條件**：`readme_surface_allowed` + 里程碑判定
+
+### 驗證結果
+
+| # | 日誌 | result | declaration_status | 結論 |
+|---|------|--------|-------------------|------|
+| R-1 | `promotion_20260420_000136.log` (runtime only) | `running_reality_promoted` | `record only` | ✓ PASS |
+| R-2 | `promotion_20260420_000143.log` (adapter only, plist warning) | `running_reality_promoted` | `record only` | ✓ PASS |
+| R-3 | `promotion_20260420_000151.log` (runtime+adapter+ui full stack) | `running_reality_promoted` | `readme_surface_allowed` | ✓ PASS |
+| R-4 | `promotion_20260420_004133.log` (adapter+ui) | `running_reality_promoted` | `phase_conclusion_allowed` | ✓ PASS |
+| R-5 | `promotion_20260420_000203.log` (adapter only, plist warning) | `running_reality_promoted` | `record only` | ✓ PASS |
+
+### 後續執行者無需判斷
+
+- 某個 result 該寫哪個 Layer？✓ 明確
+- declaration_status 怎麼判定？✓ 決策樹已給出
+- 什麼時候寫 root README？✓ 只有里程碑 + readme_surface_allowed
