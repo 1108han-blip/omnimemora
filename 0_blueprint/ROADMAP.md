@@ -101,23 +101,25 @@ Roadmap 愿景一致性锚点：
 
 ---
 
-## Phase 4（当前）
+## Phase 4（已完成）
 
 **目标**：Metering → Billing 闭环成立
 
 **验证**：
-- token savings 可计费
-- usage 可观测
-- billing plan 可切换
-- Pro / Enterprise 商业模式跑通
+- token savings 可计费 ✅
+- usage 可观测 ✅
+- billing plan 可切换 ✅
+- Pro / Enterprise 商业模式跑通 ✅
 
 **对应宪法**：
 - Billing
 - token savings + usage + governance
 
+**收口日期**：2026-04-20（commit `045c3a5`）
+
 ---
 
-## Phase 5（未来）
+## Phase 5（当前 — 可选）
 
 **目标**：Cloud Control 增强能力（可选）
 
@@ -128,6 +130,8 @@ Roadmap 愿景一致性锚点：
 
 **对应宪法**：
 - Cloud Optional
+
+> Phase 5 is explicitly optional. The repo defaults to local-first operation. Cloud control enhancements are only pursued when explicitly prioritized.
 
 ---
 
