@@ -1,0 +1,4 @@
+# Auto-generated runtime data — never commit
+*.json
+# Explicitly keep the marker file used by promotion.sh
+!.gitkeep

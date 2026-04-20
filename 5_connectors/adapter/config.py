@@ -126,7 +126,7 @@ class MemoryLevelConfig(BaseModel):
 
 
 def _default_data_dir() -> str:
-    return os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
+    return os.path.expanduser("~/.omnimemora/data")
 
 
 def _default_access_registry_path() -> str:

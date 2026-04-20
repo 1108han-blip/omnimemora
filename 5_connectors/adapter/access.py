@@ -9,6 +9,28 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import HTTPException, Request
 
+# In-memory cloud sync state — reset on restart (not persistent)
+# Used by GET /cloud/status to report last sync outcome
+_cloud_sync_state = {
+    "enabled": False,
+    "last_sync_at": None,
+    "last_sync_status": "never_run",
+    "last_error": None,
+}
+
+
+def update_cloud_sync_state(enabled: bool, status: str, error: Optional[str] = None) -> None:
+    import datetime
+    _cloud_sync_state["enabled"] = enabled
+    _cloud_sync_state["last_sync_status"] = status
+    _cloud_sync_state["last_error"] = error
+    if status == "success":
+        _cloud_sync_state["last_sync_at"] = datetime.datetime.utcnow().isoformat() + "Z"
+
+
+def get_cloud_sync_state() -> dict:
+    return dict(_cloud_sync_state)
+
 
 def normalize(value: Optional[str], max_length: int = 256) -> str:
     return (value or "").strip()[:max_length]
