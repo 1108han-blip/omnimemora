@@ -5,8 +5,8 @@ import { ContextComparison } from './components/ContextComparison';
 import { CallChainViz } from './components/CallChainViz';
 import { AgentUsagePanel } from './components/AgentUsagePanel';
 import { AgentsDashboard } from './components/AgentsDashboard';
-import { fetchMetricsSummary, fetchMetricsSummary24h, fetchMetricsTrend, fetchRecentRequests, fetchContextDiff, fetchCallChain, fetchUsageSummary, fetchTenants, fetchAgentControls } from './api';
-import type { MetricsSummary, MetricsTrend, RecentRequest, ContextDiff, CallChain, UsageSummary, AgentControlCard } from './types';
+import { fetchMetricsSummary, fetchMetricsSummary24h, fetchMetricsTrend, fetchRecentRequests, fetchContextDiff, fetchCallChain, fetchUsageSummary, fetchTenants, fetchAgentControls, fetchRequestEvidence } from './api';
+import type { MetricsSummary, MetricsTrend, RecentRequest, ContextDiff, CallChain, UsageSummary, AgentControlCard, RequestEvidence } from './types';
 
 function inferInitialTab(): 'overview' | 'agents' {
   const params = new URLSearchParams(window.location.search);
@@ -45,11 +45,9 @@ export default function App() {
   const [agentControls, setAgentControls] = useState<AgentControlCard[]>([]);
   const [requests, setRequests] = useState<RecentRequest[]>([]);
   const [_selectedRequest, setSelectedRequest] = useState<RecentRequest | null>(null);
-  const [contextDiff, setContextDiff] = useState<ContextDiff | null>(null);
-  const [callChain, setCallChain] = useState<CallChain | null>(null);
+  const [requestEvidence, setRequestEvidence] = useState<RequestEvidence | null>(null);
   const [loadingMetrics, setLoadingMetrics] = useState(true);
-  const [loadingDiff, setLoadingDiff] = useState(false);
-  const [loadingChain, setLoadingChain] = useState(false);
+  const [loadingEvidence, setLoadingEvidence] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [highlightFamilyId, setHighlightFamilyId] = useState<string | null>(null);
   const [summary24h, setSummary24h] = useState<MetricsSummary | null>(null);
@@ -158,23 +156,16 @@ export default function App() {
 
   const handleSelectRequest = useCallback(async (req: RecentRequest) => {
     setSelectedRequest(req);
-    setLoadingDiff(true);
-    setLoadingChain(true);
-    setContextDiff(null);
-    setCallChain(null);
+    setLoadingEvidence(true);
+    setRequestEvidence(null);
 
     try {
-      const [diff, chain] = await Promise.all([
-        fetchContextDiff(req.request_id).catch(() => null),
-        fetchCallChain(req.request_id).catch(() => null),
-      ]);
-      setContextDiff(diff);
-      setCallChain(chain);
+      const evidence = await fetchRequestEvidence(req.request_id).catch(() => null);
+      setRequestEvidence(evidence);
     } catch {
-      // ignore individual failures
+      // ignore failures
     } finally {
-      setLoadingDiff(false);
-      setLoadingChain(false);
+      setLoadingEvidence(false);
     }
   }, []);
 
@@ -385,14 +376,14 @@ export default function App() {
                 <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">
                   ④ Context Before / After
                 </h2>
-                <ContextComparison diff={contextDiff} loading={loadingDiff} />
+                <ContextComparison evidence={requestEvidence} loading={loadingEvidence} />
               </section>
 
               <section>
                 <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">
                   ⑤ Call Chain
                 </h2>
-                <CallChainViz chain={callChain} loading={loadingChain} />
+                <CallChainViz evidence={requestEvidence} loading={loadingEvidence} />
               </section>
             </div>
           </>

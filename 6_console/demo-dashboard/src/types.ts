@@ -149,3 +149,59 @@ export interface CallChain {
   trace_id: string;
   stages: CallChainStage[];
 }
+
+// ------------------------------------------------------------------
+// Request Evidence (unified view for overview evidence layer)
+// ------------------------------------------------------------------
+
+export type RequestStatus = 'success' | 'warning' | 'failed' | 'bypassed' | 'not_used';
+export type NodeStatus = 'success' | 'warning' | 'failed' | 'bypassed' | 'not_used';
+export type ContextOptimizationState = 'optimized_visible' | 'traffic_but_no_optimization' | 'bypass_or_not_applicable';
+
+export interface RequestEvidenceNode {
+  id: string;
+  label: string;
+  status: NodeStatus;
+  duration_ms: number;
+  note: string;
+}
+
+export interface RequestEvidenceContext {
+  before_tokens: number;
+  after_tokens: number;
+  saved_tokens: number;
+  savings_ratio: number;
+  selected_memory_count: number;
+  dropped_memory_count: number;
+  selected_memories: MemoryEntry[];
+  dropped_memories: MemoryEntry[];
+  context_state: ContextOptimizationState;
+}
+
+export interface RequestEvidenceStatus {
+  request_status: RequestStatus;
+  bypass: boolean;
+  failure_stage: string | null;
+  failure_reason: string | null;
+}
+
+export interface RequestEvidenceRequest {
+  request_id: string;
+  timestamp: string;
+  raw_agent_id: string;
+  agent_family: string;
+  task_type: string;
+  query_summary: string;
+}
+
+export interface RequestEvidenceChain {
+  nodes: RequestEvidenceNode[];
+  trace_id: string;
+}
+
+export interface RequestEvidence {
+  request: RequestEvidenceRequest;
+  status: RequestEvidenceStatus;
+  context: RequestEvidenceContext;
+  chain: RequestEvidenceChain;
+}

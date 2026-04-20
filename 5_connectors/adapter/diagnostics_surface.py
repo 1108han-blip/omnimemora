@@ -2,7 +2,7 @@ import importlib
 import inspect as _inspect
 import os
 import sys
-from typing import Any, Callable, Dict, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 from fastapi import APIRouter, HTTPException, Response
 
@@ -281,6 +281,227 @@ async def get_call_chain(request_id: str):
     if not chain_dict:
         raise HTTPException(status_code=404, detail=f"Trace not found for request_id={request_id}")
     return chain_dict
+
+
+# ------------------------------------------------------------------
+# Canonical product-level nodes (fixed set for evidence layer)
+# ------------------------------------------------------------------
+# Nodes: app_request, entry_18011, route_decision, memory_recall,
+#        context_pack, compile_or_bypass, upstream_forward, response_recorded
+# ------------------------------------------------------------------
+
+def _derive_product_nodes(meter_dict: Dict[str, Any], chain_dict: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Derive the 8 canonical product-level nodes from meter + chain data.
+
+    Each node: {id, label, status, duration_ms, note}
+    Status: success | warning | failed | bypassed | not_used
+    """
+    bypass = meter_dict.get("context_bypass", False)
+    context_bypass = bypass
+    selected_count = len(meter_dict.get("candidate_memories", []))
+    packed_count = meter_dict.get("packed_memory_count", 0)
+    savings_ratio = meter_dict.get("savings_ratio", 0.0)
+    task_type = meter_dict.get("task_type", "unknown")
+    remote_used = meter_dict.get("remote_used_count", 0)
+
+    # Sum durations from internal stages for nodes that have timing
+    def _stage_duration(*names: str) -> float:
+        if not chain_dict or "stages" not in chain_dict:
+            return 0.0
+        total = 0.0
+        for stage in chain_dict["stages"]:
+            if stage["name"] in names:
+                total += stage.get("duration_ms", 0)
+        return round(total, 3)
+
+    # Determine node status
+    def _status(success_cond: bool, warn_cond: bool = False) -> str:
+        if success_cond:
+            return "success"
+        if warn_cond:
+            return "warning"
+        return "not_used"
+
+    nodes: List[Dict[str, Any]] = [
+        {
+            "id": "app_request",
+            "label": "App Request",
+            "status": "success",
+            "duration_ms": 0,
+            "note": "request received",
+        },
+        {
+            "id": "entry_18011",
+            "label": "Entry 18011",
+            "status": "success",
+            "duration_ms": 0,
+            "note": "adapter entry",
+        },
+        {
+            "id": "route_decision",
+            "label": "Route Decision",
+            "status": _status(task_type != "unknown"),
+            "duration_ms": _stage_duration("route_score"),
+            "note": f"task_type={task_type}",
+        },
+        {
+            "id": "memory_recall",
+            "label": "Memory Recall",
+            "status": _status(selected_count > 0, selected_count == 0 and task_type != "unknown"),
+            "duration_ms": _stage_duration("filter", "dedup"),
+            "note": f"{selected_count} candidates",
+        },
+        {
+            "id": "context_pack",
+            "label": "Context Pack",
+            "status": _status(packed_count > 0, packed_count == 0 and selected_count > 0),
+            "duration_ms": _stage_duration("select", "pack"),
+            "note": f"{packed_count} packed",
+        },
+        {
+            "id": "compile_or_bypass",
+            "label": "Compile / Bypass",
+            "status": "bypassed" if context_bypass else _status(savings_ratio > 0),
+            "duration_ms": _stage_duration("meter", "policy_eval"),
+            "note": "bypassed" if context_bypass else f"savings={savings_ratio:.2%}",
+        },
+        {
+            "id": "upstream_forward",
+            "label": "Upstream Forward",
+            "status": _status(remote_used > 0),
+            "duration_ms": _stage_duration("backend_search"),
+            "note": f"{remote_used} remote" if remote_used > 0 else "no remote",
+        },
+        {
+            "id": "response_recorded",
+            "label": "Response Recorded",
+            "status": "success",
+            "duration_ms": _stage_duration("engine_total"),
+            "note": "response sent",
+        },
+    ]
+
+    return nodes
+
+
+def _infer_request_status(meter_dict: Dict[str, Any], chain_dict: Dict[str, Any]) -> Dict[str, Any]:
+    """Infer request_status from meter and chain data."""
+    bypass = meter_dict.get("context_bypass", False)
+    savings_ratio = meter_dict.get("savings_ratio", 0.0)
+    packed_memory_count = meter_dict.get("packed_memory_count", 0)
+
+    # Determine failure stage from chain if any stage has error metadata
+    failure_stage = None
+    failure_reason = None
+    if chain_dict and "stages" in chain_dict:
+        for stage in chain_dict["stages"]:
+            metadata = stage.get("metadata", {})
+            if metadata.get("error") or metadata.get("failed"):
+                failure_stage = stage["name"]
+                failure_reason = metadata.get("error_reason", "stage failed")
+                break
+
+    if failure_stage:
+        request_status = "failed"
+    elif bypass:
+        request_status = "bypassed"
+    elif savings_ratio == 0:
+        request_status = "not_used"
+    elif savings_ratio > 0.5:
+        request_status = "success"
+    elif savings_ratio > 0:
+        request_status = "warning"
+    else:
+        request_status = "not_used"
+
+    return {
+        "request_status": request_status,
+        "bypass": bypass,
+        "failure_stage": failure_stage,
+        "failure_reason": failure_reason,
+    }
+
+
+@router.get("/debug/request_evidence")
+async def get_request_evidence(request_id: str):
+    """
+    Unified request evidence endpoint — aggregates context diff + call chain
+    into a single product-level view for the overview evidence layer.
+
+    Returns:
+        request: basic request identity
+        status: inferred product-level status
+        context: token savings evidence
+        chain: product-level node list (not raw internal stages)
+    """
+    # Fetch meter (context diff source)
+    meter = _get_meter_fn(request_id)
+    if not meter:
+        raise HTTPException(status_code=404, detail=f"Meter not found for request_id={request_id}")
+
+    meter_dict = meter.to_dict()
+
+    # Fetch call chain
+    trace_store = importlib.import_module("5_connectors.adapter.trace_store")
+    chain_dict = trace_store.get_trace_dict(request_id)
+
+    # Build context section
+    before_tokens = meter_dict.get("baseline_tokens_estimate", 0)
+    after_tokens = meter_dict.get("actual_tokens_estimate", 0)
+    saved_tokens = before_tokens - after_tokens
+    savings_ratio = meter_dict.get("savings_ratio", 0.0)
+    candidate_memories = meter_dict.get("candidate_memories", [])
+    dropped_memories = meter_dict.get("dropped_memories", [])
+    dropped_content_set = {m.get("content", "").strip() for m in dropped_memories}
+    selected_memories = [
+        m for m in candidate_memories if m.get("content", "").strip() not in dropped_content_set
+    ]
+
+    # Normalize agent identity: agent_family (canonical) vs raw_agent_id
+    raw_agent_id = meter_dict.get("agent", "unknown")
+    agent_family = _agent_identity_module.resolve_canonical_agent_id(raw_agent_id)
+
+    # Build status section
+    status = _infer_request_status(meter_dict, chain_dict)
+
+    # Build chain nodes — derive from meter + chain data using canonical product nodes
+    nodes = _derive_product_nodes(meter_dict, chain_dict)
+
+    # Determine if context was optimized
+    if savings_ratio > 0 and not status["bypass"]:
+        context_state = "optimized_visible"
+    elif status["bypass"]:
+        context_state = "bypass_or_not_applicable"
+    else:
+        context_state = "traffic_but_no_optimization"
+
+    return {
+        "request": {
+            "request_id": request_id,
+            "timestamp": meter_dict.get("timestamp", ""),
+            "raw_agent_id": raw_agent_id,
+            "agent_family": agent_family,
+            "task_type": meter_dict.get("task_type", "unknown"),
+            "query_summary": meter_dict.get("query", "")[:100],
+        },
+        "status": status,
+        "context": {
+            "before_tokens": before_tokens,
+            "after_tokens": after_tokens,
+            "saved_tokens": max(0, saved_tokens),
+            "savings_ratio": savings_ratio,
+            "selected_memory_count": len(selected_memories),
+            "dropped_memory_count": len(dropped_memories),
+            "selected_memories": selected_memories,
+            "dropped_memories": dropped_memories,
+            "context_state": context_state,
+        },
+        "chain": {
+            "nodes": nodes,
+            "trace_id": chain_dict.get("trace_id") if chain_dict else request_id,
+        },
+    }
 
 
 @router.get("/agents/live")

@@ -8,6 +8,7 @@ import type {
   LiveAgent,
   AgentControlCard,
   AgentControlResponse,
+  RequestEvidence,
 } from './types';
 
 const API_BASE = '';
@@ -83,6 +84,12 @@ export async function fetchContextDiff(requestId: string): Promise<ContextDiff> 
 export async function fetchCallChain(requestId: string): Promise<CallChain> {
   const r = await fetch(`${API_BASE}/debug/call_chain?request_id=${encodeURIComponent(requestId)}`);
   if (!r.ok) throw new Error(`Failed to fetch call chain: ${r.statusText}`);
+  return r.json();
+}
+
+export async function fetchRequestEvidence(requestId: string): Promise<RequestEvidence> {
+  const r = await fetch(`${API_BASE}/debug/request_evidence?request_id=${encodeURIComponent(requestId)}`);
+  if (!r.ok) throw new Error(`Failed to fetch request evidence: ${r.statusText}`);
   return r.json();
 }
 
