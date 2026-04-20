@@ -112,3 +112,19 @@ Compatible with all prior governance records. No conflicts.
 ## Next
 
 Phase 5 is optional cloud control. No further advancement batch is required unless cloud control enhancement is explicitly prioritized. The repo defaults to local-first operation indefinitely.
+
+---
+
+## Terminal Closeout (2026-04-20)
+
+| | |
+|---|---|
+| **Final promoted revision** | `08241c1` |
+| **Drift check result** | `0 signals` |
+| **Worktree** | Clean |
+| **Cloud status default** | `cloud_enabled: false` (local-first permanent default) |
+| **Next roadmap phase defined** | None |
+
+**State**: Terminal local-first baseline. All 5 roadmap phases closed. Running reality is aligned to repo HEAD. No active DRA signals.
+
+**New work after this point requires either a new roadmap phase definition or an explicit enhancement line outside the current roadmap scope. Phase 5 is treated as the current terminal phase and will not be silently reopened.**
