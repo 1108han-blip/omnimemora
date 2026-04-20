@@ -119,19 +119,22 @@ Roadmap 愿景一致性锚点：
 
 ---
 
-## Phase 5（当前 — 可选）
+## Phase 5（已完成 — 可选）
 
 **目标**：Cloud Control 增强能力（可选）
 
 **验证**：
-- 本地 Runtime + Cloud Control Plane 组合可运行
-- policy / metering / billing 可在云端增强
-- 不影响本地独立运行
+- 本地 Runtime + Cloud Control Plane 组合可运行 ✅
+- policy / metering / billing 可在云端增强 ✅
+- 不影响本地独立运行 ✅
 
 **对应宪法**：
 - Cloud Optional
 
+**收口日期**：2026-04-20（commit `d9959e1`）
+
 > Phase 5 is explicitly optional. The repo defaults to local-first operation. Cloud control enhancements are only pursued when explicitly prioritized.
+> Phase 5 是当前产品的最终阶段；无更高 roadmap 阶段定义时，repo 保持 Phase 5 本地优先运行。
 
 ---
 
