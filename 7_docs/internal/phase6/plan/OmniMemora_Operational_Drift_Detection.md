@@ -200,6 +200,27 @@ Verify:
 - Checker reads new log/marker pair
 - Contractized adapter plist reality warning does NOT false-trigger audit
 
+### 7.4 DRA Steady-State Normalization
+
+DRA-001 (`P2 repo_ahead`) only fires when the diff from `marker_revision..HEAD` touches **running-reality-relevant paths**:
+
+**Running-reality-relevant paths** — changes here are genuine sync gaps:
+- `4_core/` — runtime source
+- `5_connectors/` — adapter source
+- `6_console/` — UI source
+- `start.sh` — service start script
+- `.omnimemora/` — service deployment directory
+- `com.omnimemora.*` — launchd plist files
+
+**Non-running-reality paths** — changes here do NOT affect what's currently running:
+- `7_docs/`, `docs/` — documentation only
+- `tools/verification/` — verification tooling
+- `README.md`, `.git/`, `node_modules/`
+
+**Rule**: If `repo_head != marker_revision` but the diff touches only non-running-reality paths, suppress DRA-001. This prevents every docs/tooling commit from emitting a spurious DRA-001 signal.
+
+**DRA-002 trigger condition**: All three (repo, marker, log) must have distinct known revisions. Only fires when `log_revision` is known AND differs from both `repo_head` and `marker_revision`.
+
 ---
 
 ## 8. Interface Specification

@@ -137,6 +137,59 @@ last_verified_commit: 5ff812c
 
 ---
 
+## 第四子線：Promotion Outcome Reporting
+
+### 狀態：**已收口 ✓**
+
+| 完成標準 | 狀態 |
+|----------|------|
+| Canonical outcome vocabulary 定義 | ✓ |
+| Layer 2 標準欄位固定 | ✓ |
+| Declaration status 判定邏輯固化 | ✓ |
+| Layer 3 / Root README 寫入規則固定 | ✓ |
+| 結果判定決策樹覆蓋全4種 outcome | ✓ |
+| 5 日誌 replay 測試全部通過 | ✓ |
+
+**收口日期：** 2026-04-20
+**Repo Revision：** d943c84
+**文檔位置：** `OmniMemora_Promotion_Outcome_Reporting_Contract.md`
+
+### Canonical Outcome Vocabulary
+
+| Value | 意義 |
+|-------|------|
+| `running_reality_promoted` | 全部目標組件成功 promote，無未契約化 warning |
+| `running_reality_partial` | 部分成功，但不是全部 |
+| `promotion_failed` | 執行中斷，未完成 promotion |
+| `prerequisite_failed` | 前置條件不滿足，未進入執行 |
+
+### Layer 2 標準欄位
+
+`target` / `datetime` / `repo_revision` / `result` / `primary_breakpoint` / `warning_status` / `declaration_status`
+
+### Declaration Status 判定
+
+`record only` / `phase_conclusion_allowed` / `readme_surface_allowed`
+
+### Replay 測試結果
+
+| # | 日誌 | result | declaration_status | 結論 |
+|---|------|--------|-------------------|------|
+| R-1 | `promotion_20260420_000136.log` (runtime only) | `running_reality_promoted` | `record only` | ✓ PASS |
+| R-2 | `promotion_20260420_000143.log` (adapter only, plist warning) | `running_reality_promoted` | `record only` | ✓ PASS |
+| R-3 | `promotion_20260420_000151.log` (runtime+adapter+ui full stack) | `running_reality_promoted` | `readme_surface_allowed` | ✓ PASS |
+| R-4 | `promotion_20260420_004133.log` (adapter+ui) | `running_reality_promoted` | `phase_conclusion_allowed` | ✓ PASS |
+| R-5 | `promotion_20260420_000203.log` (adapter only, plist warning) | `running_reality_promoted` | `record only` | ✓ PASS |
+
+### 收口結論
+
+1. 每次 promotion 的結果報告格式已固定，無需臨場判斷
+2. `declaration_status` 決策樹已覆蓋全部4種 outcome
+3. Layer 3 / README 寫入條件已明確定義
+4. 後續執行者不需要再判斷「結果出來後寫哪裡」
+
+---
+
 ## 憲法 / Roadmap 關係說明
 
 | 層 | 狀態 |

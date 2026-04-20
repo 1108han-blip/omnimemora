@@ -49,6 +49,46 @@ class DriftSignal:
     status: str = "open"
 
 
+# Paths whose changes genuinely affect the running reality on disk/services.
+# Changes to these paths, when marker and repo diverge, mean a real sync gap.
+RUNNING_REALITY_RELEVANT_PATHS = [
+    "4_core/",
+    "5_connectors/",
+    "6_console/",
+    "start.sh",
+    ".omnimemora/",
+    "com.omnimemora.",
+]
+
+# Paths that are repo-internal only and do NOT affect what's currently
+# running on this machine, even when marker and repo disagree.
+# Suppress DRA-001 for diffs that touch only these paths.
+NON_RUNNING_REALITY_PATHS = [
+    "7_docs/",
+    "docs/",
+    "tools/verification/",
+    "README.md",
+    ".git/",
+    "node_modules/",
+]
+
+def _paths_touch_running_reality(paths: list[str]) -> bool:
+    """Return True if any path is running-reality-relevant.
+
+    Rules:
+    - If the full diff (all files) touches only NON_RUNNING_REALITY_PATHS → False
+      (suppress DRA-001; the marker lag is docs/tooling only)
+    - If the diff touches any RUNNING_REALITY_RELEVANT_PATHS → True
+      (keep DRA-001; there is a genuine sync gap)
+    """
+    for path in paths:
+        for prefix in RUNNING_REALITY_RELEVANT_PATHS:
+            if prefix in path:
+                return True
+    # No running-reality-relevant path found — suppress DRA-001
+    return False
+
+
 class OperationalDriftChecker:
     def __init__(self, write_register: bool = False):
         self.write_register = write_register
@@ -369,22 +409,36 @@ class OperationalDriftChecker:
         # Classify alignment
         if marker_exists:
             if repo_head != marker_revision:
-                if log_revision == marker_revision:
-                    signals.append(DriftSignal(
-                        signal_id="DRA-001",
-                        timestamp=datetime.now().isoformat(),
-                        observation=f"Repo HEAD ({repo_head}) ahead of deployed marker ({marker_revision})",
-                        reality_layer="repo reality",
-                        evidence_level="C",
-                        severity="P2",
-                        audit_trigger=False,
-                        source_pointers=[str(marker_path), str(latest_log) if latest_log else ""],
-                        recommended_next_action="Run promotion or update docs if running reality should match repo HEAD"
-                    ))
+                # Get the list of files changed between marker revision and HEAD.
+                # This tells us whether the repo drift touches running-reality paths.
+                rc_diff, stdout_diff, _ = self.run_command(
+                    ["git", "diff", "--name-only",
+                     f"{marker_revision}..{repo_head}"],
+                    timeout=10
+                )
+                diff_paths = stdout_diff.strip().split("\n") if rc_diff == 0 else []
+
+                rr_touched = _paths_touch_running_reality(diff_paths)
+
+                if log_revision == marker_revision or log_revision in ("unknown", ""):
+                    if rr_touched:
+                        # Genuine running-reality drift; marker needs refresh
+                        signals.append(DriftSignal(
+                            signal_id="DRA-001",
+                            timestamp=datetime.now().isoformat(),
+                            observation=f"Repo HEAD ({repo_head}) ahead of deployed marker ({marker_revision}); running-reality paths changed since marker",
+                            reality_layer="repo reality",
+                            evidence_level="C",
+                            severity="P2",
+                            audit_trigger=False,
+                            source_pointers=[str(marker_path), str(latest_log) if latest_log else ""],
+                            recommended_next_action="Run promotion to sync marker with current HEAD"
+                        ))
+                    # else: diff touches only non-running-reality paths → suppress DRA-001
                 else:
-                    # log_revision == marker_revision? → DRA-001 (repo_ahead, marker still valid)
-                    # log_revision is "unknown"? → marker was just written by a non-logged run or log lacks the field; treat as marker-lag, not three-way contradiction
-                    if log_revision not in ("unknown", "") and log_revision != marker_revision:
+                    # log_revision is neither marker_revision nor unknown
+                    # → check whether all three genuinely diverge
+                    if log_revision != marker_revision:
                         signals.append(DriftSignal(
                             signal_id="DRA-002",
                             timestamp=datetime.now().isoformat(),
@@ -395,20 +449,6 @@ class OperationalDriftChecker:
                             audit_trigger=True,
                             source_pointers=[str(marker_path), str(latest_log) if latest_log else ""],
                             recommended_next_action="Investigate and resolve deployment state inconsistency"
-                        ))
-                    elif log_revision in ("unknown", ""):
-                        # marker diverges from repo; log revision unknown (no repo_revision field in log)
-                        # → DRA-001: repo is ahead, marker may need a refresh; not a contradiction
-                        signals.append(DriftSignal(
-                            signal_id="DRA-001",
-                            timestamp=datetime.now().isoformat(),
-                            observation=f"Repo HEAD ({repo_head}) newer than marker revision ({marker_revision}); log revision unknown",
-                            reality_layer="repo reality",
-                            evidence_level="C",
-                            severity="P2",
-                            audit_trigger=False,
-                            source_pointers=[str(marker_path), str(latest_log) if latest_log else ""],
-                            recommended_next_action="Run promotion to sync marker with current HEAD, or confirm marker reflects actual running state"
                         ))
         elif log_revision != "unknown" and log_revision != repo_head:
             signals.append(DriftSignal(
