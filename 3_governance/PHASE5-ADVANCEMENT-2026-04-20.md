@@ -14,6 +14,14 @@ scope: Phase 5 Cloud Control v1 verification
 **Commit**: `d9959e1`
 **Decision**: Phase 5 Cloud Control v1 complete
 
+> **Phase Advancement Chain** (unified commit sequence):
+> - Phase 3 gates passed: `7894b89`
+> - Phase 3 → Phase 4: `1755119`
+> - Phase 4 closed: `045c3a5`
+> - Phase 4 → Phase 5 advancement: `0926f7a`
+> - Phase 5 Cloud Control v1 surface: `d9959e1` ← this record
+> - Phase 5 closed (terminal): `08241c1`
+
 ---
 
 ## Phase 5 Entry Convergence

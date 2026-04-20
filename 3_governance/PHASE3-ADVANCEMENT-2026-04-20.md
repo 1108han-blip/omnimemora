@@ -14,6 +14,16 @@ scope: Phase 3 → Phase 4 advancement decision
 **Commit**: `7894b89`
 **Decision**: Advance to Phase 4
 
+> **Phase Advancement Chain** (unified commit sequence):
+> - Phase 3 gates passed: `7894b89` ← this record
+> - Phase 3 → Phase 4: `1755119`
+> - Phase 4 closed: `045c3a5`
+> - Phase 4 → Phase 5 advancement: `0926f7a`
+> - Phase 5 Cloud Control v1 surface: `d9959e1`
+> - Phase 5 closed (terminal): `08241c1`
+>
+> Formal roadmap phase is now **Phase 5（已完成 — 可选）** per `0_blueprint/ROADMAP.md`.
+
 ---
 
 ## Gate-by-Gate Live Verification (2026-04-20, running reality)

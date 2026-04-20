@@ -15,26 +15,41 @@ scope: formal roadmap phase reconciliation + Phase 3→4 advancement gate
 
 ---
 
-## 1. Formal Roadmap Phase in Force
+> **Supersession Note**: This record documented formal roadmap phase at commit `73be63e` (pre-Phase 3 advancement). Subsequent commits show Phase 3 verification gates passed at `7894b89` and formal advancement Phase 3 → Phase 4 occurred at `1755119`. Phase 4 closed at `045c3a5`. Phase 5 Cloud Control v1 closed at `08241c1`. See `PHASE5-ADVANCEMENT-2026-04-20.md` for the terminal closeout record.
+
+## 1. Historical State (at time of this record)
 
 | Document | Phase Label | Action |
 |----------|-------------|--------|
-| `0_blueprint/ROADMAP.md` | Phase 3（当前） | Keep — no change |
-| `3_governance/AUDIT-RECORD-PHASE6-LIGHT-2026-04-20.md` | internal Phase 6 workstream | Keep — already explicit |
-| `7_docs/internal/phase5/README.md` | Phase 5 convergence → internal Phase 6 workstream | Update — see §3 |
-| `7_docs/internal/phase6/plan/README.md` | internal Phase 6 workstream | Keep — already explicit |
-| `7_docs/internal/phase6/plan/OmniMemora_Operationalization_and_Adoption_执行计划_2026-04-19.md` | internal Phase 6 workstream, roadmap=phase5 (contradiction) | Fix — see §3 |
-| `README.md` | Phase note present | Keep — already correct |
+| `0_blueprint/ROADMAP.md` | Phase 3（当前） | Historical — unchanged at time of this record |
+| `3_governance/AUDIT-RECORD-PHASE6-LIGHT-2026-04-20.md` | internal Phase 6 workstream | Kept |
+| `7_docs/internal/phase5/README.md` | Phase 5 convergence → internal Phase 6 workstream | Updated per §3 |
+| `7_docs/internal/phase6/plan/README.md` | internal Phase 6 workstream | Kept |
+| `7_docs/internal/phase6/plan/OmniMemora_Operationalization_and_Adoption_执行计划_2026-04-19.md` | internal Phase 6 workstream, roadmap=phase5 (contradiction) | Fixed per §3 |
+| `README.md` | Phase note present | Updated to match current state |
 
-**Decision**: Formal roadmap phase stays at **Phase 3（当前）** — Productization & Adoption.
+**Historical Decision** (at commit `73be63e`): Formal roadmap phase stays at **Phase 3（当前）** — Productization & Adoption.
 
-**Rationale**: Phase 6 audit concluded that the 5 internal sub-workstreams closed with PASS. However, no formal verification record has been produced for Phase 3's advancement gate items (see §2). The default rule applies: preserve formal roadmap phase until roadmap-level verification is explicitly proven.
+**Historical Rationale**: Phase 6 audit concluded that the 5 internal sub-workstreams closed with PASS. However, no formal verification record had been produced for Phase 3's advancement gate items (see §2). The default rule applies: preserve formal roadmap phase until roadmap-level verification is explicitly proven.
+
+## 1b. Current State (per `0_blueprint/ROADMAP.md`)
+
+**Current formal roadmap phase**: **Phase 5（已完成 — 可选）**
+
+Phase 3-5 advancement path:
+- Phase 3 verification gates passed at `7894b89` → formal advancement at `1755119`
+- Phase 4 closed at `045c3a5` → formal advancement Phase 4 → Phase 5 at `0926f7a`
+- Phase 5 Cloud Control v1 closed at `08241c1` → terminal baseline frozen
+
+> **Phase 標籤說明**：內部執行階段標籤（如 `internal Phase 6 workstream`）不等同於正式 roadmap phase 改號。若 `ROADMAP.md` 未被正式更新，內部階段標籤只表示執行 workstream，不代表產品階段編號變更。
 
 ---
 
-## 2. Phase 3 → Phase 4 Advancement Gate
+## 2. Phase 3 → Phase 4 Advancement Gate (Historical)
 
-### Phase 3 Verification Items (from `ROADMAP.md`)
+> **Supersession Note**: This section documents the advancement gate assessment at commit `73be63e`. Phase 3 verification gates subsequently passed at `7894b89`, and formal advancement occurred at `1755119`. This assessment is historical.
+
+### Phase 3 Verification Items (from `ROADMAP.md` at time of this record)
 
 | # | Verification Item | Evidence Status | Notes |
 |---|------------------|-----------------|-------|
@@ -46,85 +61,54 @@ scope: formal roadmap phase reconciliation + Phase 3→4 advancement gate
 | V-6 | scope 模型完整（user / workspace / agent / custom） | ❓ Not evidenced in current phase record | Phase 2 record shows scope isolation verified, but current completeness not documented post-phase5 |
 | V-7 | sharing mode 完整（isolated / shared / shared_read_only） | ❓ Not evidenced | Need active doc citation |
 
-**Gate Decision**: No advancement from Phase 3 to Phase 4.
+**Gate Decision** (historical): No advancement from Phase 3 to Phase 4 at time of this record.
 
-**Next Action for Advancement**: The repo must produce evidence for each V-1 through V-7 in an active governance record. Until then, Phase 3 remains current.
+**Historical Next Action**: The repo must produce evidence for each V-1 through V-7 in an active governance record.
 
 ---
 
 ## 3. Active Doc Phase Label Reconciliation
 
-### phase5 README — Update Required
+> **Status**: Planning notes — see current state in Section 1b
 
-Current text:
-```
-**下一主线**：`Operationalization and Adoption` — internal Phase 6 workstream
-```
+### phase5 README — Addressed
 
-Replace with:
-```
-**下一主线**：`Operationalization and Adoption` — **internal Phase 6 workstream**
+See `7_docs/internal/phase5/README.md` for current终态说明. Phase 5 is terminal; enhancement line does not change roadmap phase.
 
-> **Phase 標籤說明**：本文檔所稱 `Phase 6` 為內部執行 workstream 標籤，不等於正式 roadmap phase。正式 roadmap phase 由 `0_blueprint/ROADMAP.md` 定義，當前為 **Phase 3（当前）**。除非 `ROADMAP.md` 被正式更新，否則內部階段標籤不變更產品階段編號。
-```
+### 执行计划 — Superseded
 
-### 执行计划 — Fix Contradiction
-
-Current line 198:
-```
-| `0_blueprint/ROADMAP.md` | 未更新（phase 仍為 5） |
-```
-
-This is **incorrect** — ROADMAP.md says Phase 3, not Phase 5.
-
-Replace with:
-```
-| `0_blueprint/ROADMAP.md` | Phase 3（当前）— 未更新，phase6 workstream 不改 roadmap 編號 |
-```
-
-Also update line 202:
-```
-`internal Phase 6 workstream` 只是執行標籤，直到 roadmap 正式更新，phase 編號仍為 5。
-```
-→
-```
-`internal Phase 6 workstream` 只是執行標籤，正式 roadmap phase 仍為 **Phase 3**（ROADMAP.md 未更新）。
-```
+This section documented a contradiction in `OmniMemora_Operationalization_and_Adoption_执行计划_2026-04-19.md`. Given Phase 5 is now closed as terminal, the "phase仍為5" vs "phase仍為3" contradiction is moot — formal roadmap phase is **Phase 5（已完成 — 可选）** per `ROADMAP.md`.
 
 ---
 
-## 4. Phase 6 Workstream Relationship to Roadmap
+## 4. Phase 6 Workstream Relationship to Roadmap (Historical)
+
+> **Supersession Note**: This section is historical. Phase 5 Cloud Control v1 is now closed as the terminal phase.
 
 | Layer | Status |
 |-------|--------|
-| `0_blueprint/ROADMAP.md` | Phase 3（当前）— unchanged |
+| `0_blueprint/ROADMAP.md` | Phase 5（已完成 — 可选）— terminal baseline |
 | Phase 6 internal workstream | Closed — 5 sublines, all PASS |
 | Phase 6 audit result | 0 P0/P1, next mainline gate open |
 | Phase 6 relationship to roadmap | Execution workstream, **does not advance formal roadmap** |
 
-**Phase 6 is the last internal execution workstream before the repo either:**
-- (a) advances to Phase 4 by producing Phase 3 verification evidence
-- (b) enters a new operational mainline targeting Phase 3's open verification items
+**Phase 6 was the last internal execution workstream before the repo entered terminal Phase 5 state.**
 
 ---
 
-## 5. Post-Alignment Next Product Mainline
+## 5. Post-Alignment Next Product Mainline (Historical)
 
-**Decision**: Next mainline = **Phase 3 Verification Gate Completion**
+> **Supersession Note**: This section is historical. Phase 3-5 advancement path has been completed.
 
-**Rationale**: Phase 6 workstream closed without advancing the formal roadmap. The next product mainline must address the Phase 3 advancement gate (V-1 through V-7) before roadmap can advance to Phase 4.
+**Historical Decision**: Next mainline = **Phase 3 Verification Gate Completion**
 
-**Scope**:
+**Current Reality**: Phase 3 advancement gates were subsequently passed and Phase 3 → 4 → 5 advancement completed. Phase 5 Cloud Control v1 is now closed.
+
+**Historical Scope** (superseded by actual events):
 - Verify token savings surfaces (console, breakdown, trends)
 - Verify scope model completeness (user/workspace/agent/custom)
 - Verify sharing mode completeness (isolated/shared/shared_read_only)
 - Document evidence in a Phase 3 advancement gate record
-
-**Out of Scope for Next Mainline**:
-- Retrieval pipeline evolution
-- Agent orchestration
-- Query understanding
-- Metering → Billing (Phase 4 goal — blocked by Phase 3 not yet complete)
 
 ---
 
@@ -133,14 +117,16 @@ Also update line 202:
 This record is compatible with `3_governance/AUDIT-RECORD-PHASE6-LIGHT-2026-04-20.md`:
 - Phase 6 audit result (PASS) is acknowledged
 - Phase 6 closure does NOT trigger roadmap advancement
-- Phase 3 verification items are identified as the blocking gate for Phase 4
+- Phase 3-5 advancement path subsequently completed (supersedes the historical "Phase 3 stays current" decision)
 - No conflict with F-01 through F-04 findings (all resolved)
 
 ---
 
 ## 7. Memory
 
+> **Supersession Note**: This section contains historical decisions. Updated state follows.
+
 - Phase 6 workstream closeout (5 sublines, all PASS) is **execution progress**, not roadmap advancement
-- Formal roadmap phase stays at Phase 3 until V-1 through V-7 are evidenced
-- Next product mainline = Phase 3 verification gate completion
-- Phase 6 audit "next mainline gate open" means the *next product mainline* is now defined, not that Phase 4 is approved
+- Formal roadmap phase is now **Phase 5（已完成 — 可选）** (Phase 3-5 advancement path completed)
+- Phase 6 audit "next mainline gate open" is historical in context — Phase 5 terminal baseline is now established
+- Current terminal: Phase 5 Cloud Control v1 (optional enhancement, local-first default)

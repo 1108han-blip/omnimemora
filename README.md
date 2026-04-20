@@ -33,12 +33,18 @@ Agent -> Gateway (:18011) -> compile/recall/inject -> Upstream LLM
 - Pure local mode keeps cloud updates and usage reporting off by default.
 - Enabling cloud policy updates implies minimal telemetry upload for policy quality improvement.
 
+## Current Phase
+
+正式 roadmap phase：**Phase 5（已完成 — 可选）**（见 `0_blueprint/ROADMAP.md`）
+
+> **Phase 標籤說明**：`7_docs/internal/phase6/` 為 **internal historical workstream**，已於 2026-04-20 收口（5 sublines 全部 PASS）。此 workstream 不改變正式 roadmap phase 編號。
+
 Start here:
 
+- [0_blueprint/ROADMAP.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/ROADMAP.md) — **正式 roadmap SSOT**
 - [0_blueprint/PRODUCT_DEFINITION.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/PRODUCT_DEFINITION.md)
 - [0_blueprint/DEFAULT_IN_CONTROL_PLANE.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/DEFAULT_IN_CONTROL_PLANE.md)
 - [9_adr/ADR-0003-interface-access-paths.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/9_adr/ADR-0003-interface-access-paths.md)
-- [7_docs/internal/phase6/plan/README.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase6/plan/README.md)
 
 ## Quick Start
 

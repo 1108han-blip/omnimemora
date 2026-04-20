@@ -156,9 +156,13 @@ scope: V-1 through V-7 evidence classification
 
 ## Advancement Decision
 
-**Formal roadmap phase**: Remains **Phase 3（当前）** — Productization & Adoption.
+> **Supersession Note**: This record documents the Phase 3 gate verification at commit `1a5584b` (2026-04-20, pre-alignment). This verification was subsequently addressed — Phase 3 verification gates passed at `7894b89`, and formal advancement Phase 3 → Phase 4 occurred at `1755119`. Phase 4 and Phase 5 are now closed. See `PHASE3-ADVANCEMENT-2026-04-20.md` for the superseding advancement record.
 
-**Blocking items for Phase 4**:
+**Historical status** (at time of this record): **Phase 3（当前）** — Productization & Adoption, blocked by 5 gate items.
+
+**Current status** (per `0_blueprint/ROADMAP.md`): Phase 3-5 已全部完成（收口日期 2026-04-20）
+
+**Blocking items for Phase 4** (at time of this record):
 1. V-2: Time-range breakdown (today/week/month) missing
 2. V-3: Workspace-level breakdown missing (`workspace_id` not tracked)
 3. V-5: Trend visualization missing (no time-series API)
