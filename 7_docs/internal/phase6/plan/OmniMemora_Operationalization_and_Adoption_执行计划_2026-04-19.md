@@ -195,8 +195,8 @@ last_verified_commit: 5ff812c
 | 層 | 狀態 |
 |----|------|
 | `0_blueprint/PRODUCT_CONSTITUTION.md` | 不改 |
-| `0_blueprint/ROADMAP.md` | 未更新（phase 仍為 5） |
+| `0_blueprint/ROADMAP.md` | Phase 3（当前）— 未更新，phase6 workstream 不改 roadmap 編號 |
 | `0_blueprint/PRODUCT_DEFINITION.md` | 不改 |
 | 本文檔 | 內部執行 workstream 記錄 |
 
-`internal Phase 6 workstream` 只是執行標籤，直到 roadmap 正式更新，phase 編號仍為 5。
+`internal Phase 6 workstream` 只是執行標籤，正式 roadmap phase 仍為 **Phase 3**（ROADMAP.md 未更新）。
