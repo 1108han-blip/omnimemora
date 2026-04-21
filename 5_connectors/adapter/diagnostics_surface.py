@@ -355,7 +355,6 @@ def _derive_product_nodes(meter_dict: Dict[str, Any], chain_dict: Dict[str, Any]
     packed_count = meter_dict.get("packed_memory_count", 0)
     savings_ratio = meter_dict.get("savings_ratio", 0.0)
     task_type = meter_dict.get("task_type", "unknown")
-    remote_used = meter_dict.get("remote_used_count", 0)
 
     # Sum durations from internal stages for nodes that have timing
     def _stage_duration(*names: str) -> float:
@@ -421,9 +420,9 @@ def _derive_product_nodes(meter_dict: Dict[str, Any], chain_dict: Dict[str, Any]
         {
             "id": "upstream_forward",
             "label": "Upstream Forward",
-            "status": _status(remote_used > 0),
-            "duration_ms": _stage_duration("backend_search"),
-            "note": f"{remote_used} remote" if remote_used > 0 else "no remote",
+            "status": "not_used",
+            "duration_ms": 0,
+            "note": "local-first v1: no upstream forwarding",
         },
         {
             "id": "response_recorded",
