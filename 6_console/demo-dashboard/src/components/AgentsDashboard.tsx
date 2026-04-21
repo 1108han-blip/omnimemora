@@ -209,12 +209,47 @@ export function AgentsDashboard({ highlightFamilyId }: AgentsDashboardProps) {
                     <h3 className="text-base font-semibold text-zinc-900 dark:text-zinc-100">{card.display_name}</h3>
                     <p className="mt-1 text-xs font-mono text-zinc-500">{card.family_id}</p>
                   </div>
-                  <div className={`rounded-full px-3 py-1 text-xs font-medium ${
-                    card.routing_enabled
-                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
-                      : 'bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300'
-                  }`}>
-                    {card.routing_enabled ? 'route on' : 'route off'}
+                  {/* Three-section truth surface */}
+                  <div className="flex flex-col items-end gap-1">
+                    {/* Integration truth */}
+                    {card.integration_truth && (
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        card.integration_truth === 'attached_with_backup'
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                          : card.integration_truth === 'mcp_attached'
+                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                          : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
+                      }`}>
+                        {card.integration_truth === 'attached_with_backup' ? '接入+備份' :
+                         card.integration_truth === 'mcp_attached' ? 'MCP' : '未接入'}
+                      </span>
+                    )}
+                    {/* Route truth */}
+                    {card.route_truth && (
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        card.route_truth === 'effective'
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                          : card.route_truth === 'intent_on'
+                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                          : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
+                      }`}>
+                        {card.route_truth === 'effective' ? '路由生效' :
+                         card.route_truth === 'intent_on' ? '路由意圖' : '路由關閉'}
+                      </span>
+                    )}
+                    {/* Traffic truth */}
+                    {card.traffic_truth && (
+                      <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
+                        card.traffic_truth === 'real_request_observed'
+                          ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                          : card.traffic_truth === 'internal_only'
+                          ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
+                          : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
+                      }`}>
+                        {card.traffic_truth === 'real_request_observed' ? '真實流量' :
+                         card.traffic_truth === 'internal_only' ? '僅內部' : '無證據'}
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -227,8 +262,8 @@ export function AgentsDashboard({ highlightFamilyId }: AgentsDashboardProps) {
                   <div>last_seen: <span className="font-mono">{formatRelativeTime(card.last_seen_at)}</span></div>
                 </div>
 
-                <div className="mt-3 rounded-lg bg-zinc-50 px-3 py-2 text-xs text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">
-                  {card.message || 'ready'}
+                <div className="mt-3 rounded-lg px-3 py-2 text-xs text-zinc-500 dark:bg-zinc-800 dark:text-zinc-300">
+                  {card.truth_message || card.message || 'ready'}
                 </div>
 
                 <div className="mt-4 space-y-2">

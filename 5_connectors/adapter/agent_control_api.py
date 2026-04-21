@@ -127,6 +127,100 @@ def _build_metrics_index() -> dict[str, dict[str, Any]]:
     return by_family
 
 
+def _build_integration_truth(card: Dict[str, Any]) -> str:
+    """Derive integration_truth from installed + backup_available."""
+    if not card.get("installed", False):
+        return "detached"
+    if card.get("backup_available", False):
+        return "attached_with_backup"
+    return "mcp_attached"
+
+
+def _build_route_truth(routing_enabled: bool, health_state: str) -> str:
+    """Derive route_truth from routing_enabled + health."""
+    if not routing_enabled:
+        return "off"
+    if health_state == "healthy":
+        return "effective"
+    return "intent_on"
+
+
+def _build_traffic_truth(family_id: str, window_minutes: int = 30) -> str:
+    """
+    Derive traffic_truth from compile_store telemetry.
+
+    Only openclaw family is checked for real_request_observed.
+    Other families get no_recent_evidence unless compile events exist.
+    """
+    compile_summary = _compile_store.summarize_compile_status(window_minutes=window_minutes)
+    family_stats = compile_summary.get(family_id)
+
+    if family_id == "openclaw":
+        if not family_stats:
+            return "no_recent_evidence"
+        proxied = family_stats.get("proxied_requests", 0)
+        compile_success = family_stats.get("compile_success", 0)
+        compile_skipped = family_stats.get("compile_skipped", 0)
+        # real_request_observed requires: proxied_requests > 0 AND
+        # at least one of compile_success or compile_skipped (not all failed/bypass)
+        if proxied > 0 and (compile_success > 0 or compile_skipped > 0):
+            return "real_request_observed"
+        return "internal_only"
+
+    # Non-openclaw families
+    if family_stats and family_stats.get("proxied_requests", 0) > 0:
+        return "internal_only"
+    return "no_recent_evidence"
+
+
+def _build_observed_client_truth(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Build observed_client_truth from runtime payload.
+    Only observes; does not rename or productize.
+    """
+    base_url = raw.get("base_url", "") or ""
+    base_url_class = "unknown"
+    if "127.0.0.1" in base_url or "localhost" in base_url:
+        base_url_class = "local"
+    elif base_url.startswith("ws://") or base_url.startswith("wss://"):
+        base_url_class = "remote_websocket"
+    elif base_url.startswith("http://") or base_url.startswith("https://"):
+        base_url_class = "remote_http"
+
+    return {
+        "provider": raw.get("provider", None),
+        "model": raw.get("model", None),
+        "base_url": base_url or None,
+        "base_url_class": base_url_class,
+    }
+
+
+def _build_truth_message(card: Dict[str, Any], integration_truth: str, route_truth: str, traffic_truth: str) -> str:
+    """Build user-facing truth_message from derived states."""
+    installed = card.get("installed", False)
+    routing_enabled = card.get("routing_enabled", False)
+
+    if integration_truth == "detached":
+        return "未接入 OmniMemora。點擊上方按鈕進行接入。"
+    if integration_truth == "mcp_attached":
+        if traffic_truth == "real_request_observed":
+            return "已接入 MCP，的真實工作請求已進入 OmniMemora。"
+        if traffic_truth == "internal_only":
+            return "已接入 MCP，但當前僅看到內部握手，未證明主對話經 OmniMemora。"
+        if routing_enabled:
+            return "已接入 MCP，路由已開啟，等待真實工作請求。"
+        return "已接入 MCP，當前無工作請求。"
+    if integration_truth == "attached_with_backup":
+        if traffic_truth == "real_request_observed":
+            return "已接入並具備備份還原能力，真實工作請求已進入 OmniMemora。"
+        if traffic_truth == "internal_only":
+            return "已接入並具備備份還原能力，但當前僅看到內部握手。"
+        if routing_enabled:
+            return "已接入並具備備份還原能力，路由已開啟，等待真實工作請求。"
+        return "已接入並具備備份還原能力，當前無工作請求。"
+    return "ready"
+
+
 async def _build_control_cards() -> List[Dict[str, Any]]:
     runtime_payload = await _runtime_request("GET", "/agents/control")
     health_state = await _runtime_health_state()
@@ -137,6 +231,13 @@ async def _build_control_cards() -> List[Dict[str, Any]]:
         family_id = str(raw.get("family_id") or "")
         metric = metrics_index.get(family_id, {})
         metrics_24h = _family_24h_metrics(family_id)
+
+        integration_truth = _build_integration_truth(raw)
+        route_truth = _build_route_truth(_route_state.routing_enabled(family_id), health_state)
+        traffic_truth = _build_traffic_truth(family_id, window_minutes=30)
+        observed_client_truth = _build_observed_client_truth(raw)
+        truth_message = _build_truth_message(raw, integration_truth, route_truth, traffic_truth)
+
         cards.append(
             {
                 "family_id": family_id,
@@ -156,6 +257,12 @@ async def _build_control_cards() -> List[Dict[str, Any]]:
                 "saved_tokens_24h": metrics_24h["saved_tokens_24h"],
                 "savings_ratio_24h": metrics_24h["savings_ratio_24h"],
                 "last_request_at": metrics_24h["last_request_at"],
+                # Truth surface fields (product boundary clarity)
+                "integration_truth": integration_truth,
+                "route_truth": route_truth,
+                "traffic_truth": traffic_truth,
+                "observed_client_truth": observed_client_truth,
+                "truth_message": truth_message,
             }
         )
 
@@ -327,6 +434,12 @@ async def uninstall_agent_control(request: AgentControlRequest):
             "saved_tokens_24h": 0,
             "savings_ratio_24h": 0.0,
             "last_request_at": None,
+            # Truth surface fields
+            "integration_truth": "detached",
+            "route_truth": "off",
+            "traffic_truth": "no_recent_evidence",
+            "observed_client_truth": {"provider": None, "model": None, "base_url": None, "base_url_class": "unknown"},
+            "truth_message": "未接入 OmniMemora。點擊上方按鈕進行接入。",
         }
     card["routing_enabled"] = False
     return card

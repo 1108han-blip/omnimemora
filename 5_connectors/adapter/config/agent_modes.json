@@ -2,7 +2,7 @@
   "_comment": "Per-agent routing control for OmniMemora UI. Keys must be canonical_agent_id.",
   "per_agent_modes": {
     "claude_code": "off",
-    "openclaw": "off",
+    "openclaw": "force_if_possible",
     "codex_cli": "off",
     "cursor": "off"
   },
