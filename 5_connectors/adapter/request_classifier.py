@@ -2,21 +2,40 @@
 request_classifier.py - Unified Request Classification for OmniMemora
 ========================================================================
 Provides a single source of truth for classifying requests as:
-  - real: user-facing work requests
   - internal: bootstrap, handshake, transport-level events
+  - task_non_value: user-visible task but no established value path
+  - value_qualified: user-visible task with at least one value path
+    (packed_memory_count > 0 OR local_cards_used > 0 OR remote_used_count > 0)
 
 Used by:
   - metrics_service (四卡, trend, recent_requests)
   - agent_control_api._build_traffic_truth()
+  - diagnostics_surface._classify_meter_request()
   - any other adapter-level request classification
 
 Public Interface
 ----------------
 classify_request(agent: str, query: str, extra: dict | None = None) -> str
-  Returns "real" or "internal"
+  Returns "internal", "task_non_value", or "value_qualified"
+
+is_internal_request(meter) -> bool
+  Returns True only for internal classification.
+
+is_task_non_value(meter) -> bool
+  Returns True for task_non_value requests.
+
+is_value_qualified(meter) -> bool
+  Returns True only for value_qualified requests.
 
 is_real_request(meter) -> bool
-  Convenience for meter objects (has .agent and .query attributes)
+  Preserves old binary semantics — returns True for both task_non_value and value_qualified.
+  Use is_value_qualified() when you specifically need the value-qualified subset.
+
+is_task_request(meter) -> bool
+  User-visible task request (has user-visible prompt content). Broader than real.
+
+is_default_overview_request(meter) -> bool
+  Default overview shows task data, not a narrower 'real' subset.
 """
 
 from datetime import datetime, timezone
@@ -67,13 +86,18 @@ _INTERNAL_AGENTS = {
 
 def classify_request(agent: str, query: str, extra: Optional[dict] = None) -> str:
     """
-    Classify a request as 'real' or 'internal'.
+    Classify a request as 'internal', 'task_non_value', or 'value_qualified'.
 
     Rules (in priority order):
     1. If query matches known internal pattern -> internal
     2. If agent is known internal agent AND query contains 'bootstrap' -> internal
     3. If extra flags indicate internal (e.g., transport-level event) -> internal
-    4. Otherwise -> real
+    4. If request has user-visible task content -> task_non_value (deferred classification)
+    5. Otherwise -> internal
+
+    The ternary upgrade from binary real/internal adds task_non_value as the
+    intermediate tier between internal and value_qualified. Classification is
+    determined at the adapter layer; frontend does not补规则.
 
     Args:
         agent: Agent identifier string
@@ -81,7 +105,7 @@ def classify_request(agent: str, query: str, extra: Optional[dict] = None) -> st
         extra: Optional dict with additional classification hints (e.g., {"transport_event": True})
 
     Returns:
-        "real" or "internal"
+        "internal", "task_non_value", or "value_qualified"
     """
     query = query or ""
     agent = agent or ""
@@ -114,23 +138,106 @@ def classify_request(agent: str, query: str, extra: Optional[dict] = None) -> st
         if extra.get("mcp_handshake"):
             return "internal"
 
-    # Rule 4: Default
-    return "real"
+    # Rule 4: Has user-visible task content?
+    if normalized_query:
+        # task_non_value is the deferred tier; value qualification is
+        # determined by is_value_qualified() based on meter evidence.
+        return "task_non_value"
+
+    # Rule 5: No user content, no internal markers -> internal
+    return "internal"
 
 
-def is_real_request(meter: Any) -> bool:
+def is_internal_request(meter: Any) -> bool:
     """
-    Convenience function for meter objects.
+    Returns True only for internal classification.
 
     Args:
         meter: Any object with .agent and .query attributes
 
     Returns:
-        True if this is a real request, False if internal
+        True if this is an internal request
     """
     agent = getattr(meter, "agent", "") or ""
     query = getattr(meter, "query", "") or ""
-    return classify_request(agent, query) == "real"
+    return classify_request(agent, query) == "internal"
+
+
+def is_task_non_value(meter: Any) -> bool:
+    """
+    Returns True for task_non_value requests.
+
+    These are requests where classify_request returns 'task_non_value' AND
+    the meter has no value paths (no packed_memory, no local_cards, no remote).
+    If meter has value paths but classify_request returns task_non_value,
+    the actual final classification is 'value_qualified'.
+
+    Args:
+        meter: Any object with .agent and .query attributes, plus
+               packed_memory_count, local_cards_used, remote_used_count
+
+    Returns:
+        True if this is a task_non_value request
+    """
+    agent = getattr(meter, "agent", "") or ""
+    query = getattr(meter, "query", "") or ""
+    if classify_request(agent, query) != "task_non_value":
+        return False
+    # Must also have no value paths
+    packed = getattr(meter, "packed_memory_count", 0) or 0
+    local_cards = getattr(meter, "local_cards_used", 0) or 0
+    remote = getattr(meter, "remote_used_count", 0) or 0
+    return not (packed > 0 or local_cards > 0 or remote > 0)
+
+
+def is_value_qualified(meter: Any) -> bool:
+    """
+    Returns True only for value_qualified requests.
+
+    A request is value_qualified if it has user-visible task content AND
+    at least one value path is present:
+    - packed_memory_count > 0  (local memory pack used)
+    - local_cards_used > 0     (memory cards consumed)
+    - remote_used_count > 0   (upstream forward used)
+
+    Bypassed requests remain 'bypassed' and are excluded from default KPI
+    unless explicitly queried for diagnostics.
+
+    Args:
+        meter: Any object with .agent and .query attributes, plus
+               packed_memory_count, local_cards_used, remote_used_count
+
+    Returns:
+        True if this is a value_qualified request
+    """
+    agent = getattr(meter, "agent", "") or ""
+    query = getattr(meter, "query", "") or ""
+    if classify_request(agent, query) != "task_non_value":
+        return False
+
+    # Check value paths
+    packed = getattr(meter, "packed_memory_count", 0) or 0
+    local_cards = getattr(meter, "local_cards_used", 0) or 0
+    remote = getattr(meter, "remote_used_count", 0) or 0
+    return packed > 0 or local_cards > 0 or remote > 0
+
+
+def is_real_request(meter: Any) -> bool:
+    """
+    Preserves old binary real/internal semantics for backward compatibility.
+
+    Returns True for both task_non_value and value_qualified requests.
+    Use is_value_qualified() when you specifically need the value-qualified subset.
+
+    Args:
+        meter: Any object with .agent and .query attributes
+
+    Returns:
+        True if this is a task_non_value or value_qualified request
+    """
+    agent = getattr(meter, "agent", "") or ""
+    query = getattr(meter, "query", "") or ""
+    return classify_request(agent, query) in ("task_non_value", "value_qualified")
 
 
 def is_operator_verification_query(query: str) -> bool:

@@ -55,6 +55,7 @@ export interface AgentControlCard {
   saved_tokens_24h?: number;
   savings_ratio_24h?: number;
   last_request_at?: string | null;
+  observed_requests_24h?: number;
 }
 
 export interface AgentControlResponse {
@@ -95,6 +96,7 @@ export interface TokenSavingsCard {
 export interface CoreCapabilitiesResponse {
   period: '24h';
   observed_request_count: number;
+  non_value_count: number;
   cards: {
     real_requests: RealRequestsCard;
     context_compression: ContextCompressionCard;
@@ -106,6 +108,7 @@ export interface CoreCapabilitiesResponse {
 export interface CoreCapabilitiesTrendPoint {
   date: string;
   observed_request_count: number;
+  non_value_count: number;
   real_requests: RealRequestsCard;
   context_compression: ContextCompressionCard;
   memory_enhancement: MemoryEnhancementCard;
@@ -172,6 +175,8 @@ export interface RecentRequest {
   query: string;
   packed_memory_count: number;
   local_cards_used: number;
+  remote_used_count: number;
+  request_class: 'internal' | 'task_non_value' | 'value_qualified';
 }
 
 export interface RecentRequestsResponse {

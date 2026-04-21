@@ -43,8 +43,13 @@ export async function fetchMetricsTrend(tenant: string = 'all', days: number = 7
   };
 }
 
-export async function fetchRecentRequests(tenant: string = 'default', limit = 10): Promise<RecentRequestsResponse> {
-  const r = await fetch(`${API_BASE}/metrics/recent_requests?tenant=${encodeURIComponent(tenant)}&limit=${limit}`);
+export async function fetchRecentRequests(tenant: string = 'default', limit = 10, value_qualified_only: boolean = true): Promise<RecentRequestsResponse> {
+  const params = new URLSearchParams({
+    tenant: encodeURIComponent(tenant),
+    limit: String(limit),
+    value_qualified_only: String(value_qualified_only),
+  });
+  const r = await fetch(`${API_BASE}/metrics/recent_requests?${params}`);
   if (!r.ok) throw new Error(`Failed to fetch recent requests: ${r.statusText}`);
   return r.json();
 }

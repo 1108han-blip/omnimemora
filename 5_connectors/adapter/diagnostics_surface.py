@@ -240,9 +240,19 @@ async def get_metrics_debug_sources():
 
 
 @router.get("/metrics/recent_requests")
-async def get_recent_requests(tenant: str = "default", limit: int = 20, include_internal: bool = False):
+async def get_recent_requests(
+    tenant: str = "default",
+    limit: int = 20,
+    include_internal: bool = False,
+    value_qualified_only: bool = True,
+):
     metrics_service = importlib.import_module("5_connectors.adapter.metrics_service")
-    requests = metrics_service.get_recent_requests(tenant, limit, include_internal=include_internal)
+    requests = metrics_service.get_recent_requests(
+        tenant,
+        limit,
+        include_internal=include_internal,
+        value_qualified_only=value_qualified_only,
+    )
     return {"tenant": tenant, "requests": requests}
 
 
@@ -436,11 +446,78 @@ def _derive_product_nodes(meter_dict: Dict[str, Any], chain_dict: Dict[str, Any]
     return nodes
 
 
+def _classify_meter_request(meter: Any) -> Dict[str, Any]:
+    """
+    Compute the final request_class, value_path, and qualification_reason for a meter.
+
+    This combines the agent/query-level classification from classify_request() with
+    the meter evidence (packed_memory_count, local_cards_used, remote_used_count)
+    to produce the authoritative ternary classification for /debug/request_evidence.
+    """
+    _rc = importlib.import_module("5_connectors.adapter.request_classifier")
+
+    agent = getattr(meter, "agent", "") or ""
+    query = getattr(meter, "query", "") or ""
+
+    coarse_class = _rc.classify_request(agent, query)
+
+    packed = getattr(meter, "packed_memory_count", 0) or 0
+    local_cards = getattr(meter, "local_cards_used", 0) or 0
+    remote = getattr(meter, "remote_used_count", 0) or 0
+
+    value_paths: List[str] = []
+    if packed > 0:
+        value_paths.append("packed_memory")
+    if local_cards > 0:
+        value_paths.append("local_cards")
+    if remote > 0:
+        value_paths.append("remote_forward")
+
+    # Determine final request_class by combining coarse classification with meter evidence
+    if coarse_class == "internal":
+        request_class = "internal"
+        qualification_reason = "bootstrap/handshake/transport event"
+    elif coarse_class == "task_non_value":
+        if value_paths:
+            # Upgrade to value_qualified based on meter evidence
+            request_class = "value_qualified"
+            qualification_reason = f"user-visible task with active value path: {', '.join(value_paths)}"
+        else:
+            request_class = "task_non_value"
+            qualification_reason = "user-visible task but no established value path (no memory pack, no local cards, no remote forward)"
+    else:
+        # coarse_class == "value_qualified" from classify_request (shouldn't happen with current logic
+        # since classify_request doesn't have meter evidence, but handle it anyway)
+        if value_paths:
+            request_class = "value_qualified"
+            qualification_reason = f"user-visible task with active value path: {', '.join(value_paths)}"
+        else:
+            request_class = "task_non_value"
+            qualification_reason = "user-visible task but no established value path"
+
+    return {
+        "request_class": request_class,
+        "value_path": value_paths,
+        "qualification_reason": qualification_reason,
+        "packed_memory_count": packed,
+        "local_cards_used": local_cards,
+        "remote_used_count": remote,
+    }
+
+
 def _infer_request_status(meter_dict: Dict[str, Any], chain_dict: Dict[str, Any]) -> Dict[str, Any]:
-    """Infer request_status from meter and chain data."""
+    """
+    Infer request_status from meter and chain data.
+
+    request_status is no longer auto-success just because savings_ratio > 0.5.
+    It must be combined with value_qualified result. A request without a value path
+    cannot be marked 'success' even with high savings_ratio.
+    """
     bypass = meter_dict.get("context_bypass", False)
     savings_ratio = meter_dict.get("savings_ratio", 0.0)
     packed_memory_count = meter_dict.get("packed_memory_count", 0)
+    local_cards_used = meter_dict.get("local_cards_used", 0)
+    remote_used_count = meter_dict.get("remote_used_count", 0)
 
     # Determine failure stage from chain if any stage has error metadata
     failure_stage = None
@@ -453,12 +530,22 @@ def _infer_request_status(meter_dict: Dict[str, Any], chain_dict: Dict[str, Any]
                 failure_reason = metadata.get("error_reason", "stage failed")
                 break
 
+    # Determine value path
+    has_memory_pack = packed_memory_count > 0
+    has_local_cards = local_cards_used > 0
+    has_remote = remote_used_count > 0
+    value_qualified = has_memory_pack or has_local_cards or has_remote
+
     if failure_stage:
         request_status = "failed"
     elif bypass:
         request_status = "bypassed"
-    elif savings_ratio == 0:
-        request_status = "not_used"
+    elif not value_qualified:
+        # No established value path — cannot be success regardless of savings
+        if savings_ratio > 0:
+            request_status = "warning"
+        else:
+            request_status = "not_used"
     elif savings_ratio > 0.5:
         request_status = "success"
     elif savings_ratio > 0:
@@ -471,6 +558,7 @@ def _infer_request_status(meter_dict: Dict[str, Any], chain_dict: Dict[str, Any]
         "bypass": bypass,
         "failure_stage": failure_stage,
         "failure_reason": failure_reason,
+        "value_qualified": value_qualified,
     }
 
 
@@ -536,6 +624,7 @@ async def get_request_evidence(request_id: str):
             "task_type": meter_dict.get("task_type", "unknown"),
             "query_summary": meter_dict.get("query", "")[:100],
         },
+        "request_class": _classify_meter_request(meter),
         "status": status,
         "context": {
             "before_tokens": before_tokens,

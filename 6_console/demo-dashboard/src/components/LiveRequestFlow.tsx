@@ -7,6 +7,18 @@ interface LiveRequestFlowProps {
   selectedRequestId?: string | null;
 }
 
+function requestClassLabel(cls: RecentRequest['request_class']): string {
+  if (cls === 'value_qualified') return 'qualified';
+  if (cls === 'task_non_value') return 'non-value';
+  return 'internal';
+}
+
+function requestClassColor(cls: RecentRequest['request_class']): string {
+  if (cls === 'value_qualified') return 'text-emerald-600 dark:text-emerald-400';
+  if (cls === 'task_non_value') return 'text-amber-600 dark:text-amber-400';
+  return 'text-zinc-400 dark:text-zinc-500';
+}
+
 export function LiveRequestFlow({ requests, onSelect, selectedRequestId = null }: LiveRequestFlowProps) {
   // Filter out internal events and normalize agent names
   const userFacingRequests = requests.filter(req => !isInternalEvent(req.query, req.agent));
@@ -54,6 +66,9 @@ export function LiveRequestFlow({ requests, onSelect, selectedRequestId = null }
                 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300'
               }`}>
                 {normalizeTaskType(req.task_type)}
+              </span>
+              <span className={`text-[10px] font-medium ${requestClassColor(req.request_class)}`}>
+                [{requestClassLabel(req.request_class)}]
               </span>
               <span className="text-zinc-300 truncate max-w-[200px]">{req.query || req.request_id}</span>
             </div>

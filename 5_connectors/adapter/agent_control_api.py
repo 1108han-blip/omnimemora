@@ -353,6 +353,7 @@ async def _build_control_cards() -> List[Dict[str, Any]]:
                 "saved_tokens_24h": metrics_24h["saved_tokens_24h"],
                 "savings_ratio_24h": metrics_24h["savings_ratio_24h"],
                 "last_request_at": metrics_24h["last_request_at"],
+                "observed_requests_24h": metrics_24h["observed_requests_24h"],
                 # Truth surface fields (product boundary clarity)
                 "integration_truth": integration_truth,
                 "route_truth": route_truth,
@@ -396,6 +397,10 @@ def _family_24h_metrics(family_id: str) -> Dict[str, Any]:
     Compute 24-hour metrics for a given family_id from meter_store.
     Agent identifiers are normalized via _normalize_agent_to_family before matching.
     Returns zeros if no meters found.
+
+    Primary KPI fields (requests_24h, saved_tokens_24h, savings_ratio_24h) are
+    computed from value_qualified requests only. observed_requests_24h captures
+    all task requests including task_non_value for diagnostics.
     """
     _meter_store._ensure_persistence_loaded()
     all_meters: List[Any] = []
@@ -403,35 +408,43 @@ def _family_24h_metrics(family_id: str) -> Dict[str, Any]:
         all_meters.extend(tenant_meters)
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-    family_meters = []
+    observed_family_meters = []
+    qualified_family_meters = []
     for m in all_meters:
         try:
             m_time = datetime.fromisoformat(m.timestamp.replace("Z", "+00:00")).astimezone(timezone.utc)
         except Exception:
             continue
-        if (
-            m_time >= cutoff
-            and _normalize_agent_to_family(m.agent) == family_id
-            and _rc.is_default_overview_request(m)
-        ):
-            family_meters.append(m)
+        if m_time >= cutoff and _normalize_agent_to_family(m.agent) == family_id:
+            if _rc.is_default_overview_request(m):
+                observed_family_meters.append(m)
+            if _rc.is_value_qualified(m):
+                qualified_family_meters.append(m)
 
-    family_meters = _rc.collapse_retry_bursts(family_meters)
+    observed_family_meters = _rc.collapse_retry_bursts(observed_family_meters)
+    qualified_family_meters = _rc.collapse_retry_bursts(qualified_family_meters)
 
-    if not family_meters:
-        return {"requests_24h": 0, "saved_tokens_24h": 0, "savings_ratio_24h": 0.0, "last_request_at": None}
+    if not qualified_family_meters:
+        return {
+            "requests_24h": 0,
+            "saved_tokens_24h": 0,
+            "savings_ratio_24h": 0.0,
+            "last_request_at": None,
+            "observed_requests_24h": len(observed_family_meters),
+        }
 
-    requests_24h = len(family_meters)
-    saved_tokens_24h = sum(m.saved_tokens_estimate for m in family_meters)
-    baseline_total = sum(m.baseline_tokens_estimate for m in family_meters)
+    requests_24h = len(qualified_family_meters)
+    saved_tokens_24h = sum(m.saved_tokens_estimate for m in qualified_family_meters)
+    baseline_total = sum(m.baseline_tokens_estimate for m in qualified_family_meters)
     savings_ratio_24h = saved_tokens_24h / baseline_total if baseline_total > 0 else 0.0
-    last_request_at = max((m.timestamp for m in family_meters), default=None)
+    last_request_at = max((m.timestamp for m in qualified_family_meters), default=None)
 
     return {
         "requests_24h": requests_24h,
         "saved_tokens_24h": saved_tokens_24h,
         "savings_ratio_24h": round(savings_ratio_24h, 3),
         "last_request_at": last_request_at,
+        "observed_requests_24h": len(observed_family_meters),
     }
 
 

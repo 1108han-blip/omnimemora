@@ -60,7 +60,7 @@ export default function App() {
       const [cc24hRes, ccTrendRes, rRes, uRes, ctrlRes] = await Promise.allSettled([
         controlTab ? Promise.resolve(null) : fetchCoreCapabilities(tenant),
         controlTab ? Promise.resolve(null) : fetchCoreCapabilitiesTrend(tenant, 7),
-        controlTab ? Promise.resolve(null) : fetchRecentRequests(tenant, 10),
+        controlTab ? Promise.resolve(null) : fetchRecentRequests(tenant, 10, false),  // false = show observed task traffic (including task_non_value)
         fetchUsageSummary(tenant),
         fetchAgentControls(),
       ]);
@@ -79,7 +79,9 @@ export default function App() {
       }
 
       if (!controlTab && rRes.status === 'fulfilled' && rRes.value) {
-        setRequests(rRes.value.requests);
+        // Overview shows observed task traffic (both task_non_value and value_qualified)
+        // Live Request Flow reflects this observed traffic by default
+        setRequests(rRes.value.requests.filter((req: RecentRequest) => req.request_class !== 'internal'));
       } else if (!controlTab) {
         const reason = rRes.status === 'rejected' ? rRes.reason : new Error('empty recent response');
         failures.push(`recent: ${reason instanceof Error ? reason.message : String(reason)}`);
@@ -410,6 +412,25 @@ export default function App() {
                   trendData={coreCapTrend}
                 />
               )}
+              {/* Observed Traffic Summary Strip */}
+              {coreCap24h && (
+                <div className="mt-3 flex items-center gap-6 text-xs">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-zinc-400">Observed Through Product</span>
+                    <span className="font-mono font-semibold text-zinc-700 dark:text-zinc-200">{coreCap24h.observed_request_count.toLocaleString()}</span>
+                  </div>
+                  <div className="w-px h-3 bg-zinc-300 dark:bg-zinc-600" />
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-zinc-400">Value Qualified</span>
+                    <span className="font-mono font-semibold text-emerald-600 dark:text-emerald-400">{coreCap24h.cards.real_requests.count.toLocaleString()}</span>
+                  </div>
+                  <div className="w-px h-3 bg-zinc-300 dark:bg-zinc-600" />
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-zinc-400">Non-Value</span>
+                    <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">{coreCap24h.non_value_count.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
             </section>
 
             {/* Module 2: Agent Usage */}
@@ -420,6 +441,9 @@ export default function App() {
               <AgentUsagePanel
                 agents={agentBreakdownRows}
                 onAgentClick={handleAgentUsageClick}
+                observedCounts={Object.fromEntries(
+                  agentControls.map(c => [c.family_id, c.observed_requests_24h ?? 0])
+                )}
               />
             </section>
 
