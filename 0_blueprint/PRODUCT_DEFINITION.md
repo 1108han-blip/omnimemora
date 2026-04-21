@@ -34,6 +34,16 @@ OmniMemora 不改變以下內容：
 
 > 用戶原來怎麼連上游 LLM，OmniMemora 接入後應保持該語義不變。
 
+補充要求：
+
+- 用戶端已配置的 `provider / base_url / auth / model` 應視為**第一真相源**
+- 產品端優先透傳該真相，不得默認以產品內部模型表覆蓋
+- 僅在用戶端未提供足夠上游真相時，產品端才可使用最小必要的 fallback/default
+
+明確禁止：
+
+> 不得把 OmniMemora 做成一個需要持續追蹤市場模型變化、並逐個維護模型適配規則的中心。
+
 ### 原則 2：只在用戶授權後接管請求路徑
 
 OmniMemora 的唯一強制行為是：
@@ -66,6 +76,16 @@ Agent Request
   -> OmniMemora (compile / recall / inject)
   -> Original Upstream (MiniMax / OpenAI / Anthropic)
 ```
+
+透明轉發的精確含義：
+
+- 進來是什麼協議，送回上游時仍保持什麼協議
+- 產品可修改的是 context 內容與必要的請求內嵌信息，不是外層協議語義
+- 產品不得把用戶原有請求改寫成另一種客戶端/上游無法識別的輸出格式
+
+補充判準：
+
+> 協議理解只允許服務於產品功能本身，例如讀取請求、插入 compile 結果、保持原協議返回；不得演變成替用戶重定義接入或替市場模型逐一做產品側適配。
 
 ### 原則 4：編譯執行內置於請求路徑
 
@@ -129,6 +149,8 @@ OmniMemora 不做：
 - 基於原始請求語義的上游動態轉發
 - 編譯前置執行機制（pre-forward hook）
 - 保持原有上游 provider 語義不變的透明轉發能力
+- 用戶端 `provider / base_url / auth / model` 的優先透傳
+- 同協議接入、同協議送回的最小協議理解層
 
 ### 禁止實現
 
@@ -139,6 +161,9 @@ OmniMemora 不做：
 - 通過 provider 偽裝改變用戶原始模型語義
 - 將入口接管降級為可選工具調用
 - 將 UI 父級卡片粒度擴張成所有臨時 subagent 都單獨控制
+- 將產品做成市場模型白名單/模型適配中心
+- 為了接入而重寫用戶原始 `provider / base_url / auth / model` 真相
+- 把協議兼容擴大成替用戶重定義上游語義
 
 ---
 
@@ -213,6 +238,20 @@ memory recall / context compile / token 壓縮 / context 注入：
 - 必須在 Gateway 內部執行
 - 必須發生在轉發前
 - 不暴露為 Agent 工具
+
+### 上游真相優先級
+
+產品在選擇上游時必須遵守以下優先級：
+
+1. 用戶端當前請求所攜帶的 `provider / base_url / auth / model`
+2. 用戶端已配置且可觀測到的 agent/provider truth
+3. 產品端最小 fallback/default
+
+約束：
+
+- 產品端 fallback 只能補缺，不能反客為主
+- 產品端不得因市場模型增多而持續把模型名映射維護變成主設計
+- 產品端應主要按**協議族**維持最小理解能力，而不是按**模型市場**維持逐個適配能力
 
 ---
 

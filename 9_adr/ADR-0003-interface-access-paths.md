@@ -55,6 +55,11 @@ Agent
 - 统一接口层之下是**同一个 Core Compiler**（不可分裂）
 - 所有接入返回**同一个数据结构**
 
+补充原则：
+- 产品端主要适配**协议族**，不主要适配**市场模型列表**
+- 用户端已经存在的 `provider / base_url / auth / model` 是接入真相的第一来源
+- Python Adapter 负责在不破坏该真相的前提下插入 compile / meter / trace
+
 ---
 
 ## 二、架构图
@@ -108,6 +113,12 @@ LLM
 ### 关键约束
 
 **所有接口统一从 Python Adapter (18011) 接入。**
+
+同时要求：
+
+- `18011` 接住请求后，优先透传用户端已配置的上游 truth
+- 只有在用户端未提供足够上游信息时，才允许产品端使用 fallback/default
+- 产品端不得把自己演化成一个持续维护外部模型生态的适配中心
 
 Go Runtime (8765) 的定位重新明确：
 - **仅作为 Local Memory Plane**（存储、检索、scope 治理）
@@ -179,7 +190,14 @@ Unified Entry
 必须：所有 metering 写入同一个 meter_store
 必须：所有 trace 写入同一个 trace_store
 必须：所有响应返回同一个数据结构
+必须：保持同协议接入、同协议送回
+必须：优先透传用户端 provider/base_url/auth/model truth
 ```
+
+说明：
+
+- 协议理解是为了实现 compile / meter / trace 所需的最小功能，不是为了替用户重定义接入方式
+- 若产品端能直接使用用户端现有 upstream truth，就不应退回到产品内部模型映射优先
 
 ### 6.3 端口约定
 
