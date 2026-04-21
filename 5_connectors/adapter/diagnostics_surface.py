@@ -252,6 +252,58 @@ async def get_metric_tenants():
     return {"tenants": metrics_service.list_tenants()}
 
 
+@router.get("/metrics/core_capabilities")
+async def get_core_capabilities(response: Response, tenant: str = "all"):
+    """
+    首页四卡专用 24h 聚合接口。
+
+    返回四张卡的主值+副值，过滤 internal/bootstrap 请求。
+
+    Response shape:
+    {
+      "period": "24h",
+      "observed_request_count": int,
+      "cards": {
+        "real_requests": { "count": int, "ratio": float },
+        "context_compression": { "ratio": float, "baseline_tokens": int, "actual_tokens": int },
+        "memory_enhancement": { "rate": float, "memory_count": int },
+        "token_savings": { "ratio": float, "saved_tokens": int }
+      }
+    }
+    """
+    metrics_service = importlib.import_module("5_connectors.adapter.metrics_service")
+    response.headers["X-OmniMemora-Surface-Role"] = "kpi"
+    response.headers["X-OmniMemora-KPI-Source"] = "/metrics/core_capabilities"
+    return metrics_service.compute_core_capabilities(tenant)
+
+
+@router.get("/metrics/core_capabilities/trend")
+async def get_core_capabilities_trend(response: Response, tenant: str = "all", days: int = 7):
+    """
+    首页四卡 7 天趋势接口。
+
+    Response shape:
+    {
+      "days": int,
+      "trend": [
+        {
+          "date": "YYYY-MM-DD",
+          "observed_request_count": int,
+          "real_requests": { "count": int, "ratio": float },
+          "context_compression": { "ratio": float, "baseline_tokens": int, "actual_tokens": int },
+          "memory_enhancement": { "rate": float, "memory_count": int },
+          "token_savings": { "ratio": float, "saved_tokens": int }
+        },
+        ...
+      ]
+    }
+    """
+    metrics_service = importlib.import_module("5_connectors.adapter.metrics_service")
+    response.headers["X-OmniMemora-Surface-Role"] = "kpi"
+    response.headers["X-OmniMemora-KPI-Source"] = "/metrics/core_capabilities/trend"
+    return metrics_service.compute_core_capabilities_trend(tenant, days)
+
+
 @router.get("/debug/context_diff")
 async def get_context_diff(request_id: str):
     meter = _get_meter_fn(request_id)

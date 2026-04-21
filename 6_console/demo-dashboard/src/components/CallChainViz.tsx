@@ -1,8 +1,57 @@
-import type { RequestEvidence } from '../types';
+import type { RequestEvidence, NodeStatus } from '../types';
 
 interface CallChainVizProps {
   evidence: RequestEvidence | null;
   loading: boolean;
+}
+
+const PRODUCT_NODE_ORDER = [
+  'app_request',
+  'entry_18011',
+  'route_decision',
+  'memory_recall',
+  'context_pack',
+  'compile_or_bypass',
+  'upstream_forward',
+  'response_recorded',
+];
+
+const NODE_LABELS: Record<string, string> = {
+  app_request: 'Request',
+  entry_18011: 'Entry',
+  route_decision: 'Routing',
+  memory_recall: 'Memory Recall',
+  context_pack: 'Context Pack',
+  compile_or_bypass: 'Compile',
+  upstream_forward: 'Upstream',
+  response_recorded: 'Response',
+};
+
+function nodeStatusColor(status: NodeStatus): string {
+  const colors: Record<NodeStatus, string> = {
+    success: '#10b981',
+    warning: '#f59e0b',
+    failed: '#ef4444',
+    bypassed: '#64748b',
+    not_used: '#94a3b8',
+  };
+  return colors[status] ?? '#64748b';
+}
+
+function statusBgClass(status: NodeStatus): string {
+  switch (status) {
+    case 'success':
+      return 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300';
+    case 'warning':
+      return 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300';
+    case 'failed':
+      return 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300';
+    case 'bypassed':
+      return 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300';
+    case 'not_used':
+    default:
+      return 'bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400';
+  }
 }
 
 export function CallChainViz({ evidence, loading }: CallChainVizProps) {
@@ -23,8 +72,8 @@ export function CallChainViz({ evidence, loading }: CallChainVizProps) {
   }
 
   const chain = evidence.chain;
-  const nodes = chain.nodes;
-  const totalMs = nodes.reduce((sum, n) => sum + n.duration_ms, 0) || 1;
+  const nodeMap = new Map(chain.nodes.map(n => [n.id, n]));
+  const orderedNodes = PRODUCT_NODE_ORDER.map(id => nodeMap.get(id)).filter(Boolean) as typeof chain.nodes;
 
   return (
     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
@@ -36,72 +85,23 @@ export function CallChainViz({ evidence, loading }: CallChainVizProps) {
       </div>
 
       <div className="p-6">
-        {/* Timeline visualization */}
-        <div className="flex items-center gap-0 mb-6">
-          {nodes.map((node) => {
-            const widthPct = Math.max(2, (node.duration_ms / totalMs) * 100);
-            return (
+        <div className="space-y-1.5">
+          {orderedNodes.map((node) => (
+            <div key={node.id} className="flex items-center gap-2 text-[10px]">
               <div
-                key={node.id}
-                className="relative group"
-                style={{ width: `${widthPct}%`, minWidth: '30px' }}
-              >
-                <div
-                  className="h-8 flex items-center justify-center text-[10px] font-mono text-white rounded-sm"
-                  style={{ backgroundColor: nodeStatusColor(node.status) }}
-                  title={`${node.label}: ${node.duration_ms.toFixed(3)}ms`}
-                >
-                  {node.label}
-                </div>
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-1 px-2 py-1 bg-zinc-900 text-white text-[10px] rounded opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap pointer-events-none z-10">
-                  {node.note}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* Node list */}
-        <div className="space-y-2">
-          {nodes.map((node) => {
-            const barPct = Math.max(1, (node.duration_ms / totalMs) * 100);
-            return (
-              <div key={node.id} className="flex items-center gap-3">
-                <div className="w-24 text-xs font-mono text-zinc-500 text-right truncate">{node.label}</div>
-                <div className="flex-1 bg-zinc-100 dark:bg-zinc-800 rounded-sm h-5 relative overflow-hidden">
-                  <div
-                    className="absolute left-0 top-0 h-full rounded-sm opacity-80"
-                    style={{ width: `${barPct}%`, backgroundColor: nodeStatusColor(node.status) }}
-                  />
-                </div>
-                <div className="w-20 text-xs font-mono text-zinc-600 dark:text-zinc-400">
-                  {node.duration_ms.toFixed(3)}ms
-                </div>
-                <div className={`w-16 text-xs font-medium text-center px-1 py-0.5 rounded ${
-                  node.status === 'success' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300' :
-                  node.status === 'warning' ? 'bg-amber-100 text-amber-700 dark:bg-amber-900 dark:text-amber-300' :
-                  node.status === 'failed' ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
-                  node.status === 'bypassed' ? 'bg-zinc-100 text-zinc-600 dark:bg-zinc-700 dark:text-zinc-300' :
-                  'bg-zinc-100 text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400'
-                }`}>
-                  {node.status}
-                </div>
-              </div>
-            );
-          })}
+                className="w-2 h-2 rounded-full flex-shrink-0"
+                style={{ backgroundColor: nodeStatusColor(node.status) }}
+              />
+              <span className="w-20 font-mono text-zinc-500 truncate">{NODE_LABELS[node.id] ?? node.id}</span>
+              <span className="flex-1 text-zinc-400 truncate">{node.note}</span>
+              <span className="w-12 font-mono text-zinc-500 text-right">{node.duration_ms.toFixed(1)}ms</span>
+              <span className={`w-14 text-center px-1 py-0.5 rounded ${statusBgClass(node.status)}`}>
+                {node.status}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
     </div>
   );
-}
-
-function nodeStatusColor(status: string): string {
-  const colors: Record<string, string> = {
-    success: '#10b981',
-    warning: '#f59e0b',
-    failed: '#ef4444',
-    bypassed: '#64748b',
-    not_used: '#94a3b8',
-  };
-  return colors[status] ?? '#64748b';
 }

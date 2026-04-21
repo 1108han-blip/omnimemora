@@ -40,7 +40,17 @@ export interface AgentControlCard {
   subagent_count_active: number;
   subagent_count_total_visible: number;
   message?: string;
-  // 24h benefit fields (unified with overview)
+  // Truth surface fields (product boundary clarity — from backend)
+  integration_truth?: 'detached' | 'mcp_attached' | 'attached_with_backup';
+  route_truth?: 'off' | 'intent_on' | 'effective';
+  traffic_truth?: 'no_recent_evidence' | 'internal_only' | 'real_request_observed';
+  observed_client_truth?: {
+    provider: string | null;
+    model: string | null;
+    base_url: string | null;
+    base_url_class: string;
+  };
+  truth_message?: string;
   requests_24h?: number;
   saved_tokens_24h?: number;
   savings_ratio_24h?: number;
@@ -56,6 +66,60 @@ export interface AgentControlResponse {
   rescan_added?: string[];
   rescan_removed?: string[];
 }
+
+// ---------------------------------------------------------------------------
+// Core Capabilities — 首页四卡专用类型
+// ---------------------------------------------------------------------------
+
+export interface RealRequestsCard {
+  count: number;
+  ratio: number;
+}
+
+export interface ContextCompressionCard {
+  ratio: number;
+  baseline_tokens: number;
+  actual_tokens: number;
+}
+
+export interface MemoryEnhancementCard {
+  rate: number;
+  memory_count: number;
+}
+
+export interface TokenSavingsCard {
+  ratio: number;
+  saved_tokens: number;
+}
+
+export interface CoreCapabilitiesResponse {
+  period: '24h';
+  observed_request_count: number;
+  cards: {
+    real_requests: RealRequestsCard;
+    context_compression: ContextCompressionCard;
+    memory_enhancement: MemoryEnhancementCard;
+    token_savings: TokenSavingsCard;
+  };
+}
+
+export interface CoreCapabilitiesTrendPoint {
+  date: string;
+  observed_request_count: number;
+  real_requests: RealRequestsCard;
+  context_compression: ContextCompressionCard;
+  memory_enhancement: MemoryEnhancementCard;
+  token_savings: TokenSavingsCard;
+}
+
+export interface CoreCapabilitiesTrendResponse {
+  days: number;
+  trend: CoreCapabilitiesTrendPoint[];
+}
+
+// ---------------------------------------------------------------------------
+// Legacy types (kept for existing consumers — do not use for 四卡)
+// ---------------------------------------------------------------------------
 
 export interface MetricsSummary {
   token_saving_ratio: number;

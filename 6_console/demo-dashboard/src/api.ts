@@ -9,6 +9,8 @@ import type {
   AgentControlCard,
   AgentControlResponse,
   RequestEvidence,
+  CoreCapabilitiesResponse,
+  CoreCapabilitiesTrendResponse,
 } from './types';
 
 const API_BASE = '';
@@ -151,4 +153,16 @@ export function enableAgentRoute(familyId: string): Promise<AgentControlCard> {
 
 export function disableAgentRoute(familyId: string): Promise<AgentControlCard> {
   return postAgentControlAction('disable', familyId);
+}
+
+export async function fetchCoreCapabilities(tenant: string = 'all'): Promise<CoreCapabilitiesResponse> {
+  const r = await fetch(`${API_BASE}/metrics/core_capabilities?tenant=${encodeURIComponent(tenant)}`);
+  if (!r.ok) throw new Error(`Failed to fetch core capabilities: ${r.statusText}`);
+  return r.json();
+}
+
+export async function fetchCoreCapabilitiesTrend(tenant: string = 'all', days: number = 7): Promise<CoreCapabilitiesTrendResponse> {
+  const r = await fetch(`${API_BASE}/metrics/core_capabilities/trend?tenant=${encodeURIComponent(tenant)}&days=${days}`);
+  if (!r.ok) throw new Error(`Failed to fetch core capabilities trend: ${r.statusText}`);
+  return r.json();
 }

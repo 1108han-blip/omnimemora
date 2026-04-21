@@ -5,8 +5,8 @@ import { ContextComparison } from './components/ContextComparison';
 import { CallChainViz } from './components/CallChainViz';
 import { AgentUsagePanel } from './components/AgentUsagePanel';
 import { AgentsDashboard } from './components/AgentsDashboard';
-import { fetchMetricsSummary, fetchMetricsSummary24h, fetchMetricsTrend, fetchRecentRequests, fetchContextDiff, fetchCallChain, fetchUsageSummary, fetchTenants, fetchAgentControls, fetchRequestEvidence } from './api';
-import type { MetricsSummary, MetricsTrend, RecentRequest, ContextDiff, CallChain, UsageSummary, AgentControlCard, RequestEvidence } from './types';
+import { fetchRecentRequests, fetchUsageSummary, fetchTenants, fetchAgentControls, fetchRequestEvidence, fetchCoreCapabilities, fetchCoreCapabilitiesTrend } from './api';
+import type { RecentRequest, UsageSummary, AgentControlCard, RequestEvidence, CoreCapabilitiesResponse, CoreCapabilitiesTrendResponse } from './types';
 
 function inferInitialTab(): 'overview' | 'agents' {
   const params = new URLSearchParams(window.location.search);
@@ -40,7 +40,6 @@ export default function App() {
   });
   const [tenants, setTenants] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'overview' | 'agents'>(() => inferInitialTab());
-  const [summary, setSummary] = useState<MetricsSummary | null>(null);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [agentControls, setAgentControls] = useState<AgentControlCard[]>([]);
   const [requests, setRequests] = useState<RecentRequest[]>([]);
@@ -50,42 +49,32 @@ export default function App() {
   const [loadingEvidence, setLoadingEvidence] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [highlightFamilyId, setHighlightFamilyId] = useState<string | null>(null);
-  const [summary24h, setSummary24h] = useState<MetricsSummary | null>(null);
-  const [trend7d, setTrend7d] = useState<MetricsTrend | null>(null);
-  const [showMetricsBack, setShowMetricsBack] = useState(false);
+  const [coreCap24h, setCoreCap24h] = useState<CoreCapabilitiesResponse | null>(null);
+  const [coreCapTrend, setCoreCapTrend] = useState<CoreCapabilitiesTrendResponse | null>(null);
 
   const loadMetrics = useCallback(async () => {
     const failures: string[] = [];
     try {
       const controlTab = activeTab === 'agents';
-      const [s24hRes, sAllRes, t7dRes, rRes, uRes, ctrlRes] = await Promise.allSettled([
-        controlTab ? Promise.resolve(null) : fetchMetricsSummary24h(tenant),
-        controlTab ? Promise.resolve(null) : fetchMetricsSummary(tenant),
-        controlTab ? Promise.resolve(null) : fetchMetricsTrend(tenant, 7),
+      const [cc24hRes, ccTrendRes, rRes, uRes, ctrlRes] = await Promise.allSettled([
+        controlTab ? Promise.resolve(null) : fetchCoreCapabilities(tenant),
+        controlTab ? Promise.resolve(null) : fetchCoreCapabilitiesTrend(tenant, 7),
         controlTab ? Promise.resolve(null) : fetchRecentRequests(tenant, 30),
         fetchUsageSummary(tenant),
         fetchAgentControls(),
       ]);
 
-      // 24h summary for HeroMetrics正面
-      if (!controlTab && s24hRes.status === 'fulfilled' && s24hRes.value) {
-        setSummary24h(s24hRes.value);
+      // Core capabilities for 四卡 (HeroMetrics)
+      if (!controlTab && cc24hRes.status === 'fulfilled' && cc24hRes.value) {
+        setCoreCap24h(cc24hRes.value);
       } else if (!controlTab) {
-        const reason = s24hRes.status === 'rejected' ? s24hRes.reason : new Error('empty 24h summary response');
-        failures.push(`summary24h: ${reason instanceof Error ? reason.message : String(reason)}`);
+        const reason = cc24hRes.status === 'rejected' ? cc24hRes.reason : new Error('empty core capabilities response');
+        failures.push(`coreCap24h: ${reason instanceof Error ? reason.message : String(reason)}`);
       }
 
-      // All-time summary (used as fallback / 全历史累计)
-      if (!controlTab && sAllRes.status === 'fulfilled' && sAllRes.value) {
-        setSummary(sAllRes.value);
-      } else if (!controlTab) {
-        const reason = sAllRes.status === 'rejected' ? sAllRes.reason : new Error('empty all-time summary response');
-        failures.push(`summary: ${reason instanceof Error ? reason.message : String(reason)}`);
-      }
-
-      // 7-day trend for HeroMetrics背面
-      if (!controlTab && t7dRes.status === 'fulfilled' && t7dRes.value) {
-        setTrend7d(t7dRes.value);
+      // Core capabilities trend for 四卡背面
+      if (!controlTab && ccTrendRes.status === 'fulfilled' && ccTrendRes.value) {
+        setCoreCapTrend(ccTrendRes.value);
       }
 
       if (!controlTab && rRes.status === 'fulfilled' && rRes.value) {
@@ -315,17 +304,9 @@ export default function App() {
           <>
             {/* Module 1: Hero Metrics */}
             <section>
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider">
-                  ① Core Metrics
-                </h2>
-                <button
-                  onClick={() => setShowMetricsBack(v => !v)}
-                  className="text-xs text-zinc-400 hover:text-zinc-600 dark:hover:text-zinc-300 transition-colors"
-                >
-                  {showMetricsBack ? '← 正面 (24h)' : '背面 (7天趋势)'}
-                </button>
-              </div>
+              <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">
+                ① Core Metrics
+              </h2>
               {loadingMetrics ? (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[...Array(4)].map((_, i) => (
@@ -337,11 +318,8 @@ export default function App() {
                 </div>
               ) : (
                 <HeroMetrics
-                  data={showMetricsBack ? summary : summary24h}
-                  trendData={showMetricsBack ? trend7d?.trend ?? [] : []}
-                  allTimeSavedTokens={summary?.tokens_saved ?? 0}
-                  recent24hSavedTokens={summary24h?.tokens_saved ?? 0}
-                  showBack={showMetricsBack}
+                  data={coreCap24h}
+                  trendData={coreCapTrend}
                 />
               )}
             </section>
@@ -367,7 +345,7 @@ export default function App() {
               <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">
                 ③ Live Request Flow
               </h2>
-              <LiveRequestFlow requests={requests} onSelect={handleSelectRequest} />
+              <LiveRequestFlow requests={requests} onSelect={handleSelectRequest} selectedRequestId={_selectedRequest?.request_id ?? null} />
             </section>
 
             {/* Modules 3 & 4: Context Comparison + Call Chain */}
