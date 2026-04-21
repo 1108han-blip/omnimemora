@@ -54,24 +54,41 @@ export function normalizeFamilyName(id: string): string {
  * not be shown prominently in the user-facing Live Request Flow.
  */
 export function isInternalEvent(query: string, agent: string): boolean {
+  const visibleQuery = extractUserVisibleQuery(query);
   const lowerQuery = query.toLowerCase();
+  const lowerVisibleQuery = visibleQuery.toLowerCase();
 
   // Session bootstrap is an internal handshake event, not a real user request
-  if (query === 'session bootstrap context handshake') {
+  if (query === 'session bootstrap context handshake' || visibleQuery === 'session bootstrap context handshake') {
     return true;
   }
 
   // Untrusted control-surface metadata should not dominate the user-facing flow
   if (lowerQuery.startsWith('sender (untrusted metadata):') && lowerQuery.includes('openclaw-control-ui')) {
-    return true;
+    return !lowerVisibleQuery;
   }
 
   // Internal MCP bundle events
-  if (agent.toLowerCase() === 'openclaw-bundle-mcp' && lowerQuery.includes('bootstrap')) {
+  if (agent.toLowerCase() === 'openclaw-bundle-mcp' && lowerVisibleQuery.includes('bootstrap')) {
     return true;
   }
 
   return false;
+}
+
+export function extractUserVisibleQuery(query: string): string {
+  const raw = query.trim();
+  if (!raw) return '';
+  const lower = raw.toLowerCase();
+  if (!lower.startsWith('sender (untrusted metadata):') && !lower.startsWith('system (untrusted):')) {
+    return raw;
+  }
+
+  const firstFence = raw.indexOf('```');
+  if (firstFence === -1) return '';
+  const secondFence = raw.indexOf('```', firstFence + 3);
+  if (secondFence === -1) return '';
+  return raw.slice(secondFence + 3).trim();
 }
 
 export function scoreRecentRequest(req: RecentRequest): number {

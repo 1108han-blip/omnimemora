@@ -85,21 +85,24 @@ def classify_request(agent: str, query: str, extra: Optional[dict] = None) -> st
     """
     query = query or ""
     agent = agent or ""
+    normalized_query = extract_user_visible_query(query)
 
     # Rule 1: Known internal query patterns
-    if query in _INTERNAL_QUERIES:
+    if query in _INTERNAL_QUERIES or normalized_query in _INTERNAL_QUERIES:
         return "internal"
 
     query_lower = query.lower()
+    normalized_query_lower = normalized_query.lower()
 
     # Rule 1b: Untrusted control-surface metadata should not count as a real request
     if any(query_lower.startswith(prefix) for prefix in _INTERNAL_QUERY_PREFIXES):
         if any(marker in query_lower for marker in _INTERNAL_QUERY_MARKERS):
-            return "internal"
+            if not normalized_query:
+                return "internal"
 
     # Rule 2: Internal agent + bootstrap in query
     agent_lower = agent.lower()
-    if agent_lower in _INTERNAL_AGENTS and "bootstrap" in query_lower:
+    if agent_lower in _INTERNAL_AGENTS and "bootstrap" in normalized_query_lower:
         return "internal"
 
     # Rule 3: Extra flags
@@ -132,7 +135,7 @@ def is_real_request(meter: Any) -> bool:
 
 def is_operator_verification_query(query: str) -> bool:
     """Return True when query matches known operator-only verification traffic."""
-    query_lower = (query or "").strip().lower()
+    query_lower = extract_user_visible_query(query).strip().lower()
     if not query_lower:
         return False
     return any(marker in query_lower for marker in _OPERATOR_VERIFICATION_MARKERS)
@@ -143,9 +146,20 @@ def is_operator_verification_request(meter: Any) -> bool:
     return is_operator_verification_query(query)
 
 
+def is_task_request(meter: Any) -> bool:
+    """
+    User-visible task request for overview/live flow.
+
+    This is intentionally broader than "real":
+    any request with user-visible prompt content counts as a task request,
+    even if it originated from a validation run.
+    """
+    return bool(extract_user_visible_query(getattr(meter, "query", "") or ""))
+
+
 def is_default_overview_request(meter: Any) -> bool:
-    """User-visible overview requests exclude both internal traffic and operator checks."""
-    return is_real_request(meter) and not is_operator_verification_request(meter)
+    """Default overview shows task data, not a narrower 'real' subset."""
+    return is_task_request(meter)
 
 
 def collapse_retry_bursts(meters: Iterable[Any], window_seconds: int = 90) -> List[Any]:
@@ -208,5 +222,31 @@ def _meter_timestamp(meter: Any) -> float:
 
 def _request_fingerprint(meter: Any) -> tuple[str, str]:
     agent = (getattr(meter, "agent", "") or "").strip().lower()
-    query = " ".join((getattr(meter, "query", "") or "").strip().lower().split())
+    query = " ".join(extract_user_visible_query(getattr(meter, "query", "") or "").strip().lower().split())
     return agent, query
+
+
+def extract_user_visible_query(query: str) -> str:
+    """
+    Strip known OpenClaw metadata envelopes and return the actual user-visible prompt.
+
+    If the payload is metadata-only, returns an empty string.
+    """
+    raw = (query or "").strip()
+    if not raw:
+        return ""
+
+    lower = raw.lower()
+    if not any(lower.startswith(prefix) for prefix in _INTERNAL_QUERY_PREFIXES):
+        return raw
+
+    if "```" not in raw:
+        return ""
+
+    first_fence = raw.find("```")
+    second_fence = raw.find("```", first_fence + 3)
+    if second_fence == -1:
+        return ""
+
+    remainder = raw[second_fence + 3 :].strip()
+    return remainder

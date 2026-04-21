@@ -126,7 +126,9 @@ def get_recent_requests(tenant: str, limit: int = 20, include_internal: bool = F
     if not meters:
         return []
 
-    sorted_meters = _default_overview_meters(meters, include_internal=include_internal)
+    sorted_meters = sorted(meters, key=lambda m: m.timestamp, reverse=True)
+    if not include_internal:
+        sorted_meters = [m for m in sorted_meters if _5_rc.is_task_request(m)]
 
     recent = sorted_meters[:limit]
 
@@ -139,7 +141,7 @@ def get_recent_requests(tenant: str, limit: int = 20, include_internal: bool = F
             "bypass": m.context_bypass,
             "saved_tokens": m.saved_tokens_estimate,
             "savings_ratio": m.savings_ratio,
-            "query": getattr(m, "query", "")[:80],
+            "query": _5_rc.extract_user_visible_query(getattr(m, "query", ""))[:160],
             "packed_memory_count": m.packed_memory_count,
             "local_cards_used": m.local_cards_used,
         }
