@@ -960,7 +960,9 @@ def detect_agent(request: Request, body: Optional[dict] = None) -> str:
     if body:
         agent = body.get("agent_id", "") or body.get("agent", "")
         if agent:
-            return _agent_identity.resolve_canonical_agent_id(str(agent).strip().lower())
+            resolved = _agent_identity.resolve_canonical_agent_id(str(agent).strip().lower())
+            if resolved != "unknown":
+                return resolved
 
     # 3. Unified agent identity resolution
     try:
@@ -973,7 +975,9 @@ def detect_agent(request: Request, body: Optional[dict] = None) -> str:
     # 4. Family / User-Agent inference
     family = (request.headers.get("x-agent-family") or "").strip().lower()
     if family:
-        return _agent_identity.resolve_canonical_agent_id(family)
+        resolved = _agent_identity.resolve_canonical_agent_id(family)
+        if resolved != "unknown":
+            return resolved
 
     ua = request.headers.get("user-agent", "").lower()
     if "claude" in ua:
@@ -992,7 +996,9 @@ def detect_agent(request: Request, body: Optional[dict] = None) -> str:
         meta = body.get("metadata", {})
         agent = meta.get("agent_id", "") or meta.get("agent", "")
         if agent:
-            return _agent_identity.resolve_canonical_agent_id(agent.strip().lower())
+            resolved = _agent_identity.resolve_canonical_agent_id(agent.strip().lower())
+            if resolved != "unknown":
+                return resolved
 
     return "unknown"
 
@@ -1013,9 +1019,15 @@ def get_upstream_for_anthropic(requested_model: Optional[str] = None) -> dict:
     # 檢查 OpenClaw attach truth
     attach_truth = _get_openclaw_attach_truth(wire_api="anthropic_messages")
     if attach_truth:
+        fallback_api_key = (
+            getattr(config, "anthropic_api_key", "")
+            or os.getenv("OMNIMEMORA_ANTHROPIC_API_KEY", "").strip()
+            or os.getenv("MINIMAX_API_KEY", "").strip()
+            or os.getenv("ANTHROPIC_AUTH_TOKEN", "").strip()
+        )
         return {
             "base_url": attach_truth.get("base_url", ""),
-            "api_key": "",  # auth 通過 runtime header 傳遞
+            "api_key": fallback_api_key,
             "provider": attach_truth.get("provider", "anthropic"),
             "timeout_seconds": 120,
             "model_map": {},
@@ -2525,7 +2537,37 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
     except Exception:
         return JSONResponse(status_code=400, content={"error": "invalid JSON body"})
 
-    agent_id = detect_agent(request, body)
+    explicit_agent = (
+        body.get("agent_id")
+        or body.get("agent")
+        or request.headers.get("x-omnimemora-agent")
+        or request.headers.get("x-agent-id")
+        or request.headers.get("x-agent-family")
+    )
+    if explicit_agent:
+        resolved_explicit = _agent_identity.resolve_canonical_agent_id(str(explicit_agent).strip().lower())
+        explicit_agent = None if resolved_explicit == "unknown" else resolved_explicit
+    if explicit_agent:
+        agent_id = explicit_agent
+    else:
+        detected_agent = detect_agent(request, body)
+        path_lower = str(request.url.path).lower()
+        model_hint = str(body.get("model", "") or "").lower()
+        user_agent = (request.headers.get("user-agent") or "").lower()
+        payload_hint = str(body).lower()
+        # OpenClaw anthropic gateway fallback:
+        # keep unknown requests from being gated out when OpenClaw metadata is
+        # present but not canonicalized.
+        if detected_agent == "unknown":
+            looks_like_openclaw = (
+                path_lower == "/llm/v1/messages"
+                or "openclaw" in user_agent
+                or "openclaw-control-ui" in payload_hint
+                or ("minimax" in model_hint and path_lower in ("/llm/v1/messages", "/v1/messages", "/llm/anthropic"))
+            )
+            agent_id = "openclaw" if looks_like_openclaw else detected_agent
+        else:
+            agent_id = detected_agent
     model = body.get("model", "unknown")
     is_streaming = body.get("stream", False)
     query = _extract_user_query(body.get("messages"))
@@ -2891,7 +2933,10 @@ async def proxy_openai_chat(request: Request):
         or request.headers.get("x-agent-family")
     )
     if explicit_agent:
-        agent_id = _agent_identity.resolve_canonical_agent_id(str(explicit_agent).strip().lower())
+        resolved_explicit = _agent_identity.resolve_canonical_agent_id(str(explicit_agent).strip().lower())
+        explicit_agent = None if resolved_explicit == "unknown" else resolved_explicit
+    if explicit_agent:
+        agent_id = explicit_agent
     else:
         detected_agent = detect_agent(request, body)
         path_lower = str(request.url.path).lower()

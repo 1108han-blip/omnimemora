@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { HeroMetrics } from './components/HeroMetrics';
 import { LiveRequestFlow } from './components/LiveRequestFlow';
 import { ContextComparison } from './components/ContextComparison';
@@ -7,6 +7,7 @@ import { AgentUsagePanel } from './components/AgentUsagePanel';
 import { AgentsDashboard } from './components/AgentsDashboard';
 import { fetchRecentRequests, fetchUsageSummary, fetchTenants, fetchAgentControls, fetchRequestEvidence, fetchCoreCapabilities, fetchCoreCapabilitiesTrend } from './api';
 import type { RecentRequest, UsageSummary, AgentControlCard, RequestEvidence, CoreCapabilitiesResponse, CoreCapabilitiesTrendResponse } from './types';
+import { isInternalEvent, normalizeAgentUsageList, normalizeRecentRequestUsageList, rankRecentRequests } from './utils/familyNormalization';
 
 function inferInitialTab(): 'overview' | 'agents' {
   const params = new URLSearchParams(window.location.search);
@@ -85,21 +86,7 @@ export default function App() {
       }
 
       if (uRes.status === 'fulfilled') {
-        const usageValue = uRes.value;
-        const requestCounts: Record<string, number> = {};
-        if (!controlTab && rRes.status === 'fulfilled' && rRes.value) {
-          for (const req of rRes.value.requests) {
-            requestCounts[req.agent] = (requestCounts[req.agent] ?? 0) + 1;
-          }
-        }
-        const usageWithFallback = {
-          ...usageValue,
-          by_agent: usageValue.by_agent.map((agent) => ({
-            ...agent,
-            requests: agent.requests > 0 ? agent.requests : (requestCounts[agent.agent] ?? 0),
-          })),
-        };
-        setUsage(usageWithFallback);
+        setUsage(uRes.value);
       } else {
         failures.push(`usage: ${uRes.reason instanceof Error ? uRes.reason.message : String(uRes.reason)}`);
       }
@@ -158,6 +145,23 @@ export default function App() {
     }
   }, []);
 
+  useEffect(() => {
+    if (activeTab !== 'overview') return;
+
+    const eligibleRequests = rankRecentRequests(
+      requests.filter((req) => !isInternalEvent(req.query, req.agent))
+    );
+
+    if (eligibleRequests.length === 0) {
+      setSelectedRequest(null);
+      setRequestEvidence(null);
+      return;
+    }
+    const newest = eligibleRequests[0];
+    if (_selectedRequest?.request_id === newest.request_id) return;
+    void handleSelectRequest(newest);
+  }, [requests, activeTab, _selectedRequest, handleSelectRequest]);
+
   const handleAgentUsageClick = useCallback((familyId: string) => {
     setHighlightFamilyId(familyId);
     setActiveTab('agents');
@@ -195,9 +199,86 @@ export default function App() {
   const activeAgentControls = agentControls.filter(ctrl => ctrl.active);
   const live5mCount = activeAgentControls.filter(ctrl => isWithinWindow(ctrl.last_seen_at, 5)).length;
   const live24hCount = activeAgentControls.filter(ctrl => isWithinWindow(ctrl.last_seen_at, 1440)).length;
+  const recentRequestFamilies = useMemo(
+    () => normalizeRecentRequestUsageList(requests),
+    [requests]
+  );
+  const usageFamilies = useMemo(
+    () => normalizeAgentUsageList(usage?.by_agent ?? []),
+    [usage?.by_agent]
+  );
 
-  // Historical count: count unique canonical families from usage
-  const historicalAgentCount = usage?.by_agent.length ?? 0;
+  // Overview prefers cleaned request evidence when available.
+  const historicalAgentCount = recentRequestFamilies.length > 0 ? recentRequestFamilies.length : usageFamilies.length;
+
+  const agentBreakdownRows = useMemo(() => {
+    const requestFamiliesById = new Map(recentRequestFamilies.map((item) => [item.family, item]));
+    const usageFamiliesById = new Map(usageFamilies.map((item) => [item.family, item]));
+    const seenFamilies = new Set<string>();
+
+    const rows = agentControls.map((ctrl) => {
+      seenFamilies.add(ctrl.family_id);
+      const has24hFields =
+        ctrl.requests_24h !== undefined ||
+        ctrl.saved_tokens_24h !== undefined ||
+        ctrl.savings_ratio_24h !== undefined;
+
+      if (has24hFields) {
+        return {
+          agent: ctrl.family_id,
+          requests: ctrl.requests_24h ?? 0,
+          saved_tokens: ctrl.saved_tokens_24h ?? 0,
+          savings_ratio: ctrl.savings_ratio_24h ?? 0,
+          last_request_at: ctrl.last_request_at ?? null,
+        };
+      }
+
+      const requestFallback = requestFamiliesById.get(ctrl.family_id);
+      if (requestFallback) {
+        return {
+          agent: requestFallback.family,
+          requests: requestFallback.requests,
+          saved_tokens: requestFallback.savedTokens,
+          savings_ratio: requestFallback.savingsRatio,
+          last_request_at: requestFallback.lastRequestAt,
+        };
+      }
+
+      const usageFallback = usageFamiliesById.get(ctrl.family_id);
+      if (usageFallback) {
+        return {
+          agent: usageFallback.family,
+          requests: usageFallback.requests,
+          saved_tokens: usageFallback.savedTokens,
+          savings_ratio: usageFallback.savingsRatio,
+          last_request_at: usageFallback.lastRequestAt,
+        };
+      }
+
+      return {
+        agent: ctrl.family_id,
+        requests: 0,
+        saved_tokens: 0,
+        savings_ratio: 0,
+        last_request_at: null,
+      };
+    });
+
+    for (const requestFamily of recentRequestFamilies) {
+      if (seenFamilies.has(requestFamily.family)) {
+        continue;
+      }
+      rows.push({
+        agent: requestFamily.family,
+        requests: requestFamily.requests,
+        saved_tokens: requestFamily.savedTokens,
+        savings_ratio: requestFamily.savingsRatio,
+        last_request_at: requestFamily.lastRequestAt,
+      });
+    }
+
+    return rows;
+  }, [agentControls, recentRequestFamilies, usageFamilies]);
 
   const statusColor = error
     ? 'bg-red-500'
@@ -213,6 +294,8 @@ export default function App() {
       : live24hCount > 0
         ? 'idle'
         : 'no-active';
+  const hasRecentControlSignal = activeAgentControls.some((ctrl) => isWithinWindow(ctrl.last_seen_at, 5));
+  const overviewHasOnlyControlSignal = activeTab === 'overview' && requests.length === 0 && hasRecentControlSignal;
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -299,6 +382,11 @@ export default function App() {
             Data refresh warning: {error}
           </div>
         )}
+        {!error && overviewHasOnlyControlSignal && (
+          <div className="bg-amber-50 dark:bg-amber-950 border border-amber-200 dark:border-amber-900 rounded-xl px-4 py-3 text-xs text-amber-800 dark:text-amber-200">
+            Agent 卡片的 last_seen 包含控制层心跳；总览只显示真实请求（默认过滤 internal）。当前未检测到可展示的真实请求。
+          </div>
+        )}
 
         {activeTab === 'overview' && (
           <>
@@ -330,13 +418,7 @@ export default function App() {
                 ② Agent Breakdown
               </h2>
               <AgentUsagePanel
-                agents={agentControls.map((ctrl) => ({
-                  agent: ctrl.family_id,
-                  requests: ctrl.requests_24h ?? 0,
-                  saved_tokens: ctrl.saved_tokens_24h ?? 0,
-                  savings_ratio: ctrl.savings_ratio_24h ?? 0,
-                  last_request_at: ctrl.last_request_at,
-                }))}
+                agents={agentBreakdownRows}
                 onAgentClick={handleAgentUsageClick}
               />
             </section>

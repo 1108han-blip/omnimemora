@@ -233,8 +233,8 @@ def _count_real_meters_in_window(family_id: str, cutoff_ts: float) -> int:
             if normalized != family_id:
                 continue
 
-            # Check if real request
-            if not _rc.is_real_request(m):
+            # Check if this request belongs to the default user-facing overview
+            if not _rc.is_default_overview_request(m):
                 continue
 
             # Check if tiny ping (baseline < 50 tokens)
@@ -409,8 +409,14 @@ def _family_24h_metrics(family_id: str) -> Dict[str, Any]:
             m_time = datetime.fromisoformat(m.timestamp.replace("Z", "+00:00")).astimezone(timezone.utc)
         except Exception:
             continue
-        if m_time >= cutoff and _normalize_agent_to_family(m.agent) == family_id:
+        if (
+            m_time >= cutoff
+            and _normalize_agent_to_family(m.agent) == family_id
+            and _rc.is_default_overview_request(m)
+        ):
             family_meters.append(m)
+
+    family_meters = _rc.collapse_retry_bursts(family_meters)
 
     if not family_meters:
         return {"requests_24h": 0, "saved_tokens_24h": 0, "savings_ratio_24h": 0.0, "last_request_at": None}

@@ -14,6 +14,11 @@ PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
+# P1 fix: meter_store 預設寫入源碼樹，需定向到 running reality 數據目錄
+# 避免 adapter 從源碼樹啟動時 meter 數據與 service 讀取的路徑不一致
+_service_data_dir = os.path.join(os.path.expanduser("~/.omnimemora/service/current/5_connectors/data"))
+os.environ.setdefault("OMNIMEMORA_METER_DATA_DIR", _service_data_dir)
+
 import uvicorn
 import importlib
 

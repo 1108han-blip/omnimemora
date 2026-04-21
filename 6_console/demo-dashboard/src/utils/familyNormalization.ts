@@ -1,38 +1,52 @@
+import type { RecentRequest } from '../types';
+
 /**
  * Family name normalization utility
  * Maps internal agent/family identifiers to canonical display names.
  * Ensures user-facing surfaces show consistent, meaningful names.
  */
 
-// Mapping from internal identifiers to canonical family names
-const FAMILY_NAME_MAP: Record<string, string> = {
+const FAMILY_ID_MAP: Record<string, string> = {
   // OpenClaw family
-  'openclaw': 'OpenClaw',
-  'openclaw-agent': 'OpenClaw',
-  'openclaw-bundle-mcp': 'OpenClaw',
-  'openclaw_bundle_mcp': 'OpenClaw',
+  'openclaw': 'openclaw',
+  'openclaw-agent': 'openclaw',
+  'openclaw-bundle-mcp': 'openclaw',
+  'openclaw_bundle_mcp': 'openclaw',
 
   // Claude Code family
-  'claude_code': 'Claude Code',
-  'claude-code': 'Claude Code',
+  'claude_code': 'claude_code',
+  'claude-code': 'claude_code',
+  'claude': 'claude_code',
 
   // Codex family
-  'codex': 'Codex',
-  'codex_cli': 'Codex',
-  'codex-cli': 'Codex',
+  'codex': 'codex_cli',
+  'codex_cli': 'codex_cli',
+  'codex-cli': 'codex_cli',
 
   // Test/development agents (canonical)
-  'test': 'Test',
-  'test-agent': 'Test',
+  'test': 'test',
+  'test-agent': 'test',
 };
+
+const FAMILY_NAME_MAP: Record<string, string> = {
+  openclaw: 'OpenClaw',
+  claude_code: 'Claude Code',
+  codex_cli: 'Codex',
+  test: 'Test',
+};
+
+export function normalizeFamilyId(id: string): string {
+  const lower = id.toLowerCase();
+  return FAMILY_ID_MAP[lower] ?? lower;
+}
 
 /**
  * Returns the canonical display name for a given agent/family identifier.
  * Falls back to the original identifier if no mapping exists.
  */
 export function normalizeFamilyName(id: string): string {
-  const lower = id.toLowerCase();
-  return FAMILY_NAME_MAP[lower] ?? id;
+  const familyId = normalizeFamilyId(id);
+  return FAMILY_NAME_MAP[familyId] ?? id;
 }
 
 /**
@@ -40,17 +54,92 @@ export function normalizeFamilyName(id: string): string {
  * not be shown prominently in the user-facing Live Request Flow.
  */
 export function isInternalEvent(query: string, agent: string): boolean {
+  const lowerQuery = query.toLowerCase();
+
   // Session bootstrap is an internal handshake event, not a real user request
   if (query === 'session bootstrap context handshake') {
     return true;
   }
 
+  // Untrusted control-surface metadata should not dominate the user-facing flow
+  if (lowerQuery.startsWith('sender (untrusted metadata):') && lowerQuery.includes('openclaw-control-ui')) {
+    return true;
+  }
+
   // Internal MCP bundle events
-  if (agent.toLowerCase() === 'openclaw-bundle-mcp' && query.includes('bootstrap')) {
+  if (agent.toLowerCase() === 'openclaw-bundle-mcp' && lowerQuery.includes('bootstrap')) {
     return true;
   }
 
   return false;
+}
+
+export function scoreRecentRequest(req: RecentRequest): number {
+  const isUnknownAgent = req.agent.toLowerCase() === 'unknown';
+  const taskKnown = req.task_type !== 'unknown';
+
+  let score = 0;
+  if (!req.bypass) score += 1000;
+  if (req.saved_tokens > 0) score += 500;
+  if (req.packed_memory_count > 0) score += 250;
+  if (!isUnknownAgent) score += 100;
+  if (taskKnown) score += 25;
+  score += Math.min(req.saved_tokens, 99);
+  return score;
+}
+
+export function rankRecentRequests(requests: RecentRequest[]): RecentRequest[] {
+  return [...requests].sort((a, b) => {
+    // Live flow must be time-first to reflect real-time traffic.
+    // Keep score as a secondary tie-breaker only.
+    const tsDiff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+    if (tsDiff !== 0) return tsDiff;
+    return scoreRecentRequest(b) - scoreRecentRequest(a);
+  });
+}
+
+export function normalizeRecentRequestUsageList(requests: RecentRequest[]): NormalizedAgentUsage[] {
+  const familyMap = new Map<string, NormalizedAgentUsage>();
+
+  for (const req of requests) {
+    if (isInternalEvent(req.query, req.agent)) {
+      continue;
+    }
+
+    const family = normalizeFamilyId(req.agent);
+    const displayName = normalizeFamilyName(family);
+    const existing = familyMap.get(family);
+
+    if (existing) {
+      const existingSaved = existing.savedTokens;
+      const existingRatio = existing.savingsRatio;
+      const existingBaseline = existingSaved > 0 && existingRatio > 0
+        ? existingSaved / existingRatio
+        : 0;
+      const newBaseline = req.saved_tokens > 0 && req.savings_ratio > 0
+        ? req.saved_tokens / req.savings_ratio
+        : 0;
+
+      existing.requests += 1;
+      existing.savedTokens = existingSaved + req.saved_tokens;
+      const totalBaseline = existingBaseline + newBaseline;
+      existing.savingsRatio = totalBaseline > 0 ? existing.savedTokens / totalBaseline : 0;
+      if (!existing.lastRequestAt || req.timestamp > existing.lastRequestAt) {
+        existing.lastRequestAt = req.timestamp;
+      }
+    } else {
+      familyMap.set(family, {
+        family,
+        displayName,
+        requests: 1,
+        savedTokens: req.saved_tokens,
+        savingsRatio: req.savings_ratio,
+        lastRequestAt: req.timestamp,
+      });
+    }
+  }
+
+  return Array.from(familyMap.values());
 }
 
 /**
@@ -77,21 +166,22 @@ export function normalizeAgentUsageList(
   const familyMap = new Map<string, NormalizedAgentUsage>();
 
   for (const a of agents) {
-    const family = normalizeFamilyName(a.agent);
+    const family = normalizeFamilyId(a.agent);
+    const displayName = normalizeFamilyName(family);
     const existing = familyMap.get(family);
 
     if (existing) {
-      existing.requests += a.requests;
-      existing.savedTokens += a.saved_tokens;
-      // Recalculate weighted average ratio
-      // savings_ratio = saved_tokens / baseline_tokens
-      // So baseline_tokens = saved_tokens / savings_ratio (when savings_ratio > 0)
-      const existingBaseline = existing.savedTokens > 0 && existing.savingsRatio > 0
-        ? existing.savedTokens / existing.savingsRatio
+      const existingSaved = existing.savedTokens;
+      const existingRatio = existing.savingsRatio;
+      const existingBaseline = existingSaved > 0 && existingRatio > 0
+        ? existingSaved / existingRatio
         : 0;
       const newBaseline = a.saved_tokens > 0 && a.savings_ratio > 0
         ? a.saved_tokens / a.savings_ratio
         : 0;
+
+      existing.requests += a.requests;
+      existing.savedTokens = existingSaved + a.saved_tokens;
       const totalBaseline = existingBaseline + newBaseline;
       existing.savingsRatio = totalBaseline > 0 ? existing.savedTokens / totalBaseline : 0;
       // Keep most recent timestamp
@@ -101,7 +191,7 @@ export function normalizeAgentUsageList(
     } else {
       familyMap.set(family, {
         family,
-        displayName: family,
+        displayName,
         requests: a.requests,
         savedTokens: a.saved_tokens,
         savingsRatio: a.savings_ratio,

@@ -41,6 +41,9 @@ def _default_anthropic_api_key() -> str:
     minimax = os.getenv("MINIMAX_API_KEY", "").strip()
     if minimax:
         return minimax
+    bridge = os.getenv("ANTHROPIC_AUTH_TOKEN", "").strip()
+    if bridge:
+        return bridge
     return os.getenv("ANTHROPIC_API_KEY", "")
 
 

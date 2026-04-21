@@ -19,7 +19,8 @@ is_real_request(meter) -> bool
   Convenience for meter objects (has .agent and .query attributes)
 """
 
-from typing import Any, Optional
+from datetime import datetime, timezone
+from typing import Any, Iterable, List, Optional
 
 
 # =============================================================================
@@ -30,6 +31,32 @@ from typing import Any, Optional
 _INTERNAL_QUERIES = {
     "session bootstrap context handshake",
 }
+
+_INTERNAL_QUERY_PREFIXES = (
+    "sender (untrusted metadata):",
+    "system (untrusted):",
+)
+
+_INTERNAL_QUERY_MARKERS = (
+    "openclaw-control-ui",
+    "exec completed (",
+)
+
+_OPERATOR_VERIFICATION_MARKERS = (
+    "ui链路验收",
+    "openclaw_final_check",
+    "openclaw_after_fix",
+    "openclaw_real_path_ok",
+    "openclaw_route_used",
+    "openclaw_chat_check_ok",
+    "reply with ok",
+    "reply with ok-2",
+    "dashboard live meter check",
+    "port-18011 live meter check",
+    "5173 ui refresh verification",
+    "dashboard verification test",
+    "stability heartbeat iteration",
+)
 
 # Known internal agents
 _INTERNAL_AGENTS = {
@@ -63,9 +90,16 @@ def classify_request(agent: str, query: str, extra: Optional[dict] = None) -> st
     if query in _INTERNAL_QUERIES:
         return "internal"
 
+    query_lower = query.lower()
+
+    # Rule 1b: Untrusted control-surface metadata should not count as a real request
+    if any(query_lower.startswith(prefix) for prefix in _INTERNAL_QUERY_PREFIXES):
+        if any(marker in query_lower for marker in _INTERNAL_QUERY_MARKERS):
+            return "internal"
+
     # Rule 2: Internal agent + bootstrap in query
     agent_lower = agent.lower()
-    if agent_lower in _INTERNAL_AGENTS and "bootstrap" in query.lower():
+    if agent_lower in _INTERNAL_AGENTS and "bootstrap" in query_lower:
         return "internal"
 
     # Rule 3: Extra flags
@@ -96,6 +130,51 @@ def is_real_request(meter: Any) -> bool:
     return classify_request(agent, query) == "real"
 
 
+def is_operator_verification_query(query: str) -> bool:
+    """Return True when query matches known operator-only verification traffic."""
+    query_lower = (query or "").strip().lower()
+    if not query_lower:
+        return False
+    return any(marker in query_lower for marker in _OPERATOR_VERIFICATION_MARKERS)
+
+
+def is_operator_verification_request(meter: Any) -> bool:
+    query = getattr(meter, "query", "") or ""
+    return is_operator_verification_query(query)
+
+
+def is_default_overview_request(meter: Any) -> bool:
+    """User-visible overview requests exclude both internal traffic and operator checks."""
+    return is_real_request(meter) and not is_operator_verification_request(meter)
+
+
+def collapse_retry_bursts(meters: Iterable[Any], window_seconds: int = 90) -> List[Any]:
+    """
+    Collapse retry bursts from the same user action into one representative meter.
+
+    OpenClaw may retry identical prompts several times within a short window when
+    the upstream provider overloads or the gateway reconnects. For user-facing
+    overview surfaces we keep the latest attempt in each short burst.
+    """
+    ordered = sorted(list(meters), key=_meter_timestamp)
+    collapsed: List[Any] = []
+    latest_by_fingerprint: dict[tuple[str, str], tuple[int, float]] = {}
+
+    for meter in ordered:
+        ts = _meter_timestamp(meter)
+        fingerprint = _request_fingerprint(meter)
+        prev = latest_by_fingerprint.get(fingerprint)
+        if prev and (ts - prev[1]) <= window_seconds:
+            collapsed[prev[0]] = meter
+            latest_by_fingerprint[fingerprint] = (prev[0], ts)
+            continue
+
+        collapsed.append(meter)
+        latest_by_fingerprint[fingerprint] = (len(collapsed) - 1, ts)
+
+    return collapsed
+
+
 def is_tiny_ping(meter: Any, threshold: int = 50) -> bool:
     """
     Detect tiny/basic ping requests that don't represent meaningful work.
@@ -115,3 +194,19 @@ def is_tiny_ping(meter: Any, threshold: int = 50) -> bool:
         return True  # Can't determine, assume ping
 
     return baseline < threshold
+
+
+def _meter_timestamp(meter: Any) -> float:
+    raw = getattr(meter, "timestamp", "") or ""
+    if not raw:
+        return 0.0
+    try:
+        return datetime.fromisoformat(raw.replace("Z", "+00:00")).astimezone(timezone.utc).timestamp()
+    except Exception:
+        return 0.0
+
+
+def _request_fingerprint(meter: Any) -> tuple[str, str]:
+    agent = (getattr(meter, "agent", "") or "").strip().lower()
+    query = " ".join((getattr(meter, "query", "") or "").strip().lower().split())
+    return agent, query
