@@ -19,6 +19,7 @@ Phase 3 升級：在轉發前執行 compile（memory selection + context optimiz
   POST /llm/anthropic         — Claude Code 專用（Anthropic 格式）
 """
 import json
+import importlib
 import os
 import time as _time
 import httpx
@@ -45,12 +46,15 @@ from .truth_bridge import (
     product_auth_ref_for_provider,
     resolve_truth_contract,
 )
+from .truth_registry import DEFAULT_TRUTH_REGISTRY
 from .config import config
 from .path_registry import classify_path
 from .trace_context import build_trace_event, get_request_context
 from .trace_events import append_trace_event
 
 router = APIRouter(tags=["llm_proxy"])
+_meter_store = importlib.import_module("5_connectors.adapter.meter_store")
+_v2_compute = importlib.import_module("4_core.logic.v2_compute")
 
 _OMNI_HOP_BY_HOP_HEADERS = {
     "connection",
@@ -997,10 +1001,30 @@ def detect_agent(request: Request, body: Optional[dict] = None) -> str:
 # 上游配置
 # ============================================================================
 
-def get_upstream_for_anthropic() -> dict:
-    """返回 Anthropic 上游配置。"""
+def get_upstream_for_anthropic(requested_model: Optional[str] = None) -> dict:
+    """
+    返回 Anthropic wire-api 对应的上游配置。
+
+    優先級：
+    1. OpenClaw attach truth snapshot（如果存在且 wire_api=anthropic_messages）
+    2. 模型特例 fallback（MiniMax-M2.7 等）
+    3. product upstream config（默认配置）
+    """
+    # 檢查 OpenClaw attach truth
+    attach_truth = _get_openclaw_attach_truth(wire_api="anthropic_messages")
+    if attach_truth:
+        return {
+            "base_url": attach_truth.get("base_url", ""),
+            "api_key": "",  # auth 通過 runtime header 傳遞
+            "provider": attach_truth.get("provider", "anthropic"),
+            "timeout_seconds": 120,
+            "model_map": {},
+            "default_model": attach_truth.get("model", config.anthropic_default_model),
+            "_truth_source": "openclaw_attach",
+        }
+
     upstream = dict(config.upstreams.get("anthropic", {}))
-    return {
+    resolved = {
         "base_url": upstream.get("base_url", config.anthropic_base_url),
         "api_key": upstream.get("api_key", config.anthropic_api_key),
         "provider": upstream.get("provider", "anthropic"),
@@ -1008,10 +1032,68 @@ def get_upstream_for_anthropic() -> dict:
         "model_map": upstream.get("model_map", {}),
         "default_model": config.anthropic_default_model,
     }
+    if not requested_model:
+        return resolved
+
+    # MiniMax-M2.7 等模型特例 — 現在作為低優先級 fallback
+    model_lookup = DEFAULT_TRUTH_REGISTRY.canonicalize_refs(
+        model_requested=requested_model,
+        canonical_wire_api="anthropic_messages",
+    )
+    model_provider = getattr(getattr(model_lookup, "provider", None), "provider_ref", None)
+    if model_provider != "minimax_anthropic_compatible":
+        return resolved
+
+    endpoint = model_lookup.endpoint or DEFAULT_TRUTH_REGISTRY.default_endpoint_for_provider(model_provider)
+    if endpoint is not None:
+        resolved["base_url"] = endpoint.base_url
+    resolved["provider"] = model_provider
+    resolved["_truth_source"] = "model_fallback"
+    return resolved
+
+
+def _get_openclaw_attach_truth(wire_api: Optional[str] = None) -> Optional[dict]:
+    """
+    獲取 OpenClaw attach metadata upstream truth snapshot。
+    如果有 attach truth 且 wire_api 匹配（或不指定），返回該快照。
+    """
+    try:
+        _openclaw_attach = __import__(
+            "5_connectors.adapter.openclaw_attach_state",
+            fromlist=["dummy"]
+        )
+        attach_truth = _openclaw_attach.get_openclaw_attach_truth()
+        if not attach_truth:
+            return None
+        if wire_api and attach_truth.get("wire_api") != wire_api:
+            return None
+        return attach_truth
+    except Exception:
+        return None
 
 
 def get_upstream_for_openai(provider_base: Optional[str] = None) -> dict:
-    """返回 OpenAI-compatible 上游配置。"""
+    """
+    返回 OpenAI-compatible 上游配置。
+
+    優先級：
+    1. OpenClaw attach truth snapshot（如果存在且 wire_api=chat_completions）
+    2. runtime override（provider_base header）
+    3. product upstream config（默认配置）
+    """
+    # 檢查 OpenClaw attach truth — 這是 attach 時捕獲的用戶端原始上游真相
+    attach_truth = _get_openclaw_attach_truth(wire_api="chat_completions")
+    if attach_truth:
+        return {
+            "base_url": attach_truth.get("base_url", ""),
+            "api_key": "",  # auth 通過 runtime header 傳遞
+            "provider": attach_truth.get("provider", "openai_compatible"),
+            "timeout_seconds": 120,
+            "model_map": {},
+            "default_model": attach_truth.get("model", config.openai_default_model),
+            "_truth_source": "openclaw_attach",
+        }
+
     upstream = dict(config.upstreams.get("openai", {}))
     return {
         "base_url": provider_base or upstream.get("base_url", config.openai_base_url),
@@ -1640,6 +1722,81 @@ def _collect_text_parts(parts) -> str:
             if isinstance(text, str) and text:
                 chunks.append(text)
     return "".join(chunks)
+
+
+def _extract_user_query(messages) -> str:
+    if not isinstance(messages, list):
+        return ""
+    for message in reversed(messages):
+        if not isinstance(message, dict):
+            continue
+        if str(message.get("role", "")).lower() != "user":
+            continue
+        content = _collect_text_parts(message.get("content"))
+        if content:
+            return content
+    return ""
+
+
+def _persist_gateway_meter(
+    *,
+    request_id: str,
+    agent_id: str,
+    query: str,
+    compile_meta: dict,
+) -> None:
+    baseline_tokens = int(compile_meta.get("original_token_estimate") or 0)
+    actual_tokens = int(compile_meta.get("compiled_token_estimate") or 0)
+    compile_status = str(compile_meta.get("compile_status") or "compile_skipped")
+
+    if actual_tokens <= 0 or compile_status != "compile_success":
+        actual_tokens = baseline_tokens
+
+    baseline_chars = max(len(query or ""), baseline_tokens * 4)
+    actual_chars = max(0, actual_tokens * 4)
+    saved_tokens = max(0, baseline_tokens - actual_tokens)
+    saved_chars = max(0, baseline_chars - actual_chars)
+    packed_count = int(compile_meta.get("selected_memory_count") or 0)
+    tenant = agent_id if agent_id and agent_id != "unknown" else "gateway"
+
+    try:
+        meter = _v2_compute.TokenSavingsMeter(
+            request_id=request_id,
+            tenant=tenant,
+            user=tenant,
+            agent=agent_id or "unknown",
+            client=f"{agent_id or 'unknown'}-gateway",
+            timestamp=datetime.utcnow().isoformat() + "Z",
+            query_shape=_v2_compute.classify_query_shape(query or ""),
+            query_chars=len(query or ""),
+            query=query or "",
+            baseline_chars=baseline_chars,
+            actual_chars=actual_chars,
+            saved_chars=saved_chars,
+            baseline_tokens_estimate=baseline_tokens,
+            actual_tokens_estimate=actual_tokens,
+            saved_tokens_estimate=saved_tokens,
+            savings_ratio=round((saved_tokens / baseline_tokens), 3) if baseline_tokens > 0 else 0.0,
+            packed_memory_count=packed_count,
+            local_cards_used=packed_count,
+            remote_candidates_considered=max(packed_count, 0),
+            remote_candidates_skipped=0,
+            remote_used_count=0,
+            skipped_remote_reason=None,
+            coverage_satisfied=packed_count > 0,
+            packing_enabled=compile_status == "compile_success",
+            abstract_preferred=False,
+            dedup_applied=True,
+            task_type=None,
+            context_bypass=compile_status != "compile_success",
+            bypassed_context_tokens=baseline_tokens if compile_status != "compile_success" else 0,
+            matched_keywords=[],
+            candidate_memories=[],
+            dropped_memories=[],
+        )
+        _meter_store.store_meter(meter)
+    except Exception as exc:
+        loguru.logger.warning(f"[LLM_PROXY/METER] request_id={request_id} persist skipped: {exc}")
 
 
 def _responses_tools_to_chat_tools(tools) -> list[dict]:
@@ -2371,6 +2528,7 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
     agent_id = detect_agent(request, body)
     model = body.get("model", "unknown")
     is_streaming = body.get("stream", False)
+    query = _extract_user_query(body.get("messages"))
 
     _record_event(agent_id, "proxy_request", request_id, route_label, model, "received", trace_id=trace_id)
     _trace_anthropic_payload(
@@ -2400,7 +2558,7 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
         {"agent_id": agent_id, "route": route_label, "compile_meta": compile_meta},
     )
 
-    upstream = get_upstream_for_anthropic()
+    upstream = get_upstream_for_anthropic(model)
     upstream_model = resolve_anthropic_upstream_model(model, upstream)
     contract, truth_meta = resolve_truth_contract(
         request_id=request_id,
@@ -2438,6 +2596,12 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
     )
     _record_compile_event(
         request_id, agent_id, route_label, model, compile_meta, truth_meta=truth_meta, trace_id=trace_id
+    )
+    _persist_gateway_meter(
+        request_id=request_id,
+        agent_id=agent_id,
+        query=query,
+        compile_meta=compile_meta,
     )
     compiled_body["model"] = contract.model_resolved or upstream_model
     upstream_base = contract.base_url_resolved or upstream["base_url"]
@@ -2730,8 +2894,18 @@ async def proxy_openai_chat(request: Request):
         agent_id = _agent_identity.resolve_canonical_agent_id(str(explicit_agent).strip().lower())
     else:
         detected_agent = detect_agent(request, body)
-        if detected_agent == "unknown" and str(request.url.path).startswith("/llm/"):
-            agent_id = "openclaw"
+        path_lower = str(request.url.path).lower()
+        # OpenClaw CLI/gateway 请求识别增强：
+        # - 当 detect_agent 返回 unknown 时，只要路径是 /llm/* 或 OpenAI chat 兼容路径
+        #   且无其他明确 agent 标识，优先判定为 openclaw
+        if detected_agent == "unknown":
+            if path_lower.startswith("/llm/"):
+                agent_id = "openclaw"
+            elif path_lower in ("/v1/chat/completions", "/chat/completions"):
+                # OpenClaw 和 Codex 常用路径，无明确 agent 时优先 openclaw
+                agent_id = "openclaw"
+            else:
+                agent_id = detected_agent
         else:
             agent_id = detected_agent
     model = body.get("model", config.openai_default_model)
@@ -2799,6 +2973,16 @@ async def proxy_openai_chat(request: Request):
     )
     _record_compile_event(
         request_id, agent_id, "/llm/chat", model, compile_meta, truth_meta=truth_meta, trace_id=trace_id
+    )
+    # OpenClaw/Codex 请求无论 compile 成功/失败都需要落盘 meter
+    # OpenAI chat 格式使用 messages 数组，提取用户查询
+    chat_messages = body.get("messages", [])
+    query_text = _extract_user_query(chat_messages) if chat_messages else ""
+    _persist_gateway_meter(
+        request_id=request_id,
+        agent_id=agent_id,
+        query=query_text,
+        compile_meta=compile_meta,
     )
     compiled_body["model"] = contract.model_resolved or upstream_model
     compiled_body = _normalize_openai_upstream_payload(compiled_body)

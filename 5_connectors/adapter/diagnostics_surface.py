@@ -240,9 +240,9 @@ async def get_metrics_debug_sources():
 
 
 @router.get("/metrics/recent_requests")
-async def get_recent_requests(tenant: str = "default", limit: int = 20):
+async def get_recent_requests(tenant: str = "default", limit: int = 20, include_internal: bool = False):
     metrics_service = importlib.import_module("5_connectors.adapter.metrics_service")
-    requests = metrics_service.get_recent_requests(tenant, limit)
+    requests = metrics_service.get_recent_requests(tenant, limit, include_internal=include_internal)
     return {"tenant": tenant, "requests": requests}
 
 

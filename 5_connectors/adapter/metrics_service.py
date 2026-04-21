@@ -16,6 +16,7 @@ from datetime import datetime, timezone, timedelta
 # Lazy import to avoid circular imports
 import importlib
 _5_meter = importlib.import_module("5_connectors.adapter.meter_store")
+_5_rc = importlib.import_module("5_connectors.adapter.request_classifier")
 
 
 def _collect_meters(tenant: str):
@@ -84,9 +85,15 @@ def compute_metrics_summary(tenant: str) -> Dict[str, Any]:
     }
 
 
-def get_recent_requests(tenant: str, limit: int = 20) -> List[Dict[str, Any]]:
+def get_recent_requests(tenant: str, limit: int = 20, include_internal: bool = False) -> List[Dict[str, Any]]:
     """
     Get the most recent N requests for a tenant.
+
+    Args:
+        tenant: Tenant identifier
+        limit: Maximum number of requests to return
+        include_internal: If False (default), excludes bootstrap/handshake/internal requests.
+                         If True, includes all requests for diagnostics.
 
     Returns a list of lightweight request summaries suitable for the Live Flow module.
     """
@@ -97,6 +104,11 @@ def get_recent_requests(tenant: str, limit: int = 20) -> List[Dict[str, Any]]:
 
     # Sort by timestamp descending
     sorted_meters = sorted(meters, key=lambda m: m.timestamp, reverse=True)
+
+    # Filter internal requests for user-facing view
+    if not include_internal:
+        sorted_meters = [m for m in sorted_meters if _5_rc.is_real_request(m)]
+
     recent = sorted_meters[:limit]
 
     return [
@@ -170,23 +182,17 @@ def compute_metrics_summary_24h(tenant: str) -> Dict[str, Any]:
 
 
 # =============================================================================
-# Internal/bootstrap filtering —统一由后端处理，前端不再需要猜
+# Internal/bootstrap filtering — now delegates to request_classifier
 # =============================================================================
 
 def _is_real_request(meter: Any) -> bool:
     """
     Return True if this meter represents a real user-facing request.
     Excludes internal/bootstrap events like session handshakes.
+
+    Delegates to request_classifier.is_real_request() for unified logic.
     """
-    query = getattr(meter, "query", "") or ""
-    agent = getattr(meter, "agent", "") or ""
-    # Session bootstrap is an internal handshake, not a real request
-    if query == "session bootstrap context handshake":
-        return False
-    # Internal MCP bundle bootstrap events
-    if agent.lower() in ("openclaw-bundle-mcp", "openclaw_bundle_mcp") and "bootstrap" in query.lower():
-        return False
-    return True
+    return _5_rc.is_real_request(meter)
 
 
 # =============================================================================

@@ -11,6 +11,7 @@ from . import agent_metrics as _agent_metrics
 from . import agent_routing_state as _route_state
 from . import compile_store as _compile_store
 from . import meter_store as _meter_store
+from . import request_classifier as _rc
 from .config import config
 
 router = APIRouter()
@@ -23,8 +24,19 @@ _DISPLAY_NAMES = {
 }
 
 
+class UpstreamTruthSnapshot(BaseModel):
+    """OpenClaw attach 時傳遞的上游真相快照。"""
+    wire_api: str = "chat_completions"
+    provider: str = "openai_compatible"
+    base_url: str = ""
+    auth_source: str = "runtime_authorization_header"
+    model: str = ""
+    config_layer: str = "env"
+
+
 class AgentControlRequest(BaseModel):
     family_id: str
+    upstream_truth: Optional[UpstreamTruthSnapshot] = None
 
 
 def _parse_iso(value: Optional[str]) -> float:
@@ -147,30 +159,114 @@ def _build_route_truth(routing_enabled: bool, health_state: str) -> str:
 
 def _build_traffic_truth(family_id: str, window_minutes: int = 30) -> str:
     """
-    Derive traffic_truth from compile_store telemetry.
+    Derive traffic_truth using dual evidence: compile_store + meter_store.
 
-    Only openclaw family is checked for real_request_observed.
-    Other families get no_recent_evidence unless compile events exist.
+    Rules (priority order):
+    1. real_request_observed: compile events exist AND corresponding real meter exists
+    2. internal_only: compile events exist but no real meter evidence (bootstrap/ping only)
+    3. no_recent_evidence: no compile events AND no real meter evidence
+
+    This replaces the old single-source (compile_store only) logic that
+    produced false positives when tiny pings triggered compile_success.
     """
+    import time as _time
+
     compile_summary = _compile_store.summarize_compile_status(window_minutes=window_minutes)
     family_stats = compile_summary.get(family_id)
 
+    # Get real meter evidence for this family in the window
+    cutoff_ts = _time.time() - (window_minutes * 60)
+    real_meter_count = _count_real_meters_in_window(family_id, cutoff_ts)
+
     if family_id == "openclaw":
-        if not family_stats:
+        if not family_stats and real_meter_count == 0:
             return "no_recent_evidence"
-        proxied = family_stats.get("proxied_requests", 0)
-        compile_success = family_stats.get("compile_success", 0)
-        compile_skipped = family_stats.get("compile_skipped", 0)
-        # real_request_observed requires: proxied_requests > 0 AND
-        # at least one of compile_success or compile_skipped (not all failed/bypass)
-        if proxied > 0 and (compile_success > 0 or compile_skipped > 0):
+
+        proxied = family_stats.get("proxied_requests", 0) if family_stats else 0
+
+        if proxied > 0 and real_meter_count > 0:
+            # Both compile evidence AND real meter evidence
             return "real_request_observed"
-        return "internal_only"
+        elif proxied > 0:
+            # Compile events exist but no real meter evidence
+            return "internal_only"
+        else:
+            return "no_recent_evidence"
 
     # Non-openclaw families
     if family_stats and family_stats.get("proxied_requests", 0) > 0:
         return "internal_only"
+    if real_meter_count > 0:
+        return "real_request_observed"
     return "no_recent_evidence"
+
+
+def _count_real_meters_in_window(family_id: str, cutoff_ts: float) -> int:
+    """
+    Count real (non-internal, non-tiny-ping) meter records for a family
+    within a time window.
+
+    Uses request_classifier for unified real/internal classification.
+    """
+    _meter_store._ensure_persistence_loaded()
+
+    count = 0
+    for tenant, meters in _meter_store._usage_aggregates.items():
+        for m in meters:
+            ts = getattr(m, "timestamp", None)
+            if not ts:
+                continue
+            # Parse timestamp
+            try:
+                if isinstance(ts, str):
+                    dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                else:
+                    continue
+                if dt.timestamp() < cutoff_ts:
+                    continue
+            except Exception:
+                continue
+
+            # Normalize agent to family
+            agent = getattr(m, "agent", "") or ""
+            normalized = _normalize_agent_to_family(agent)
+            if normalized != family_id:
+                continue
+
+            # Check if real request
+            if not _rc.is_real_request(m):
+                continue
+
+            # Check if tiny ping (baseline < 50 tokens)
+            baseline = getattr(m, "baseline_tokens_estimate", 0)
+            try:
+                baseline = int(baseline)
+            except (ValueError, TypeError):
+                baseline = 0
+            if baseline < 50:
+                continue
+
+            count += 1
+
+    return count
+
+
+def _normalize_agent_to_family(agent: str) -> str:
+    """
+    Normalize an agent identifier from meter records to its canonical family.
+    """
+    lower = agent.lower()
+    if lower in {"openclaw", "openclaw-agent", "openclaw-bundle-mcp", "openclaw_bundle_mcp"}:
+        return "openclaw"
+    if lower in {"claude_code", "claude-code", "claude"}:
+        return "claude_code"
+    if lower in {"codex", "codex_cli", "codex-cli"}:
+        return "codex_cli"
+    if lower == "cursor":
+        return "cursor"
+    if lower == "test":
+        return "test"
+    return agent
 
 
 def _build_observed_client_truth(raw: Dict[str, Any]) -> Dict[str, Any]:
@@ -388,6 +484,21 @@ async def rescan_agents_control():
 
 @router.post("/agents/control/install")
 async def install_agent_control(request: AgentControlRequest):
+    # 保存 OpenClaw attach metadata upstream truth snapshot
+    if request.family_id == "openclaw" and request.upstream_truth:
+        _openclaw_attach = __import__(
+            "5_connectors.adapter.openclaw_attach_state",
+            fromlist=["dummy"]
+        )
+        _openclaw_attach.save_openclaw_attach_metadata(
+            wire_api=request.upstream_truth.wire_api,
+            provider=request.upstream_truth.provider,
+            base_url=request.upstream_truth.base_url,
+            auth_source=request.upstream_truth.auth_source,
+            model=request.upstream_truth.model,
+            config_layer=request.upstream_truth.config_layer,
+        )
+
     try:
         await _runtime_request("POST", "/agents/control/install", request.model_dump())
         cards = await _build_control_cards()
@@ -405,6 +516,14 @@ async def install_agent_control(request: AgentControlRequest):
 
 @router.post("/agents/control/uninstall")
 async def uninstall_agent_control(request: AgentControlRequest):
+    # 清除 OpenClaw attach metadata
+    if request.family_id == "openclaw":
+        _openclaw_attach = __import__(
+            "5_connectors.adapter.openclaw_attach_state",
+            fromlist=["dummy"]
+        )
+        _openclaw_attach.clear_openclaw_attach_metadata()
+
     try:
         _route_state.set_family_routing_enabled(request.family_id, False)
         await _runtime_request("POST", "/agents/control/uninstall", request.model_dump())
