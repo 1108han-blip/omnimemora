@@ -14,11 +14,12 @@ export function LiveRequestFlow({ requests, onSelect, selectedRequestId = null }
     ...req,
     agent: normalizeFamilyName(req.agent),
   }));
+  const displayedRequests = normalizedRequests.slice(0, 10);
 
-  if (normalizedRequests.length === 0) {
+  if (displayedRequests.length === 0) {
     return (
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6">
-        <div className="text-sm text-zinc-400">No recent user requests</div>
+        <div className="text-sm text-zinc-400">No recent task requests</div>
       </div>
     );
   }
@@ -27,10 +28,10 @@ export function LiveRequestFlow({ requests, onSelect, selectedRequestId = null }
     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
       <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Live Request Flow</h3>
-        <span className="text-xs text-zinc-400">{normalizedRequests.length} user requests</span>
+        <span className="text-xs text-zinc-400">{displayedRequests.length} task requests</span>
       </div>
       <div className="divide-y divide-zinc-100 dark:divide-zinc-800 max-h-64 overflow-y-auto">
-        {normalizedRequests.map((req) => (
+        {displayedRequests.map((req) => (
           <button
             key={req.request_id}
             onClick={() => onSelect(req)}

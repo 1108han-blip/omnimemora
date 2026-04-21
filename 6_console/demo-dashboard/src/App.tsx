@@ -60,7 +60,7 @@ export default function App() {
       const [cc24hRes, ccTrendRes, rRes, uRes, ctrlRes] = await Promise.allSettled([
         controlTab ? Promise.resolve(null) : fetchCoreCapabilities(tenant),
         controlTab ? Promise.resolve(null) : fetchCoreCapabilitiesTrend(tenant, 7),
-        controlTab ? Promise.resolve(null) : fetchRecentRequests(tenant, 30),
+        controlTab ? Promise.resolve(null) : fetchRecentRequests(tenant, 10),
         fetchUsageSummary(tenant),
         fetchAgentControls(),
       ]);

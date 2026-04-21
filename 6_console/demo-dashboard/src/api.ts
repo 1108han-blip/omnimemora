@@ -43,7 +43,7 @@ export async function fetchMetricsTrend(tenant: string = 'all', days: number = 7
   };
 }
 
-export async function fetchRecentRequests(tenant: string = 'default', limit = 20): Promise<RecentRequestsResponse> {
+export async function fetchRecentRequests(tenant: string = 'default', limit = 10): Promise<RecentRequestsResponse> {
   const r = await fetch(`${API_BASE}/metrics/recent_requests?tenant=${encodeURIComponent(tenant)}&limit=${limit}`);
   if (!r.ok) throw new Error(`Failed to fetch recent requests: ${r.statusText}`);
   return r.json();
