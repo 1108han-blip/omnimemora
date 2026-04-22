@@ -3,6 +3,7 @@ import { HeroMetrics } from './components/HeroMetrics';
 import { LiveRequestFlow } from './components/LiveRequestFlow';
 import { ContextComparison } from './components/ContextComparison';
 import { CallChainViz } from './components/CallChainViz';
+import { SkillSuggestionsPanel } from './components/SkillSuggestionsPanel';
 import { AgentUsagePanel } from './components/AgentUsagePanel';
 import { AgentsDashboard } from './components/AgentsDashboard';
 import { fetchRecentRequests, fetchUsageSummary, fetchTenants, fetchAgentControls, fetchRequestEvidence, fetchCoreCapabilities, fetchCoreCapabilitiesTrend } from './api';
@@ -454,8 +455,8 @@ export default function App() {
               <LiveRequestFlow requests={requests} onSelect={handleSelectRequest} selectedRequestId={_selectedRequest?.request_id ?? null} />
             </section>
 
-            {/* Modules 3 & 4: Context Comparison + Call Chain */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Modules 4/5/6: Request Evidence Views */}
+            <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
               <section>
                 <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">
                   ④ Context Before / After
@@ -468,6 +469,13 @@ export default function App() {
                   ⑤ Call Chain
                 </h2>
                 <CallChainViz evidence={requestEvidence} loading={loadingEvidence} />
+              </section>
+
+              <section>
+                <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">
+                  ⑥ Skill Advisory
+                </h2>
+                <SkillSuggestionsPanel evidence={requestEvidence} loading={loadingEvidence} />
               </section>
             </div>
           </>

@@ -268,9 +268,22 @@ export interface RequestEvidenceChain {
   trace_id: string;
 }
 
+export interface SkillSuggestionView {
+  skill_id: string;
+  title: string;
+  reason: string;
+  confidence: number;
+  source: string;
+}
+
 export interface RequestEvidence {
   request: RequestEvidenceRequest;
   status: RequestEvidenceStatus;
   context: RequestEvidenceContext;
   chain: RequestEvidenceChain;
+  skill_suggestions: SkillSuggestionView[];
+  skill_policy_name?: string;
+  skill_policy_version?: string;
+  skill_policy_source?: string;
+  skill_policy_status?: string;
 }

@@ -97,7 +97,15 @@ export async function fetchCallChain(requestId: string): Promise<CallChain> {
 export async function fetchRequestEvidence(requestId: string): Promise<RequestEvidence> {
   const r = await fetch(`${API_BASE}/debug/request_evidence?request_id=${encodeURIComponent(requestId)}`);
   if (!r.ok) throw new Error(`Failed to fetch request evidence: ${r.statusText}`);
-  return r.json();
+  const raw = await r.json();
+  return {
+    ...raw,
+    skill_suggestions: Array.isArray(raw?.skill_suggestions) ? raw.skill_suggestions : [],
+    skill_policy_name: raw?.skill_policy_name,
+    skill_policy_version: raw?.skill_policy_version,
+    skill_policy_source: raw?.skill_policy_source,
+    skill_policy_status: raw?.skill_policy_status,
+  };
 }
 
 export async function fetchLiveAgents(windowMinutes = 30): Promise<LiveAgent[]> {
