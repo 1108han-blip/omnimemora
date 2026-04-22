@@ -108,6 +108,13 @@ Context 是结果，不是决策过程。
 
 - request_id / tenant / agent / action
 
+## 6️⃣ 用户端接入真相优先
+
+- 用户端已配置的 `provider / base_url / auth / model` 是接入真相的第一来源
+- 产品端必须优先透传该真相，只做最小必要兼容
+- 只有在用户端未提供足够上游信息时，才允许产品端使用 fallback/default
+- 产品端不得演化为持续维护外部模型生态或个性化配置的中心
+
 ---
 
 # 五、Token Savings（核心产品能力）
@@ -276,6 +283,12 @@ OmniMemora 只通过标准接口提供能力：
 - `/memory/write`
 
 不扩展为 orchestration / agent runtime / tool system。
+
+同时要求：
+
+- 产品通过透传用户端已熟悉、已配置的协议与上游真相工作
+- 协议兼容只服务于产品主链所需的最小能力：读取请求、插入 compile 结果、保持原协议返回
+- 不得把协议兼容扩张成产品自己的配置中心、模型映射中心或市场适配中心
 
 ---
 

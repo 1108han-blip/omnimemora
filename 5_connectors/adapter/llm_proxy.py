@@ -2594,8 +2594,6 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
             agent_id = detected_agent
     model = body.get("model", "unknown")
     is_streaming = body.get("stream", False)
-    query = _extract_user_query(body.get("messages"))
-
     _record_event(agent_id, "proxy_request", request_id, route_label, model, "received", trace_id=trace_id)
     _trace_anthropic_payload(
         request_id,
@@ -2609,14 +2607,30 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
         f"model={model} streaming={is_streaming}"
     )
 
-    # Phase 3: Gateway Compile — run before forwarding
-    compile_input = {**body, "_path": route_label}
-    compiled_body, compile_meta = await _compile_or_passthrough_for_route(
-        payload=compile_input,
-        agent_id=agent_id,
-        request_id=request_id,
-        trace_id=trace_id,
-    )
+    upstream = get_upstream_for_anthropic(model)
+    truth_meta: Optional[dict] = None
+    if not _routing_enabled_for_agent(agent_id):
+        loguru.logger.info(
+            f"[LLM_PROXY/ANTHROPIC] request_id={request_id} agent={agent_id} routing=off passthrough=true"
+        )
+        compiled_body = dict(body)
+        compile_meta = _build_route_disabled_compile_meta()
+        upstream_model = resolve_anthropic_upstream_model(model, upstream)
+        upstream_base = upstream["base_url"]
+    else:
+        compile_input = {**body, "_path": route_label}
+        compiled_body, compile_meta, contract, truth_meta = await _get_compile_orchestrator().run_anthropic_compile_and_resolve(
+            payload=compile_input,
+            agent_id=agent_id,
+            upstream=upstream,
+            route=route_label,
+            requested_model=model,
+            request_id=request_id,
+            trace_id=trace_id,
+        )
+        upstream_model = contract.model_resolved or resolve_anthropic_upstream_model(model, upstream)
+        upstream_base = contract.base_url_resolved or upstream["base_url"]
+
     _trace_anthropic_payload(
         request_id,
         "post_compile",
@@ -2624,53 +2638,7 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
         {"agent_id": agent_id, "route": route_label, "compile_meta": compile_meta},
     )
 
-    upstream = get_upstream_for_anthropic(model)
-    upstream_model = resolve_anthropic_upstream_model(model, upstream)
-    contract, truth_meta = resolve_truth_contract(
-        request_id=request_id,
-        agent_id=agent_id,
-        route=route_label,
-        requested_model=model,
-        wire_api_requested="anthropic_messages",
-        provider_requested=upstream.get("provider", "anthropic"),
-        base_url_requested=upstream.get("base_url"),
-        auth_requested=product_auth_ref_for_provider(upstream.get("provider", "anthropic")),
-        provider_source="product_policy_binding",
-        base_url_source="product_upstream_config",
-        model_source="agent_payload_explicit",
-        auth_source=auth_source_from_values(
-            product_api_key_present=bool(upstream.get("api_key")),
-        ),
-        policy_profile="anthropic_default",
-        candidates_by_source={
-            "product_policy_binding": {
-                "provider": upstream.get("provider", "anthropic"),
-                "base_url": upstream.get("base_url"),
-                "auth": product_auth_ref_for_provider(upstream.get("provider", "anthropic")),
-                "wire_api": "anthropic_messages",
-            },
-            "provider_default": {
-                "provider": upstream.get("provider", "anthropic"),
-                "base_url": upstream.get("base_url"),
-                "model": upstream_model,
-                "auth": product_auth_ref_for_provider(upstream.get("provider", "anthropic")),
-                "wire_api": "anthropic_messages",
-                "fallback": False,
-            },
-        },
-        compile_enabled=bool(compile_meta),
-    )
-    _record_compile_event(
-        request_id, agent_id, route_label, model, compile_meta, truth_meta=truth_meta, trace_id=trace_id
-    )
-    _persist_gateway_meter(
-        request_id=request_id,
-        agent_id=agent_id,
-        query=query,
-        compile_meta=compile_meta,
-    )
-    compiled_body["model"] = contract.model_resolved or upstream_model
-    upstream_base = contract.base_url_resolved or upstream["base_url"]
+    compiled_body["model"] = upstream_model
     headers = {
         "Content-Type": "application/json",
         "x-api-key": upstream["api_key"],
@@ -2693,7 +2661,7 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
             )
 
             if upstream_resp.status_code >= 400:
-                upstream_url = f"{upstream['base_url']}/v1/messages"
+                upstream_url = f"{upstream_base}/v1/messages"
                 status_code = upstream_resp.status_code
                 error_type = _classify_upstream_error(status_code, None)
                 error_msg = upstream_resp.text[:300]
@@ -2774,7 +2742,7 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
 
     except httpx.HTTPStatusError as e:
         status_code = e.response.status_code if e.response else None
-        upstream_url = f"{upstream['base_url']}/v1/messages"
+        upstream_url = f"{upstream_base}/v1/messages"
         error_type = _classify_upstream_error(status_code, e)
         error_msg = str(e)[:300]
         _log_upstream_failure(
@@ -2810,7 +2778,7 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
         return JSONResponse(status_code=502, content={"error": f"{error_type}|{error_msg}"})
 
     except httpx.TimeoutException as e:
-        upstream_url = f"{upstream['base_url']}/v1/messages"
+        upstream_url = f"{upstream_base}/v1/messages"
         error_type = UPSTREAM_ERROR_TYPES["upstream_timeout"]
         error_msg = str(e)[:300]
         _log_upstream_failure(
@@ -2843,7 +2811,7 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
         return JSONResponse(status_code=504, content=error_body)
 
     except Exception as e:
-        upstream_url = f"{upstream['base_url']}/v1/messages"
+        upstream_url = f"{upstream_base}/v1/messages"
         error_type = UPSTREAM_ERROR_TYPES["proxy_internal_error"]
         error_msg = str(e)[:300]
         _log_upstream_failure(
