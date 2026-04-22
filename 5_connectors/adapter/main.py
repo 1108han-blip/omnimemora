@@ -148,27 +148,44 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Phase 2: 註冊 LLM Proxy 和 Status API routers
+# 18011 assembly convergence (Batch 3B):
+# group router registration by responsibility while preserving existing routes.
 import importlib
-_llm_proxy_mod = importlib.import_module("5_connectors.adapter.llm_proxy")
-_status_api_mod = importlib.import_module("5_connectors.adapter.status_api")
-_agent_control_api_mod = importlib.import_module("5_connectors.adapter.agent_control_api")
-_mcp_surface_mod = importlib.import_module("5_connectors.adapter.mcp_surface")
-_diagnostics_surface_mod = importlib.import_module("5_connectors.adapter.diagnostics_surface")
-_usage_surface_mod = importlib.import_module("5_connectors.adapter.usage_surface")
-_scope_surface_mod = importlib.import_module("5_connectors.adapter.scope_surface")
-_billing_surface_mod = importlib.import_module("5_connectors.adapter.billing_surface")
-_cloud_surface_mod = importlib.import_module("5_connectors.adapter.cloud_surface")
-app.include_router(_llm_proxy_mod.router, prefix="")
-app.include_router(_status_api_mod.router, prefix="")
-app.include_router(_agent_control_api_mod.router, prefix="")
-app.include_router(_mcp_surface_mod.router, prefix="")
-app.include_router(_diagnostics_surface_mod.router, prefix="")
-app.include_router(_usage_surface_mod.router, prefix="")
-app.include_router(_scope_surface_mod.router, prefix="")
-app.include_router(_billing_surface_mod.router, prefix="")
-app.include_router(_cloud_surface_mod.router, prefix="")
-del _llm_proxy_mod, _status_api_mod, _agent_control_api_mod, _mcp_surface_mod, _diagnostics_surface_mod, _usage_surface_mod, _scope_surface_mod, _billing_surface_mod, _cloud_surface_mod
+
+
+def _register_product_data_path(app: FastAPI) -> None:
+    """Register product data path surfaces (ingress + product protocol)."""
+    _llm_proxy_mod = importlib.import_module("5_connectors.adapter.llm_proxy")
+    _mcp_surface_mod = importlib.import_module("5_connectors.adapter.mcp_surface")
+    app.include_router(_llm_proxy_mod.router, prefix="")
+    app.include_router(_mcp_surface_mod.router, prefix="")
+
+
+def _register_control_plane(app: FastAPI) -> None:
+    """Register control-plane surfaces."""
+    _agent_control_api_mod = importlib.import_module("5_connectors.adapter.agent_control_api")
+    app.include_router(_agent_control_api_mod.router, prefix="")
+
+
+def _register_read_model_and_diagnostics(app: FastAPI) -> None:
+    """Register read-model / diagnostics surfaces."""
+    _status_api_mod = importlib.import_module("5_connectors.adapter.status_api")
+    _diagnostics_surface_mod = importlib.import_module("5_connectors.adapter.diagnostics_surface")
+    _usage_surface_mod = importlib.import_module("5_connectors.adapter.usage_surface")
+    _scope_surface_mod = importlib.import_module("5_connectors.adapter.scope_surface")
+    _billing_surface_mod = importlib.import_module("5_connectors.adapter.billing_surface")
+    _cloud_surface_mod = importlib.import_module("5_connectors.adapter.cloud_surface")
+    app.include_router(_status_api_mod.router, prefix="")
+    app.include_router(_diagnostics_surface_mod.router, prefix="")
+    app.include_router(_usage_surface_mod.router, prefix="")
+    app.include_router(_scope_surface_mod.router, prefix="")
+    app.include_router(_billing_surface_mod.router, prefix="")
+    app.include_router(_cloud_surface_mod.router, prefix="")
+
+
+_register_product_data_path(app)
+_register_control_plane(app)
+_register_read_model_and_diagnostics(app)
 
 @app.middleware("http")
 async def attach_request_id(request: Request, call_next):

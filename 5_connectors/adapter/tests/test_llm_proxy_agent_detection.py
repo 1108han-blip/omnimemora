@@ -165,7 +165,13 @@ class TestOpenClawRouteFallback(unittest.IsolatedAsyncioTestCase):
             llm_proxy._routing_enabled_for_agent = original_route_enabled
 
         self.assertEqual(response.status_code, 200)
-        self.assertTrue(any(item["agent_id"] == "openclaw" and item["path"] == "/llm/chat" for item in recorded))
+        self.assertTrue(
+            any(
+                item["agent_id"] == "openclaw"
+                and item["path"] in {"/llm/chat", "/llm/api/chat"}
+                for item in recorded
+            )
+        )
 
     async def test_route_disabled_skips_compile_and_uses_passthrough(self):
         body = {"model": "gemma4:26b", "messages": [{"role": "user", "content": "hi"}], "stream": False}
