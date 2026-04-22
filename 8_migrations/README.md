@@ -1,23 +1,21 @@
+# 8_migrations
 
-# 8_migrations/ - 迁移记录
+This layer stores migration references and archive materials.
 
-**Purpose:** 架构迁移、数据迁移、破坏性变更记录
+## Active boundary
 
-## 职责
+Current product and operations should use active product paths (`5173`, `18011`, `8765`) and active docs/specs outside this folder.
 
-- 架构迁移计划
-- 数据迁移脚本
-- 破坏性变更说明
-- 回滚计划
-- 云重构记录
+This folder is not an active runtime entrypoint for current cloud integration.
 
-## 文件
+## Legacy archive
 
-- `cloud-refactor.md` - 云重构记录（从归档迁移）
-- `ADR-0002-cloud-refactor.md.md` - 云重构 ADR（从 01_SEED/ 迁移）
+Legacy migration/tooling assets are archived under:
+- `8_migrations/archive/legacy/`
 
-## 治理规则
+That includes historical backend migration plans and enterprise lifecycle scripts.
 
-- 所有破坏性变更必须在此层记录
-- 必须包含回滚计划
-- 迁移完成后保留记录
+## Operator guidance
+
+- Do not treat archived migration defaults as current product dependencies.
+- Use current OmniMemora naming and current active config surface in any new tooling.
