@@ -78,7 +78,7 @@ last_verified_commit: ""
 | 旧 Adapter 主体 | [5_connectors/adapter/main.py](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/5_connectors/adapter/main.py) | 是 | 主链承载层 | 不否认其 V2 血缘；但文档口径必须按 phase5 产品定义解释 |
 | `/memory/search V2` 设计稿 | [7_docs/internal/phase2/01_planning/archive/Search_V2_Phase_2a_plan.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase2/01_planning/archive/Search_V2_Phase_2a_plan.md), [Search_V2_Phase_2b_plan.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase2/01_planning/archive/Search_V2_Phase_2b_plan.md), [Search_V2_Phase_2c_plan.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase2/01_planning/archive/Search_V2_Phase_2c_plan.md) | 否，直接不依赖 | 历史设计资产 | 保留为后备优化轨参考，不作为当前产品验收标准 |
 | V2 修复审计结论 | [7_docs/internal/phase2/02_enforcement/archive/Phase_2c5_AUDIT_V2_REPORT.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase2/02_enforcement/archive/Phase_2c5_AUDIT_V2_REPORT.md) | 否，直接不依赖 | 历史验证资产 | 可用作后续“遗产回归风险”参考，不外推为 phase5 行为证明 |
-| Adapter Raw / 旧 `/memory/query` 叙事 | [4_core/adapter-raw/archive/README.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/4_core/adapter-raw/archive/README.md) 等 archive 内容 | 否 | 纯历史残留 | 不得回流为当前产品路径 |
+| Adapter Raw / 旧 `/memory/query` 叙事 | `4_core/adapter-raw/`（Cloud Reset Batch 1 已删除旧 archive 载体） | 否 | 纯历史残留 | 不得回流为当前产品路径 |
 
 ## 四、当前主线应如何对待 V2
 

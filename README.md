@@ -16,6 +16,14 @@ Agent -> Gateway (:18011) -> compile/recall/inject -> Upstream LLM
                                -> Runtime (:8765)
 ```
 
+## Cloud Split (Current Product)
+
+| Layer | Responsibility | Not Responsible |
+|------|----------------|-----------------|
+| Cloudflare (`doloclaw.com`) | External domain entry, control-plane API/auth/tenant/billing/policy-access, candidate fetch entry | Cloud memory plane, cloud compile engine, `/memory/*` primary write/read/delete |
+| Railway | Recommendation candidate snapshot/state storage, lightweight async aggregation jobs | `/memory/*` primary path, main compile path |
+| Local (`18011` + `8765`) | Active/fallback execution truth, promotion-controlled active policy | Remote override of local active |
+
 ## Frozen Truth
 
 - `:5173` is the only user control entry.
@@ -37,14 +45,15 @@ Agent -> Gateway (:18011) -> compile/recall/inject -> Upstream LLM
 
 正式 roadmap phase：**Phase 5（已完成 — 可选）**（见 `0_blueprint/ROADMAP.md`）
 
-> **Phase 標籤說明**：`7_docs/internal/phase6/` 為 **internal historical workstream**，已於 2026-04-20 收口（5 sublines 全部 PASS）。此 workstream 不改變正式 roadmap phase 編號。
+> **Phase 标签说明**：`7_docs/internal/phase6/` 为 **internal historical workstream**，已于 2026-04-20 收口（5 sublines 全部 PASS）。此 workstream 不改变正式 roadmap phase 编号。
 
 Start here:
 
-- [0_blueprint/ROADMAP.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/ROADMAP.md) — **正式 roadmap SSOT**
+- [0_blueprint/ROADMAP.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/ROADMAP.md) — 正式 roadmap SSOT
 - [0_blueprint/PRODUCT_DEFINITION.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/PRODUCT_DEFINITION.md)
-- [0_blueprint/DEFAULT_IN_CONTROL_PLANE.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/DEFAULT_IN_CONTROL_PLANE.md)
+- [0_blueprint/PRODUCT_CONFIGURATION_AND_BOUNDARY_BASELINE.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/PRODUCT_CONFIGURATION_AND_BOUNDARY_BASELINE.md)
 - [9_adr/ADR-0003-interface-access-paths.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/9_adr/ADR-0003-interface-access-paths.md)
+- [9_adr/ADR-0002-cloud-refactor.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/9_adr/ADR-0002-cloud-refactor.md)
 
 ## Quick Start
 
@@ -78,10 +87,9 @@ If KPI and diagnostics disagree, trust `/metrics/summary` first.
 | `5_connectors/adapter/` | Active gateway and adapter code |
 | `4_core/local-runtime/` | Internal memory plane |
 | `6_console/demo-dashboard/` | Dashboard |
-| `docs/audit/2026-04-16_gateway_reconciliation/` | Current audit baseline |
-| `7_docs/internal/archive/` | Historical plans and retired phase docs |
-| `5_connectors/archive/` | Archived plugin experiments |
-| `4_core/adapter-raw/` | Archived legacy Python adapter line |
+| `7_docs/internal/phase5/` | Current phase docs index and active plans |
+| `7_docs/internal/phase6/plan/` | Closed phase6 workstream and post-close governance records |
+| `5_connectors/archive/` | Archived connector/plugin experiments |
 
 ## Non-Goals
 
@@ -90,9 +98,10 @@ If KPI and diagnostics disagree, trust `/metrics/summary` first.
 - not a runtime-direct product
 - not a second control plane beside the gateway
 - not an auto-attach or silent-takeover product
+- not a cloud-hosted primary memory plane
 
 ## Governance
 
-- [3_governance/AUDIT_SCHEME.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/3_governance/AUDIT_SCHEME.md) — 審計觸發規則、執行骨架、結論路由
+- [3_governance/AUDIT_SCHEME.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/3_governance/AUDIT_SCHEME.md) — 审计触发规则、执行骨架、结论路由
 
-> **Phase 標籤說明**：內部執行階段標籤（如 `internal Phase 6 workstream`）不等同於正式 roadmap phase 改號。若 `ROADMAP.md` 未被正式更新，內部階段標籤只表示執行 workstream，不代表產品階段編號變更。
+> **Phase 标签说明**：内部执行阶段标签（如 `internal Phase 6 workstream`）不等同于正式 roadmap phase 改号。若 `ROADMAP.md` 未被正式更新，内部阶段标签只表示执行 workstream，不代表产品阶段编号变更。
