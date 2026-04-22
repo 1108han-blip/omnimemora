@@ -43,7 +43,7 @@ function jsonResponse(payload: unknown): Response {
   });
 }
 
-describe("memory-openviking plugin", () => {
+describe("omnimemora-memory plugin", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
@@ -94,7 +94,7 @@ describe("memory-openviking plugin", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
       const url = String(input);
       if (url.endsWith("/memory/write")) {
-        return jsonResponse({ uri: "viking://memory/test" });
+        return jsonResponse({ uri: "omnimemora://memory/test" });
       }
       if (url.endsWith("/memory/snapshot")) {
         return jsonResponse({
@@ -123,7 +123,7 @@ describe("memory-openviking plugin", () => {
       expect.objectContaining({
         details: expect.objectContaining({
           action: "stored",
-          uri: "viking://memory/test",
+          uri: "omnimemora://memory/test",
         }),
       }),
     );

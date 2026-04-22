@@ -1,7 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, posix as pathPosix } from "node:path";
-import { memoryOpenVikingConfigSchema, type MemoryOpenVikingConfig } from "./config.js";
+import { omnimemoraMemoryConfigSchema } from "./config.js";
 import { MemoryAdapterClient, type MemoryItem } from "./client.js";
 import {
   extractLatestUserText,
@@ -88,8 +88,8 @@ function renderMemorySnapshotDocument(autoMarkdown: string, manualContent?: stri
     "",
     "## 基础说明",
     "- 仅在主会话（与用户的直接聊天）加载，不在群组/共享会话泄露。",
-    "- OpenViking 是长期记忆主库，本文件是自动生成的启动快照从库。",
-    "- 自动生成区会由 memory-openviking 插件刷新。",
+    "- OmniMemora 是长期记忆主库，本文件是自动生成的启动快照从库。",
+    "- 自动生成区会由 omnimemora-memory 插件刷新。",
     "- 手工备注请写在人工保留区，自动同步不会覆盖该区域。",
     "",
     AUTO_START_MARKER,
@@ -104,15 +104,15 @@ function renderMemorySnapshotDocument(autoMarkdown: string, manualContent?: stri
 }
 
 const contextEnginePlugin = {
-  id: "memory-openviking",
-  name: "Memory (OpenViking via Adapter)",
-  description: "OpenViking-backed memory through Memory Adapter layer with auto-recall/capture",
+  id: "omnimemora-memory",
+  name: "Memory (OmniMemora via Adapter)",
+  description: "OmniMemora-backed memory through gateway layer with auto-recall/capture",
   kind: "memory" as const,
-  configSchema: memoryOpenVikingConfigSchema,
+  configSchema: omnimemoraMemoryConfigSchema,
 
   register(api: OpenClawPluginApi) {
-    const cfg = memoryOpenVikingConfigSchema.parse(api.pluginConfig);
-    const baseUrl = cfg.baseUrl ?? "http://memory-adapter:8000";
+    const cfg = omnimemoraMemoryConfigSchema.parse(api.pluginConfig);
+    const baseUrl = cfg.baseUrl ?? "http://127.0.0.1:18011";
     const agentId = cfg.agentId ?? "supervisor";
     const timeoutMs = cfg.timeoutMs ?? 30000;
 
@@ -128,7 +128,7 @@ const contextEnginePlugin = {
       if (client.getAgentId() !== nextAgentId) {
         client = new MemoryAdapterClient(baseUrl, nextAgentId, timeoutMs);
         if (reason) {
-          api.logger.info(`memory-openviking: switched to agentId=${nextAgentId} for ${reason}`);
+          api.logger.info(`omnimemora-memory: switched to agentId=${nextAgentId} for ${reason}`);
         }
       }
       return client;
@@ -158,10 +158,10 @@ const contextEnginePlugin = {
         const nextContent = renderMemorySnapshotDocument(snapshot.markdown, preservedManual);
         await writeFile(snapshotPath, nextContent, "utf8");
         api.logger.info(
-          `memory-openviking: synced MEMORY.md for agentId=${resolvedAgentId} (sourceCount=${snapshot.sourceCount})`,
+          `omnimemora-memory: synced MEMORY.md for agentId=${resolvedAgentId} (sourceCount=${snapshot.sourceCount})`,
         );
       } catch (err) {
-        api.logger.warn(`memory-openviking: snapshot sync failed: ${String(err)}`);
+        api.logger.warn(`omnimemora-memory: snapshot sync failed: ${String(err)}`);
       }
     };
 
@@ -187,9 +187,9 @@ const contextEnginePlugin = {
     api.registerTool(
       {
         name: "memory_recall",
-        label: "Memory Recall (OpenViking)",
+        label: "Memory Recall (OmniMemora)",
         description:
-          "Search long-term memories from OpenViking via Memory Adapter. Use when you need past user preferences, facts, or decisions.",
+          "Search long-term memories from OmniMemora. Use when you need past user preferences, facts, or decisions.",
         parameters: Type.Object({
           query: Type.String({ description: "Search query" }),
           limit: Type.Optional(
@@ -224,7 +224,7 @@ const contextEnginePlugin = {
 
           if (memories.length === 0) {
             return {
-              content: [{ type: "text", text: "No relevant OpenViking memories found." }],
+              content: [{ type: "text", text: "No relevant OmniMemora memories found." }],
               details: { count: 0, total: result.total ?? 0, scoreThreshold },
             };
           }
@@ -251,9 +251,9 @@ const contextEnginePlugin = {
     api.registerTool(
       {
         name: "memory_store",
-        label: "Memory Store (OpenViking)",
+        label: "Memory Store (OmniMemora)",
         description:
-          "Store text in OpenViking memory via Memory Adapter.",
+          "Store text in OmniMemora memory.",
         parameters: Type.Object({
           text: Type.String({ description: "Information to store as memory" }),
           type: Type.Optional(Type.String({ description: "Memory type, default 'fact'" })),
@@ -270,7 +270,7 @@ const contextEnginePlugin = {
             : undefined;
 
           api.logger.info?.(
-            `memory-openviking: memory_store invoked (textLength=${text?.length ?? 0})`,
+            `omnimemora-memory: memory_store invoked (textLength=${text?.length ?? 0})`,
           );
 
           try {
@@ -282,13 +282,13 @@ const contextEnginePlugin = {
               content: [
                 {
                   type: "text",
-                  text: `Stored in OpenViking via Memory Adapter.`,
+                  text: `Stored in OmniMemora.`,
                 },
               ],
               details: { action: "stored", uri: result.uri },
             };
           } catch (err) {
-            api.logger.warn(`memory-openviking: memory_store failed: ${String(err)}`);
+            api.logger.warn(`omnimemora-memory: memory_store failed: ${String(err)}`);
             throw err;
           }
         },
@@ -299,7 +299,7 @@ const contextEnginePlugin = {
     api.registerTool(
       {
         name: "memory_forget",
-        label: "Memory Forget (OpenViking)",
+        label: "Memory Forget (OmniMemora)",
         description: "Forget memory by URI, or search then delete when a strong single match is found.",
         parameters: Type.Object({
           uri: Type.Optional(Type.String({ description: "Exact memory URI to delete" })),
@@ -417,7 +417,7 @@ const contextEnginePlugin = {
           const healthy = await activeClient.healthCheck();
           if (!healthy) {
             api.logger.info(
-              `memory-openviking: skipping auto-recall because adapter health check failed`,
+              `omnimemora-memory: skipping auto-recall because adapter health check failed`,
             );
           } else {
             const candidateLimit = Math.max((cfg.recallLimit ?? 6) * 4, 20);
@@ -450,19 +450,19 @@ const contextEnginePlugin = {
                 }),
               );
               const memoryContext = memoryLines.join("\n");
-              api.logger.info(`memory-openviking: injecting ${memories.length} memories into context`);
+              api.logger.info(`omnimemora-memory: injecting ${memories.length} memories into context`);
               api.logger.info(
-                `memory-openviking: inject-detail ${toJsonLog({ count: memories.length, memories: summarizeInjectionMemories(memories) })}`,
+                `omnimemora-memory: inject-detail ${toJsonLog({ count: memories.length, memories: summarizeInjectionMemories(memories) })}`,
               );
               prependContextParts.push(
-                "<relevant-memories>\nThe following OpenViking memories may be relevant:\n" +
+                "<relevant-memories>\nThe following OmniMemora memories may be relevant:\n" +
                   `${memoryContext}\n` +
                 "</relevant-memories>",
               );
             }
           }
         } catch (err) {
-          api.logger.warn(`memory-openviking: auto-recall failed: ${String(err)}`);
+          api.logger.warn(`omnimemora-memory: auto-recall failed: ${String(err)}`);
         }
       }
 
@@ -473,7 +473,7 @@ const contextEnginePlugin = {
         });
         if (decision.shouldAssist) {
           api.logger.info(
-            `memory-openviking: ingest-reply-assist applied (reason=${decision.reason}, speakerTurns=${decision.speakerTurns}, chars=${decision.chars})`,
+            `omnimemora-memory: ingest-reply-assist applied (reason=${decision.reason}, speakerTurns=${decision.speakerTurns}, chars=${decision.chars})`,
           );
           prependContextParts.push(
             "<ingest-reply-assist>\n" +
@@ -555,37 +555,37 @@ const contextEnginePlugin = {
               await activeClient.writeMemory(sanitized, "fact");
               stored++;
             } catch (err) {
-              api.logger.warn(`memory-openviking: auto-capture failed: ${String(err)}`);
+              api.logger.warn(`omnimemora-memory: auto-capture failed: ${String(err)}`);
             }
           }
           if (stored > 0) {
-            api.logger.info(`memory-openviking: auto-captured ${stored} memories`);
+            api.logger.info(`omnimemora-memory: auto-captured ${stored} memories`);
             void syncMemorySnapshot(activeClient.getAgentId());
           }
         }
       } catch (err) {
-        api.logger.warn(`memory-openviking: auto-capture hook failed: ${String(err)}`);
+        api.logger.warn(`omnimemora-memory: auto-capture hook failed: ${String(err)}`);
       }
     });
 
     api.registerService({
-      id: "memory-openviking",
+      id: "omnimemora-memory",
       start: async () => {
         const activeClient = getClient(agentId);
         const healthy = await activeClient.healthCheck().catch(() => false);
         if (healthy) {
           api.logger.info(
-            `memory-openviking: initialized (url: ${baseUrl}, agentId: ${agentId})`,
+            `omnimemora-memory: initialized (url: ${baseUrl}, agentId: ${agentId})`,
           );
           void syncMemorySnapshot(agentId);
         } else {
           api.logger.warn(
-            `memory-openviking: adapter health check failed (url: ${baseUrl}) - will retry on demand`,
+            `omnimemora-memory: adapter health check failed (url: ${baseUrl}) - will retry on demand`,
           );
         }
       },
       stop: () => {
-        api.logger.info("memory-openviking: stopped");
+        api.logger.info("omnimemora-memory: stopped");
       },
     });
   },

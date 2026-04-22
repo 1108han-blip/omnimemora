@@ -1,7 +1,7 @@
 {
-  "name": "@openclaw/memory-openviking",
+  "name": "@openclaw/omnimemora-memory",
   "version": "1.0.0",
-  "description": "OpenViking-backed memory via Memory Adapter layer",
+  "description": "OmniMemora-backed memory via gateway",
   "type": "module",
   "openclaw": {
     "extensions": [

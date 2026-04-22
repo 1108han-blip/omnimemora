@@ -1,11 +1,11 @@
 export const DEFAULT_CAPTURE_MAX_CHARS = 24000;
 export const DEFAULT_RECALL_LIMIT = 6;
 export const DEFAULT_RECALL_SCORE_THRESHOLD = 0.01;
-export const DEFAULT_BASE_URL = "http://memory-adapter:8000";
+export const DEFAULT_BASE_URL = "http://127.0.0.1:18011";
 export const DEFAULT_AGENT_ID = "supervisor";
 export const DEFAULT_TIMEOUT_MS = 30000;
 
-export type MemoryOpenVikingConfig = {
+export type OmnimemoraMemoryConfig = {
   baseUrl?: string;
   agentId?: string;
   timeoutMs?: number;
@@ -24,8 +24,8 @@ function assertAllowedKeys(value: Record<string, unknown>, allowed: string[], la
   throw new Error(`${label} has unknown keys: ${unknown.join(", ")}`);
 }
 
-export const memoryOpenVikingConfigSchema = {
-  parse(value: unknown): MemoryOpenVikingConfig {
+export const omnimemoraMemoryConfigSchema = {
+  parse(value: unknown): OmnimemoraMemoryConfig {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
       // Return default config if no value provided
       return {
@@ -52,7 +52,7 @@ export const memoryOpenVikingConfigSchema = {
         "recallLimit",
         "recallScoreThreshold",
       ],
-      "memory-openviking config",
+      "omnimemora-memory config",
     );
 
     const baseUrl = typeof cfg.baseUrl === "string" ? cfg.baseUrl : DEFAULT_BASE_URL;
@@ -82,14 +82,14 @@ export const memoryOpenVikingConfigSchema = {
   },
   uiHints: {
     baseUrl: {
-      label: "Memory Adapter Base URL",
+      label: "OmniMemora Gateway Base URL",
       placeholder: DEFAULT_BASE_URL,
-      help: "Memory Adapter service URL (default: http://memory-adapter:8000)",
+      help: "OmniMemora Gateway URL (default: http://127.0.0.1:18011)",
     },
     agentId: {
       label: "Agent ID",
       placeholder: DEFAULT_AGENT_ID,
-      help: "Identifies this agent to Memory Adapter. Default: supervisor.",
+      help: "Identifies this agent to OmniMemora. Default: supervisor.",
     },
     timeoutMs: {
       label: "Request Timeout (ms)",
@@ -98,7 +98,7 @@ export const memoryOpenVikingConfigSchema = {
     },
     autoCapture: {
       label: "Auto-Capture",
-      help: "Extract memories from recent conversation messages via Memory Adapter",
+      help: "Extract memories from recent conversation messages via OmniMemora",
     },
     captureMaxLength: {
       label: "Capture Max Length",
@@ -108,7 +108,7 @@ export const memoryOpenVikingConfigSchema = {
     },
     autoRecall: {
       label: "Auto-Recall",
-      help: "Inject relevant OpenViking memories into agent context",
+      help: "Inject relevant OmniMemora memories into agent context",
     },
     recallLimit: {
       label: "Recall Limit",

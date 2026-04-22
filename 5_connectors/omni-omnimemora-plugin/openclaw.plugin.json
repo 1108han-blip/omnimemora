@@ -1,16 +1,16 @@
 {
-  "id": "memory-openviking",
+  "id": "omnimemora-memory",
   "kind": "memory",
   "uiHints": {
     "baseUrl": {
-      "label": "Memory Adapter Base URL",
+      "label": "OmniMemora Gateway Base URL",
       "placeholder": "http://127.0.0.1:18011",
-      "help": "Memory Adapter service URL (default: http://127.0.0.1:18011)"
+      "help": "OmniMemora Gateway URL (default: http://127.0.0.1:18011)"
     },
     "agentId": {
       "label": "Agent ID",
       "placeholder": "supervisor",
-      "help": "Identifies this agent to Memory Adapter. Default: supervisor."
+      "help": "Identifies this agent to OmniMemora. Default: supervisor."
     },
     "timeoutMs": {
       "label": "Request Timeout (ms)",
@@ -19,7 +19,7 @@
     },
     "autoCapture": {
       "label": "Auto-Capture",
-      "help": "Extract memories from recent conversation messages via Memory Adapter"
+      "help": "Extract memories from recent conversation messages via OmniMemora"
     },
     "captureMaxLength": {
       "label": "Capture Max Length",
@@ -29,7 +29,7 @@
     },
     "autoRecall": {
       "label": "Auto-Recall",
-      "help": "Inject relevant OpenViking memories into agent context"
+      "help": "Inject relevant OmniMemora memories into agent context"
     },
     "recallLimit": {
       "label": "Recall Limit",
