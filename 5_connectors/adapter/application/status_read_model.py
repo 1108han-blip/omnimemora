@@ -932,6 +932,42 @@ def _infer_request_status(meter_dict: Dict[str, Any], chain_dict: Dict[str, Any]
     }
 
 
+def _normalize_skill_suggestions(raw: Any) -> List[Dict[str, Any]]:
+    if not isinstance(raw, list):
+        return []
+    normalized: List[Dict[str, Any]] = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        normalized.append(
+            {
+                "skill_id": item.get("skill_id", ""),
+                "title": item.get("title", ""),
+                "reason": item.get("reason", ""),
+                "confidence": item.get("confidence", 0.0),
+                "source": item.get("source", ""),
+            }
+        )
+    return normalized
+
+
+def _project_skill_suggestions(request_id: str) -> List[Dict[str, Any]]:
+    """
+    Read-only projection from persisted compile events.
+    Never recomputes suggestions.
+    """
+    compile_store = _get_compile_store()
+    try:
+        events = compile_store.read_recent_compile_events(limit=5000)
+    except Exception:
+        return []
+
+    for event in events:
+        if event.get("request_id") == request_id:
+            return _normalize_skill_suggestions(event.get("skill_suggestions", []))
+    return []
+
+
 def build_request_evidence_payload(request_id: str) -> Dict[str, Any]:
     if _diag_get_meter_fn is None:
         raise LookupError(f"Meter not found for request_id={request_id}")
@@ -960,6 +996,7 @@ def build_request_evidence_payload(request_id: str) -> Dict[str, Any]:
 
     status = _infer_request_status(meter_dict, chain_dict)
     nodes = _derive_product_nodes(meter_dict, chain_dict)
+    skill_suggestions = _project_skill_suggestions(request_id)
 
     if savings_ratio > 0 and not status["bypass"]:
         context_state = "optimized_visible"
@@ -994,6 +1031,7 @@ def build_request_evidence_payload(request_id: str) -> Dict[str, Any]:
             "nodes": nodes,
             "trace_id": chain_dict.get("trace_id") if chain_dict else request_id,
         },
+        "skill_suggestions": skill_suggestions,
     }
 
 

@@ -253,6 +253,7 @@ def _build_codex_bypass_compile_meta() -> dict:
         "compile_path": "codex_env_bypass",
         "compile_error": None,
         "compile_reason": "codex_env_bypass",
+        "skill_suggestions": [],
     }
 
 
@@ -266,6 +267,7 @@ def _build_route_disabled_compile_meta() -> dict:
         "compile_path": "agent_route_disabled",
         "compile_error": None,
         "compile_reason": "agent_route_disabled",
+        "skill_suggestions": [],
     }
 
 
@@ -1384,6 +1386,7 @@ def _record_compile_event(
             "compile_path": compile_meta.get("compile_path", "unknown"),
             "compile_error": compile_meta.get("compile_error"),
             "compile_reason": compile_meta.get("compile_reason", ""),
+            "skill_suggestions": compile_meta.get("skill_suggestions", []) or [],
         }
         if truth_meta:
             row.update(truth_meta)
