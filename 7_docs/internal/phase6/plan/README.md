@@ -28,6 +28,7 @@
 | Cloud Reset Batch 1 Spec | **进行中（边界已固定）** | [OmniMemora_Cloud_Reset_Batch1_Spec_2026-04-22.md](./OmniMemora_Cloud_Reset_Batch1_Spec_2026-04-22.md) |
 | Cloud Reset Batch 3 Inventory | **已收口 ✓（inventory complete）** | [OmniMemora_Cloud_Reset_Batch3_Inventory_2026-04-23.md](./OmniMemora_Cloud_Reset_Batch3_Inventory_2026-04-23.md) |
 | Cloud Reset Batch 4 Cutover Prep | **已收口 ✓（prep complete）** | [OmniMemora_Cloud_Reset_Batch4_Cutover_Prep_2026-04-23.md](./OmniMemora_Cloud_Reset_Batch4_Cutover_Prep_2026-04-23.md) |
+| Cloud Reset Batch 5 Cutover Execution | **已收口 ✓（Railway rationalization complete; Cloudflare continuity hold）** | [OmniMemora_Cloud_Reset_Batch5_Cutover_Execution_2026-04-23.md](./OmniMemora_Cloud_Reset_Batch5_Cutover_Execution_2026-04-23.md) |
 
 ---
 
