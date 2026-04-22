@@ -24,7 +24,7 @@
 |--------|--------|----------|
 | Architecture Governance Batch 2 Closeout | **已收口 ✓** | [OmniMemora_Architecture_Governance_Batch2_Closeout_2026-04-22.md](./OmniMemora_Architecture_Governance_Batch2_Closeout_2026-04-22.md) |
 | Architecture Governance Next Mainline | **已收口 ✓（可进入 Skill Suggestion 工程）** | [OmniMemora_Architecture_Governance_Next_Mainline_2026-04-22.md](./OmniMemora_Architecture_Governance_Next_Mainline_2026-04-22.md) |
-| Skill Suggestion v1 Closeout (repo/candidate) | **已收口 ✓（阶段性）** | [OmniMemora_Skill_Suggestion_v1_Closeout_2026-04-22.md](./OmniMemora_Skill_Suggestion_v1_Closeout_2026-04-22.md) |
+| Skill Suggestion v1 Closeout | **已收口 ✓（running reality verified）** | [OmniMemora_Skill_Suggestion_v1_Closeout_2026-04-22.md](./OmniMemora_Skill_Suggestion_v1_Closeout_2026-04-22.md) |
 
 ---
 
