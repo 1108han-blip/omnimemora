@@ -540,8 +540,8 @@ def build_root_payload() -> Dict[str, Any]:
             "current": _diag_rate_limiter.get_current_count(),
         },
     }
-    if _diag_config.viking_url:
-        result["viking_url"] = _diag_config.viking_url
+    if _diag_config.memory_backend_url:
+        result["memory_backend_url"] = _diag_config.memory_backend_url
     return result
 
 

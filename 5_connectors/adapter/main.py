@@ -775,7 +775,7 @@ async def viking_request(
             async with httpx.AsyncClient(timeout=build_timeout(timeout_seconds)) as client:
                 response = await client.request(
                     method,
-                    f"{config.viking_url}{path}",
+                    f"{config.memory_backend_url}{path}",
                     headers=request_headers,
                     **kwargs,
                 )
@@ -806,15 +806,15 @@ async def viking_request(
 
 def build_headers() -> Dict[str, str]:
     headers: Dict[str, str] = {}
-    if config.viking_api_key:
-        headers["X-API-Key"] = config.viking_api_key
+    if config.memory_backend_api_key:
+        headers["X-API-Key"] = config.memory_backend_api_key
     return headers
 
 
 def build_headers_with_tenant(tenant_id: str, user_id: str) -> Dict[str, str]:
     headers = build_headers()
-    headers["X-OpenViking-Account"] = tenant_id
-    headers["X-OpenViking-User"] = user_id
+    headers["X-OmniMemora-Tenant"] = tenant_id
+    headers["X-OmniMemora-User"] = user_id
     return headers
 
 
@@ -825,8 +825,8 @@ def resolve_tenant_identity(request: Request) -> tuple[Optional[str], Optional[s
     if override_tenant and override_user:
         return override_tenant, override_user
 
-    header_tenant = request.headers.get("X-OpenViking-Account")
-    header_user = request.headers.get("X-OpenViking-User")
+    header_tenant = request.headers.get("X-OmniMemora-Tenant")
+    header_user = request.headers.get("X-OmniMemora-User")
     if header_tenant and header_user:
         return header_tenant, header_user
 

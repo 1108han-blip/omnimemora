@@ -78,7 +78,7 @@ class MemoryBackend(ABC):
     @property
     @abstractmethod
     def backend_type(self) -> str:
-        """Return backend type identifier (e.g., 'openviking', 'omnimemora_runtime')"""
+        """Return backend type identifier (e.g., 'omnimemora_runtime')."""
         pass
 
     @abstractmethod
@@ -141,7 +141,7 @@ class MemoryBackend(ABC):
     async def prepare_namespace(self, scope: str, scope_ref: str) -> bool:
         """Prepare namespace tree before write operations.
 
-        For backends that require namespace creation (e.g., OpenViking),
+        For backends that require namespace creation,
         this ensures the target namespace exists before writing.
 
         Args:
@@ -162,7 +162,7 @@ class MemoryBackend(ABC):
     ) -> MemorySearchResult:
         """Fallback content-scan search when primary search yields no results.
 
-        This is an OpenViking-specific concept where, when the main search
+        This is a legacy concept where, when the main search
         doesn't find matches, a content scan of recent memories is performed.
 
         Args:

@@ -9,7 +9,7 @@ status_read_model = importlib.import_module("5_connectors.adapter.application.st
 class _DummyConfig:
     enable_rate_limit = True
     rate_limit_per_minute = 60
-    viking_url = ""
+    memory_backend_url = ""
 
 
 class _DummyDedupCache:

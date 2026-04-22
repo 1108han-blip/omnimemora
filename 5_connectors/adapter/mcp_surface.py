@@ -225,11 +225,10 @@ async def _bootstrap_mcp_initialize(request: Optional[Request], body: Dict[str, 
     if request:
         tenant = (
             request.headers.get("x-omnimemora-tenant")
-            or request.headers.get("x-openviking-account")
             or tenant
         ).strip() or tenant
         user = (
-            request.headers.get("x-openviking-user")
+            request.headers.get("x-omnimemora-user")
             or request.headers.get("x-user-id")
             or user
         ).strip() or user
@@ -386,7 +385,7 @@ async def _mcp_call_tool(name: str, args: Dict[str, Any]) -> List[Dict[str, Any]
             sr = await client.post(
                 f"{_adapter_http_base}/memory/search",
                 json={"query": keyword, "keyword": keyword, "limit": limit, "agent": "openclaw-agent"},
-                headers={"X-OpenViking-Account": "openclaw", "X-OpenViking-User": "openclaw-user"},
+                headers={"X-OmniMemora-Tenant": "openclaw", "X-OmniMemora-User": "openclaw-user"},
             )
             if sr.status_code >= 400:
                 return [{"type": "text", "text": f"error: search failed ({sr.status_code})"}]

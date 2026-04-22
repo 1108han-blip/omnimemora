@@ -12,7 +12,6 @@ from .base import (
 from .factory import create_backend, get_memory_backend, register_backend
 
 # Import backend implementations to trigger @register_backend decorators
-from .openviking_backend import OpenVikingBackend
 from .omnimemora_runtime_backend import OmniMemoraRuntimeBackend
 
 __all__ = [
@@ -25,6 +24,5 @@ __all__ = [
     "create_backend",
     "get_memory_backend",
     "register_backend",
-    "OpenVikingBackend",
     "OmniMemoraRuntimeBackend",
 ]

@@ -12,7 +12,7 @@ status_read_model = importlib.import_module("5_connectors.adapter.application.st
 class _DummyConfig:
     enable_rate_limit = True
     rate_limit_per_minute = 60
-    viking_url = ""
+    memory_backend_url = ""
 
 
 class _DummyDedupCache:
@@ -76,4 +76,3 @@ class StatusReadModelDiagnosticsHelperTests(unittest.TestCase):
         self.assertEqual(payload["status"], "healthy")
         self.assertEqual(payload["interface_policy"]["product_entry_port"], 18011)
         self.assertEqual(payload["rate_limit"]["max_per_minute"], 60)
-

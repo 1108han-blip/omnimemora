@@ -1,8 +1,6 @@
 # factory.py
 """Backend Factory - Backend creation and registry"""
 
-import os
-
 from typing import Dict, Type, Optional, Any
 
 from .base import MemoryBackend, BackendHealth
@@ -81,20 +79,12 @@ def create_backend(config) -> MemoryBackend:
             'connect_timeout_seconds': config.connect_timeout_seconds,
         }
 
-    # For openviking backend (compatibility full-CRUD), resolve viking_url from env
     backend_type = config_dict.get('backend_type', 'omnimemora_runtime')
     if backend_type == 'openviking':
-        viking_url = os.getenv('VIKING_URL')
-        if not viking_url:
-            raise ValueError(
-                "VIKING_URL environment variable is required when using openviking backend. "
-                "This backend is a compatibility option; use 'omnimemora_runtime' (default) for new deployments."
-            )
-        default_omnimemora_url = os.getenv("MEMORY_BACKEND_URL", "http://127.0.0.1:8765")
-        if config_dict.get('base_url') == default_omnimemora_url:
-            config_dict['base_url'] = viking_url
-        if not config_dict.get('api_key'):
-            config_dict['api_key'] = os.getenv('VIKING_API_KEY', '')
+        raise ValueError(
+            "Backend type 'openviking' has been removed from active runtime paths. "
+            "Use 'omnimemora_runtime' only."
+        )
 
     backend_config = BackendConfig(**config_dict)
     backend_class = get_backend_class(backend_config.backend_type)

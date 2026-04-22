@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 # =============================================================================
 
 # 本地产品端口列表（host + port 一起判断才认为是内部）
-_INTERNAL_PORTS = {8765, 18011, 5173, 1933}
+_INTERNAL_PORTS = {8765, 18011, 5173}
 
 # localhost / loopback host patterns
 _LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1", "::ffff:127.0.0.1"}
@@ -77,7 +77,6 @@ def is_internal_target(host: str, port: int | None = None) -> bool:
         "omnimemora-runtime",
         "runtime",
         "memory-backend",
-        "openviking",
         "host.docker.internal",
     }
     if host_lower in _local_service_hosts:

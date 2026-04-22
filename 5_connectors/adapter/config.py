@@ -220,12 +220,11 @@ class Config(BaseModel):
     omnimemora_trial_days: int = int(os.getenv("OMNIMEMORA_TRIAL_DAYS", "14"))
     omnimemora_trial_quota_tokens: int = int(os.getenv("OMNIMEMORA_TRIAL_QUOTA_TOKENS", "500000"))
 
-    # OpenViking 配置
-    # DEPRECATED: 仅 openviking backend 需填；omnimemora_runtime 不需要此配置
-    viking_url: Optional[str] = os.getenv("VIKING_URL", None)
-    viking_api_key: str = os.getenv("VIKING_API_KEY", "")
+    # Memory plane endpoint config (active naming)
+    memory_backend_url: str = os.getenv("MEMORY_BACKEND_URL", "http://127.0.0.1:8765")
+    memory_backend_api_key: str = os.getenv("MEMORY_BACKEND_API_KEY", "")
     viking_memory_namespace_root: str = os.getenv(
-        "VIKING_MEMORY_NAMESPACE_ROOT",
+        "OMNIMEMORA_MEMORY_NAMESPACE_ROOT",
         "viking://resources/memory-adapter",
     )
 
