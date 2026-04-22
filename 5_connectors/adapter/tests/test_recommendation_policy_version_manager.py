@@ -111,3 +111,80 @@ def test_invalid_snapshot_falls_back_without_breaking_compile_chain():
     assert result["skill_policy_version"] == "static_catalog_v1"
     assert result["skill_policy_source"] == "local_builtin"
     assert result["skill_policy_status"] == "invalid_snapshot"
+
+
+def test_cloud_candidate_is_used_when_local_candidate_missing():
+    with tempfile.TemporaryDirectory(prefix="omnimemora-rec-policy-cloud-candidate-") as tmpdir:
+        policies_dir = Path(tmpdir)
+        manifest_path = policies_dir / "manifest.json"
+        _write_json(
+            manifest_path,
+            {
+                "active_version": "rec-v1",
+                "candidate_version": None,
+                "last_verified_report": None,
+                "last_promoted_at": None,
+            },
+        )
+        _write_json(policies_dir / "rec-v1.json", _snapshot("rec-v1"))
+        cloud_candidate = _snapshot("cloud-rec-v9")
+        cloud_candidate["policy_source"] = "cloud_candidate"
+        cloud_candidate["policy_status"] = "candidate"
+
+        manager._inject_path(
+            {
+                "policies_dir": str(policies_dir),
+                "manifest_path": str(manifest_path),
+            }
+        )
+        try:
+            with mock.patch(
+                "5_connectors.adapter.infrastructure.recommendation_policy_loader.load_cloud_candidate_recommendation_policy",
+                return_value=cloud_candidate,
+            ):
+                active, candidate = loader.load_recommendation_policy_with_candidate()
+        finally:
+            manager._clear_injection()
+
+    assert active is not None
+    assert active["policy_version"] == "rec-v1"
+    assert candidate is not None
+    assert candidate["policy_version"] == "cloud-rec-v9"
+    assert candidate["policy_source"] == "cloud_candidate"
+
+
+def test_local_candidate_has_priority_over_cloud_candidate():
+    with tempfile.TemporaryDirectory(prefix="omnimemora-rec-policy-priority-") as tmpdir:
+        policies_dir = Path(tmpdir)
+        manifest_path = policies_dir / "manifest.json"
+        _write_json(
+            manifest_path,
+            {
+                "active_version": "rec-v1",
+                "candidate_version": "rec-v2",
+                "last_verified_report": None,
+                "last_promoted_at": None,
+            },
+        )
+        _write_json(policies_dir / "rec-v1.json", _snapshot("rec-v1"))
+        _write_json(policies_dir / "rec-v2.json", _snapshot("rec-v2"))
+
+        manager._inject_path(
+            {
+                "policies_dir": str(policies_dir),
+                "manifest_path": str(manifest_path),
+            }
+        )
+        try:
+            with mock.patch(
+                "5_connectors.adapter.infrastructure.recommendation_policy_loader.load_cloud_candidate_recommendation_policy",
+                return_value=_snapshot("cloud-rec-v9"),
+            ):
+                active, candidate = loader.load_recommendation_policy_with_candidate()
+        finally:
+            manager._clear_injection()
+
+    assert active is not None
+    assert active["policy_version"] == "rec-v1"
+    assert candidate is not None
+    assert candidate["policy_version"] == "rec-v2"

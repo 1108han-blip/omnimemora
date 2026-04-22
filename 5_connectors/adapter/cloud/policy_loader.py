@@ -5,8 +5,6 @@ V1 策略: 本地 active 版本优先，云端 policy/flags 是非主路径，�
 """
 from typing import Optional, Tuple
 from .models import Policy
-from .client import CloudClient
-from ..config import config
 from ..policy_version_manager import load_active_policy, load_candidate_policy
 
 

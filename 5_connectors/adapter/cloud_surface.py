@@ -72,6 +72,7 @@ async def get_cloud_status():
 
     return {
         "cloud_enabled": bool(cloud_cfg.enabled),
+        "cloud_candidate_source_enabled": bool(cloud_cfg.candidate_source_enabled),
         "registry_sync_enabled": bool(sync_cfg.enabled),
         "last_sync_at": sync_state.get("last_sync_at"),
         "last_sync_status": sync_state.get("last_sync_status"),

@@ -2680,7 +2680,7 @@ class InternalTrialQueryResponse(BaseModel):
 @app.post("/internal/trial-query", response_model=InternalTrialQueryResponse)
 async def internal_trial_query(request: InternalTrialQueryRequest, http_request: Request):
     """
-    Internal trial query endpoint — called ONLY by Cloudflare Pages Functions
+    Internal trial query endpoint — called ONLY by cloud control-plane edge handlers
     (query.ts) after it has already validated the API key against D1.
 
     Trust is established via X-Internal-Token header matching

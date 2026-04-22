@@ -174,6 +174,31 @@ class CloudIntegrationConfig(BaseModel):
             _env_bool("CLOUD_ENABLED", False),
         ),
     )
+    # Candidate source contract (Cloud Reset Batch 1):
+    # - Cloudflare: candidate pointer fetch entry
+    # - Railway: candidate snapshot/state fetch
+    # - Local active remains authoritative
+    candidate_source_enabled: bool = _env_bool(
+        "OMNIMEMORA_CLOUD_CANDIDATE_SOURCE_ENABLED",
+        False,
+    )
+    control_plane_base_url: str = os.getenv(
+        "OMNIMEMORA_CLOUD_CONTROL_PLANE_BASE_URL",
+        "https://doloclaw.com",
+    )
+    control_plane_candidate_path: str = os.getenv(
+        "OMNIMEMORA_CLOUD_CANDIDATE_POINTER_PATH",
+        "/api/control/recommendation/candidates/latest",
+    )
+    control_plane_token: str = os.getenv("OMNIMEMORA_CLOUD_CONTROL_TOKEN", "")
+    railway_state_base_url: str = os.getenv("OMNIMEMORA_RAILWAY_STATE_BASE_URL", "")
+    railway_snapshot_path_template: str = os.getenv(
+        "OMNIMEMORA_RAILWAY_SNAPSHOT_PATH_TEMPLATE",
+        "/internal/recommendation/snapshots/{snapshot_id}",
+    )
+    candidate_timeout_ms: float = float(
+        os.getenv("OMNIMEMORA_CLOUD_CANDIDATE_TIMEOUT_MS", "800")
+    )
 
 
 class Config(BaseModel):
