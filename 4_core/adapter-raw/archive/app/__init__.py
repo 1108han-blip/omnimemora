@@ -1,1 +1,0 @@
-# Memory Adapter for OpenViking
