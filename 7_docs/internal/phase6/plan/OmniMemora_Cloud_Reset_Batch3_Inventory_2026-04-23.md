@@ -135,5 +135,5 @@
 5. Local path (`8765/18011/5173`): no change in Batch 4 unless explicitly required by cutover validation.
 
 ## Batch 3 Closeout
-- Result: **已收口 ✓（inventory complete）**
+- Result: **Conditional（inventory complete, Cloudflare D1 auth gap）**
 - Constraint check: no cloud resource created, modified, or deleted in this batch.
