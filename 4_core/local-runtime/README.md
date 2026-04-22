@@ -15,11 +15,20 @@ Use the runtime for storage, retrieval, and runtime-local health only. External 
 
 - owns local memory persistence
 - serves runtime health and storage/search/query/delete operations
+- exposes runtime-local control/integration carrier actions (install/uninstall/rescan, gateway decision intake)
 - does not define product entry behavior
 - does not own KPI truth
 - does not decide bypass policy
 - does not decide agent routing policy
 - does not auto-attach detected agents by default
+
+## Runtime Surface Families (`:8765`)
+
+- memory plane: `/memory/*` + scope/store/metering path
+- control/integration carrier: `/agents/control/*`, `/gateway/decision/*`
+- runtime/operator/internal surfaces: `/health`, `/metrics`, `/dashboard`, `/internal/metrics`, `/mcp*`, `/sse`
+
+These families are runtime-local. They do not change the product entry rule: external product traffic enters from `:18011`.
 
 Canonical references:
 
@@ -45,6 +54,8 @@ Interpretation rule:
 | `POST` | `/agents/control/install` | Internal low-frequency attach/install action |
 | `POST` | `/agents/control/uninstall` | Internal low-frequency detach/uninstall with backup restore |
 | `POST` | `/agents/control/rescan` | Recompute detectable parent-level agents for UI |
+| `POST` | `/gateway/decision/disable-route` | Runtime-local recovery decision carrier |
+| `POST` | `/gateway/decision/uninstall` | Runtime-local recovery decision carrier |
 | `POST` | `/memory/write` | Write memory |
 | `POST` | `/memory/query` | Query memory |
 | `POST` | `/memory/search` | Search memory |

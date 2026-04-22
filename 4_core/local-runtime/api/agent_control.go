@@ -8,6 +8,9 @@ import (
 	"github.com/omnimemora/local-runtime/internal/attach"
 )
 
+// registerInstallControlRoutes exposes runtime-local integration-carrier routes.
+// These endpoints are low-frequency attach/detach/rescan surfaces and do not
+// define memory-plane behavior or product entry behavior.
 func registerInstallControlRoutes(mux *http.ServeMux, server *Server) {
 	mux.HandleFunc("GET /agents/control", server.handleAgentControlList)
 	mux.HandleFunc("POST /agents/control/rescan", server.handleAgentControlRescan)
@@ -113,7 +116,7 @@ func (s *Server) handleAgentControlRescan(w http.ResponseWriter, r *http.Request
 	s.handleAgentControlList(w, r)
 }
 
-// Runtime agent control remains the low-frequency install layer only.
+// Runtime agent control remains the low-frequency integration carrier layer only.
 // Product routing and product-facing control semantics stay at :18011.
 func (s *Server) handleAgentControlInstall(w http.ResponseWriter, r *http.Request) {
 	var req agentControlRequest

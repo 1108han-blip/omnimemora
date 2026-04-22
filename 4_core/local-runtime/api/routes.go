@@ -1,4 +1,4 @@
-// api/routes.go - HTTP route handlers
+// api/routes.go - Memory-plane and runtime connector route handlers
 // Aligns with RUNTIME_ARCHITECTURE.md Section 7
 package api
 

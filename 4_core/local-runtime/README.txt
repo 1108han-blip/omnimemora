@@ -18,6 +18,14 @@ This binary is the local runtime behind OmniMemora.
 - executes low-frequency install / uninstall actions for agent configs
 - supports gateway compile / search / query through internal calls
 
+## Runtime surface families (:8765)
+
+- memory plane: /memory/*
+- control/integration carrier: /agents/control/* and /gateway/decision/*
+- runtime/operator/internal: /health, /metrics, /dashboard, /internal/metrics, /mcp*, /sse
+
+All of these are internal runtime surfaces. Product-facing data entry remains :18011.
+
 ## What this binary does not do
 
 - does not replace the gateway at `:18011`

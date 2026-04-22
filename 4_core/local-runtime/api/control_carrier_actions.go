@@ -6,6 +6,9 @@ import (
 	"github.com/omnimemora/local-runtime/internal/attach"
 )
 
+// ApplyDisableRouteDecision and ApplyUninstallDecision are runtime-local
+// control carrier actions. They do not redefine memory-plane behavior and are
+// not product-entry semantics.
 type controlCarrierActionResult struct {
 	FamilyID string
 	Action   string

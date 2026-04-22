@@ -79,24 +79,10 @@ func NewServer(cfg *config.RuntimeConfig, store storepkg.Store, rtCtx *lifecycle
 
 	// Register routes
 	registerRootRoutes(mux, server)
-	mux.HandleFunc("GET /health", server.handleHealth)
-	mux.HandleFunc("GET /metrics", server.handleMetrics)
-	registerOperatorDashboardRoutes(mux, server)
-	registerControlCarrierRoutes(mux, server)
-	registerInstallControlRoutes(mux, server)
-	mux.HandleFunc("GET /sse", server.handleMCPSSE)
-	mux.HandleFunc("GET /mcp", server.handleMCPSSE)
-	mux.HandleFunc("GET /mcp/sse", server.handleMCPSSE)
-	mux.HandleFunc("POST /mcp", server.handleMCPHTTP)
-	mux.HandleFunc("POST /messages", server.handleMCPMessages)
-	mux.HandleFunc("POST /mcp/messages", server.handleMCPMessages)
-	mux.HandleFunc("POST /memory/write", server.handleWrite)
-	mux.HandleFunc("POST /memory/query", server.handleQuery)
-	mux.HandleFunc("POST /memory/search", server.handleSearch)
-	mux.HandleFunc("POST /memory/delete", server.handleDelete)
-	mux.HandleFunc("POST /connector/register", server.handleConnectorRegister)
-	mux.HandleFunc("GET /connector/list", server.handleConnectorList)
-	registerBootstrapRoutes(mux, server)
+	registerRuntimeOperatorRoutes(mux, server)
+	registerControlAndIntegrationCarrierRoutes(mux, server)
+	registerMCPTransportRoutes(mux, server)
+	registerMemoryPlaneRoutes(mux, server)
 
 	server.httpServer = &http.Server{
 		Addr:         fmt.Sprintf("%s:%d", cfg.Local.Endpoint, port),
@@ -107,6 +93,45 @@ func NewServer(cfg *config.RuntimeConfig, store storepkg.Store, rtCtx *lifecycle
 	}
 
 	return server
+}
+
+// registerRuntimeOperatorRoutes registers runtime-local operator surfaces.
+// These are for internal runtime health/bootstrap/diagnostics only.
+func registerRuntimeOperatorRoutes(mux *http.ServeMux, server *Server) {
+	mux.HandleFunc("GET /health", server.handleHealth)
+	mux.HandleFunc("GET /metrics", server.handleMetrics)
+	registerOperatorDashboardRoutes(mux, server)
+	registerBootstrapRoutes(mux, server)
+}
+
+// registerControlAndIntegrationCarrierRoutes registers runtime-local control
+// and integration carrier surfaces (install/uninstall/rescan and gateway
+// recovery decisions). These are not product data entry surfaces.
+func registerControlAndIntegrationCarrierRoutes(mux *http.ServeMux, server *Server) {
+	registerControlCarrierRoutes(mux, server)
+	registerInstallControlRoutes(mux, server)
+}
+
+// registerMCPTransportRoutes registers runtime MCP transport/internal protocol
+// surfaces. They are internal transport/runtime surfaces, not product entry.
+func registerMCPTransportRoutes(mux *http.ServeMux, server *Server) {
+	mux.HandleFunc("GET /sse", server.handleMCPSSE)
+	mux.HandleFunc("GET /mcp", server.handleMCPSSE)
+	mux.HandleFunc("GET /mcp/sse", server.handleMCPSSE)
+	mux.HandleFunc("POST /mcp", server.handleMCPHTTP)
+	mux.HandleFunc("POST /messages", server.handleMCPMessages)
+	mux.HandleFunc("POST /mcp/messages", server.handleMCPMessages)
+}
+
+// registerMemoryPlaneRoutes registers runtime memory-plane routes plus
+// runtime-local connector registration/listing used by the runtime internals.
+func registerMemoryPlaneRoutes(mux *http.ServeMux, server *Server) {
+	mux.HandleFunc("POST /memory/write", server.handleWrite)
+	mux.HandleFunc("POST /memory/query", server.handleQuery)
+	mux.HandleFunc("POST /memory/search", server.handleSearch)
+	mux.HandleFunc("POST /memory/delete", server.handleDelete)
+	mux.HandleFunc("POST /connector/register", server.handleConnectorRegister)
+	mux.HandleFunc("GET /connector/list", server.handleConnectorList)
 }
 
 // ListenAndServe starts the HTTP server

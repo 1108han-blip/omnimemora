@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+// registerControlCarrierRoutes exposes runtime-local recovery decision routes.
+// These are control-carrier surfaces, not memory-plane routes and not product entry.
 func registerControlCarrierRoutes(mux *http.ServeMux, server *Server) {
 	mux.HandleFunc("GET /gateway/status", server.handleGatewayStatus)
 	mux.HandleFunc("POST /gateway/decision/disable-route", server.handleGatewayDecisionDisableRoute)
