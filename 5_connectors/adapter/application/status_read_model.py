@@ -968,6 +968,39 @@ def _project_skill_suggestions(request_id: str) -> List[Dict[str, Any]]:
     return []
 
 
+def _project_skill_policy_metadata(request_id: str) -> Dict[str, str]:
+    """
+    Read-only projection for skill policy metadata from persisted compile events.
+    Never recomputes recommendation policy.
+    """
+    compile_store = _get_compile_store()
+    try:
+        events = compile_store.read_recent_compile_events(limit=5000)
+    except Exception:
+        return {
+            "skill_policy_name": "local_fallback",
+            "skill_policy_version": "static_catalog_v1",
+            "skill_policy_source": "local_builtin",
+            "skill_policy_status": "fallback",
+        }
+
+    for event in events:
+        if event.get("request_id") == request_id:
+            return {
+                "skill_policy_name": str(event.get("skill_policy_name", "local_fallback")),
+                "skill_policy_version": str(event.get("skill_policy_version", "static_catalog_v1")),
+                "skill_policy_source": str(event.get("skill_policy_source", "local_builtin")),
+                "skill_policy_status": str(event.get("skill_policy_status", "fallback")),
+            }
+
+    return {
+        "skill_policy_name": "local_fallback",
+        "skill_policy_version": "static_catalog_v1",
+        "skill_policy_source": "local_builtin",
+        "skill_policy_status": "fallback",
+    }
+
+
 def build_request_evidence_payload(request_id: str) -> Dict[str, Any]:
     if _diag_get_meter_fn is None:
         raise LookupError(f"Meter not found for request_id={request_id}")
@@ -997,6 +1030,7 @@ def build_request_evidence_payload(request_id: str) -> Dict[str, Any]:
     status = _infer_request_status(meter_dict, chain_dict)
     nodes = _derive_product_nodes(meter_dict, chain_dict)
     skill_suggestions = _project_skill_suggestions(request_id)
+    policy_meta = _project_skill_policy_metadata(request_id)
 
     if savings_ratio > 0 and not status["bypass"]:
         context_state = "optimized_visible"
@@ -1032,6 +1066,10 @@ def build_request_evidence_payload(request_id: str) -> Dict[str, Any]:
             "trace_id": chain_dict.get("trace_id") if chain_dict else request_id,
         },
         "skill_suggestions": skill_suggestions,
+        "skill_policy_name": policy_meta["skill_policy_name"],
+        "skill_policy_version": policy_meta["skill_policy_version"],
+        "skill_policy_source": policy_meta["skill_policy_source"],
+        "skill_policy_status": policy_meta["skill_policy_status"],
     }
 
 

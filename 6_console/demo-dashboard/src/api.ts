@@ -101,10 +101,10 @@ export async function fetchRequestEvidence(requestId: string): Promise<RequestEv
   return {
     ...raw,
     skill_suggestions: Array.isArray(raw?.skill_suggestions) ? raw.skill_suggestions : [],
-    skill_policy_name: raw?.skill_policy_name,
-    skill_policy_version: raw?.skill_policy_version,
-    skill_policy_source: raw?.skill_policy_source,
-    skill_policy_status: raw?.skill_policy_status,
+    skill_policy_name: raw?.skill_policy_name ?? 'local_fallback',
+    skill_policy_version: raw?.skill_policy_version ?? 'static_catalog_v1',
+    skill_policy_source: raw?.skill_policy_source ?? 'local_builtin',
+    skill_policy_status: raw?.skill_policy_status ?? 'fallback',
   };
 }
 
