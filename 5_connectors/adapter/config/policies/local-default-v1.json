@@ -1,0 +1,15 @@
+{
+  "version": "local-default-v1",
+  "weights": {
+    "relevance": 1.0,
+    "recency": 1.0,
+    "scope": 1.0
+  },
+  "compression": {
+    "enabled": true,
+    "mode": "balanced"
+  },
+  "selection": {
+    "max_memories": 6
+  }
+}

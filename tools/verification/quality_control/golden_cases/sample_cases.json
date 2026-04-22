@@ -1,0 +1,79 @@
+[
+  {
+    "case_id": "gc-001",
+    "gate_class": "must_pass",
+    "query": "write code for login function",
+    "candidate_memories": [
+      {"memory_id": "mem-001", "uri": "auth/login.py", "category": "code", "content": "def authenticate user", "term": "login function implementation"},
+      {"memory_id": "mem-002", "uri": "auth/logout.py", "category": "code", "content": "def logout user", "term": "logout function"},
+      {"memory_id": "mem-003", "uri": "docs/readme.md", "category": "docs", "content": "project documentation", "term": "readme"}
+    ],
+    "agent": "claude_code",
+    "client": "test-client",
+    "max_local_cards": 10,
+    "candidate_limit": 10,
+    "expected_task_type": "implementation",
+    "expected_context_bypass": true,
+    "required_memory_refs_or_terms": [],
+    "forbidden_memory_refs_or_terms": [],
+    "min_selected": 0,
+    "max_selected": 0
+  },
+  {
+    "case_id": "gc-002",
+    "gate_class": "must_pass",
+    "query": "should we use Redis or Memcached for caching",
+    "candidate_memories": [
+      {"memory_id": "mem-cache-001", "uri": "redis/docs.md", "category": "cache", "content": "Redis caching solution", "term": "Redis caching"},
+      {"memory_id": "mem-cache-002", "uri": "memcached/docs.md", "category": "cache", "content": "Memcached solution", "term": "Memcached"},
+      {"memory_id": "mem-perf-001", "uri": "perf/benchmark.md", "category": "performance", "content": "performance metrics", "term": "performance"}
+    ],
+    "agent": "claude_code",
+    "client": "test-client",
+    "max_local_cards": 10,
+    "candidate_limit": 10,
+    "expected_task_type": "decision",
+    "expected_context_bypass": false,
+    "required_memory_refs_or_terms": ["Redis", "Memcached", "cache"],
+    "forbidden_memory_refs_or_terms": ["unrelated_topic"],
+    "min_selected": 1,
+    "max_selected": 4
+  },
+  {
+    "case_id": "gc-003",
+    "gate_class": "scored",
+    "query": "continue the current integration work",
+    "candidate_memories": [
+      {"memory_id": "mem-int-001", "uri": "integration/work.md", "category": "integration", "content": "integration work progress", "term": "integration"},
+      {"memory_id": "mem-int-002", "uri": "integration/status.md", "category": "integration", "content": "current integration status", "term": "current status"}
+    ],
+    "agent": "openclaw",
+    "client": "test-client",
+    "max_local_cards": 10,
+    "candidate_limit": 10,
+    "expected_task_type": "continuation",
+    "expected_context_bypass": false,
+    "required_memory_refs_or_terms": ["integration"],
+    "forbidden_memory_refs_or_terms": [],
+    "min_selected": 1,
+    "max_selected": 5
+  },
+  {
+    "case_id": "gc-004",
+    "gate_class": "scored",
+    "query": "hello world",
+    "candidate_memories": [
+      {"memory_id": "mem-gen-001", "uri": "misc/notes.md", "category": "general", "content": "random notes", "term": "notes"}
+    ],
+    "agent": "codex",
+    "client": "test-client",
+    "max_local_cards": 10,
+    "candidate_limit": 10,
+    "expected_task_type": null,
+    "expected_context_bypass": null,
+    "required_memory_refs_or_terms": [],
+    "forbidden_memory_refs_or_terms": [],
+    "min_selected": 0,
+    "max_selected": 2
+  }
+]

@@ -427,6 +427,8 @@ class MemoryQueryResponse(BaseModel):
     task_type: str = "continuation"
     context_bypass: bool = False
     matched_keywords: List[str] = []
+    # Policy v1: Active policy version for wrapper feedback
+    policy_version: str = ""
 
 
 # ==================== 工具函数 ====================
@@ -2332,6 +2334,7 @@ async def query_memory_v2(request: MemoryQueryRequest, http_request: Request):
         task_type=task_type,
         context_bypass=context_bypass,
         matched_keywords=matched_keywords,
+        policy_version=policy.version,
     )
 
 

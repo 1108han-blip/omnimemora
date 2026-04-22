@@ -1,51 +1,30 @@
 """
-策略加载器 - 支持云端拉取 + 本地 fallback
+策略加载器 - V1 Local-First Quality Control Loop
+==================================================
+V1 策略: 本地 active 版本优先，云端 policy/flags 是非主路径，不能覆盖本地 active。
 """
-import json
-import os
-from typing import Optional
+from typing import Optional, Tuple
 from .models import Policy
 from .client import CloudClient
 from ..config import config
-
-
-def _get_default_policy_path() -> str:
-    return os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..", "config", "default_policy.json")
-    )
-
-
-def load_local_default_policy() -> Policy:
-    """
-    加载本地默认策略
-    """
-    policy_path = _get_default_policy_path()
-    try:
-        with open(policy_path, "r", encoding="utf-8") as f:
-            data = json.load(f)
-            return Policy(**data)
-    except Exception:
-        # 如果文件读取失败，返回硬编码的默认值
-        return Policy()
+from ..policy_version_manager import load_active_policy, load_candidate_policy
 
 
 def load_policy() -> Policy:
     """
-    主入口：加载策略
-    - 云开启且可用：从云端拉取
-    - 其他情况：返回本地默认策略
+    主入口：加载策略 (V1 Local-First)
+    - 始终使用本地 active 版本（来自 versioned policies 目录）
+    - 云端 policy 在 V1 中是非主路径，不覆盖本地 active 选择
+    - cloud.enabled 仅用于 observation/secondary 场景
     """
-    if config.cloud.enabled:
-        try:
-            client = CloudClient(
-                base_url=config.cloud.base_url,
-                timeout_ms=config.cloud.policy_timeout_ms
-            )
-            cloud_policy = client.get_policy()
-            if cloud_policy is not None:
-                return cloud_policy
-        except Exception:
-            # 任何异常都 fallback 到本地
-            pass
+    return load_active_policy()
 
-    return load_local_default_policy()
+
+def load_policy_with_candidate() -> Tuple[Policy, Optional[Policy]]:
+    """
+    返回 (active_policy, candidate_policy)。
+    用于 golden-case runner 对比 active vs candidate。
+    """
+    active = load_active_policy()
+    candidate = load_candidate_policy()
+    return active, candidate

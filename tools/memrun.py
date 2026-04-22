@@ -296,6 +296,7 @@ def main():
     saved_tokens_estimate    = 0
     savings_ratio            = 0.0
     request_id              = "wrapper-local"
+    policy_version          = "unknown"
 
     if not args.no_inject:
         print(f"[memrun] Calling OmniMemora /memory/query ...")
@@ -315,6 +316,7 @@ def main():
             task_type              = result.get("task_type", "unknown")
             matched_keywords        = result.get("matched_keywords", [])
             meter                  = result.get("meter_artifact", {})
+            policy_version          = result.get("policy_version", "unknown")
 
             baseline_tokens_estimate = meter.get("baseline_tokens_estimate", 0)
             actual_tokens_estimate   = meter.get("actual_tokens_estimate", 0)
@@ -361,6 +363,7 @@ def main():
         execution_feedback=None,
         subjective_score=None,
         request_id=request_id,
+        policy_version=policy_version,
     )
 
     sys.exit(exit_code)
