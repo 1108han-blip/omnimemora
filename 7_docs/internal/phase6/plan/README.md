@@ -30,6 +30,9 @@
 | Cloud Reset Batch 4 Cutover Prep | **已收口 ✓（prep complete）** | [OmniMemora_Cloud_Reset_Batch4_Cutover_Prep_2026-04-23.md](./OmniMemora_Cloud_Reset_Batch4_Cutover_Prep_2026-04-23.md) |
 | Cloud Reset Batch 5 Cutover Execution | **已收口 ✓（Railway rationalization complete; Cloudflare continuity hold）** | [OmniMemora_Cloud_Reset_Batch5_Cutover_Execution_2026-04-23.md](./OmniMemora_Cloud_Reset_Batch5_Cutover_Execution_2026-04-23.md) |
 | Cloud Reset Batch 6 Control Project Cutover | **已收口 ✓（replacement control entry + domain rebind complete）** | [OmniMemora_Cloud_Reset_Batch6_Control_Project_Cutover_2026-04-23.md](./OmniMemora_Cloud_Reset_Batch6_Control_Project_Cutover_2026-04-23.md) |
+| Cloud Reset Closeout | **已收口 ✓（mainline complete）** | [OmniMemora_Cloud_Reset_Closeout_2026-04-23.md](./OmniMemora_Cloud_Reset_Closeout_2026-04-23.md) |
+
+> Cloud Reset `Batch 6.1` is classified as **optional cleanup only** (legacy project physical retire), not a mainline closeout prerequisite.
 
 ---
 
