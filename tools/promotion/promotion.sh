@@ -262,6 +262,29 @@ promote_adapter() {
         mkdir -p "$(dirname "$dest")"
         cp "$f" "$dest"
     done
+    # 同步 logic 依赖（adapter 运行态依赖 4_core/logic）
+    # 这是 adapter dependency sync，不是 runtime promotion 扩面。
+    local logic_src="$PROJECT_ROOT/4_core/logic"
+    if [ -d "$logic_src" ]; then
+        log_info "[2.5/4] 同步 Adapter logic 依赖到 $CURRENT_SERVICE_DIR ..." | log_output
+        local logic_files
+        logic_files=$(find "$logic_src" -name "*.py" -type f 2>/dev/null | grep -v __pycache__ | grep -v "\.pyc" || true)
+        if [ -n "$logic_files" ]; then
+            mkdir -p "$CURRENT_SERVICE_DIR/4_core/logic"
+            for f in $logic_files; do
+                local relpath="${f#$logic_src/}"
+                local dest="$CURRENT_SERVICE_DIR/4_core/logic/$relpath"
+                mkdir -p "$(dirname "$dest")"
+                cp "$f" "$dest"
+            done
+            log_info "  已同步 $(echo "$logic_files" | wc -l) 个 logic Python 文件" | log_output
+        else
+            log_warn "  未找到 logic Python 文件，跳过 logic 依赖同步" | log_output
+        fi
+    else
+        log_warn "  logic 源码目录不存在: $logic_src，跳过 logic 依赖同步" | log_output
+    fi
+
     # 同步 launcher
     cp "$adapter_launcher" "$CURRENT_SERVICE_DIR/tools/_run_adapter.py"
 
