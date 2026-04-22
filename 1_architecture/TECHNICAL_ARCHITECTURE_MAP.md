@@ -89,8 +89,7 @@ HTTP Request
     ├─ access.py 认证
     ├─ meter_store.get_tenant_current_usage() 获取配额
     ├─ get_memory_backend() → MemoryBackend 接口
-    │       ├─ OpenVikingBackend (1933) — compatibility full-CRUD backend
-    │       └─ OmniMemoraRuntimeBackend (8765) — default query-path backend
+    │       └─ OmniMemoraRuntimeBackend (8765) — active backend
     ├─ backend.search() / backend.write() — 统一 memory 操作
     ├─ 组装 OptimizationInput
     └→ 4_core/logic/engine.optimize_context()
@@ -187,94 +186,38 @@ HTTP/SSE Request
 
 ---
 
-# 九、Backend Abstraction Migration（新增）
+# 九、Backend Abstraction（Current）
 
-> **Status:** MIGRATION COMPLETED (PARTIAL)
-> **Reference:** `1_architecture/backend_abstraction/MIGRATION_PLAN_1933.md`
-> **Completed:** 2026-04-12
+> **Status:** CURRENT
+> **Reference:** `docs/spec/SPEC-BACKEND-ABSTRACTION-001.md`
 
-## 9.1 迁移前（As-Is）
-
-```
-5_connectors/adapter/main.py
-        ↓
-    viking_request() 硬编码调用
-        ↓
-    1933 (OpenViking) — 唯一 backend
-```
-
-**问题：**
-- `viking_request()` 调用渗透到 connector 主链路
-- OpenViking 协议语义（`/api/v1/fs/*`、`/api/v1/resources/*`）混入 connector 层
-- 无法切换到 OmniMemora Runtime (8765)
-- 违反宪法 Backend-agnostic 原则
-
-## 9.2 迁移后（Current）
+## 9.1 Active contract
 
 ```
 5_connectors/adapter/main.py
         ↓
     MemoryBackend Interface（统一抽象）
         ↓
-    Backend Adapter
-   ├─ OpenVikingBackend (1933) — compatibility full-CRUD backend
-   └─ OmniMemoraRuntimeBackend (8765) — default query-path backend ✅
+    OmniMemoraRuntimeBackend (8765) — active backend
 ```
 
-**架构约束：**
-- `main.py` 只依赖 `MemoryBackend` 接口
-- OpenViking 协议细节只能存在于 `backends/openviking_backend.py`
-- 新增 backend 不修改 connector 逻辑
-
-## 9.3 新增文件
+## 9.2 Active files
 
 | 文件 | 职责 |
 |------|------|
 | `5_connectors/adapter/backends/base.py` | `MemoryBackend` ABC + 统一数据模型 |
-| `5_connectors/adapter/backends/factory.py` | Backend 注册与创建 |
-| `5_connectors/adapter/backends/openviking_backend.py` | OpenViking (1933) 实现 |
-| `5_connectors/adapter/backends/omnimemora_runtime_backend.py` | OmniMemora Runtime (8765) 实现 |
+| `5_connectors/adapter/backends/factory.py` | Backend 创建与 retired-type 拒绝 |
+| `5_connectors/adapter/backends/omnimemora_runtime_backend.py` | Active runtime backend 实现 |
 
-## 9.4 配置变更
+## 9.3 Active config surface
 
 | 配置项 | 说明 |
 |--------|------|
-| `memory_backend.backend_type` | `omnimemora_runtime`（默认）/ `openviking` |
-| `memory_backend.base_url` | Backend 地址 |
-| `viking_url` | **DEPRECATED** — 仅供 OpenVikingBackend 使用 |
+| `memory_backend.backend_type` | `omnimemora_runtime`（唯一 active 类型） |
+| `MEMORY_BACKEND_URL` | Runtime backend 地址（默认 `http://127.0.0.1:8765`） |
+| `MEMORY_BACKEND_API_KEY` | Runtime backend API key（可选） |
 
-## 9.5 健康检查输出
+## 9.4 Legacy boundary
 
-```json
-{
-  "memory_backend": {
-    "type": "omnimemora_runtime",
-    "healthy": true
-  }
-}
-```
-
-## 9.6 验收标准
-
-| 标准 | 状态 | 验证 |
-|------|------|------|
-| `main.py` 核心 endpoint 无 `viking_request` 调用 | ✅ | grep 返回 0 行（排除 helper 函数） |
-| 所有 memory 操作走 backend 接口 | ✅ | 代码审查 |
-| OpenViking backend 可用 | ✅ | backend 接口实现完成 |
-| OmniMemora Runtime backend 可用 | ✅ | write/search/query 已验证 |
-| Engine 全链路 (query path) | ✅ | `/memory/query` 端到端测试通过 |
-
-## 9.7 当前限制
-
-| 功能 | 状态 | 说明 |
-|------|------|------|
-| Write | ✅ | `omnimemora_runtime` 已验证 |
-| Search | ✅ | `omnimemora_runtime` 已验证 |
-| Query (Engine) | ✅ | `/memory/query` 全链路通过 |
-| Read | ⚠️ | not supported by `omnimemora_runtime` |
-| Delete | ⚠️ | not supported by `omnimemora_runtime` |
-
-## 9.8 遗留项
-
-- `/memory/snapshot` 端点仍直接调用 OpenViking helpers（已标记为 legacy compatibility endpoint）
-- `read/delete` are outside the supported capability surface of `omnimemora_runtime`
+- Legacy backend abstraction docs are archive-only under `1_architecture/archive/legacy/backend_abstraction/`.
+- Archive material is not a current implementation contract.
