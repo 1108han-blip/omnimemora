@@ -312,6 +312,7 @@ async def run_gateway_compile(
             "compile_error": str(e)[:200],
             "candidate_count": 0,
             "selected_count": 0,
+            "skill_suggestions": [],
         }
 
     # Step 4: Determine status and build response
@@ -348,6 +349,7 @@ async def run_gateway_compile(
         error=compile_result.get("compile_error"),
         reason=compile_result.get("compile_reason", "runtime_compile"),
         compression_ratio=compile_result.get("compression_ratio", 0.0),
+        skill_suggestions=compile_result.get("skill_suggestions", []),
     )
     if config.trace_events_enabled:
         append_trace_event(
@@ -447,6 +449,7 @@ def _build_meta(
     error: Optional[str],
     reason: str,
     compression_ratio: float = 0.0,
+    skill_suggestions: Optional[List[dict]] = None,
 ) -> dict:
     """
     Build standardized compile metadata.
@@ -466,4 +469,5 @@ def _build_meta(
         "compile_path": path,
         "compile_error": error,
         "compile_reason": reason,
+        "skill_suggestions": skill_suggestions or [],
     }

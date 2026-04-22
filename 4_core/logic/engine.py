@@ -2,7 +2,7 @@
 统一能力入口 - 串联纯逻辑模块
 所有外部依赖（规则、数据）从外部注入，engine 只负责编排决策流程
 """
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -19,6 +19,7 @@ from .v2_compute import (
     CallChain,
     CallChainStage,
 )
+from .skill_suggestion import SkillSuggestion, suggest_skills
 import time
 
 
@@ -64,6 +65,7 @@ class OptimizationResult:
 
     # Call chain timing trace
     call_chain: CallChain = None
+    skill_suggestions: List[SkillSuggestion] = field(default_factory=list)
 
 
 def _extract_content_metadata(mem: Dict[str, Any]) -> Tuple[str, Dict[str, str]]:
@@ -243,6 +245,19 @@ def optimize_context(input: OptimizationInput) -> OptimizationResult:
     # Build call chain (trace_id placeholder — adapter will replace with real request_id)
     call_chain = CallChain(trace_id="engine-local", stages=stages)
 
+    # Skill suggestions (advisory-only sidecar metadata; never affects packed_context)
+    task_type = (input.task_type or "").strip().lower()
+    if task_type == "implementation":
+        skill_suggestions: List[SkillSuggestion] = []
+    else:
+        normalized_task = task_type if task_type in {"decision", "continuation"} else "continuation"
+        skill_suggestions = suggest_skills(
+            query=input.query,
+            task_type=normalized_task,
+            agent=input.agent,
+            client=input.client,
+        )
+
     return OptimizationResult(
         selected_memories=selected,
         packed_context=packed_context,
@@ -252,4 +267,5 @@ def optimize_context(input: OptimizationInput) -> OptimizationResult:
         candidate_count=candidate_count,
         selected_count=selected_count,
         call_chain=call_chain,
+        skill_suggestions=skill_suggestions,
     )

@@ -151,6 +151,7 @@ async def execute_runtime_compile(
             "compile_error": None,
             "candidate_count": result.candidate_count,
             "selected_count": result.selected_count,
+            "skill_suggestions": [s.to_dict() for s in (result.skill_suggestions or [])],
         }
 
     except Exception as e:
@@ -180,6 +181,7 @@ async def execute_runtime_compile(
             "compile_error": str(e)[:200],
             "candidate_count": 0,
             "selected_count": 0,
+            "skill_suggestions": [],
         }
 
 
