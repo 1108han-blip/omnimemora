@@ -18,6 +18,10 @@ status_read_model.py — Status / Diagnostics Read Model
 
 from __future__ import annotations
 
+import importlib
+import inspect as _inspect
+import os
+import sys
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
@@ -29,6 +33,69 @@ _DISPLAY_NAMES = {
     "cursor": "Cursor",
     "openclaw": "OpenClaw",
 }
+
+
+# ============================================================================
+# Diagnostics Read-Model Configuration
+# ============================================================================
+
+_diag_config = None
+_diag_get_backend_fn = None
+_diag_get_dedup_cache_fn = None
+_diag_rate_limiter = None
+_diag_adapter_hostname = ""
+_diag_adapter_started_at = ""
+_diag_agent_metrics_module = None
+_diag_agent_identity_module = None
+_diag_get_meter_fn = None
+_diag_support_schema_version = ""
+_diag_support_error_catalog: Dict[str, Dict[str, Any]] = {}
+
+
+def configure_diagnostics_read_model(
+    *,
+    config_obj: Any,
+    get_backend_fn: Any,
+    get_dedup_cache_fn: Any,
+    rate_limiter: Any,
+    adapter_hostname: str,
+    adapter_started_at: str,
+    agent_metrics_module: Any,
+    agent_identity_module: Any,
+    get_meter_fn: Any,
+    support_schema_version: str,
+    support_error_catalog: Dict[str, Dict[str, Any]],
+) -> None:
+    """Configure diagnostics read-model dependencies from adapter main assembly."""
+    global _diag_config, _diag_get_backend_fn, _diag_get_dedup_cache_fn, _diag_rate_limiter
+    global _diag_adapter_hostname, _diag_adapter_started_at, _diag_agent_metrics_module, _diag_agent_identity_module
+    global _diag_get_meter_fn, _diag_support_schema_version, _diag_support_error_catalog
+    _diag_config = config_obj
+    _diag_get_backend_fn = get_backend_fn
+    _diag_get_dedup_cache_fn = get_dedup_cache_fn
+    _diag_rate_limiter = rate_limiter
+    _diag_adapter_hostname = adapter_hostname
+    _diag_adapter_started_at = adapter_started_at
+    _diag_agent_metrics_module = agent_metrics_module
+    _diag_agent_identity_module = agent_identity_module
+    _diag_get_meter_fn = get_meter_fn
+    _diag_support_schema_version = support_schema_version
+    _diag_support_error_catalog = support_error_catalog
+
+
+def _require_diag_config() -> None:
+    if _diag_config is None:
+        raise RuntimeError("diagnostics read-model is not configured")
+
+
+def _diag_agent_metrics():
+    return _diag_agent_metrics_module or _get_agent_metrics()
+
+
+def _diag_agent_identity():
+    if _diag_agent_identity_module is not None:
+        return _diag_agent_identity_module
+    return __import__("5_connectors.adapter.agent_identity", fromlist=["dummy"])
 
 
 def _get_agent_metrics():
@@ -455,3 +522,503 @@ async def build_control_cards() -> List[Dict[str, Any]]:
 
     cards.sort(key=lambda item: (not item["active"], item["display_name"].lower()))
     return cards
+
+
+# ============================================================================
+# Diagnostics Surface Projections (Read Model Only)
+# ============================================================================
+
+def build_root_payload() -> Dict[str, Any]:
+    _require_diag_config()
+    result = {
+        "service": "Memory Adapter v2.2",
+        "version": "2.2.0",
+        "support_schema_version": _diag_support_schema_version,
+        "dedup_stats": _diag_get_dedup_cache_fn().get_stats(),
+        "rate_limit": {
+            "max_per_minute": _diag_config.rate_limit_per_minute,
+            "current": _diag_rate_limiter.get_current_count(),
+        },
+    }
+    if _diag_config.viking_url:
+        result["viking_url"] = _diag_config.viking_url
+    return result
+
+
+async def build_health_payload(mode: str = "full") -> Dict[str, Any]:
+    _require_diag_config()
+    if mode == "local":
+        return {
+            "status": "healthy",
+            "mode": "local",
+            "interface_policy": {
+                "product_entry_port": 18011,
+                "mcp_endpoint": "/mcp",
+                "internal_backend_port": 8765,
+                "note": "External agents must connect to 18011. Port 8765 is internal only.",
+            },
+            "dedup_stats": _diag_get_dedup_cache_fn().get_stats(),
+            "rate_limit": {
+                "enabled": _diag_config.enable_rate_limit,
+                "max_per_minute": _diag_config.rate_limit_per_minute,
+                "current": _diag_rate_limiter.get_current_count(),
+            },
+        }
+
+    backend_health = await _diag_get_backend_fn().health()
+    route_state = _get_agent_routing_state()
+    track_b_orchestrator = __import__("5_connectors.adapter.track_b_orchestrator", fromlist=["dummy"])
+    per_agent_modes, _default_mode = route_state.get_agent_modes_cache()
+    system_status = track_b_orchestrator.build_system_status_from_backend_health(
+        backend_health=backend_health,
+        per_agent_modes=per_agent_modes,
+    )
+    return {
+        "status": "healthy" if backend_health.healthy else "degraded",
+        "mode": "full",
+        "interface_policy": {
+            "product_entry_port": 18011,
+            "mcp_endpoint": "/mcp",
+            "internal_backend_port": 8765,
+            "note": "External agents must connect to 18011. Port 8765 is internal only.",
+        },
+        "memory_backend": {
+            "type": backend_health.backend_type,
+            "healthy": backend_health.healthy,
+            "details": backend_health.details,
+        },
+        "system_status": system_status,
+        "timeout_profile": {
+            "connect_seconds": _diag_config.viking_connect_timeout_seconds,
+            "health_seconds": _diag_config.viking_health_timeout_seconds,
+            "search_seconds": _diag_config.viking_search_timeout_seconds,
+            "read_seconds": _diag_config.viking_read_timeout_seconds,
+            "delete_seconds": _diag_config.viking_delete_timeout_seconds,
+            "snapshot_seconds": _diag_config.viking_snapshot_timeout_seconds,
+            "upload_seconds": _diag_config.viking_upload_timeout_seconds,
+            "commit_seconds": _diag_config.viking_commit_timeout_seconds,
+            "resolve_seconds": _diag_config.viking_resolve_timeout_seconds,
+            "retry_attempts": _diag_config.viking_retry_attempts,
+            "retry_backoff_seconds": _diag_config.viking_retry_backoff_seconds,
+            "slow_request_threshold_ms": _diag_config.slow_request_threshold_ms,
+        },
+        "path_policy": {
+            "agent_segment_sanitized": True,
+            "namespace_prepare_on_write": True,
+            "missing_namespace_returns_empty": True,
+        },
+        "error_policy": {
+            "schema_version": _diag_support_schema_version,
+            "request_id_header": "X-Request-ID",
+            "catalog_endpoint": "/support/error-codes",
+            "structured_http_errors": True,
+            "write_error_fields": ["reason", "error_code", "request_id", "support"],
+        },
+        "dedup_stats": _diag_get_dedup_cache_fn().get_stats(),
+        "rate_limit": {
+            "enabled": _diag_config.enable_rate_limit,
+            "max_per_minute": _diag_config.rate_limit_per_minute,
+            "current": _diag_rate_limiter.get_current_count(),
+        },
+    }
+
+
+def build_runtime_fingerprint_payload() -> Dict[str, Any]:
+    _require_diag_config()
+    agent_metrics = _diag_agent_metrics()
+    live_5m = agent_metrics.get_live_agents(window_minutes=5)
+    live_24h = agent_metrics.get_live_agents(window_minutes=1440)
+    key_modules = [
+        "5_connectors.adapter.main",
+        "5_connectors.adapter.metrics_service",
+        "5_connectors.adapter.agent_identity",
+        "5_connectors.adapter.agent_metrics",
+    ]
+    code_source: Dict[str, str] = {}
+    for name in key_modules:
+        try:
+            mod = importlib.import_module(name)
+            code_source[name] = _inspect.getfile(mod)
+        except Exception as exc:
+            code_source[name] = f"import failed: {exc}"
+
+    return {
+        "service": "Memory Adapter v2.2",
+        "version": "2.2.0",
+        "pid": os.getpid(),
+        "hostname": _diag_adapter_hostname,
+        "started_at": _diag_adapter_started_at,
+        "python": sys.version.split(" ")[0],
+        "config": {
+            "adapter_host": _diag_config.adapter_host,
+            "adapter_port": _diag_config.adapter_port,
+            "memory_backend_type": _diag_config.memory_backend.backend_type,
+            "memory_backend_url": _diag_config.memory_backend.base_url,
+            "agent_events_path": _diag_config.agent_events_path,
+        },
+        "code_source": code_source,
+        "live_counts": {
+            "window_5m": len(live_5m),
+            "window_24h": len(live_24h),
+        },
+        "interface_policy": {
+            "product_entry_port": 18011,
+            "mcp_endpoint": "/mcp",
+            "internal_backend_port": 8765,
+            "note": "External agents must connect to 18011. Port 8765 is internal only.",
+        },
+    }
+
+
+def build_support_error_codes_payload() -> Dict[str, Any]:
+    return {
+        "schema_version": _diag_support_schema_version,
+        "count": len(_diag_support_error_catalog),
+        "error_codes": [
+            {
+                "code": code,
+                "category": meta["category"],
+                "severity": meta["severity"],
+                "retryable": meta["retryable"],
+                "suggested_action": meta["suggested_action"],
+            }
+            for code, meta in sorted(_diag_support_error_catalog.items())
+        ],
+    }
+
+
+def build_metrics_summary_payload(tenant: str = "all") -> Dict[str, Any]:
+    metrics_service = __import__("5_connectors.adapter.metrics_service", fromlist=["dummy"])
+    return metrics_service.compute_metrics_summary(tenant)
+
+
+def build_metrics_summary_24h_payload(tenant: str = "all") -> Dict[str, Any]:
+    metrics_service = __import__("5_connectors.adapter.metrics_service", fromlist=["dummy"])
+    return metrics_service.compute_metrics_summary_24h(tenant)
+
+
+def build_metrics_debug_sources_payload() -> Dict[str, Any]:
+    _require_diag_config()
+    metrics_service = __import__("5_connectors.adapter.metrics_service", fromlist=["dummy"])
+    return {
+        "summary_source": "5_connectors.adapter.metrics_service.compute_metrics_summary",
+        "recent_requests_source": "5_connectors.adapter.metrics_service.get_recent_requests",
+        "tenant_source": "5_connectors.adapter.metrics_service.list_tenants",
+        "module_file": _inspect.getfile(metrics_service),
+        "agent_events_path": _diag_config.agent_events_path,
+    }
+
+
+def build_recent_requests_payload(
+    tenant: str = "default",
+    limit: int = 20,
+    include_internal: bool = False,
+    value_qualified_only: bool = True,
+) -> Dict[str, Any]:
+    metrics_service = __import__("5_connectors.adapter.metrics_service", fromlist=["dummy"])
+    requests = metrics_service.get_recent_requests(
+        tenant,
+        limit,
+        include_internal=include_internal,
+        value_qualified_only=value_qualified_only,
+    )
+    return {"tenant": tenant, "requests": requests}
+
+
+def build_metric_tenants_payload() -> Dict[str, Any]:
+    metrics_service = __import__("5_connectors.adapter.metrics_service", fromlist=["dummy"])
+    return {"tenants": metrics_service.list_tenants()}
+
+
+def build_core_capabilities_payload(tenant: str = "all") -> Dict[str, Any]:
+    metrics_service = __import__("5_connectors.adapter.metrics_service", fromlist=["dummy"])
+    return metrics_service.compute_core_capabilities(tenant)
+
+
+def build_core_capabilities_trend_payload(tenant: str = "all", days: int = 7) -> Dict[str, Any]:
+    metrics_service = __import__("5_connectors.adapter.metrics_service", fromlist=["dummy"])
+    return metrics_service.compute_core_capabilities_trend(tenant, days)
+
+
+def build_context_diff_payload(request_id: str) -> Dict[str, Any]:
+    if _diag_get_meter_fn is None:
+        raise LookupError(f"Meter not found for request_id={request_id}")
+    meter = _diag_get_meter_fn(request_id)
+    if not meter:
+        raise LookupError(f"Meter not found for request_id={request_id}")
+
+    meter_dict = meter.to_dict()
+    candidate_memories = meter_dict.get("candidate_memories", [])
+    dropped_memories = meter_dict.get("dropped_memories", [])
+    dropped_content_set = {m.get("content", "").strip() for m in dropped_memories}
+    selected_memories = [
+        m for m in candidate_memories if m.get("content", "").strip() not in dropped_content_set
+    ]
+    return {
+        "request_id": request_id,
+        "before_tokens": meter_dict.get("baseline_tokens_estimate", 0),
+        "after_tokens": meter_dict.get("actual_tokens_estimate", 0),
+        "selected_memories": selected_memories,
+        "dropped_memories": dropped_memories,
+    }
+
+
+def build_call_chain_payload(request_id: str) -> Dict[str, Any]:
+    trace_store = __import__("5_connectors.adapter.trace_store", fromlist=["dummy"])
+    chain_dict = trace_store.get_trace_dict(request_id)
+    if not chain_dict:
+        raise LookupError(f"Trace not found for request_id={request_id}")
+    return chain_dict
+
+
+def _derive_product_nodes(meter_dict: Dict[str, Any], chain_dict: Dict[str, Any]) -> List[Dict[str, Any]]:
+    bypass = meter_dict.get("context_bypass", False)
+    selected_count = len(meter_dict.get("candidate_memories", []))
+    packed_count = meter_dict.get("packed_memory_count", 0)
+    savings_ratio = meter_dict.get("savings_ratio", 0.0)
+    task_type = meter_dict.get("task_type", "unknown")
+
+    def _stage_duration(*names: str) -> float:
+        if not chain_dict or "stages" not in chain_dict:
+            return 0.0
+        total = 0.0
+        for stage in chain_dict["stages"]:
+            if stage["name"] in names:
+                total += stage.get("duration_ms", 0)
+        return round(total, 3)
+
+    def _status(success_cond: bool, warn_cond: bool = False) -> str:
+        if success_cond:
+            return "success"
+        if warn_cond:
+            return "warning"
+        return "not_used"
+
+    return [
+        {"id": "app_request", "label": "App Request", "status": "success", "duration_ms": 0, "note": "request received"},
+        {"id": "entry_18011", "label": "Entry 18011", "status": "success", "duration_ms": 0, "note": "adapter entry"},
+        {
+            "id": "route_decision",
+            "label": "Route Decision",
+            "status": _status(task_type != "unknown"),
+            "duration_ms": _stage_duration("route_score"),
+            "note": f"task_type={task_type}",
+        },
+        {
+            "id": "memory_recall",
+            "label": "Memory Recall",
+            "status": _status(selected_count > 0, selected_count == 0 and task_type != "unknown"),
+            "duration_ms": _stage_duration("filter", "dedup"),
+            "note": f"{selected_count} candidates",
+        },
+        {
+            "id": "context_pack",
+            "label": "Context Pack",
+            "status": _status(packed_count > 0, packed_count == 0 and selected_count > 0),
+            "duration_ms": _stage_duration("select", "pack"),
+            "note": f"{packed_count} packed",
+        },
+        {
+            "id": "compile_or_bypass",
+            "label": "Compile / Bypass",
+            "status": "bypassed" if bypass else _status(savings_ratio > 0),
+            "duration_ms": _stage_duration("meter", "policy_eval"),
+            "note": "bypassed" if bypass else f"savings={savings_ratio:.2%}",
+        },
+        {
+            "id": "upstream_forward",
+            "label": "Upstream Forward",
+            "status": "not_used",
+            "duration_ms": 0,
+            "note": "local-first v1: no upstream forwarding",
+        },
+        {
+            "id": "response_recorded",
+            "label": "Response Recorded",
+            "status": "success",
+            "duration_ms": _stage_duration("engine_total"),
+            "note": "response sent",
+        },
+    ]
+
+
+def _classify_meter_request(meter: Any) -> Dict[str, Any]:
+    request_classifier = _get_request_classifier()
+    agent = getattr(meter, "agent", "") or ""
+    query = getattr(meter, "query", "") or ""
+    coarse_class = request_classifier.classify_request(agent, query)
+
+    packed = getattr(meter, "packed_memory_count", 0) or 0
+    local_cards = getattr(meter, "local_cards_used", 0) or 0
+    remote = getattr(meter, "remote_used_count", 0) or 0
+
+    value_paths: List[str] = []
+    if packed > 0:
+        value_paths.append("packed_memory")
+    if local_cards > 0:
+        value_paths.append("local_cards")
+    if remote > 0:
+        value_paths.append("remote_forward")
+
+    if coarse_class == "internal":
+        request_class = "internal"
+        qualification_reason = "bootstrap/handshake/transport event"
+    elif coarse_class == "task_non_value":
+        if value_paths:
+            request_class = "value_qualified"
+            qualification_reason = f"user-visible task with active value path: {', '.join(value_paths)}"
+        else:
+            request_class = "task_non_value"
+            qualification_reason = "user-visible task but no established value path (no memory pack, no local cards, no remote forward)"
+    else:
+        if value_paths:
+            request_class = "value_qualified"
+            qualification_reason = f"user-visible task with active value path: {', '.join(value_paths)}"
+        else:
+            request_class = "task_non_value"
+            qualification_reason = "user-visible task but no established value path"
+
+    return {
+        "request_class": request_class,
+        "value_path": value_paths,
+        "qualification_reason": qualification_reason,
+        "packed_memory_count": packed,
+        "local_cards_used": local_cards,
+        "remote_used_count": remote,
+    }
+
+
+def _infer_request_status(meter_dict: Dict[str, Any], chain_dict: Dict[str, Any]) -> Dict[str, Any]:
+    bypass = meter_dict.get("context_bypass", False)
+    savings_ratio = meter_dict.get("savings_ratio", 0.0)
+    packed_memory_count = meter_dict.get("packed_memory_count", 0)
+    local_cards_used = meter_dict.get("local_cards_used", 0)
+    remote_used_count = meter_dict.get("remote_used_count", 0)
+
+    failure_stage = None
+    failure_reason = None
+    if chain_dict and "stages" in chain_dict:
+        for stage in chain_dict["stages"]:
+            metadata = stage.get("metadata", {})
+            if metadata.get("error") or metadata.get("failed"):
+                failure_stage = stage["name"]
+                failure_reason = metadata.get("error_reason", "stage failed")
+                break
+
+    value_qualified = (packed_memory_count > 0) or (local_cards_used > 0) or (remote_used_count > 0)
+
+    if failure_stage:
+        request_status = "failed"
+    elif bypass:
+        request_status = "bypassed"
+    elif not value_qualified:
+        if savings_ratio > 0:
+            request_status = "warning"
+        else:
+            request_status = "not_used"
+    elif savings_ratio > 0.5:
+        request_status = "success"
+    elif savings_ratio > 0:
+        request_status = "warning"
+    else:
+        request_status = "not_used"
+
+    return {
+        "request_status": request_status,
+        "bypass": bypass,
+        "failure_stage": failure_stage,
+        "failure_reason": failure_reason,
+        "value_qualified": value_qualified,
+    }
+
+
+def build_request_evidence_payload(request_id: str) -> Dict[str, Any]:
+    if _diag_get_meter_fn is None:
+        raise LookupError(f"Meter not found for request_id={request_id}")
+    meter = _diag_get_meter_fn(request_id)
+    if not meter:
+        raise LookupError(f"Meter not found for request_id={request_id}")
+
+    meter_dict = meter.to_dict()
+    trace_store = __import__("5_connectors.adapter.trace_store", fromlist=["dummy"])
+    chain_dict = trace_store.get_trace_dict(request_id)
+
+    before_tokens = meter_dict.get("baseline_tokens_estimate", 0)
+    after_tokens = meter_dict.get("actual_tokens_estimate", 0)
+    saved_tokens = before_tokens - after_tokens
+    savings_ratio = meter_dict.get("savings_ratio", 0.0)
+    candidate_memories = meter_dict.get("candidate_memories", [])
+    dropped_memories = meter_dict.get("dropped_memories", [])
+    dropped_content_set = {m.get("content", "").strip() for m in dropped_memories}
+    selected_memories = [
+        m for m in candidate_memories if m.get("content", "").strip() not in dropped_content_set
+    ]
+
+    raw_agent_id = meter_dict.get("agent", "unknown")
+    agent_identity = _diag_agent_identity()
+    agent_family = agent_identity.resolve_canonical_agent_id(raw_agent_id)
+
+    status = _infer_request_status(meter_dict, chain_dict)
+    nodes = _derive_product_nodes(meter_dict, chain_dict)
+
+    if savings_ratio > 0 and not status["bypass"]:
+        context_state = "optimized_visible"
+    elif status["bypass"]:
+        context_state = "bypass_or_not_applicable"
+    else:
+        context_state = "traffic_but_no_optimization"
+
+    return {
+        "request": {
+            "request_id": request_id,
+            "timestamp": meter_dict.get("timestamp", ""),
+            "raw_agent_id": raw_agent_id,
+            "agent_family": agent_family,
+            "task_type": meter_dict.get("task_type", "unknown"),
+            "query_summary": meter_dict.get("query", "")[:100],
+        },
+        "request_class": _classify_meter_request(meter),
+        "status": status,
+        "context": {
+            "before_tokens": before_tokens,
+            "after_tokens": after_tokens,
+            "saved_tokens": max(0, saved_tokens),
+            "savings_ratio": savings_ratio,
+            "selected_memory_count": len(selected_memories),
+            "dropped_memory_count": len(dropped_memories),
+            "selected_memories": selected_memories,
+            "dropped_memories": dropped_memories,
+            "context_state": context_state,
+        },
+        "chain": {
+            "nodes": nodes,
+            "trace_id": chain_dict.get("trace_id") if chain_dict else request_id,
+        },
+    }
+
+
+def build_agents_live_payload(window_minutes: int = 30) -> Dict[str, Any]:
+    agent_metrics = _diag_agent_metrics()
+    live = agent_metrics.get_live_agents(window_minutes=window_minutes)
+    return {
+        "surface_role": "diagnostic",
+        "kpi_source": "/metrics/summary",
+        "diagnostic_scope": "agent session snapshots reconstructed from agent_events JSONL",
+        "agents": live,
+        "count": len(live),
+    }
+
+
+def build_agent_metrics_payload(agent_id: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:
+    agent_metrics = _diag_agent_metrics()
+    canonical_id = None
+    if agent_id:
+        canonical_id = _diag_agent_identity().resolve_canonical_agent_id(agent_id)
+    metrics = agent_metrics.get_agent_metrics(agent_id=canonical_id, session_id=session_id)
+    return {
+        "surface_role": "diagnostic",
+        "kpi_source": "/metrics/summary",
+        "diagnostic_scope": "agent/session aggregates replayed from agent_events JSONL",
+        "metrics": [m.dict() for m in metrics],
+        "count": len(metrics),
+    }
