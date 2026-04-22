@@ -11,8 +11,9 @@
 
 ## Auth Mode Used
 - Cloudflare preferred mode required by plan: `CLOUDFLARE_AUTH_EMAIL` + `CLOUDFLARE_GLOBAL_API_KEY`
-- Cloudflare actual mode used: `CLOUDFLARE_API_TOKEN` fallback
-- Reason: preferred global key/email were not visible in session or launchctl env; token path was available
+- Cloudflare actual mode used (initial run): `CLOUDFLARE_API_TOKEN` fallback
+- Cloudflare actual mode used (Batch 4.1 closure): `CLOUDFLARE_AUTH_EMAIL` + `CLOUDFLARE_GLOBAL_API_KEY`
+- Reason: initial run lacked global-key visibility; Batch 4.1 restored system-level launchd visibility for preferred auth mode
 - Railway mode used: `RAILWAY_TOKEN` + `RAILWAY_PROJECT_ID`
 - Railway API endpoint selection:
 - `https://backboard.railway.app/graphql/v2` `me` -> status `403`
@@ -42,6 +43,7 @@
 | pages_project | openviking-site | 46dbc321-53bc-474a-b3c7-2eab274517dc | active | control_entry | conflict | retire |
 | domain_binding | doloclaw.com | openviking-site:doloclaw.com | active | control_entry | fit | keep |
 | domain_binding | www.doloclaw.com | openviking-site:www.doloclaw.com | active | control_entry | fit | keep |
+| d1_database | omnimemora-leads | e7481f9d-a1f2-482c-90e6-d56949bd42e2 | active | control_plane_supporting_store | fit | keep |
 | r2_bucket | doloclaw-assets-v2 | doloclaw-assets-v2 | active | candidate_state_or_async_storage | needs_mapping | migrate_reference_only |
 | r2_bucket | seancorliss | seancorliss | active | candidate_state_or_async_storage | needs_mapping | migrate_reference_only |
 
@@ -53,6 +55,10 @@
 - This means D1 inventory is currently permission-blocked under available token mode.
 - Legacy naming hit detected: Pages project `openviking-site`.
 - Batch 4 follow-up (2026-04-23): D1 endpoint re-probe still returns `401`; blocker remains auth-scope related.
+- Batch 4.1 closure (2026-04-23):
+  - `launchctl` now exposes `CLOUDFLARE_AUTH_EMAIL` and `CLOUDFLARE_GLOBAL_API_KEY`
+  - D1 list endpoint and per-database detail endpoint both returned `200`
+  - Blocker root cause confirmed as auth visibility gap, not product boundary conflict
 
 ## Railway Asset Table
 | resource_type | name | id | status | current_role | boundary_fit | disposition |
@@ -94,6 +100,7 @@
 - `zone` `doloclaw.com`
 - `domain_binding` `doloclaw.com`
 - `domain_binding` `www.doloclaw.com`
+- `d1_database` `omnimemora-leads`
 
 ### migrate_reference_only
 - `r2_bucket` `doloclaw-assets-v2`
@@ -122,7 +129,7 @@
 - Cloudflare:
   - `doloclaw.com` zone/domain entry fits control-entry target and should be kept.
   - Legacy-named Pages project conflicts with current product naming and should be retired/replaced in cutover.
-  - D1 visibility is incomplete under current token scope; inventory is partial for D1.
+  - D1 visibility is now complete under preferred global-key auth mode; D1 can be evaluated as control-plane supporting store.
 - Railway:
   - Current project/service operate as legacy ingress-style runtime surface, not candidate-state/async-only.
   - Legacy env/domain naming confirms boundary conflict.
@@ -130,11 +137,11 @@
 
 ## Next-Batch Inputs (Batch 4: Rationalization / Cutover Prep)
 1. Cloudflare: prepare replacement plan for `openviking-site` while preserving `doloclaw.com` entry continuity.
-2. Cloudflare: obtain permission set that can list D1 under approved auth mode, then close D1 inventory gap.
+2. Cloudflare: carry `omnimemora-leads` as control-plane supporting-store candidate in cutover prep records (no structural change in this batch).
 3. Railway: plan cutover to remove `api.doloclaw.com` from Railway and retire `VIKING_*` vars.
 4. Railway: decide keep-vs-rebuild for project `omnimemora-adapter` as candidate-state/async carrier only.
 5. Local path (`8765/18011/5173`): no change in Batch 4 unless explicitly required by cutover validation.
 
 ## Batch 3 Closeout
-- Result: **Conditional（inventory complete, Cloudflare D1 auth/provider blocker remains）**
+- Result: **已收口 ✓（inventory complete）**
 - Constraint check: no cloud resource created, modified, or deleted in this batch.
