@@ -118,9 +118,13 @@ Batch 2 收口时，工作区仍存在以下 3 个未跟踪文档：
 
 Batch 2 收口后，不应继续在本批次上扩面。
 
-后续若继续推进，建议单独开启新的独立能力批，优先级可按以下顺序考虑：
+后续主线目标固定为：**先完成剩余架构调整，再进入 Skill Suggestion 工程。**
 
-1. Skill Suggestion 独立能力批
-2. `5173` recommendation/advisory UI
-3. cloud policy binding optional interface
+因此，下一条主线优先级改为：
 
+1. `18011` 目录级三层重组
+2. `main.py` 装配收敛
+3. `diagnostics_surface.py` 纯 read-model 化
+4. infrastructure 显式成层
+5. `8765` 新一轮结构治理
+6. 以上完成后，才进入 Skill Suggestion 独立能力批
