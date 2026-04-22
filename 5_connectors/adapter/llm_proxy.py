@@ -4,15 +4,16 @@ llm_proxy.py — Protocol Ingress / Egress Layer
 職責定位（18011 內部三層結構）：
 
   [1] INGRESS LAYER（本文件）
-      - Protocol entry points (OpenAI/Anthropic/Codex/OpenClaw)
+      - Protocol entry points (OpenAI-compatible / Anthropic / Codex / OpenClaw)
       - Agent/session identity detection
       - Passthrough / upstream forwarding
       - Ingress trace/context attach
-      - Compile dispatch (delegates to gateway_compile.py)
+      - Compile dispatch (delegates to application/compile_orchestrator.py)
 
-  [2] APPLICATION LAYER (gateway_compile.py)
-      - compile orchestration
-      - truth resolution (delegates to truth_bridge.py)
+  [2] APPLICATION LAYER (application/compile_orchestrator.py, gateway_compile.py)
+      - compile orchestration (application/compile_orchestrator.py)
+      - truth resolution (via truth_bridge.py)
+      - event recording (compile_store, meter_store)
 
   [3] INFRASTRUCTURE LAYER (truth_bridge.py / meter_store.py / ...)
       - truth resolution contract
@@ -20,10 +21,18 @@ llm_proxy.py — Protocol Ingress / Egress Layer
       - runtime/backend access
 
 明確禁止進入本文件：
-  - compile 執行細節（ belong to gateway_compile.py）
+  - compile 執行細節（belong to application/compile_orchestrator.py）
   - truth resolution 業務邏輯（belong to truth_bridge.py）
   - metrics/read-model 聚合（belong to application/status_read_model.py）
   - control action execution（belong to agent_control_api.py）
+
+OpenAI-compatible 主路徑狀態：
+  - proxy_openai_chat: 已委託給 application/compile_orchestrator.run_compile_and_resolve()
+  - proxy_v1_chat: 直接調用 proxy_openai_chat，自動受益
+  - proxy_v1_responses: 待遷移（使用 _compile_or_passthrough_for_route 舊模式）
+
+Anthropic 路徑狀態：
+  - proxy_anthropic: 待遷移（使用 _compile_or_passthrough_for_route 舊模式）
 
 端點：
   POST /v1/chat/completions  — OpenAI / Codex / Claude Code HTTP
@@ -63,6 +72,9 @@ from .config import config
 from .path_registry import classify_path
 from .trace_context import build_trace_event, get_request_context
 from .trace_events import append_trace_event
+
+def _get_compile_orchestrator():
+    return __import__("5_connectors.adapter.application.compile_orchestrator", fromlist=["dummy"])
 
 router = APIRouter(tags=["llm_proxy"])
 _meter_store = importlib.import_module("5_connectors.adapter.meter_store")
@@ -2978,70 +2990,60 @@ async def proxy_openai_chat(request: Request):
         f"model={model} streaming={is_streaming}"
     )
 
-    # Phase 3: Gateway Compile — run before forwarding
-    compiled_body, compile_meta = await _compile_or_passthrough_for_route(
+    # Phase 3: Compile + Truth Resolution + Event Recording
+    # Routing decision stays at ingress layer: check here before delegating to application layer
+    if not _routing_enabled_for_agent(agent_id):
+        loguru.logger.info(
+            f"[LLM_PROXY/OPENAI] request_id={request_id} agent={agent_id} routing=off passthrough=true"
+        )
+        upstream = get_upstream_for_openai(provider_base)
+        # Use _compile_or_passthrough_for_route which handles routing-off correctly
+        compiled_body, compile_meta = await _compile_or_passthrough_for_route(
+            payload=body,
+            agent_id=agent_id,
+            request_id=request_id,
+            trace_id=trace_id,
+        )
+        # Passthrough: original payload, no compile, no application-layer involvement
+        upstream_model = resolve_openai_upstream_model(model, upstream)
+        compiled_body["model"] = upstream_model
+        compiled_body = _normalize_openai_upstream_payload(compiled_body)
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key_override or upstream['api_key']}",
+        }
+        upstream_url = f"{upstream['base_url']}/chat/completions"
+        _mark_quota_audit(request, upstream_url=upstream_url, action="proxied")
+        async with httpx.AsyncClient(
+            timeout=httpx.Timeout(upstream["timeout_seconds"], connect=15.0)
+        ) as client:
+            upstream_resp = await client.post(upstream_url, json=compiled_body, headers=headers)
+            return _passthrough_response(
+                request_id=request_id,
+                route="/llm/chat",
+                upstream_resp=upstream_resp,
+            )
+
+    # Routing is on: delegate to application layer for compile + truth resolution
+    upstream = get_upstream_for_openai(provider_base)
+    compiled_body, compile_meta, contract, truth_meta = await _get_compile_orchestrator().run_compile_and_resolve(
         payload=body,
         agent_id=agent_id,
-        request_id=request_id,
-        trace_id=trace_id,
-    )
-
-    upstream = get_upstream_for_openai(provider_base)
-    upstream_model = resolve_openai_upstream_model(model, upstream)
-    auth_source_label = auth_source_from_values(
-        explicit_authorization=bool(api_key_override),
-        product_api_key_present=bool(upstream.get("api_key")),
-    )
-    contract, truth_meta = resolve_truth_contract(
-        request_id=request_id,
-        agent_id=agent_id,
+        upstream=upstream,
+        api_key_override=api_key_override,
         route="/llm/chat",
         requested_model=model,
         wire_api_requested="chat_completions",
-        provider_requested=infer_provider_name(upstream.get("base_url", ""), upstream.get("provider", "openai_compatible")),
-        base_url_requested=provider_base or upstream.get("base_url"),
-        auth_requested=("runtime_authorization_header" if api_key_override else product_auth_ref_for_provider(upstream.get("provider", "openai_compatible"))),
+        provider_base=provider_base,
         provider_source="runtime_override" if provider_base else "product_policy_binding",
         base_url_source="runtime_override" if provider_base else "product_upstream_config",
         model_source="agent_payload_explicit",
-        auth_source=auth_source_label,
+        auth_source="",  # computed internally by run_compile_and_resolve
         policy_profile="openai_chat_default",
-        candidates_by_source={
-            "product_policy_binding": {
-                "provider": infer_provider_name(upstream.get("base_url", ""), upstream.get("provider", "openai_compatible")),
-                "base_url": upstream.get("base_url"),
-                "auth": product_auth_ref_for_provider(upstream.get("provider", "openai_compatible")),
-                "wire_api": "chat_completions",
-            },
-            "runtime_override": {
-                "base_url": provider_base,
-                "auth": "runtime_authorization_header" if api_key_override else None,
-            },
-            "provider_default": {
-                "provider": infer_provider_name(upstream.get("base_url", ""), upstream.get("provider", "openai_compatible")),
-                "base_url": upstream.get("base_url"),
-                "model": upstream_model,
-                "auth": product_auth_ref_for_provider(upstream.get("provider", "openai_compatible")),
-                "wire_api": "chat_completions",
-                "fallback": True,
-            },
-        },
-        compile_enabled=bool(compile_meta),
-    )
-    _record_compile_event(
-        request_id, agent_id, "/llm/chat", model, compile_meta, truth_meta=truth_meta, trace_id=trace_id
-    )
-    # OpenClaw/Codex 请求无论 compile 成功/失败都需要落盘 meter
-    # OpenAI chat 格式使用 messages 数组，提取用户查询
-    chat_messages = body.get("messages", [])
-    query_text = _extract_user_query(chat_messages) if chat_messages else ""
-    _persist_gateway_meter(
         request_id=request_id,
-        agent_id=agent_id,
-        query=query_text,
-        compile_meta=compile_meta,
+        trace_id=trace_id,
     )
-    compiled_body["model"] = contract.model_resolved or upstream_model
+    compiled_body["model"] = contract.model_resolved or model
     compiled_body = _normalize_openai_upstream_payload(compiled_body)
     headers = {
         "Content-Type": "application/json",

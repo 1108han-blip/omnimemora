@@ -10,5 +10,6 @@ Modules:
 import importlib
 
 status_read_model = importlib.import_module("5_connectors.adapter.application.status_read_model")
+compile_orchestrator = importlib.import_module("5_connectors.adapter.application.compile_orchestrator")
 
-__all__ = ["status_read_model"]
+__all__ = ["status_read_model", "compile_orchestrator"]
