@@ -10,20 +10,25 @@
 ## D1 Inventory Backfill (Blocking Check)
 
 ### Auth visibility check
-- `CLOUDFLARE_AUTH_EMAIL`: missing (env + launchctl)
-- `CLOUDFLARE_GLOBAL_API_KEY`: missing (env + launchctl)
+- `CLOUDFLARE_AUTH_EMAIL`: present (launchctl)
+- `CLOUDFLARE_GLOBAL_API_KEY`: present (launchctl)
 - `CLOUDFLARE_API_TOKEN`: present (launchctl)
 
 ### Read-only D1 probe
-- Account listing succeeded via token.
+- Account listing succeeded via global-key auth.
 - D1 list endpoint probes:
-  - `GET /accounts/<account_id>/d1/database` -> `401 Authentication error`
-  - `GET /accounts/<account_id>/d1/database?page=1&per_page=50` -> `401 Authentication error`
+  - `GET /accounts/<account_id>/d1/database` -> `200` (success, 1 database)
+  - `GET /accounts/<account_id>/d1/database?page=1&per_page=50` -> `200` (success, 1 database)
+  - `GET /accounts/<account_id>/d1/database/<db_id>` -> `200` (detail success)
+- Observed D1 asset:
+  - `name`: `omnimemora-leads`
+  - `id`: `e7481f9d-a1f2-482c-90e6-d56949bd42e2`
+  - `known binding`: no direct coupling to legacy Pages project detected via inventory endpoints
 
 ### D1 gap status
-- **Not closed** in Batch 4.
-- Blocking reason: Cloudflare auth scope mismatch under currently visible credentials.
-- Classification: **provider/auth blocker** (not product-path blocker).
+- **Closed** in Batch 4.1.
+- Resolution reason: preferred auth mode visibility restored in system-level launchd env.
+- Classification update: previous blocker was auth visibility gap, not product-path blocker.
 
 ## Final Disposition List (Cutover-Oriented)
 
@@ -74,7 +79,7 @@
 ## Cutover Preconditions
 
 ### Cloudflare preconditions
-1. D1 read visibility restored under approved Cloudflare auth mode.
+1. D1 inventory completed (`omnimemora-leads`) and recorded as control-plane supporting-store candidate.
 2. Replacement control-plane project defined with current naming.
 3. Domain cutover runbook prepared (`doloclaw.com` / `www.doloclaw.com`).
 4. Legacy Pages decommission sequence approved.
@@ -95,7 +100,7 @@
 6. Retire legacy Pages project after traffic cut confirmation.
 
 ## Batch 4 Status
-- Result: **Conditional (cutover prep complete, D1 auth scope blocker remains)**
+- Result: **已收口 ✓（prep complete）**
 - Gate impact:
   - cutover prep artifacts are ready,
-  - but inventory is not fully closed until D1 visibility is restored.
+  - inventory blocker is resolved and status no longer depends on D1 auth visibility.
