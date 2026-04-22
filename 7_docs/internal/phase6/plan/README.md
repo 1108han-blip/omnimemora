@@ -14,6 +14,18 @@
 
 ---
 
+## Post-Phase6 Governance Records
+
+以下记录属于 **phase6 收口后的 roadmap 外治理增强线**，用于固定后续架构治理与结构迁移结论。
+
+它们不是新的 roadmap phase，也不改变本 README 上方 phase6 子线已收口的事实。
+
+| Record | Status | 文档位置 |
+|--------|--------|----------|
+| Architecture Governance Batch 2 Closeout | **已收口 ✓** | [OmniMemora_Architecture_Governance_Batch2_Closeout_2026-04-22.md](./OmniMemora_Architecture_Governance_Batch2_Closeout_2026-04-22.md) |
+
+---
+
 ## Promotion Evidence Routing
 
 **狀態：** 已收口
