@@ -52,6 +52,7 @@
   - `/accounts/<id>/d1/database` -> `401` (`Authentication error`)
 - This means D1 inventory is currently permission-blocked under available token mode.
 - Legacy naming hit detected: Pages project `openviking-site`.
+- Batch 4 follow-up (2026-04-23): D1 endpoint re-probe still returns `401`; blocker remains auth-scope related.
 
 ## Railway Asset Table
 | resource_type | name | id | status | current_role | boundary_fit | disposition |
@@ -135,5 +136,5 @@
 5. Local path (`8765/18011/5173`): no change in Batch 4 unless explicitly required by cutover validation.
 
 ## Batch 3 Closeout
-- Result: **Conditional（inventory complete, Cloudflare D1 auth gap）**
+- Result: **Conditional（inventory complete, Cloudflare D1 auth/provider blocker remains）**
 - Constraint check: no cloud resource created, modified, or deleted in this batch.

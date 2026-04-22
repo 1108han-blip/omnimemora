@@ -26,7 +26,8 @@
 | Architecture Governance Next Mainline | **已收口 ✓（可进入 Skill Suggestion 工程）** | [OmniMemora_Architecture_Governance_Next_Mainline_2026-04-22.md](./OmniMemora_Architecture_Governance_Next_Mainline_2026-04-22.md) |
 | Skill Suggestion v1 Closeout | **已收口 ✓（running reality verified）** | [OmniMemora_Skill_Suggestion_v1_Closeout_2026-04-22.md](./OmniMemora_Skill_Suggestion_v1_Closeout_2026-04-22.md) |
 | Cloud Reset Batch 1 Spec | **进行中（边界已固定）** | [OmniMemora_Cloud_Reset_Batch1_Spec_2026-04-22.md](./OmniMemora_Cloud_Reset_Batch1_Spec_2026-04-22.md) |
-| Cloud Reset Batch 3 Inventory | **进行中（inventory complete, D1 auth gap）** | [OmniMemora_Cloud_Reset_Batch3_Inventory_2026-04-23.md](./OmniMemora_Cloud_Reset_Batch3_Inventory_2026-04-23.md) |
+| Cloud Reset Batch 3 Inventory | **进行中（inventory complete, D1 auth/provider blocker）** | [OmniMemora_Cloud_Reset_Batch3_Inventory_2026-04-23.md](./OmniMemora_Cloud_Reset_Batch3_Inventory_2026-04-23.md) |
+| Cloud Reset Batch 4 Cutover Prep | **进行中（prep complete, blocked by D1 auth scope）** | [OmniMemora_Cloud_Reset_Batch4_Cutover_Prep_2026-04-23.md](./OmniMemora_Cloud_Reset_Batch4_Cutover_Prep_2026-04-23.md) |
 
 ---
 
