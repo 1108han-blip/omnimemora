@@ -3,17 +3,17 @@ doc_id: GOV-ARCH-NEXT-MAINLINE-2026-04-22
 title: OmniMemora Architecture Governance Next Mainline
 owner: doc-team
 reviewers: [arch-lead]
-status: active
+status: closed
 version: 1.0.0
 effective_date: 2026-04-22
 depends_on: [GOV-ARCH-BATCH2-CLOSEOUT-2026-04-22, ADR-0003-INTERFACE-ACCESS-PATHS]
 supersedes: []
-last_verified_commit: 3d8c83e
+last_verified_commit: 89cde22
 ---
 
 # OmniMemora Architecture Governance Next Mainline
 
-**Status:** ACTIVE  
+**Status:** 已收口 ✓  
 **Type:** roadmap 外架构治理增强线后续主线  
 **Goal:** 在进入 Skill Suggestion 工程前，先把剩余架构调整完整做完  
 **Phase Note:** 不新增 roadmap phase，不改 `ROADMAP.md` 正式 phase 编号
@@ -41,6 +41,12 @@ last_verified_commit: 3d8c83e
 因此，下一阶段主线目标固定为：
 
 > **先完成架构调整终态，再考虑 Skill Suggestion 工程。**
+
+当前状态（2026-04-22）：
+
+- Batch 3D 已完成：`18011` infrastructure 从目录概念收敛为真实依赖层
+- Batch 3E 已完成：`8765` memory plane / carrier / operator surfaces 已完成结构治理收束
+- 本文档从主线执行状态转入收口记录状态
 
 ---
 
@@ -164,3 +170,18 @@ Skill Suggestion、`5173` recommendation/advisory UI、cloud policy binding 都�
 
 只有在这些条件满足后，才允许将 Skill Suggestion 提升为下一条工程主线。
 
+---
+
+## 9. 收口结论（2026-04-22）
+
+本主线完成判定已全部满足：
+
+1. `18011` 三层结构在代码组织和职责口径上成立（3A）
+2. `main.py` 不再维持旧式总装配表达（3B）
+3. diagnostics/read-model 已从主链视觉脱开（3C）
+4. infrastructure 已从概念层收敛到代码依赖层（3D）
+5. `8765` 的 memory plane / integration carrier 已完成一轮正式治理（3E）
+
+正式后续结论：
+
+> **Architecture Governance Next Mainline 已收口，可进入 Skill Suggestion 工程。**
