@@ -9,7 +9,8 @@ version: 1.0.0
 effective_date: 2026-04-14
 depends_on: [STD-DOC-SCHEMA-001]
 supersedes: []
-last_verified_commit: ""
+last_verified_commit: "9e6f4ea"
+effective_date: 2026-04-22
 ---
 
 # 9_adr/ - 架构决策记录
@@ -31,6 +32,7 @@ last_verified_commit: ""
 - `ADR-0005-agent-identity-fields.md` - Agent Identity 字段规范
 - `ADR-0006-internal-transport.md` - 内部直连传递规范
 - `ADR-0007-backend-abstraction-layer.md` - Backend 抽象层
+- `ADR-0008-skill-suggestion-boundary.md` - Skill Suggestion advisory 边界
 - `ADR-0003-interface-access-paths.md` - 多接入接口架构原则
 - `ADR-PROJECT-CONVENTIONS.md` - 工程约定
 - `README.md` - 本文档

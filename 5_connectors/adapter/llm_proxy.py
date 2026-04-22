@@ -1,17 +1,29 @@
 """
-llm_proxy.py — OmniMemora LLM Proxy + Compile Gateway（Phase 2 + Phase 3）
-===========================================================================
-Phase 2 職責：接住所有 Agent 的 LLM 請求，轉發到真實上游。
+llm_proxy.py — Protocol Ingress / Egress Layer
+==============================================
+職責定位（18011 內部三層結構）：
 
-Phase 3 升級：在轉發前執行 compile（memory selection + context optimization）。
-             compile 完成後：
-               - 編譯後 payload 轉發到上游
-               - compile 事件寫入 compile_store
-               - proxy 事件寫入 proxy_store
-             三種模式（無靜默繞過）：
-               compile_success  — 編譯成功，上游收到編譯後 payload
-               compile_skipped  — 已知不支持的形狀，上游收到原始 payload
-               compile_failed   — 編譯失敗，上游收到原始 payload
+  [1] INGRESS LAYER（本文件）
+      - Protocol entry points (OpenAI/Anthropic/Codex/OpenClaw)
+      - Agent/session identity detection
+      - Passthrough / upstream forwarding
+      - Ingress trace/context attach
+      - Compile dispatch (delegates to gateway_compile.py)
+
+  [2] APPLICATION LAYER (gateway_compile.py)
+      - compile orchestration
+      - truth resolution (delegates to truth_bridge.py)
+
+  [3] INFRASTRUCTURE LAYER (truth_bridge.py / meter_store.py / ...)
+      - truth resolution contract
+      - meter/event storage
+      - runtime/backend access
+
+明確禁止進入本文件：
+  - compile 執行細節（ belong to gateway_compile.py）
+  - truth resolution 業務邏輯（belong to truth_bridge.py）
+  - metrics/read-model 聚合（belong to application/status_read_model.py）
+  - control action execution（belong to agent_control_api.py）
 
 端點：
   POST /v1/chat/completions  — OpenAI / Codex / Claude Code HTTP

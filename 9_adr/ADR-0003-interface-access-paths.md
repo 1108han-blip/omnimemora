@@ -104,11 +104,11 @@ LLM
 | REST | HTTP JSON | :18011 | 工具链 / CI/CD / 编排系统 |
 | Wrapper | subprocess | :18011 | 策略验证与实验 |
 
-补充口径：
+補充口徑：
 
-- `:5173` 是用户控制入口，不承载产品数据路径
-- `:18011` 是用户开启产品路由后的唯一产品数据入口
-- `:8765` 是内部 Local Memory Plane，不对用户暴露为产品入口
+- `:5173` 是用戶控制與 advisory 入口，不承載產品數據路徑；但它可以展示產品數據路徑的狀態、結果、診斷投影與只讀聚合視圖
+- `:18011` 是用戶開啟產品路由後的唯一產品數據入口
+- `:8765` 是內部 Runtime / Memory Plane；其 integration carrier 能力（attach/detach/backup/restore/rescan）不等於 memory plane 本體，不回流成產品入口
 
 ### 关键约束
 
@@ -124,6 +124,7 @@ Go Runtime (8765) 的定位重新明确：
 - **仅作为 Local Memory Plane**（存储、检索、scope 治理）
 - **不承载产品入口功能**
 - **不实现独立的 Context Assembly / Token Savings 逻辑**
+- **integration carrier（attach/detach/backup/restore/rescan）属于控制面能力，不等于 memory plane 本體**
 
 ---
 
@@ -203,9 +204,17 @@ Unified Entry
 
 | 端口 | 角色 | 备注 |
 |------|------|------|
-| 5173 | Dashboard / Control UI | **用户控制入口**，不承载产品数据路径 |
-| 8765 | Local Memory Plane（Go Runtime） | 仅存储/检索，**非产品入口** |
+| 5173 | Dashboard / Control UI | **用户控制与 advisory 入口**，不承载产品数据路径，可展示数据路径状态与只读聚合视图 |
+| 8765 | Local Memory Plane（Go Runtime） | 仅存储/检索，**非产品入口**；integration carrier 能力属于控制面，不等于 memory plane |
 | 18011 | Unified Interface Layer（Python Adapter） | **唯一产品数据入口**，所有协议统一接入 |
+
+### 6.4 内部三层结构
+
+`18011` 内部明确分为三层：
+
+- **ingress**：协议入口，passthrough / upstream forwarding，ingress trace/context attach（`llm_proxy.py`）
+- **application**：compile 编排，truth resolution，control orchestration，read-model 聚合（`gateway_compile.py` + `application/status_read_model.py`）
+- **infrastructure**：runtime/backend/store/cloud 访问（`meter_store.py` 等）
 
 ---
 
@@ -216,6 +225,9 @@ Unified Entry
 - **DECISION-0003-03**：Dashboard (5173) 是用户控制入口，不参与产品数据路径
 - **DECISION-0003-04**：所有响应返回统一数据结构，不得因协议不同而分化
 - **DECISION-0003-05**：能力模块可配置（token_optimization / compression 等），但产品路径不可选
+- **DECISION-0003-06**：`5173` 不承载产品数据路径，但可以展示产品数据路径的状态、结果、诊断投影与只读聚合视图
+- **DECISION-0003-07**：`8765` 的 integration carrier（attach/detach/backup/restore/rescan）不等于 memory plane 本體，不回流成产品入口
+- **DECISION-0003-08**：18011 内部明确三层结构：ingress（llm_proxy.py）/ application（gateway_compile.py + application/）/ infrastructure
 
 ---
 
