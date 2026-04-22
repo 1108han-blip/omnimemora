@@ -15,10 +15,12 @@ llm_proxy.py — Protocol Ingress / Egress Layer
       - truth resolution (via truth_bridge.py)
       - event recording (compile_store, meter_store)
 
-  [3] INFRASTRUCTURE LAYER (truth_bridge.py / meter_store.py / ...)
-      - truth resolution contract
+  [3] INFRASTRUCTURE LAYER (runtime/store access)
       - meter/event storage
       - runtime/backend access
+
+  truth_bridge.py is currently application-adjacent truth logic
+  (not part of the Batch 3D infrastructure migration scope).
 
 明確禁止進入本文件：
   - compile 執行細節（belong to application/compile_orchestrator.py）
@@ -77,7 +79,7 @@ def _get_compile_orchestrator():
     return __import__("5_connectors.adapter.application.compile_orchestrator", fromlist=["dummy"])
 
 router = APIRouter(tags=["llm_proxy"])
-_meter_store = importlib.import_module("5_connectors.adapter.meter_store")
+_meter_store = importlib.import_module("5_connectors.adapter.infrastructure.meter_store")
 _v2_compute = importlib.import_module("4_core.logic.v2_compute")
 
 _OMNI_HOP_BY_HOP_HEADERS = {
@@ -1298,7 +1300,7 @@ def _record_event(
     """寫入 proxy_store 事件。"""
     try:
         import importlib
-        _ps = importlib.import_module("5_connectors.adapter.proxy_store")
+        _ps = importlib.import_module("5_connectors.adapter.infrastructure.proxy_store")
         row = {
             "type": event_type,
             "trace_id": trace_id or request_id,
@@ -1364,7 +1366,7 @@ def _record_compile_event(
     """
     try:
         import importlib
-        _cs = importlib.import_module("5_connectors.adapter.compile_store")
+        _cs = importlib.import_module("5_connectors.adapter.infrastructure.compile_store")
         row = {
             "trace_id": trace_id or request_id,
             "request_id": request_id,

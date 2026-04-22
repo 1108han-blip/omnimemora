@@ -73,7 +73,7 @@ async def proxy_status(response: Response, window_minutes: int = 30, include_sys
       ...
     }
     """
-    _ps = importlib.import_module("5_connectors.adapter.proxy_store")
+    _ps = importlib.import_module("5_connectors.adapter.infrastructure.proxy_store")
     _mark_diagnostic_surface(response)
     agents = _ps.summarize_agent_status(window_minutes=window_minutes)
     if not include_system:
@@ -118,7 +118,7 @@ async def clear_proxy_system_status_override(request: Request, response: Respons
 @router.get("/proxy/events")
 async def proxy_events(response: Response, limit: int = 50):
     """返回最近的代理事件日誌。"""
-    _ps = importlib.import_module("5_connectors.adapter.proxy_store")
+    _ps = importlib.import_module("5_connectors.adapter.infrastructure.proxy_store")
     _mark_diagnostic_surface(response)
     return {"events": _ps.read_recent_events(limit=limit)}
 
@@ -146,7 +146,7 @@ async def compile_status(response: Response, window_minutes: int = 30):
       ...
     }
     """
-    _cs = importlib.import_module("5_connectors.adapter.compile_store")
+    _cs = importlib.import_module("5_connectors.adapter.infrastructure.compile_store")
     _mark_diagnostic_surface(response)
     return _cs.summarize_compile_status(window_minutes=window_minutes)
 
@@ -160,7 +160,7 @@ async def compile_events(response: Response, limit: int = 50, window_minutes: in
         limit: 最大返回條目數
         window_minutes: 可選，限定時間窗口
     """
-    _cs = importlib.import_module("5_connectors.adapter.compile_store")
+    _cs = importlib.import_module("5_connectors.adapter.infrastructure.compile_store")
     kw = {"limit": limit}
     if window_minutes is not None:
         kw["window_minutes"] = window_minutes

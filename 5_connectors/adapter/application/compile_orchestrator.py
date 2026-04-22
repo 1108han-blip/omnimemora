@@ -24,16 +24,16 @@ from typing import Optional, Tuple
 
 
 def _get_gateway_compile():
-    return __import__("5_connectors.adapter.gateway_compile", fromlist=["dummy"])
+    return __import__("5_connectors.adapter.application.gateway_compile", fromlist=["dummy"])
 
 def _get_truth_bridge():
     return __import__("5_connectors.adapter.truth_bridge", fromlist=["dummy"])
 
 def _get_compile_store():
-    return __import__("5_connectors.adapter.compile_store", fromlist=["dummy"])
+    return __import__("5_connectors.adapter.infrastructure.compile_store", fromlist=["dummy"])
 
 def _get_meter_store():
-    return __import__("5_connectors.adapter.meter_store", fromlist=["dummy"])
+    return __import__("5_connectors.adapter.infrastructure.meter_store", fromlist=["dummy"])
 
 def _get_v2_compute():
     return __import__("4_core.logic.v2_compute", fromlist=["dummy"])

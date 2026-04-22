@@ -105,10 +105,10 @@ def _get_agent_routing_state():
     return __import__("5_connectors.adapter.agent_routing_state", fromlist=["dummy"])
 
 def _get_compile_store():
-    return __import__("5_connectors.adapter.compile_store", fromlist=["dummy"])
+    return __import__("5_connectors.adapter.infrastructure.compile_store", fromlist=["dummy"])
 
 def _get_meter_store():
-    return __import__("5_connectors.adapter.meter_store", fromlist=["dummy"])
+    return __import__("5_connectors.adapter.infrastructure.meter_store", fromlist=["dummy"])
 
 def _get_request_classifier():
     return __import__("5_connectors.adapter.request_classifier", fromlist=["dummy"])
@@ -764,7 +764,7 @@ def build_context_diff_payload(request_id: str) -> Dict[str, Any]:
 
 
 def build_call_chain_payload(request_id: str) -> Dict[str, Any]:
-    trace_store = __import__("5_connectors.adapter.trace_store", fromlist=["dummy"])
+    trace_store = __import__("5_connectors.adapter.infrastructure.trace_store", fromlist=["dummy"])
     chain_dict = trace_store.get_trace_dict(request_id)
     if not chain_dict:
         raise LookupError(f"Trace not found for request_id={request_id}")
@@ -940,7 +940,7 @@ def build_request_evidence_payload(request_id: str) -> Dict[str, Any]:
         raise LookupError(f"Meter not found for request_id={request_id}")
 
     meter_dict = meter.to_dict()
-    trace_store = __import__("5_connectors.adapter.trace_store", fromlist=["dummy"])
+    trace_store = __import__("5_connectors.adapter.infrastructure.trace_store", fromlist=["dummy"])
     chain_dict = trace_store.get_trace_dict(request_id)
 
     before_tokens = meter_dict.get("baseline_tokens_estimate", 0)

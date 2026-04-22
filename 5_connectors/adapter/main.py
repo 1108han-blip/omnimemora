@@ -32,7 +32,8 @@ from collections import deque
 from .config import config
 from .trace_context import REQUEST_HEADER, TRACE_HEADER, build_trace_event, ensure_request_context
 from .trace_events import append_trace_event
-from .cloud import load_policy, load_flags, report_usage_async
+# Cloud access is consumed via infrastructure boundary in Batch 3D.
+from .infrastructure import load_policy, load_flags, report_usage_async
 from .quota_observer import (
     classify_quota_observation,
     is_quota_related_path,
@@ -56,9 +57,9 @@ _4_v2       = importlib.import_module("4_core.logic.v2_compute")
 _4_engine   = importlib.import_module("4_core.logic.engine")
 _4_rules    = importlib.import_module("4_core.logic.rules")
 _5_adapter  = importlib.import_module("5_connectors.adapter")
-_5_meter    = importlib.import_module("5_connectors.adapter.meter_store")
+_5_meter    = importlib.import_module("5_connectors.adapter.infrastructure.meter_store")
 _5_tc       = importlib.import_module("5_connectors.adapter.task_classifier")
-_5_trace    = importlib.import_module("5_connectors.adapter.trace_store")
+_5_trace    = importlib.import_module("5_connectors.adapter.infrastructure.trace_store")
 _5_agent_id = importlib.import_module("5_connectors.adapter.agent_identity")
 _5_ctrl     = importlib.import_module("5_connectors.adapter.control_mode")
 _5_route_state = importlib.import_module("5_connectors.adapter.agent_routing_state")
