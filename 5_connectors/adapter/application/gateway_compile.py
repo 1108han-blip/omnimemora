@@ -1,0 +1,469 @@
+"""
+gateway_compile.py — Gateway Compile Orchestrator
+===================================================
+Phase 3 Task A: Single orchestration adapter between Gateway ingress
+and existing runtime core compile logic.
+
+Responsibilities:
+  - normalize inbound LLM request into compile input
+  - resolve agent identity
+  - call memory search + runtime compile
+  - produce compiled request payload
+  - return compile metadata
+  - expose fallback modes when compile cannot run
+
+Three modes (no silent pass-through):
+  compile_success  — compile ran OK, upstream receives compiled payload
+  compile_skipped  — known unsupported shape, upstream receives original payload
+  compile_failed   — compile attempted but failed, upstream receives original payload
+"""
+from __future__ import annotations
+
+import time as _time
+from typing import Any, Dict, List, Optional, Tuple
+
+import loguru
+from ..config import config
+from ..trace_context import build_trace_event
+from ..trace_events import append_trace_event
+
+
+# ============================================================================
+# Task A-1: Request Normalization
+# ============================================================================
+
+def normalize_inbound_request(payload: dict, agent_id: str) -> dict:
+    """
+    Convert raw OpenAI/Anthropic-compatible request body into internal compile format.
+
+    Args:
+        payload: Raw request body from llm_proxy.py
+        agent_id: Detected agent identifier
+
+    Returns:
+        {
+            "messages": [...],        # original messages array
+            "query": str,             # extracted primary query
+            "model": str,
+            "is_streaming": bool,
+            "protocol": "openai" | "anthropic",
+            "can_compile": bool,
+            "skip_reason": Optional[str],
+        }
+    """
+    messages = payload.get("messages", [])
+    model = payload.get("model", "unknown")
+    is_streaming = payload.get("stream", False)
+    request_path = str(payload.get("_path", ""))
+    protocol = "openai"
+    if any(segment in request_path for segment in ("/llm/anthropic", "/llm/v1/messages", "/v1/messages")):
+        protocol = "anthropic"
+
+    # Extract primary query from messages
+    query = _extract_query_from_messages(messages)
+
+    # Determine compile eligibility
+    can_compile, skip_reason = _assess_compile_eligibility(payload, messages, query)
+
+    return {
+        "messages": messages,
+        "query": query,
+        "model": model,
+        "is_streaming": is_streaming,
+        "protocol": protocol,
+        "can_compile": can_compile,
+        "skip_reason": skip_reason,
+        "original_token_estimate": _estimate_original_tokens(payload, messages),
+    }
+
+
+def _content_to_text(content: Any) -> str:
+    """Flatten Anthropic/OpenAI message content into a searchable text string."""
+    if isinstance(content, str):
+        return content.strip()
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, dict) and part.get("type") == "text":
+                text = str(part.get("text", "")).strip()
+                if text:
+                    parts.append(text)
+        return "\n".join(parts).strip()
+    return ""
+
+
+def _extract_query_from_messages(messages: List[Dict[str, Any]]) -> str:
+    """Extract primary query from the last user text block(s)."""
+    for msg in reversed(messages):
+        role = msg.get("role", "")
+        content = _content_to_text(msg.get("content", ""))
+        if role == "user" and content:
+            return content
+    # Fallback: first non-empty content
+    for msg in messages:
+        content = _content_to_text(msg.get("content", ""))
+        if content:
+            return content
+    return ""
+
+
+def _estimate_original_tokens(payload: dict, messages: List[Dict[str, Any]]) -> int:
+    """
+    Estimate token count from messages array.
+    Rough estimate: ~4 chars per token.
+    """
+    total_chars = 0
+    for msg in messages:
+        content = msg.get("content", "")
+        if isinstance(content, str):
+            total_chars += len(content)
+        elif isinstance(content, list):
+            # Multi-modal content (e.g., image + text)
+            for part in content:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    total_chars += len(part.get("text", ""))
+    return max(1, int(total_chars / 3))  # ~3 chars/token for English
+
+
+def _assess_compile_eligibility(
+    payload: dict,
+    messages: List[Dict[str, Any]],
+    query: str,
+) -> Tuple[bool, Optional[str]]:
+    """
+    Determine if a request is compile-eligible.
+
+    Returns:
+        (can_compile, skip_reason)
+        can_compile=True, skip_reason=None  → should compile
+        can_compile=False, skip_reason!=None → skip (known unsupported shape)
+    """
+    # No messages = nothing to compile
+    if not messages:
+        return False, "no_messages"
+
+    # Empty query = nothing to search for
+    if not query:
+        return False, "empty_query"
+
+    # System prompt only = nothing to augment
+    has_user_message = any(
+        msg.get("role") == "user" and msg.get("content")
+        for msg in messages
+    )
+    if not has_user_message:
+        return False, "no_user_message"
+
+    # Assistant-only continuation = no new context needed
+    if all(msg.get("role") in ("assistant", "system") for msg in messages):
+        return False, "assistant_only_continuation"
+
+    # Streaming with compile: supported (compile first chunk)
+    # Non-streaming: fully supported
+    return True, None
+
+
+# ============================================================================
+# Task A-2: Compile Context Builder
+# ============================================================================
+
+def build_compile_context(
+    normalized: dict,
+    agent_id: str,
+    session_id: Optional[str] = None,
+) -> dict:
+    """
+    Create the internal request object required by runtime_bridge.
+
+    Args:
+        normalized: Output of normalize_inbound_request()
+        agent_id: Canonical agent identifier
+        session_id: Optional session ID
+
+    Returns:
+        Internal compile context dict.
+    """
+    return {
+        "query": normalized["query"],
+        "agent_id": agent_id,
+        "session_id": session_id,
+        "model": normalized["model"],
+        "protocol": normalized["protocol"],
+        "original_token_estimate": normalized["original_token_estimate"],
+        "messages": normalized["messages"],
+    }
+
+
+# ============================================================================
+# Task A-3: Main Gateway Compile Entry Point
+# ============================================================================
+
+async def run_gateway_compile(
+    payload: dict,
+    agent_id: str,
+    session_id: Optional[str] = None,
+    request_id: Optional[str] = None,
+    trace_id: Optional[str] = None,
+) -> Tuple[dict, dict]:
+    """
+    Main orchestration function: normalize → search → compile → rebuild.
+
+    Args:
+        payload: Raw LLM request body
+        agent_id: Canonical agent identifier
+        session_id: Optional session ID
+
+    Returns:
+        (compiled_payload, compile_meta)
+
+        compiled_payload:
+            LLM request body ready for upstream forwarding.
+            If compile_success: contains compiled context injected.
+            If compile_skipped/compile_failed: contains original payload (unmodified).
+
+        compile_meta:
+            {
+                "compile_status": "compile_success" | "compile_skipped" | "compile_failed",
+                "selected_memory_count": int,
+                "original_token_estimate": int,
+                "compiled_token_estimate": int,
+                "compression_ratio": float,
+                "compile_path": str,
+                "compile_error": Optional[str],
+                "compile_reason": str,
+            }
+    """
+    # Step 1: Normalize
+    normalized = normalize_inbound_request(payload, agent_id)
+    request_path = str(payload.get("_path", "unknown"))
+    if config.trace_events_enabled:
+        append_trace_event(
+            build_trace_event(
+                trace_id=trace_id or request_id or "unknown",
+                request_id=request_id or "unknown",
+                stage="gateway",
+                path=request_path,
+                status="compile_enter",
+                agent_id=agent_id,
+                details={
+                    "protocol": normalized["protocol"],
+                    "can_compile": normalized["can_compile"],
+                    "skip_reason": normalized["skip_reason"],
+                },
+            )
+        )
+
+    if not normalized["can_compile"]:
+        loguru.logger.info(
+            f"[GATEWAY_COMPILE] agent={agent_id} compile_skipped "
+            f"reason={normalized['skip_reason']}"
+        )
+        return _build_original_payload(payload, normalized), _build_meta(
+            status="compile_skipped",
+            selected_count=0,
+            original_tokens=normalized["original_token_estimate"],
+            compiled_tokens=0,
+            path="gateway_normalize",
+            error=None,
+            reason=f"skip_{normalized['skip_reason']}",
+        )
+
+    # Step 2: Fetch memory candidates
+    compile_context = build_compile_context(normalized, agent_id, session_id)
+
+    from ..infrastructure import runtime_bridge as _rb
+
+    try:
+        candidates = await _rb.fetch_memory_candidates(
+            query=compile_context["query"],
+            agent_id=agent_id,
+            limit=16,
+            scope="agent",
+            request_id=request_id,
+            trace_id=trace_id,
+        )
+    except Exception as e:
+        loguru.logger.warning(f"[GATEWAY_COMPILE] search failed agent={agent_id}: {e}")
+        candidates = []
+
+    # Step 3: Run runtime compile
+    try:
+        compile_result = await _rb.execute_runtime_compile(
+            query=compile_context["query"],
+            candidate_memories=candidates,
+            agent_id=agent_id,
+            session_id=session_id,
+            model=compile_context.get("model"),
+            original_token_estimate=normalized["original_token_estimate"],
+            request_id=request_id,
+            trace_id=trace_id,
+        )
+    except Exception as e:
+        loguru.logger.warning(f"[GATEWAY_COMPILE] compile failed agent={agent_id}: {e}")
+        compile_result = {
+            "compiled_messages": None,
+            "selected_memories": [],
+            "packed_context": "",
+            "original_token_estimate": compile_context["original_token_estimate"],
+            "compiled_token_estimate": 0,
+            "saved_token_estimate": 0,
+            "compression_ratio": 0.0,
+            "compile_reason": "runtime_compile",
+            "compile_error": str(e)[:200],
+            "candidate_count": 0,
+            "selected_count": 0,
+        }
+
+    # Step 4: Determine status and build response
+    if compile_result.get("compile_error"):
+        status = "compile_failed"
+        compiled_payload = _build_original_payload(payload, normalized)
+        loguru.logger.warning(
+            f"[GATEWAY_COMPILE] agent={agent_id} compile_failed "
+            f"error={compile_result['compile_error'][:80]}"
+        )
+    else:
+        status = "compile_success"
+        compiled_payload = _inject_compiled_context(
+            payload=payload,
+            normalized=normalized,
+            packed_context=compile_result.get("packed_context", ""),
+            selected_memories=compile_result.get("selected_memories", []),
+        )
+        loguru.logger.info(
+            f"[GATEWAY_COMPILE] agent={agent_id} compile_success "
+            f"selected={len(compile_result.get('selected_memories', []))} "
+            f"original={compile_result['original_token_estimate']} "
+            f"compiled={compile_result['compiled_token_estimate']} "
+            f"ratio={compile_result['compression_ratio']:.3f}"
+        )
+
+    # Step 5: Build compile metadata
+    compile_meta = _build_meta(
+        status=status,
+        selected_count=len(compile_result.get("selected_memories", [])),
+        original_tokens=compile_result.get("original_token_estimate", 0),
+        compiled_tokens=compile_result.get("compiled_token_estimate", 0),
+        path="runtime_compile",
+        error=compile_result.get("compile_error"),
+        reason=compile_result.get("compile_reason", "runtime_compile"),
+        compression_ratio=compile_result.get("compression_ratio", 0.0),
+    )
+    if config.trace_events_enabled:
+        append_trace_event(
+            build_trace_event(
+                trace_id=trace_id or request_id or "unknown",
+                request_id=request_id or "unknown",
+                stage="gateway",
+                path=request_path,
+                status=status,
+                agent_id=agent_id,
+                error_type="compile_failed" if compile_result.get("compile_error") else None,
+                details={
+                    "compile_status": status,
+                    "selected_memory_count": compile_meta["selected_memory_count"],
+                    "compiled_token_estimate": compile_meta["compiled_token_estimate"],
+                    "compression_ratio": compile_meta["compression_ratio"],
+                    "compile_reason": compile_meta["compile_reason"],
+                },
+            )
+        )
+
+    return compiled_payload, compile_meta
+
+
+# ============================================================================
+# Helper: Build compiled payload
+# ============================================================================
+
+def _inject_compiled_context(
+    payload: dict,
+    normalized: dict,
+    packed_context: str,
+    selected_memories: List[dict],
+) -> dict:
+    """
+    Inject compiled context into LLM request payload.
+
+    Strategy: prepend system message with OmniMemora context.
+    This keeps the original user/assistant conversation intact.
+    """
+    if not packed_context:
+        return _build_original_payload(payload, normalized)
+
+    ctx_msg = {
+        "role": "system",
+        "content": f"[OmniMemora Context]\n{packed_context}",
+    }
+
+    protocol = normalized["protocol"]
+
+    if protocol == "anthropic":
+        # Anthropic /v1/messages expects top-level `system`, not a system-role message.
+        existing_system = payload.get("system")
+        context_block = f"[OmniMemora Context]\n{packed_context}"
+
+        if isinstance(existing_system, str) and existing_system.strip():
+            system_value = f"{existing_system}\n\n{context_block}"
+        elif isinstance(existing_system, list):
+            system_value = [
+                *existing_system,
+                {"type": "text", "text": context_block},
+            ]
+        else:
+            system_value = context_block
+
+        return {
+            **payload,
+            "system": system_value,
+            "messages": normalized["messages"],
+        }
+    else:
+        # OpenAI /v1/chat/completions: prepend system message
+        # If there's already a system message, append to it
+        messages = normalized["messages"]
+        if messages and messages[0].get("role") == "system":
+            # Append to existing system message
+            existing = messages[0].get("content", "")
+            messages = [
+                {**messages[0], "content": f"{existing}\n\n[OmniMemora Context]\n{packed_context}"}
+            ] + messages[1:]
+        else:
+            messages = [ctx_msg] + messages
+        return {**payload, "messages": messages}
+
+
+def _build_original_payload(payload: dict, normalized: dict) -> dict:
+    """Return the original payload unchanged (for skipped/failed cases)."""
+    return dict(payload)
+
+
+def _build_meta(
+    status: str,
+    selected_count: int,
+    original_tokens: int,
+    compiled_tokens: int,
+    path: str,
+    error: Optional[str],
+    reason: str,
+    compression_ratio: float = 0.0,
+) -> dict:
+    """
+    Build standardized compile metadata.
+    compression_ratio: stored separately from compile_meta to avoid confusion
+    """
+    ratio = compression_ratio
+    if ratio == 0.0 and original_tokens > 0 and compiled_tokens > 0:
+        ratio = 1.0 - (compiled_tokens / original_tokens)
+    ratio = max(0.0, min(1.0, ratio))
+
+    return {
+        "compile_status": status,
+        "selected_memory_count": selected_count,
+        "original_token_estimate": original_tokens,
+        "compiled_token_estimate": compiled_tokens,
+        "compression_ratio": ratio,
+        "compile_path": path,
+        "compile_error": error,
+        "compile_reason": reason,
+    }
