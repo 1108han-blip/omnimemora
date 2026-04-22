@@ -986,11 +986,17 @@ def _project_skill_policy_metadata(request_id: str) -> Dict[str, str]:
 
     for event in events:
         if event.get("request_id") == request_id:
+            def _val(key: str, default: str) -> str:
+                value = event.get(key)
+                if value is None or value == "":
+                    return default
+                return str(value)
+
             return {
-                "skill_policy_name": str(event.get("skill_policy_name", "local_fallback")),
-                "skill_policy_version": str(event.get("skill_policy_version", "static_catalog_v1")),
-                "skill_policy_source": str(event.get("skill_policy_source", "local_builtin")),
-                "skill_policy_status": str(event.get("skill_policy_status", "fallback")),
+                "skill_policy_name": _val("skill_policy_name", "local_fallback"),
+                "skill_policy_version": _val("skill_policy_version", "static_catalog_v1"),
+                "skill_policy_source": _val("skill_policy_source", "local_builtin"),
+                "skill_policy_status": _val("skill_policy_status", "fallback"),
             }
 
     return {
@@ -999,6 +1005,34 @@ def _project_skill_policy_metadata(request_id: str) -> Dict[str, str]:
         "skill_policy_source": "local_builtin",
         "skill_policy_status": "fallback",
     }
+
+
+def _project_task_type(request_id: str, meter_dict: Dict[str, Any]) -> str:
+    """
+    Prefer persisted compile event task_type; fallback to meter task_type;
+    fallback to continuation.
+    """
+    compile_store = _get_compile_store()
+    try:
+        events = compile_store.read_recent_compile_events(limit=5000)
+    except Exception:
+        events = []
+
+    for event in events:
+        if event.get("request_id") == request_id:
+            value = event.get("task_type")
+            if isinstance(value, str):
+                normalized = value.strip().lower()
+                if normalized in {"implementation", "decision", "continuation"}:
+                    return normalized
+            break
+
+    meter_task_type = meter_dict.get("task_type")
+    if isinstance(meter_task_type, str):
+        normalized = meter_task_type.strip().lower()
+        if normalized in {"implementation", "decision", "continuation"}:
+            return normalized
+    return "continuation"
 
 
 def build_request_evidence_payload(request_id: str) -> Dict[str, Any]:
@@ -1031,6 +1065,7 @@ def build_request_evidence_payload(request_id: str) -> Dict[str, Any]:
     nodes = _derive_product_nodes(meter_dict, chain_dict)
     skill_suggestions = _project_skill_suggestions(request_id)
     policy_meta = _project_skill_policy_metadata(request_id)
+    task_type = _project_task_type(request_id, meter_dict)
 
     if savings_ratio > 0 and not status["bypass"]:
         context_state = "optimized_visible"
@@ -1045,7 +1080,7 @@ def build_request_evidence_payload(request_id: str) -> Dict[str, Any]:
             "timestamp": meter_dict.get("timestamp", ""),
             "raw_agent_id": raw_agent_id,
             "agent_family": agent_family,
-            "task_type": meter_dict.get("task_type", "unknown"),
+            "task_type": task_type,
             "query_summary": meter_dict.get("query", "")[:100],
         },
         "request_class": _classify_meter_request(meter),

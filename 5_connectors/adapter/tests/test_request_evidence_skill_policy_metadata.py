@@ -111,6 +111,7 @@ def test_request_evidence_returns_real_skill_policy_metadata():
             {
                 "request_id": request_id,
                 "skill_suggestions": [],
+                "task_type": "decision",
                 "skill_policy_name": "recommendation_local_active",
                 "skill_policy_version": "local-default-v1",
                 "skill_policy_source": "local_manifest",
@@ -122,6 +123,7 @@ def test_request_evidence_returns_real_skill_policy_metadata():
     assert payload["skill_policy_version"] == "local-default-v1"
     assert payload["skill_policy_source"] == "local_manifest"
     assert payload["skill_policy_status"] == "active"
+    assert payload["request"]["task_type"] == "decision"
 
 
 def test_request_evidence_without_suggestions_keeps_policy_metadata_stable():

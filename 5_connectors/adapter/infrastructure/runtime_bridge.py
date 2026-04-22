@@ -35,6 +35,7 @@ async def execute_runtime_compile(
     query: str,
     candidate_memories: List[Dict[str, Any]],
     agent_id: str,
+    task_type: str = "continuation",
     session_id: Optional[str] = None,
     model: Optional[str] = None,
     token_limit: Optional[int] = None,
@@ -93,7 +94,7 @@ async def execute_runtime_compile(
             packing_enabled=True,
             max_local_cards=4,
             candidate_limit=16,
-            task_type=None,
+            task_type=task_type,
             context_bypass=False,
             bypassed_context_tokens=0,
             recommendation_policy_snapshot=policy_snapshot,
@@ -165,6 +166,7 @@ async def execute_runtime_compile(
             "skill_policy_version": getattr(result, "skill_policy_version", "static_catalog_v1"),
             "skill_policy_source": getattr(result, "skill_policy_source", "local_builtin"),
             "skill_policy_status": getattr(result, "skill_policy_status", "fallback"),
+            "task_type": task_type,
         }
 
     except Exception as e:
@@ -199,6 +201,7 @@ async def execute_runtime_compile(
             "skill_policy_version": "static_catalog_v1",
             "skill_policy_source": "local_builtin",
             "skill_policy_status": "fallback",
+            "task_type": task_type or "continuation",
         }
 
 

@@ -64,6 +64,7 @@ def normalize_inbound_request(payload: dict, agent_id: str) -> dict:
 
     # Determine compile eligibility
     can_compile, skip_reason = _assess_compile_eligibility(payload, messages, query)
+    task_type = _classify_task_type(query)
 
     return {
         "messages": messages,
@@ -74,6 +75,7 @@ def normalize_inbound_request(payload: dict, agent_id: str) -> dict:
         "can_compile": can_compile,
         "skip_reason": skip_reason,
         "original_token_estimate": _estimate_original_tokens(payload, messages),
+        "task_type": task_type,
     }
 
 
@@ -185,6 +187,7 @@ def build_compile_context(
     """
     return {
         "query": normalized["query"],
+        "task_type": normalized.get("task_type", "continuation"),
         "agent_id": agent_id,
         "session_id": session_id,
         "model": normalized["model"],
@@ -292,6 +295,7 @@ async def run_gateway_compile(
             query=compile_context["query"],
             candidate_memories=candidates,
             agent_id=agent_id,
+            task_type=compile_context.get("task_type", "continuation"),
             session_id=session_id,
             model=compile_context.get("model"),
             original_token_estimate=normalized["original_token_estimate"],
@@ -317,6 +321,7 @@ async def run_gateway_compile(
             "skill_policy_version": "static_catalog_v1",
             "skill_policy_source": "local_builtin",
             "skill_policy_status": "fallback",
+            "task_type": compile_context.get("task_type", "continuation"),
         }
 
     # Step 4: Determine status and build response
@@ -358,6 +363,7 @@ async def run_gateway_compile(
         skill_policy_version=compile_result.get("skill_policy_version", "static_catalog_v1"),
         skill_policy_source=compile_result.get("skill_policy_source", "local_builtin"),
         skill_policy_status=compile_result.get("skill_policy_status", "fallback"),
+        task_type=compile_result.get("task_type", compile_context.get("task_type", "continuation")),
     )
     if config.trace_events_enabled:
         append_trace_event(
@@ -462,6 +468,7 @@ def _build_meta(
     skill_policy_version: str = "static_catalog_v1",
     skill_policy_source: str = "local_builtin",
     skill_policy_status: str = "fallback",
+    task_type: str = "continuation",
 ) -> dict:
     """
     Build standardized compile metadata.
@@ -486,4 +493,18 @@ def _build_meta(
         "skill_policy_version": skill_policy_version,
         "skill_policy_source": skill_policy_source,
         "skill_policy_status": skill_policy_status,
+        "task_type": task_type,
     }
+
+
+def _classify_task_type(query: str) -> str:
+    try:
+        from ..task_classifier import classify_task
+
+        classification = classify_task(query or "")
+        task_type = (classification.task_type or "").strip().lower()
+        if task_type in {"implementation", "decision", "continuation"}:
+            return task_type
+    except Exception:
+        pass
+    return "continuation"

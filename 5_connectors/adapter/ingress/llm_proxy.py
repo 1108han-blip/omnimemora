@@ -258,6 +258,7 @@ def _build_codex_bypass_compile_meta() -> dict:
         "skill_policy_version": "static_catalog_v1",
         "skill_policy_source": "local_builtin",
         "skill_policy_status": "disabled",
+        "task_type": "continuation",
     }
 
 
@@ -276,7 +277,35 @@ def _build_route_disabled_compile_meta() -> dict:
         "skill_policy_version": "static_catalog_v1",
         "skill_policy_source": "local_builtin",
         "skill_policy_status": "disabled",
+        "task_type": "continuation",
     }
+
+
+def _classify_task_type_for_payload(payload: dict) -> str:
+    try:
+        from ..task_classifier import classify_task
+
+        messages = payload.get("messages", [])
+        query = ""
+        for msg in reversed(messages):
+            if msg.get("role") == "user":
+                content = msg.get("content", "")
+                if isinstance(content, str):
+                    query = content.strip()
+                elif isinstance(content, list):
+                    parts = []
+                    for part in content:
+                        if isinstance(part, dict) and part.get("type") == "text":
+                            parts.append(str(part.get("text", "")).strip())
+                    query = "\n".join([p for p in parts if p]).strip()
+                if query:
+                    break
+        task_type = (classify_task(query).task_type or "").strip().lower()
+        if task_type in {"implementation", "decision", "continuation"}:
+            return task_type
+    except Exception:
+        pass
+    return "continuation"
 
 
 def _routing_enabled_for_agent(agent_id: str) -> bool:
@@ -294,7 +323,9 @@ async def _compile_or_passthrough_for_route(
         loguru.logger.info(
             f"[LLM_PROXY/ROUTE] request_id={request_id} agent={agent_id} route=off passthrough=true"
         )
-        return dict(payload), _build_route_disabled_compile_meta()
+        meta = _build_route_disabled_compile_meta()
+        meta["task_type"] = _classify_task_type_for_payload(payload)
+        return dict(payload), meta
 
     return await _gc.run_gateway_compile(
         payload=payload,
@@ -1387,6 +1418,7 @@ def _record_compile_event(
             "proxy_status": proxy_status,
             "proxy_status_code": proxy_status_code,
             "compile_status": compile_meta.get("compile_status", "unknown"),
+            "task_type": (compile_meta.get("task_type") or "continuation"),
             "selected_memory_count": compile_meta.get("selected_memory_count", 0),
             "original_token_estimate": compile_meta.get("original_token_estimate", 0),
             "compiled_token_estimate": compile_meta.get("compiled_token_estimate", 0),
@@ -1395,10 +1427,10 @@ def _record_compile_event(
             "compile_error": compile_meta.get("compile_error"),
             "compile_reason": compile_meta.get("compile_reason", ""),
             "skill_suggestions": compile_meta.get("skill_suggestions", []) or [],
-            "skill_policy_name": compile_meta.get("skill_policy_name", "local_fallback"),
-            "skill_policy_version": compile_meta.get("skill_policy_version", "static_catalog_v1"),
-            "skill_policy_source": compile_meta.get("skill_policy_source", "local_builtin"),
-            "skill_policy_status": compile_meta.get("skill_policy_status", "fallback"),
+            "skill_policy_name": compile_meta.get("skill_policy_name") or "local_fallback",
+            "skill_policy_version": compile_meta.get("skill_policy_version") or "static_catalog_v1",
+            "skill_policy_source": compile_meta.get("skill_policy_source") or "local_builtin",
+            "skill_policy_status": compile_meta.get("skill_policy_status") or "fallback",
         }
         if truth_meta:
             row.update(truth_meta)
