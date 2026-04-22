@@ -57,6 +57,14 @@ async def execute_runtime_compile(
     RoutingRules = _engine_mod.RoutingRules
 
     try:
+        policy_snapshot = None
+        try:
+            from .recommendation_policy_loader import load_recommendation_policy
+
+            policy_snapshot = load_recommendation_policy()
+        except Exception:
+            policy_snapshot = None
+
         if config.trace_events_enabled:
             append_trace_event(
                 build_trace_event(
@@ -88,6 +96,7 @@ async def execute_runtime_compile(
             task_type=None,
             context_bypass=False,
             bypassed_context_tokens=0,
+            recommendation_policy_snapshot=policy_snapshot,
         )
 
         result = optimize_context(input_data)
@@ -152,6 +161,10 @@ async def execute_runtime_compile(
             "candidate_count": result.candidate_count,
             "selected_count": result.selected_count,
             "skill_suggestions": [s.to_dict() for s in (result.skill_suggestions or [])],
+            "skill_policy_name": getattr(result, "skill_policy_name", "local_fallback"),
+            "skill_policy_version": getattr(result, "skill_policy_version", "static_catalog_v1"),
+            "skill_policy_source": getattr(result, "skill_policy_source", "local_builtin"),
+            "skill_policy_status": getattr(result, "skill_policy_status", "fallback"),
         }
 
     except Exception as e:
@@ -182,6 +195,10 @@ async def execute_runtime_compile(
             "candidate_count": 0,
             "selected_count": 0,
             "skill_suggestions": [],
+            "skill_policy_name": "local_fallback",
+            "skill_policy_version": "static_catalog_v1",
+            "skill_policy_source": "local_builtin",
+            "skill_policy_status": "fallback",
         }
 
 

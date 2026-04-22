@@ -32,6 +32,10 @@ def test_gateway_compile_meta_includes_skill_suggestions_without_polluting_conte
                     "source": "static_catalog_v1",
                 }
             ],
+            "skill_policy_name": "recommendation_local_active",
+            "skill_policy_version": "local-default-v1",
+            "skill_policy_source": "local_manifest",
+            "skill_policy_status": "active",
         }
 
     old_fetch = runtime_bridge.fetch_memory_candidates
@@ -53,6 +57,10 @@ def test_gateway_compile_meta_includes_skill_suggestions_without_polluting_conte
 
     assert compile_meta["skill_suggestions"]
     assert compile_meta["skill_suggestions"][0]["skill_id"] == "checks"
+    assert compile_meta["skill_policy_name"] == "recommendation_local_active"
+    assert compile_meta["skill_policy_version"] == "local-default-v1"
+    assert compile_meta["skill_policy_source"] == "local_manifest"
+    assert compile_meta["skill_policy_status"] == "active"
 
     # suggestions should remain metadata only; packed context injection remains unchanged
     sys_msg = compiled_payload["messages"][0]

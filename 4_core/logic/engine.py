@@ -19,7 +19,11 @@ from .v2_compute import (
     CallChain,
     CallChainStage,
 )
-from .skill_suggestion import SkillSuggestion, suggest_skills
+from .skill_suggestion import (
+    RecommendationPolicyInput,
+    SkillSuggestion,
+    evaluate_recommendation_policy,
+)
 import time
 
 
@@ -51,6 +55,9 @@ class OptimizationInput:
     current_session_context: Optional[str] = None  # Current session context (treated as one candidate)
     raw_candidates: Optional[List[Dict[str, Any]]] = None  # Explicit candidate list from caller
 
+    # Recommendation policy snapshot injected by adapter binding.
+    recommendation_policy_snapshot: Optional[dict] = None
+
 @dataclass
 class OptimizationResult:
     """Query 路径的统一输出"""
@@ -66,6 +73,10 @@ class OptimizationResult:
     # Call chain timing trace
     call_chain: CallChain = None
     skill_suggestions: List[SkillSuggestion] = field(default_factory=list)
+    skill_policy_name: str = "local_fallback"
+    skill_policy_version: str = "static_catalog_v1"
+    skill_policy_source: str = "local_builtin"
+    skill_policy_status: str = "fallback"
 
 
 def _extract_content_metadata(mem: Dict[str, Any]) -> Tuple[str, Dict[str, str]]:
@@ -246,17 +257,32 @@ def optimize_context(input: OptimizationInput) -> OptimizationResult:
     call_chain = CallChain(trace_id="engine-local", stages=stages)
 
     # Skill suggestions (advisory-only sidecar metadata; never affects packed_context)
-    task_type = (input.task_type or "").strip().lower()
-    if task_type == "implementation":
-        skill_suggestions: List[SkillSuggestion] = []
-    else:
-        normalized_task = task_type if task_type in {"decision", "continuation"} else "continuation"
-        skill_suggestions = suggest_skills(
+    normalized_task = (input.task_type or "").strip().lower()
+    if normalized_task not in {"decision", "continuation", "implementation"}:
+        normalized_task = "continuation"
+
+    policy_result = evaluate_recommendation_policy(
+        RecommendationPolicyInput(
             query=input.query,
             task_type=normalized_task,
             agent=input.agent,
             client=input.client,
+            limit=3,
+        ),
+        snapshot_dict=input.recommendation_policy_snapshot,
+    )
+
+    task_type = (input.task_type or "").strip().lower()
+    if task_type == "implementation":
+        skill_suggestions: List[SkillSuggestion] = []
+        policy_status = (
+            "invalid_snapshot"
+            if policy_result.policy_status == "invalid_snapshot"
+            else "disabled"
         )
+    else:
+        skill_suggestions = policy_result.skill_suggestions
+        policy_status = policy_result.policy_status
 
     return OptimizationResult(
         selected_memories=selected,
@@ -268,4 +294,8 @@ def optimize_context(input: OptimizationInput) -> OptimizationResult:
         selected_count=selected_count,
         call_chain=call_chain,
         skill_suggestions=skill_suggestions,
+        skill_policy_name=policy_result.policy_name,
+        skill_policy_version=policy_result.policy_version,
+        skill_policy_source=policy_result.policy_source,
+        skill_policy_status=policy_status,
     )

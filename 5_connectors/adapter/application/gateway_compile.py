@@ -313,6 +313,10 @@ async def run_gateway_compile(
             "candidate_count": 0,
             "selected_count": 0,
             "skill_suggestions": [],
+            "skill_policy_name": "local_fallback",
+            "skill_policy_version": "static_catalog_v1",
+            "skill_policy_source": "local_builtin",
+            "skill_policy_status": "fallback",
         }
 
     # Step 4: Determine status and build response
@@ -350,6 +354,10 @@ async def run_gateway_compile(
         reason=compile_result.get("compile_reason", "runtime_compile"),
         compression_ratio=compile_result.get("compression_ratio", 0.0),
         skill_suggestions=compile_result.get("skill_suggestions", []),
+        skill_policy_name=compile_result.get("skill_policy_name", "local_fallback"),
+        skill_policy_version=compile_result.get("skill_policy_version", "static_catalog_v1"),
+        skill_policy_source=compile_result.get("skill_policy_source", "local_builtin"),
+        skill_policy_status=compile_result.get("skill_policy_status", "fallback"),
     )
     if config.trace_events_enabled:
         append_trace_event(
@@ -450,6 +458,10 @@ def _build_meta(
     reason: str,
     compression_ratio: float = 0.0,
     skill_suggestions: Optional[List[dict]] = None,
+    skill_policy_name: str = "local_fallback",
+    skill_policy_version: str = "static_catalog_v1",
+    skill_policy_source: str = "local_builtin",
+    skill_policy_status: str = "fallback",
 ) -> dict:
     """
     Build standardized compile metadata.
@@ -470,4 +482,8 @@ def _build_meta(
         "compile_error": error,
         "compile_reason": reason,
         "skill_suggestions": skill_suggestions or [],
+        "skill_policy_name": skill_policy_name,
+        "skill_policy_version": skill_policy_version,
+        "skill_policy_source": skill_policy_source,
+        "skill_policy_status": skill_policy_status,
     }

@@ -1,0 +1,53 @@
+{
+  "policy_name": "recommendation_local_active",
+  "policy_version": "local-default-v1",
+  "policy_source": "local_manifest",
+  "enabled": true,
+  "max_suggestions": 3,
+  "matching_rules": {
+    "intent_classifier": "rule_based_v1",
+    "matcher": "keyword_hits_v1"
+  },
+  "catalog": [
+    {
+      "skill_id": "checks",
+      "title": "Checks And Validation",
+      "intents": ["decision", "continuation"],
+      "keywords": ["verify", "validation", "check", "regression", "test", "assert"],
+      "source": "local-default-v1",
+      "priority": 1
+    },
+    {
+      "skill_id": "refactor",
+      "title": "Refactor Guidance",
+      "intents": ["decision", "continuation"],
+      "keywords": ["refactor", "restructure", "cleanup", "boundary", "layer"],
+      "source": "local-default-v1",
+      "priority": 2
+    },
+    {
+      "skill_id": "architecture-review",
+      "title": "Architecture Review",
+      "intents": ["decision"],
+      "keywords": ["architecture", "tradeoff", "boundary", "governance", "adr"],
+      "source": "local-default-v1",
+      "priority": 3
+    },
+    {
+      "skill_id": "handoff-summary",
+      "title": "Handoff Summary",
+      "intents": ["continuation"],
+      "keywords": ["continue", "next", "batch", "handoff", "summary", "status"],
+      "source": "local-default-v1",
+      "priority": 4
+    },
+    {
+      "skill_id": "risk-triage",
+      "title": "Risk Triage",
+      "intents": ["decision", "continuation"],
+      "keywords": ["risk", "impact", "scope", "warning", "gate"],
+      "source": "local-default-v1",
+      "priority": 5
+    }
+  ]
+}

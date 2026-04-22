@@ -254,6 +254,10 @@ def _build_codex_bypass_compile_meta() -> dict:
         "compile_error": None,
         "compile_reason": "codex_env_bypass",
         "skill_suggestions": [],
+        "skill_policy_name": "local_fallback",
+        "skill_policy_version": "static_catalog_v1",
+        "skill_policy_source": "local_builtin",
+        "skill_policy_status": "disabled",
     }
 
 
@@ -268,6 +272,10 @@ def _build_route_disabled_compile_meta() -> dict:
         "compile_error": None,
         "compile_reason": "agent_route_disabled",
         "skill_suggestions": [],
+        "skill_policy_name": "local_fallback",
+        "skill_policy_version": "static_catalog_v1",
+        "skill_policy_source": "local_builtin",
+        "skill_policy_status": "disabled",
     }
 
 
@@ -1387,6 +1395,10 @@ def _record_compile_event(
             "compile_error": compile_meta.get("compile_error"),
             "compile_reason": compile_meta.get("compile_reason", ""),
             "skill_suggestions": compile_meta.get("skill_suggestions", []) or [],
+            "skill_policy_name": compile_meta.get("skill_policy_name", "local_fallback"),
+            "skill_policy_version": compile_meta.get("skill_policy_version", "static_catalog_v1"),
+            "skill_policy_source": compile_meta.get("skill_policy_source", "local_builtin"),
+            "skill_policy_status": compile_meta.get("skill_policy_status", "fallback"),
         }
         if truth_meta:
             row.update(truth_meta)

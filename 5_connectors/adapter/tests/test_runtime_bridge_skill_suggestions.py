@@ -27,6 +27,10 @@ class _FakeEngineResult:
         self.candidate_count = 1
         self.selected_count = 1
         self.skill_suggestions = [_FakeSuggestion("checks")]
+        self.skill_policy_name = "recommendation_local_active"
+        self.skill_policy_version = "local-default-v1"
+        self.skill_policy_source = "local_manifest"
+        self.skill_policy_status = "active"
 
 
 class _FakeOptimizationInput:
@@ -71,3 +75,7 @@ def test_execute_runtime_compile_returns_skill_suggestions_sidecar():
     assert "skill_suggestions" in result
     assert result["skill_suggestions"]
     assert result["skill_suggestions"][0]["skill_id"] == "checks"
+    assert result["skill_policy_name"] == "recommendation_local_active"
+    assert result["skill_policy_version"] == "local-default-v1"
+    assert result["skill_policy_source"] == "local_manifest"
+    assert result["skill_policy_status"] == "active"
