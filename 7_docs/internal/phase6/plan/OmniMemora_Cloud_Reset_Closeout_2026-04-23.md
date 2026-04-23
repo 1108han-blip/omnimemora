@@ -42,6 +42,8 @@
 ### Cloud running reality
 - Official entry domains are served by `omnimemora-control-entry`.
 - Railway no longer exposes removed legacy ingress surfaces (`api.doloclaw.com`, `VIKING_*`).
+  - Platform verification: Railway production service instance no longer lists `api.doloclaw.com` under `customDomains`; only `omnimemora-adapter-production.up.railway.app` remains as a service domain.
+  - Live verification: `https://api.doloclaw.com` no longer reaches Railway edge/fallback. Current public response is Cloudflare `530`, which reflects hostname retirement at the Cloudflare boundary rather than a live Railway ingress path.
 - `openviking-site` is no longer an official carrying surface.
 
 ### Local running reality

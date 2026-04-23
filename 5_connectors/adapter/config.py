@@ -236,17 +236,39 @@ class Config(BaseModel):
     adapter_port: int = int(os.getenv("PORT", "18011"))
 
     # ========== 超时治理配置 ==========
-    viking_connect_timeout_seconds: float = float(os.getenv("VIKING_CONNECT_TIMEOUT_SECONDS", "5"))
-    viking_health_timeout_seconds: float = float(os.getenv("VIKING_HEALTH_TIMEOUT_SECONDS", "5"))
-    viking_search_timeout_seconds: float = float(os.getenv("VIKING_SEARCH_TIMEOUT_SECONDS", "20"))
-    viking_read_timeout_seconds: float = float(os.getenv("VIKING_READ_TIMEOUT_SECONDS", "20"))
-    viking_delete_timeout_seconds: float = float(os.getenv("VIKING_DELETE_TIMEOUT_SECONDS", "20"))
-    viking_snapshot_timeout_seconds: float = float(os.getenv("VIKING_SNAPSHOT_TIMEOUT_SECONDS", "60"))
-    viking_upload_timeout_seconds: float = float(os.getenv("VIKING_UPLOAD_TIMEOUT_SECONDS", "20"))
-    viking_commit_timeout_seconds: float = float(os.getenv("VIKING_COMMIT_TIMEOUT_SECONDS", "45"))
-    viking_resolve_timeout_seconds: float = float(os.getenv("VIKING_RESOLVE_TIMEOUT_SECONDS", "15"))
-    viking_retry_attempts: int = int(os.getenv("VIKING_RETRY_ATTEMPTS", "1"))
-    viking_retry_backoff_seconds: float = float(os.getenv("VIKING_RETRY_BACKOFF_SECONDS", "0.75"))
+    memory_backend_connect_timeout_seconds: float = float(
+        os.getenv("MEMORY_BACKEND_CONNECT_TIMEOUT_SECONDS", "5")
+    )
+    memory_backend_health_timeout_seconds: float = float(
+        os.getenv("MEMORY_BACKEND_HEALTH_TIMEOUT_SECONDS", "5")
+    )
+    memory_backend_search_timeout_seconds: float = float(
+        os.getenv("MEMORY_BACKEND_SEARCH_TIMEOUT_SECONDS", "20")
+    )
+    memory_backend_read_timeout_seconds: float = float(
+        os.getenv("MEMORY_BACKEND_READ_TIMEOUT_SECONDS", "20")
+    )
+    memory_backend_delete_timeout_seconds: float = float(
+        os.getenv("MEMORY_BACKEND_DELETE_TIMEOUT_SECONDS", "20")
+    )
+    memory_backend_snapshot_timeout_seconds: float = float(
+        os.getenv("MEMORY_BACKEND_SNAPSHOT_TIMEOUT_SECONDS", "60")
+    )
+    memory_backend_upload_timeout_seconds: float = float(
+        os.getenv("MEMORY_BACKEND_UPLOAD_TIMEOUT_SECONDS", "20")
+    )
+    memory_backend_commit_timeout_seconds: float = float(
+        os.getenv("MEMORY_BACKEND_COMMIT_TIMEOUT_SECONDS", "45")
+    )
+    memory_backend_resolve_timeout_seconds: float = float(
+        os.getenv("MEMORY_BACKEND_RESOLVE_TIMEOUT_SECONDS", "15")
+    )
+    memory_backend_retry_attempts: int = int(
+        os.getenv("MEMORY_BACKEND_RETRY_ATTEMPTS", "1")
+    )
+    memory_backend_retry_backoff_seconds: float = float(
+        os.getenv("MEMORY_BACKEND_RETRY_BACKOFF_SECONDS", "0.75")
+    )
     slow_request_threshold_ms: int = int(os.getenv("SLOW_REQUEST_THRESHOLD_MS", "5000"))
     search_fallback_scan_limit: int = int(os.getenv("SEARCH_FALLBACK_SCAN_LIMIT", "40"))
 

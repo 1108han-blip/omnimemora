@@ -22,10 +22,10 @@ const (
 	// - Listens on 18011 for agent requests
 	PortAdapter = 18011
 
-	// OpenViking Backend port (legacy, optional)
-	// - Only used for backward compatibility with existing OpenViking deployments
-	// - New installations should use OmniMemora Runtime's built-in SQLite store
-	PortOpenViking = 1933
+	// Legacy OpenViking backend port (compatibility-only)
+	// - Retained only to document historical deployments
+	// - Not part of the current OmniMemora product topology
+	PortLegacyOpenViking = 1933
 
 	// Demo Dashboard UI port (Vite dev server)
 	// - Frontend only, proxies API calls to Adapter (18011)
@@ -46,7 +46,7 @@ const (
 	ServiceNameRuntime    = "omnimemora-runtime"
 	ServiceNameAdapter    = "omnimemora-adapter"
 	ServiceNameDashboard  = "omnimemora-dashboard"
-	ServiceNameOpenViking = "openviking-backend"
+	ServiceNameLegacyOpenViking = "openviking-backend"
 )
 
 // =============================================================================

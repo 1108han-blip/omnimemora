@@ -1,5 +1,5 @@
 """
-Memory Adapter v2.2 - OpenViking 中间层
+Memory Adapter v2.2 - memory backend 中间层
 功能：标准化 → 过滤 → 路由 → 转换
 
 改进点 v2.2（相比 v2.1）：
@@ -8,7 +8,7 @@ Memory Adapter v2.2 - OpenViking 中间层
 3. 支持检测失败内容并标记
 
 处理流程：
-标准化 → 过滤 → 去重 → 限流 → 路由 → 转换 → OpenViking
+标准化 → 过滤 → 去重 → 限流 → 路由 → 转换 → memory backend
 """
 import asyncio
 from fastapi import FastAPI, HTTPException, Request, Response
@@ -136,7 +136,7 @@ class SupportAPIError(Exception):
 
 app = FastAPI(
     title="Memory Adapter v2.2",
-    description="OpenViking 中间层：标准化 → 过滤 → 去重 → 限流 → 路由 → 转换",
+    description="memory backend 中间层：标准化 → 过滤 → 去重 → 限流 → 路由 → 转换",
     version="2.2.0"
 )
 
@@ -469,7 +469,7 @@ SUPPORT_ERROR_CATALOG: Dict[str, Dict[str, Any]] = {
         "category": "dependency",
         "severity": "medium",
         "retryable": True,
-        "suggested_action": "检查 OpenViking 搜索状态、索引窗口与 Adapter health。",
+        "suggested_action": "检查 memory backend 搜索状态、索引窗口与 Adapter health。",
     },
     "ADAPTER_READ_FAILED": {
         "category": "dependency",
@@ -487,37 +487,37 @@ SUPPORT_ERROR_CATALOG: Dict[str, Dict[str, Any]] = {
         "category": "dependency",
         "severity": "medium",
         "retryable": True,
-        "suggested_action": "检查 OpenViking 文件系统可用性与命名空间遍历状态。",
+        "suggested_action": "检查 memory backend 文件系统可用性与命名空间遍历状态。",
     },
     "ADAPTER_NAMESPACE_PREPARE_FAILED": {
         "category": "runtime",
         "severity": "high",
         "retryable": True,
-        "suggested_action": "检查命名空间根路径配置与 OpenViking 文件系统写权限。",
+        "suggested_action": "检查命名空间根路径配置与 memory backend 文件系统写权限。",
     },
-    "ADAPTER_VIKING_UPLOAD_FAILED": {
+    "ADAPTER_MEMORY_BACKEND_UPLOAD_FAILED": {
         "category": "dependency",
         "severity": "high",
         "retryable": True,
-        "suggested_action": "检查 OpenViking 上传接口与临时存储状态。",
+        "suggested_action": "检查 memory backend 上传接口与临时存储状态。",
     },
-    "ADAPTER_VIKING_COMMIT_FAILED": {
+    "ADAPTER_MEMORY_BACKEND_COMMIT_FAILED": {
         "category": "dependency",
         "severity": "high",
         "retryable": True,
-        "suggested_action": "检查 OpenViking 提交链路、commit timeout 与上游负载。",
+        "suggested_action": "检查 memory backend 提交链路、commit timeout 与上游负载。",
     },
-    "ADAPTER_VIKING_UNAVAILABLE": {
+    "ADAPTER_MEMORY_BACKEND_UNAVAILABLE": {
         "category": "dependency",
         "severity": "high",
         "retryable": True,
-        "suggested_action": "确认 OpenViking 服务在线且网络可达。",
+        "suggested_action": "确认 memory backend 服务在线且网络可达。",
     },
-    "ADAPTER_VIKING_TIMEOUT": {
+    "ADAPTER_MEMORY_BACKEND_TIMEOUT": {
         "category": "dependency",
         "severity": "high",
         "retryable": True,
-        "suggested_action": "提升相关 timeout 或排查 OpenViking 提交/索引时延。",
+        "suggested_action": "提升相关 timeout 或排查 memory backend 提交/索引时延。",
     },
     "ADAPTER_INTERNAL_ERROR": {
         "category": "runtime",
@@ -664,13 +664,13 @@ def log_error(error: str, detail: str = ""):
 
 def build_timeout(total_seconds: float) -> httpx.Timeout:
     """统一构建下游请求 timeout，避免散落的硬编码常量。"""
-    total = max(total_seconds, config.viking_connect_timeout_seconds)
+    total = max(total_seconds, config.memory_backend_connect_timeout_seconds)
     return httpx.Timeout(
         timeout=total,
-        connect=min(config.viking_connect_timeout_seconds, total),
+        connect=min(config.memory_backend_connect_timeout_seconds, total),
         read=total,
         write=total,
-        pool=min(config.viking_connect_timeout_seconds, total),
+        pool=min(config.memory_backend_connect_timeout_seconds, total),
     )
 
 
@@ -763,9 +763,9 @@ async def viking_request(
     user_id: Optional[str] = None,
     **kwargs,
 ) -> httpx.Response:
-    """统一封装对 OpenViking 的下游调用，提供分层超时与有限重试。"""
-    attempts = 1 + max(0, config.viking_retry_attempts if retryable else 0)
-    backoff = max(0.0, config.viking_retry_backoff_seconds)
+    """统一封装对 memory backend 的下游调用，提供分层超时与有限重试。"""
+    attempts = 1 + max(0, config.memory_backend_retry_attempts if retryable else 0)
+    backoff = max(0.0, config.memory_backend_retry_backoff_seconds)
     last_exc: Optional[Exception] = None
     request_headers = build_headers_with_tenant(tenant_id, user_id) if tenant_id and user_id else build_headers()
 
@@ -1034,7 +1034,7 @@ async def list_directory_entries(
             "GET",
             f"/api/v1/fs/ls?uri={encoded_uri}",
             operation="list_directory_entries",
-            timeout_seconds=config.viking_snapshot_timeout_seconds,
+            timeout_seconds=config.memory_backend_snapshot_timeout_seconds,
             retryable=True,
             tenant_id=tenant_id,
             user_id=user_id,
@@ -1091,7 +1091,7 @@ async def mkdir_uri(uri: str, tenant_id: Optional[str] = None, user_id: Optional
             "POST",
             "/api/v1/fs/mkdir",
             operation="mkdir_uri",
-            timeout_seconds=config.viking_resolve_timeout_seconds,
+            timeout_seconds=config.memory_backend_resolve_timeout_seconds,
             retryable=False,
             tenant_id=tenant_id,
             user_id=user_id,
@@ -1203,7 +1203,7 @@ async def resolve_leaf_uri(
             "GET",
             f"/api/v1/fs/tree?uri={encoded_uri}",
             operation="resolve_leaf_uri",
-            timeout_seconds=config.viking_resolve_timeout_seconds,
+            timeout_seconds=config.memory_backend_resolve_timeout_seconds,
             retryable=True,
             tenant_id=tenant_id,
             user_id=user_id,
@@ -1249,7 +1249,7 @@ def extract_memory_body(content: Optional[str]) -> Optional[str]:
 
 
 def is_derived_resource_uri(uri: str) -> bool:
-    """过滤 OpenViking 自动生成的摘要/概览资源，避免污染召回。"""
+    """过滤 memory backend 自动生成的摘要/概览资源，避免污染召回。"""
     if not isinstance(uri, str) or not uri:
         return False
 
@@ -1357,7 +1357,7 @@ async def read_clean_resource_content(
         "GET",
         f"/api/v1/content/read?uri={encoded_uri}",
         operation="read_clean_resource_content",
-        timeout_seconds=config.viking_read_timeout_seconds,
+        timeout_seconds=config.memory_backend_read_timeout_seconds,
         retryable=True,
         tenant_id=tenant_id,
         user_id=user_id,
@@ -1454,8 +1454,8 @@ async def write_memory(request: MemoryRequest, http_request: Request):
     3. 去重 - 检查内容是否重复
     4. 限流 - 检查写入频率
     5. 路由 - 决定记忆类型和等级（含失败经验检测）
-    6. 转换 - 转换为 OpenViking 格式（含 expire_at）
-    7. 转发 - 发送到 OpenViking
+    6. 转换 - 转换为 memory backend 格式（含 expire_at）
+    7. 转发 - 发送到 memory backend
     """
     loguru.logger.info(f"[WRITE] Received from agent={request.agent}, type={request.type}, len={len(request.content)}")
 
@@ -1585,20 +1585,20 @@ async def write_memory(request: MemoryRequest, http_request: Request):
         )
 
     except httpx.ConnectError as e:
-        log_error("OpenViking unavailable", str(e))
+        log_error("Memory backend unavailable", str(e))
         return build_memory_error_response(
             http_request,
-            "ADAPTER_VIKING_UNAVAILABLE",
-            "viking_unavailable",
+            "ADAPTER_MEMORY_BACKEND_UNAVAILABLE",
+            "memory_backend_unavailable",
             operation="write_memory",
             detail=str(e),
         )
     except httpx.TimeoutException as e:
-        log_error("OpenViking timeout", f"{type(e).__name__}: {e}")
+        log_error("Memory backend timeout", f"{type(e).__name__}: {e}")
         return build_memory_error_response(
             http_request,
-            "ADAPTER_VIKING_TIMEOUT",
-            "viking_timeout",
+            "ADAPTER_MEMORY_BACKEND_TIMEOUT",
+            "memory_backend_timeout",
             operation="write_memory",
             detail=f"{type(e).__name__}: {e}",
         )
@@ -1842,7 +1842,7 @@ async def read_memory(request: RetrieveRequest, http_request: Request):
 async def delete_memory(request: DeleteRequest, http_request: Request):
     """按 URI 删除记忆。"""
     try:
-        # Use backend interface (backend handles OpenViking protocol encoding)
+        # Use backend interface; protocol-specific encoding stays behind the backend boundary.
         success = await _get_backend().delete(request.uri)
         if success:
             return {"success": True, "uri": request.uri, "request_id": get_request_id(http_request)}
@@ -1914,9 +1914,9 @@ async def delete_memory(request: DeleteRequest, http_request: Request):
 @app.post("/memory/snapshot")
 async def build_memory_snapshot(request: SnapshotRequest, http_request: Request):
     """
-    从 OpenViking 主库生成 MEMORY.md 自动摘要区。
+    从 memory backend 主库生成 MEMORY.md 自动摘要区。
 
-    NOTE: This endpoint only works with the OpenViking backend.
+    NOTE: This endpoint only works with the legacy compatibility backend.
     For other backends, use the backend's native snapshot capability.
     """
     try:

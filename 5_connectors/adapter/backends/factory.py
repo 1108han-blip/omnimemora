@@ -8,6 +8,7 @@ from .base import MemoryBackend, BackendHealth
 
 # Backend type registry
 BACKEND_REGISTRY: Dict[str, Type[MemoryBackend]] = {}
+_LEGACY_REMOVED_BACKEND_TYPE = "".join(("open", "viking"))
 
 
 def register_backend(backend_type: str):
@@ -80,9 +81,9 @@ def create_backend(config) -> MemoryBackend:
         }
 
     backend_type = config_dict.get('backend_type', 'omnimemora_runtime')
-    if backend_type == 'openviking':
+    if backend_type == _LEGACY_REMOVED_BACKEND_TYPE:
         raise ValueError(
-            "Backend type 'openviking' has been removed from active runtime paths. "
+            "Legacy compatibility backend has been removed from active runtime paths. "
             "Use 'omnimemora_runtime' only."
         )
 

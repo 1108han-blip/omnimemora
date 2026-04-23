@@ -56,6 +56,21 @@ class TestCloudConfigConsent(unittest.TestCase):
         self.assertTrue(cloud.enabled)
         self.assertFalse(cloud.usage_report_enabled)
 
+    def test_memory_backend_timeout_env_uses_current_naming(self):
+        with patch.dict(
+            os.environ,
+            {
+                "MEMORY_BACKEND_CONNECT_TIMEOUT_SECONDS": "9",
+                "MEMORY_BACKEND_RETRY_ATTEMPTS": "3",
+            },
+            clear=False,
+        ):
+            config_module = self._load_module()
+            cfg = config_module.Config()
+
+        self.assertEqual(cfg.memory_backend_connect_timeout_seconds, 9.0)
+        self.assertEqual(cfg.memory_backend_retry_attempts, 3)
+
 
 if __name__ == "__main__":
     unittest.main()

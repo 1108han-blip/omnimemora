@@ -23,3 +23,10 @@ def test_main_registers_expected_router_groups():
     assert "/scope/capabilities" in route_paths
     assert "/billing/overview" in route_paths
     assert "/cloud/status" in route_paths
+
+
+def test_main_support_error_catalog_uses_current_memory_backend_codes():
+    main_mod = importlib.import_module("5_connectors.adapter.main")
+
+    assert "ADAPTER_MEMORY_BACKEND_UNAVAILABLE" in main_mod.SUPPORT_ERROR_CATALOG
+    assert "ADAPTER_MEMORY_BACKEND_TIMEOUT" in main_mod.SUPPORT_ERROR_CATALOG
