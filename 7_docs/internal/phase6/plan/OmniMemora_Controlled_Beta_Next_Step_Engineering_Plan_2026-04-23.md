@@ -104,12 +104,11 @@ last_verified_commit: ""
 
 当前缺口：
 
-- 下载页与发行脚本仍使用私人邮箱 `1108.han@gmail.com`
-- 下载页和 `5173` 尚未形成统一的“预填反馈动作”
 - runtime agent detection 仍是家族级粗探测，`rescan` 只是重新返回列表，未体现真实本机变体
 - `Claude Code` 本机变体/包装链仍可能“机器上存在但产品里搜不到”
-- 压缩负面影响尚未通过 `Claude Code / Codex / OpenClaw` 的最小对照 gate
-- `5173` 仍存在会误导当前测试判断的 truth drift
+- 压缩负面影响尚未通过当前主线对象的最小对照 gate
+- Codex live validation 仍未回到当前执行线，后续需单独补批
+- 轻量外触达（Batch 5）尚未启动
 
 ## 4.1 Batch A-B Execution Snapshot (2026-04-23)
 
@@ -171,6 +170,84 @@ last_verified_commit: ""
 **Batch B 最终结论：**
 
 CLI/product-path verified，control truth aligned within family-scope boundary。
+
+### D1 Non-Codex Closeout Snapshot (2026-04-24)
+
+**Result:** pass
+
+- 范围固定为：
+  - Claude Code default
+  - Claude Code `cc-haha`
+  - OpenClaw
+- Codex live validation 继续排除在该 D1 gate 之外
+
+已成立的 running/user-path 结果：
+
+- Claude default：
+  - real request + `request_evidence` pass
+- Claude `cc-haha`：
+  - family-scope contract preserved
+  - no standalone control card
+- OpenClaw：
+  - post-restart aligned request: `21c8ad3c8dd8`
+  - `request_evidence` pass
+  - control card aligned:
+    - `traffic_truth=real_request_observed`
+    - `last_request_at=2026-04-23T17:19:22.300286Z`
+    - `integration_truth=attached_with_backup`
+
+本轮关键结论：
+
+- 先前 OpenClaw control/evidence mismatch 的主因是 adapter promotion restart-truth 不足
+- `tools/promotion/promotion.sh` 现已要求 adapter pre/post fingerprint 发生真实变化，不能再只靠 API 可达判定 promotion success
+- D1 non-Codex 现已收口；下一条执行线转为 Batch 3 non-Codex negative-impact gate
+
+证据记录：
+
+- `OmniMemora_D1_NonCodex_Promotion_Record_2026-04-24.md`
+- `OmniMemora_D1_NonCodex_Claude_UserPath_Record_2026-04-24.md`
+- `OmniMemora_D1_NonCodex_OpenClaw_UserPath_Record_2026-04-24.md`
+- `OmniMemora_D1_OpenClaw_Minimal_Fix_Record_2026-04-24.md`
+- `OmniMemora_D1_Restart_Truth_Repair_Record_2026-04-24.md`
+- `OmniMemora_D1_NonCodex_Closeout_Note_2026-04-24.md`
+
+### Batch 3 Non-Codex Negative-Impact Gate Snapshot (2026-04-24)
+
+**Result:** conditional pass
+
+范围：
+
+- Claude Code default
+- Claude Code `cc-haha`
+- OpenClaw
+- Codex deferred to a separate sub-batch
+
+已完成的对照方式：
+
+- baseline:
+  - route disabled through `/agents/control`
+  - request evidence remained queryable
+  - request status presented as `bypassed`
+- product path:
+  - route enabled through `/agents/control`
+  - request evidence remained queryable
+  - request status presented as `warning` with non-zero savings evidence
+
+非-Codex结论：
+
+- Claude Code default: pass
+- Claude Code `cc-haha`: pass
+- OpenClaw: pass
+- aggregate gate: `conditional pass`
+
+保留 `conditional` 的原因：
+
+- request path 本身未观察到明显负面影响
+- 但 `/agents/control` 路由切换在执行窗口内表现出明显延迟，因此不把本轮写成 full pass
+
+证据记录：
+
+- `OmniMemora_Batch3_NonCodex_Negative_Impact_Gate_2026-04-24.md`
 
 ---
 
