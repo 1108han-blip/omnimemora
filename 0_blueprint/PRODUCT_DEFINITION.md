@@ -189,6 +189,61 @@ Gateway 位於本機應用層，先於用戶系統代理生效。
 - `:18011` = 用戶開啟產品路由後的唯一產品數據入口
 - `:8765` = 內部 memory plane
 
+## 5.1 Agent Identity Mature-State Target
+
+本節用於凍結「當前過渡態」與「目標成熟態」的產品約束。後續 identity 實作必須朝成熟態收斂，不得把過渡態誤寫成 current reality 的終態定義。
+當前實作被明確認定為過渡態；後續不得繼續圍繞單一客戶端表象做語義修補。
+本節與 [ADR-0009-agent-identity-mature-state](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/9_adr/ADR-0009-agent-identity-mature-state.md) 同步，若有衝突以 ADR-0009 的成熟態契約為準。
+
+### 當前狀態（過渡態，非終態）
+
+- 當前為 canonical-first 過渡實作
+- 存在 unmapped passthrough
+- control shell 由 family 視角主導
+
+### 目標狀態（成熟態）
+
+產品正式區分三層身份：
+
+- `runtime agent_id`
+- `source_agent_id`
+- `agent_family`
+
+`runtime agent_id` 是正式 principal：
+
+- 用於 scope
+- 用於 memory isolation
+- 用於 record attribution
+- 用於 metering
+- 用於 connector ownership
+- 用於 layered integration
+
+`source_agent_id` 是上游輸入身份：
+
+- 完整保留
+- 用於對接
+- 用於回傳
+- 用於診斷
+- 用於映射追蹤
+- 不自動成為正式 principal
+
+`agent_family` 是 control shell / 聚合視圖：
+
+- 用於 control card
+- 用於 family routing
+- 用於 summary view
+- 不等於正式 principal
+
+### 固定邊界
+
+- `8765` 是 `agent_id` 語義基準層
+- `18011` 承擔 admission + preservation
+- `5173` 只投影產品真相，不反向定義 identity
+- admission 原則：只有穩定、顯式、可復現的 source identity 才能提升為正式 `runtime agent_id`
+- 推斷型 identity 不得直接寫入正式 principal
+
+本節只定義成熟態契約，不宣稱 current reality 已達成成熟態。
+
 ---
 
 ## 6. 工程口徑

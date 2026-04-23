@@ -8,15 +8,20 @@ version: 1.0.0
 effective_date: 2026-04-14
 depends_on: [ADR-0001-PRODUCT-BOUNDARY]
 supersedes: []
+superseded_by: [ADR-0009-AGENT-IDENTITY-MATURE-STATE]
 last_verified_commit: ""
 ---
 
 # ADR-0005: OmniMemora Agent Identity 字段规范
 
 **版本：** v1.0
-**状态：** Accepted
+**状态：** Superseded (Transitional)
 **日期：** 2026-04-14
 **所有者：** OmniMemora Architecture Team
+
+> Transitional ADR notice:
+> ADR-0005 captures the canonical-first transition-stage identity model and is kept for historical implementation context.
+> The mature-state identity contract is defined by ADR-0009 and is the active target for future convergence.
 
 ---
 
