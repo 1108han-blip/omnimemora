@@ -47,7 +47,7 @@ Current control-entry worker behavior:
 
 Initial beta feedback channel:
 
-- support email: `1108.han@gmail.com`
+- support email: `support@doloclaw.com`
 
 Required report fields:
 
@@ -71,3 +71,6 @@ Required report fields:
 - R2 artifact upload completed for current beta package set
 - `doloclaw.com/download` serves controlled beta HTML
 - asset links and `SHA256SUMS.txt` are reachable
+- support channel baseline is now aligned to `support@doloclaw.com`
+- download page exposes a prefilled "Report an issue" action
+- `5173` exposes a feedback action gated on real request evidence
