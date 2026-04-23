@@ -252,6 +252,7 @@ export interface RequestEvidenceStatus {
   bypass: boolean;
   failure_stage: string | null;
   failure_reason: string | null;
+  error_code?: string | null;
 }
 
 export interface RequestEvidenceRequest {

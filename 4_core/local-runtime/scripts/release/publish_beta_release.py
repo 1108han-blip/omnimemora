@@ -19,7 +19,7 @@ import requests
 ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "066fdd55ca132844a1a136e3f90ae0aa")
 BUCKET = os.getenv("OMNIMEMORA_RELEASE_BUCKET", "doloclaw-assets-v2")
 WORKER_NAME = os.getenv("OMNIMEMORA_CONTROL_ENTRY_WORKER", "omnimemora-control-entry")
-SUPPORT_EMAIL = os.getenv("OMNIMEMORA_BETA_SUPPORT_EMAIL", "1108.han@gmail.com")
+SUPPORT_EMAIL = os.getenv("OMNIMEMORA_BETA_SUPPORT_EMAIL", "support@doloclaw.com")
 API_BASE = "https://api.cloudflare.com/client/v4"
 R2_ENDPOINT = f"https://{ACCOUNT_ID}.r2.cloudflarestorage.com"
 ROOT = Path(__file__).resolve().parents[2]

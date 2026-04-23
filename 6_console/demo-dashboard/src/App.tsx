@@ -8,6 +8,7 @@ import { AgentUsagePanel } from './components/AgentUsagePanel';
 import { AgentsDashboard } from './components/AgentsDashboard';
 import { fetchRecentRequests, fetchUsageSummary, fetchTenants, fetchAgentControls, fetchRequestEvidence, fetchCoreCapabilities, fetchCoreCapabilitiesTrend } from './api';
 import type { RecentRequest, UsageSummary, AgentControlCard, RequestEvidence, CoreCapabilitiesResponse, CoreCapabilitiesTrendResponse } from './types';
+import { SUPPORT_EMAIL, buildFeedbackMailto } from './feedback';
 import { isInternalEvent, normalizeAgentUsageList, normalizeRecentRequestUsageList, rankRecentRequests } from './utils/familyNormalization';
 
 function inferInitialTab(): 'overview' | 'agents' {
@@ -283,6 +284,11 @@ export default function App() {
     return rows;
   }, [agentControls, recentRequestFamilies, usageFamilies]);
 
+  const feedbackHref = useMemo(
+    () => (requestEvidence ? buildFeedbackMailto(requestEvidence) : null),
+    [requestEvidence]
+  );
+
   const statusColor = error
     ? 'bg-red-500'
     : live5mCount > 0
@@ -453,6 +459,35 @@ export default function App() {
                 ③ Live Request Flow
               </h2>
               <LiveRequestFlow requests={requests} onSelect={handleSelectRequest} selectedRequestId={_selectedRequest?.request_id ?? null} />
+            </section>
+
+            <section className="rounded-xl border border-zinc-200 bg-white px-5 py-4 dark:border-zinc-700 dark:bg-zinc-900">
+              <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <div>
+                  <h2 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Feedback</h2>
+                  <p className="mt-1 text-xs text-zinc-500 dark:text-zinc-400">
+                    {requestEvidence
+                      ? `Send prefilled feedback for request ${requestEvidence.request.request_id} to ${SUPPORT_EMAIL}.`
+                      : `Select a real request first. Feedback stays disabled until request evidence is loaded.`}
+                  </p>
+                </div>
+                {feedbackHref ? (
+                  <a
+                    href={feedbackHref}
+                    className="inline-flex items-center justify-center rounded-lg bg-zinc-900 px-4 py-2 text-xs font-medium text-white hover:bg-zinc-800 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-200"
+                  >
+                    提交反馈
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    disabled
+                    className="inline-flex items-center justify-center rounded-lg bg-zinc-300 px-4 py-2 text-xs font-medium text-zinc-500 dark:bg-zinc-700 dark:text-zinc-400"
+                  >
+                    提交反馈
+                  </button>
+                )}
+              </div>
             </section>
 
             {/* Modules 4/5/6: Request Evidence Views */}

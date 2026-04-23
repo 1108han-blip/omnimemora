@@ -102,6 +102,24 @@ function downloadHtml() {
       text-decoration: none;
       font-weight: 600;
     }
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 18px;
+    }
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 10px 14px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #f5fbf9;
+      color: var(--accent);
+      text-decoration: none;
+      font: 600 13px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
     .meta {
       display: grid;
       gap: 8px;
@@ -144,12 +162,34 @@ function downloadHtml() {
         <li>Feedback should include version, system, <code>request_id</code>, <code>error_code</code>, and reproduction steps.</li>
       </ul>
 
+      <div class="actions">
+        <a class="button" id="report-link" href="mailto:${SUPPORT_EMAIL}?subject=OmniMemora%20Beta%20Feedback">Report an Issue</a>
+      </div>
+
       <div class="meta">
         <div>Feedback: <a href="mailto:${SUPPORT_EMAIL}?subject=OmniMemora%20Beta%20Feedback">${SUPPORT_EMAIL}</a></div>
         <div>License: all rights reserved, beta only, no redistribution, no commercial use.</div>
       </div>
     </section>
   </main>
+  <script>
+    const reportLink = document.getElementById("report-link");
+    if (reportLink) {
+      const platform = navigator.userAgent || "unknown";
+      const subject = encodeURIComponent("OmniMemora Beta Feedback");
+      const body = encodeURIComponent(
+        [
+          "version: ${PACKAGE_VERSION}",
+          "platform: " + platform,
+          "request_id: ",
+          "error_code: ",
+          "steps:",
+          "- ",
+        ].join("\\n")
+      );
+      reportLink.setAttribute("href", "mailto:${SUPPORT_EMAIL}?subject=" + subject + "&body=" + body);
+    }
+  </script>
 </body>
 </html>`;
 

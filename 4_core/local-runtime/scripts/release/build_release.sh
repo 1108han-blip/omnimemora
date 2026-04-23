@@ -6,7 +6,7 @@ PACKAGE_VERSION=${1:-"1.0.0-beta.1"}
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 RELEASE_DIR="$ROOT_DIR/release/$PACKAGE_VERSION"
-SUPPORT_EMAIL=${OMNIMEMORA_BETA_SUPPORT_EMAIL:-"1108.han@gmail.com"}
+SUPPORT_EMAIL=${OMNIMEMORA_BETA_SUPPORT_EMAIL:-"support@doloclaw.com"}
 DOWNLOAD_BASE_URL=${OMNIMEMORA_DOWNLOAD_BASE_URL:-"https://assets.doloclaw.com/omnimemora/beta/$PACKAGE_VERSION"}
 
 echo "Building OmniMemora controlled beta package set: $PACKAGE_VERSION"
