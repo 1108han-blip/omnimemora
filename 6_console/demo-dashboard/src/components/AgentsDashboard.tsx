@@ -242,12 +242,18 @@ export function AgentsDashboard({ highlightFamilyId }: AgentsDashboardProps) {
                       <span className={`rounded-full px-2 py-0.5 text-[10px] font-medium ${
                         card.traffic_truth === 'real_request_observed'
                           ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300'
+                          : card.traffic_truth === 'compile_empty'
+                          ? 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300'
+                          : card.traffic_truth === 'bypassed'
+                          ? 'bg-orange-100 text-orange-700 dark:bg-orange-950 dark:text-orange-300'
                           : card.traffic_truth === 'internal_only'
                           ? 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300'
                           : 'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400'
                       }`}>
                         {card.traffic_truth === 'real_request_observed' ? '真實流量' :
-                         card.traffic_truth === 'internal_only' ? '僅內部' : '無證據'}
+                         card.traffic_truth === 'internal_only' ? '僅內部' :
+                         card.traffic_truth === 'compile_empty' ? '編譯空結果' :
+                         card.traffic_truth === 'bypassed' ? '已旁路' : '無證據'}
                       </span>
                     )}
                   </div>

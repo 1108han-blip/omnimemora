@@ -1884,6 +1884,38 @@ def _persist_gateway_meter(
         loguru.logger.warning(f"[LLM_PROXY/METER] request_id={request_id} persist skipped: {exc}")
 
 
+def _record_ingress_compile_and_meter(
+    *,
+    request_id: str,
+    agent_id: str,
+    ingress_path: str,
+    requested_model: str,
+    compile_meta: dict,
+    truth_meta: Optional[dict],
+    trace_id: Optional[str],
+    query_messages: object,
+) -> None:
+    """
+    D1a: fixed ingress responsibility for compile/meter persistence.
+    Every product ingress path must leave compile+meter evidence at request granularity.
+    """
+    _record_compile_event(
+        request_id,
+        agent_id,
+        ingress_path,
+        requested_model,
+        compile_meta,
+        truth_meta=truth_meta,
+        trace_id=trace_id,
+    )
+    _persist_gateway_meter(
+        request_id=request_id,
+        agent_id=agent_id,
+        query=_extract_user_query(query_messages),
+        compile_meta=compile_meta,
+    )
+
+
 def _responses_tools_to_chat_tools(tools) -> list[dict]:
     if not isinstance(tools, list):
         return []
@@ -2655,7 +2687,6 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
         f"[LLM_PROXY/ANTHROPIC] request_id={request_id} agent={agent_id} "
         f"model={model} streaming={is_streaming}"
     )
-
     upstream = get_upstream_for_anthropic(model)
     truth_meta: Optional[dict] = None
     if not _routing_enabled_for_agent(agent_id):
@@ -2679,6 +2710,16 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
         )
         upstream_model = contract.model_resolved or resolve_anthropic_upstream_model(model, upstream)
         upstream_base = contract.base_url_resolved or upstream["base_url"]
+    _record_ingress_compile_and_meter(
+        request_id=request_id,
+        agent_id=agent_id,
+        ingress_path=route_label,
+        requested_model=model,
+        compile_meta=compile_meta,
+        truth_meta=truth_meta,
+        trace_id=trace_id,
+        query_messages=compiled_body.get("messages"),
+    )
 
     _trace_anthropic_payload(
         request_id,
@@ -2729,13 +2770,6 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
                     "upstream_response",
                     status_code,
                     upstream_resp.text[:500],
-                )
-                # Re-record compile event with actual proxy outcome (P1-2 fix)
-                _record_compile_event(
-                    request_id, agent_id, route_label, model,
-                    compile_meta, proxy_status="failed", proxy_status_code=status_code,
-                    truth_meta=truth_meta,
-                    trace_id=trace_id,
                 )
                 _record_event(
                     agent_id, "proxy_error", request_id, route_label, model,
@@ -2804,12 +2838,6 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
             route=route_label,
             model=model,
         )
-        _record_compile_event(
-            request_id, agent_id, route_label, model,
-            compile_meta, proxy_status="failed", proxy_status_code=status_code,
-            truth_meta=truth_meta,
-            trace_id=trace_id,
-        )
         _record_event(
             agent_id, "proxy_error", request_id, route_label, model,
             "error", status_code,
@@ -2840,11 +2868,6 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
             route=route_label,
             model=model,
         )
-        _record_compile_event(
-            request_id, agent_id, route_label, model,
-            compile_meta, proxy_status="failed", proxy_status_code=None,
-            truth_meta=truth_meta,
-        )
         _record_event(
             agent_id, "proxy_error", request_id, route_label, model,
             "error", None,
@@ -2872,11 +2895,6 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
             agent_id=agent_id,
             route=route_label,
             model=model,
-        )
-        _record_compile_event(
-            request_id, agent_id, route_label, model,
-            compile_meta, proxy_status="failed", proxy_status_code=None,
-            truth_meta=truth_meta,
         )
         _record_event(
             agent_id, "proxy_error", request_id, route_label, model,
@@ -3411,14 +3429,15 @@ async def proxy_v1_responses(request: Request):
             },
             compile_enabled=bool(compile_meta),
         )
-        _record_compile_event(
-            request_id, agent_id, ingress_path, requested_model, compile_meta, truth_meta=truth_meta, trace_id=trace_id
-        )
-        _persist_gateway_meter(
+        _record_ingress_compile_and_meter(
             request_id=request_id,
             agent_id=agent_id,
-            query=_extract_user_query(chat_body.get("messages")),
+            ingress_path=ingress_path,
+            requested_model=requested_model,
             compile_meta=compile_meta,
+            truth_meta=truth_meta,
+            trace_id=trace_id,
+            query_messages=chat_body.get("messages"),
         )
         rebuilt_body = _compiled_chat_to_responses_request(body, compiled_body)
         upstream_url = _normalize_responses_upstream_url(contract.base_url_resolved or responses_upstream["base_url"])
@@ -3667,14 +3686,15 @@ async def proxy_v1_responses(request: Request):
         compile_enabled=bool(compile_meta),
     )
     truth_meta["fallback_reason"] = "responses_upstream_unavailable"
-    _record_compile_event(
-        request_id, agent_id, ingress_path, requested_model, compile_meta, truth_meta=truth_meta, trace_id=trace_id
-    )
-    _persist_gateway_meter(
+    _record_ingress_compile_and_meter(
         request_id=request_id,
         agent_id=agent_id,
-        query=_extract_user_query(chat_body.get("messages")),
+        ingress_path=ingress_path,
+        requested_model=requested_model,
         compile_meta=compile_meta,
+        truth_meta=truth_meta,
+        trace_id=trace_id,
+        query_messages=chat_body.get("messages"),
     )
     if config.trace_events_enabled:
         append_trace_event(

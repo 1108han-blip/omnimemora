@@ -93,6 +93,37 @@ read_running_reality_state() {
     echo "runtime=$runtime_state adapter=$adapter_state ui=$ui_state"
 }
 
+# 读取 adapter runtime fingerprint（pid|started_at|code_source_main）
+read_adapter_fingerprint() {
+    local endpoint="http://127.0.0.1:${ADAPTER_PORT}/debug/runtime_fingerprint"
+    local payload
+    payload=$(curl -sf --connect-timeout 5 "$endpoint" 2>/dev/null || true)
+    if [ -z "$payload" ]; then
+        echo "unknown|unknown|unknown"
+        return 1
+    fi
+
+    local parsed
+    parsed=$(printf '%s' "$payload" | python3 -c '
+import json, sys
+try:
+    obj = json.load(sys.stdin)
+    pid = str(obj.get("pid", "unknown"))
+    started = str(obj.get("started_at", "unknown"))
+    code_source = obj.get("code_source", {}) or {}
+    main_src = str(code_source.get("5_connectors.adapter.main", "unknown"))
+    print(f"{pid}|{started}|{main_src}")
+except Exception:
+    print("unknown|unknown|unknown")
+' 2>/dev/null || true)
+
+    if [ -z "$parsed" ]; then
+        echo "unknown|unknown|unknown"
+        return 1
+    fi
+    echo "$parsed"
+}
+
 # 前置条件校验
 check_prerequisites() {
     log_info "=== 前置条件校验 ===" | log_output
@@ -290,11 +321,43 @@ promote_adapter() {
 
     # 3. 重启 Adapter（通过 launchd 管理）
     log_info "[3/4] 重启 Adapter ..." | log_output
+    local pre_fingerprint pre_pid pre_started_at pre_code_source
+    pre_fingerprint=$(read_adapter_fingerprint)
+    IFS='|' read -r pre_pid pre_started_at pre_code_source <<< "$pre_fingerprint"
+    log_info "  pre-fingerprint: pid=$pre_pid started_at=$pre_started_at" | log_output
+    log_info "  pre-code-source: $pre_code_source" | log_output
+    echo "adapter_pre_pid=$pre_pid" >> "$PROMOTION_LOG"
+    echo "adapter_pre_started_at=$pre_started_at" >> "$PROMOTION_LOG"
+
+    local restart_method="unknown"
+    local launchd_label="gui/$(id -u)/com.omnimemora.adapter"
     if command -v launchctl >/dev/null 2>&1; then
-        log_info "  通过 launchd 重载 Adapter ..." | log_output
-        launchctl stop "gui/$(id -u)/com.omnimemora.adapter" 2>/dev/null || true
-        sleep 2
-        launchctl start "gui/$(id -u)/com.omnimemora.adapter" 2>/dev/null || true
+        log_info "  优先使用 launchctl kickstart -k 重启 Adapter ..." | log_output
+        if launchctl kickstart -k "$launchd_label" >/dev/null 2>&1; then
+            restart_method="launchctl_kickstart_k"
+        else
+            log_warn "  kickstart -k 失败，回退到 stop/start ..." | log_output
+            if launchctl stop "$launchd_label" >/dev/null 2>&1; then
+                sleep 2
+                if launchctl start "$launchd_label" >/dev/null 2>&1; then
+                    restart_method="launchctl_stop_start"
+                fi
+            fi
+            if [ "$restart_method" = "unknown" ]; then
+                log_warn "  stop/start 失败，回退到直接 kill+start ..." | log_output
+                local adapter_pid_fallback
+                adapter_pid_fallback=$(pgrep -f "_run_adapter" 2>/dev/null || true)
+                if [ -n "$adapter_pid_fallback" ]; then
+                    kill "$adapter_pid_fallback" 2>/dev/null || true
+                    sleep 2
+                fi
+                cd "$CURRENT_SERVICE_DIR"
+                PORT="$ADAPTER_PORT" \
+                MEMORY_BACKEND_URL="http://127.0.0.1:${RUNTIME_PORT}" \
+                "$PYTHON_BIN" "$CURRENT_SERVICE_DIR/tools/_run_adapter.py" >"$LOG_DIR/adapter_promotion.out.log" 2>"$LOG_DIR/adapter_promotion.err.log" &
+                restart_method="direct_kill_start_fallback"
+            fi
+        fi
     else
         # Fallback: 直接重启
         log_info "  launchctl 不可用，使用直接重启 ..." | log_output
@@ -308,11 +371,13 @@ promote_adapter() {
         PORT="$ADAPTER_PORT" \
         MEMORY_BACKEND_URL="http://127.0.0.1:${RUNTIME_PORT}" \
         "$PYTHON_BIN" "$CURRENT_SERVICE_DIR/tools/_run_adapter.py" >"$LOG_DIR/adapter_promotion.out.log" 2>"$LOG_DIR/adapter_promotion.err.log" &
+        restart_method="direct_kill_start"
     fi
+    log_info "  重启方法: $restart_method" | log_output
     sleep 3
 
-    # 4. 三层验证
-    log_info "[4/4] 验证 Adapter 三层 reality ..." | log_output
+    # 4. 三层验证 + restart truth gate
+    log_info "[4/4] 验证 Adapter 三层 reality + restart truth ..." | log_output
 
     # plist reality (launchctl print)
     local plist_ok=0
@@ -341,12 +406,59 @@ promote_adapter() {
         log_info "  [API reality :${ADAPTER_PORT}] OK" | log_output
     else
         log_error "  [API reality] 失败"
-        echo "failed:api_unreachable" >> "$PROMOTION_LOG"
+        echo "adapter_restart_truth=unknown" >> "$PROMOTION_LOG"
+        echo "adapter_code_source=unknown" >> "$PROMOTION_LOG"
+        echo "adapter_restart_method=$restart_method" >> "$PROMOTION_LOG"
+        echo "adapter:failed:api_unreachable" >> "$PROMOTION_LOG"
+        return 1
+    fi
+
+    local post_fingerprint post_pid post_started_at post_code_source
+    post_fingerprint=$(read_adapter_fingerprint)
+    IFS='|' read -r post_pid post_started_at post_code_source <<< "$post_fingerprint"
+
+    local restart_truth="unknown"
+    if [ "$pre_started_at" != "unknown" ] && [ "$post_started_at" != "unknown" ]; then
+        if [ "$pre_started_at" != "$post_started_at" ]; then
+            restart_truth="changed"
+        else
+            restart_truth="unchanged"
+        fi
+    fi
+
+    echo "adapter_post_pid=$post_pid" >> "$PROMOTION_LOG"
+    echo "adapter_post_started_at=$post_started_at" >> "$PROMOTION_LOG"
+    echo "adapter_restart_truth=$restart_truth" >> "$PROMOTION_LOG"
+    echo "adapter_code_source=$post_code_source" >> "$PROMOTION_LOG"
+    echo "adapter_restart_method=$restart_method" >> "$PROMOTION_LOG"
+
+    log_info "  post-fingerprint: pid=$post_pid started_at=$post_started_at" | log_output
+    log_info "  post-code-source: $post_code_source" | log_output
+    log_info "  restart-truth: $restart_truth" | log_output
+
+    local expected_code_source="$CURRENT_SERVICE_DIR/5_connectors/adapter/main.py"
+    if [ "$post_code_source" != "$expected_code_source" ]; then
+        log_error "Adapter code_source 未指向 running reality: $expected_code_source" | log_output
+        echo "adapter:failed:code_source_mismatch" >> "$PROMOTION_LOG"
+        return 1
+    fi
+
+    if [ "$restart_truth" != "changed" ]; then
+        log_error "Adapter restart 未生效：started_at 未变化或不可判定" | log_output
+        echo "failed:adapter_restart_not_effective" >> "$PROMOTION_LOG"
+        echo "adapter:failed:adapter_restart_not_effective" >> "$PROMOTION_LOG"
+        return 1
+    fi
+
+    if [ "$pre_pid" = "$post_pid" ]; then
+        log_error "Adapter restart 异常：started_at 已变化但 pid 未变化（默认失败）" | log_output
+        echo "failed:adapter_restart_pid_unchanged" >> "$PROMOTION_LOG"
+        echo "adapter:failed:adapter_restart_pid_unchanged" >> "$PROMOTION_LOG"
         return 1
     fi
 
     if [ "$api_ok" -eq 1 ]; then
-        log_info "Adapter promotion 成功" | log_output
+        log_info "Adapter promotion 成功（restart truth 已通过）" | log_output
         echo "adapter:promoted" >> "$PROMOTION_LOG"
         return 0
     else

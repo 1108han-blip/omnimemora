@@ -167,6 +167,15 @@ def _parse_iso(value: Optional[str]) -> float:
         return 0.0
 
 
+def _epoch_to_iso(epoch_value: Optional[float]) -> Optional[str]:
+    if not epoch_value:
+        return None
+    try:
+        return datetime.fromtimestamp(float(epoch_value), tz=timezone.utc).isoformat()
+    except Exception:
+        return None
+
+
 def build_metrics_index() -> dict[str, dict[str, Any]]:
     """
     Build per-family metrics index from compile_store (primary) and agent_metrics (fallback).
@@ -275,91 +284,182 @@ def derive_route_truth(routing_enabled: bool, health_state: str) -> str:
     return "intent_on"
 
 
-def _count_real_meters_in_window(family_id: str, cutoff_ts: float) -> int:
+def _collect_observed_family_meters(family_id: str, window_minutes: int = 30) -> List[Any]:
     """
-    Count real (non-internal, non-tiny-ping) meter records for a family
-    within a time window.
+    Collect family-scoped observed task meters for control/read-model truth.
+
+    Inclusion criteria (fixed contract):
+    - family_id matches after normalization
+    - timestamp falls within window
+    - request_classifier.is_default_overview_request(m) is True
+    - baseline_tokens_estimate >= 50
     """
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+    cutoff_epoch = cutoff.timestamp()
     meter_store = _get_meter_store()
     request_classifier = _get_request_classifier()
-
     meter_store._ensure_persistence_loaded()
 
-    count = 0
-    for tenant, meters in meter_store._usage_aggregates.items():
+    observed: List[Any] = []
+    seen_request_ids: set[str] = set()
+
+    def _maybe_add_meter(m: Any) -> None:
+        request_id = str(getattr(m, "request_id", "") or "")
+        if request_id and request_id in seen_request_ids:
+            return
+
+        ts = getattr(m, "timestamp", None)
+        if not ts:
+            return
+        try:
+            if isinstance(ts, str):
+                dt = datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc)
+            else:
+                return
+            if dt < cutoff:
+                return
+        except Exception:
+            return
+
+        agent = getattr(m, "agent", "") or ""
+        normalized = _normalize_agent_to_family(agent)
+        if normalized != family_id:
+            return
+
+        if not request_classifier.is_default_overview_request(m):
+            return
+
+        baseline = getattr(m, "baseline_tokens_estimate", 0)
+        try:
+            baseline = int(baseline)
+        except (ValueError, TypeError):
+            baseline = 0
+        if baseline < 50:
+            return
+
+        observed.append(m)
+        if request_id:
+            seen_request_ids.add(request_id)
+
+    # Primary source: in-memory tenant aggregates
+    for meters in meter_store._usage_aggregates.values():
         for m in meters:
-            ts = getattr(m, "timestamp", None)
-            if not ts:
-                continue
+            _maybe_add_meter(m)
+
+    # Fallback source: persisted index snapshot (covers aggregate/index drift windows)
+    load_state = getattr(meter_store, "load_persisted_state", None)
+    meter_cls = getattr(meter_store, "TokenSavingsMeter", None)
+    if callable(load_state) and meter_cls is not None:
+        try:
+            persisted_index, _ = load_state()
+        except Exception:
+            persisted_index = {}
+        for meter_dict in (persisted_index or {}).values():
             try:
-                if isinstance(ts, str):
-                    dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
-                else:
+                meter_obj = meter_cls(**meter_dict)
+            except Exception:
+                continue
+            _maybe_add_meter(meter_obj)
+
+    # Secondary fallback: recent proxy request IDs resolved through meter getter.
+    try:
+        proxy_store = __import__("5_connectors.adapter.infrastructure.proxy_store", fromlist=["dummy"])
+        recent_events = proxy_store.read_recent_events(limit=5000)
+    except Exception:
+        recent_events = []
+    meter_getter = _diag_get_meter_fn if callable(_diag_get_meter_fn) else getattr(meter_store, "get_meter", None)
+    if callable(meter_getter):
+        for event in recent_events:
+            try:
+                if event.get("type") != "proxy_request":
                     continue
-                if dt.timestamp() < cutoff_ts:
+                ts = float(event.get("timestamp") or 0)
+                if ts < cutoff_epoch:
                     continue
+                agent_id = str(event.get("agent_id") or "")
+                if _normalize_agent_to_family(agent_id) != family_id:
+                    continue
+                request_id = str(event.get("request_id") or "")
+                if not request_id or request_id in seen_request_ids:
+                    continue
+                meter_obj = meter_getter(request_id)
+                if meter_obj is None:
+                    continue
+                _maybe_add_meter(meter_obj)
             except Exception:
                 continue
 
-            agent = getattr(m, "agent", "") or ""
-            normalized = _normalize_agent_to_family(agent)
-            if normalized != family_id:
-                continue
+    return request_classifier.collapse_retry_bursts(observed)
 
-            if not request_classifier.is_default_overview_request(m):
-                continue
 
-            baseline = getattr(m, "baseline_tokens_estimate", 0)
-            try:
-                baseline = int(baseline)
-            except (ValueError, TypeError):
-                baseline = 0
-            if baseline < 50:
-                continue
+_COMPILE_EMPTY_REASONS = {
+    "empty_query",
+    "no_messages",
+    "no_user_message",
+    "assistant_only_continuation",
+}
 
-            count += 1
+_BYPASS_COMPILE_REASONS = {
+    "agent_route_disabled",
+    "codex_env_bypass",
+}
 
-    return count
+
+def _summarize_family_compile_events(family_id: str, window_minutes: int = 30) -> Dict[str, Any]:
+    compile_store = _get_compile_store()
+    rows = compile_store.read_recent_compile_events(limit=5000, window_minutes=window_minutes)
+    summary = {
+        "proxied_requests": 0,
+        "compile_empty": 0,
+        "bypassed": 0,
+        "last_event_ts": None,
+    }
+
+    for row in rows:
+        normalized = _normalize_agent_to_family(str(row.get("agent_id") or ""))
+        if normalized != family_id:
+            continue
+        summary["proxied_requests"] += 1
+
+        status = str(row.get("compile_status") or "").strip().lower()
+        reason = str(row.get("compile_reason") or "").strip().lower()
+
+        if status == "compile_skipped":
+            if reason in _COMPILE_EMPTY_REASONS:
+                summary["compile_empty"] += 1
+            elif reason in _BYPASS_COMPILE_REASONS:
+                summary["bypassed"] += 1
+
+        ts = row.get("timestamp")
+        if isinstance(ts, (int, float)):
+            current = summary["last_event_ts"] or 0
+            if ts > current:
+                summary["last_event_ts"] = float(ts)
+
+    return summary
 
 
 def derive_traffic_truth(family_id: str, window_minutes: int = 30) -> str:
     """
-    Derive traffic_truth using dual evidence: compile_store + meter_store.
+    Derive traffic_truth using running-reality-first evidence.
 
-    Priority for non-openclaw families:
-    - real_meter_count > 0  -> real_request_observed (real user traffic observed)
-    - real_meter_count == 0 and proxied_requests > 0 -> internal_only (compile evidence only)
-    - otherwise -> no_recent_evidence
-
-    openclaw keeps its legacy special logic unchanged.
+    Priority:
+    1) real request observed (meter-backed)
+    2) bypassed compile route observed
+    3) compile_empty observed
+    4) internal compile evidence only
+    5) no recent evidence
     """
-    import time as _time
+    observed_meters = _collect_observed_family_meters(family_id, window_minutes=window_minutes)
+    family_compile = _summarize_family_compile_events(family_id, window_minutes=window_minutes)
 
-    compile_store = _get_compile_store()
-
-    compile_summary = compile_store.summarize_compile_status(window_minutes=window_minutes)
-    family_stats = compile_summary.get(family_id)
-
-    cutoff_ts = _time.time() - (window_minutes * 60)
-    real_meter_count = _count_real_meters_in_window(family_id, cutoff_ts)
-
-    if family_id == "openclaw":
-        if not family_stats and real_meter_count == 0:
-            return "no_recent_evidence"
-
-        proxied = family_stats.get("proxied_requests", 0) if family_stats else 0
-
-        if proxied > 0 and real_meter_count > 0:
-            return "real_request_observed"
-        elif proxied > 0:
-            return "internal_only"
-        else:
-            return "no_recent_evidence"
-
-    # Non-openclaw families: real meter traffic takes priority over compile/proxy evidence
-    if real_meter_count > 0:
+    if observed_meters:
         return "real_request_observed"
-    if family_stats and family_stats.get("proxied_requests", 0) > 0:
+    if family_compile["bypassed"] > 0:
+        return "bypassed"
+    if family_compile["compile_empty"] > 0:
+        return "compile_empty"
+    if family_compile["proxied_requests"] > 0:
         return "internal_only"
     return "no_recent_evidence"
 
@@ -437,12 +537,13 @@ def compute_family_24h_metrics(family_id: str) -> Dict[str, Any]:
     request_classifier = _get_request_classifier()
 
     meter_store._ensure_persistence_loaded()
+    observed_family_meters = _collect_observed_family_meters(family_id, window_minutes=24 * 60)
+
     all_meters: List[Any] = []
     for tenant_meters in meter_store._usage_aggregates.values():
         all_meters.extend(tenant_meters)
 
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
-    observed_family_meters = []
     qualified_family_meters = []
     for m in all_meters:
         try:
@@ -450,20 +551,35 @@ def compute_family_24h_metrics(family_id: str) -> Dict[str, Any]:
         except Exception:
             continue
         if m_time >= cutoff and _normalize_agent_to_family(m.agent) == family_id:
-            if request_classifier.is_default_overview_request(m):
-                observed_family_meters.append(m)
             if request_classifier.is_value_qualified(m):
                 qualified_family_meters.append(m)
 
-    observed_family_meters = request_classifier.collapse_retry_bursts(observed_family_meters)
     qualified_family_meters = request_classifier.collapse_retry_bursts(qualified_family_meters)
+
+    compile_24h = _summarize_family_compile_events(family_id, window_minutes=24 * 60)
+    compile_last_request_at = _epoch_to_iso(compile_24h.get("last_event_ts"))
+    observed_last_request_at = None
+    for m in observed_family_meters:
+        ts = getattr(m, "timestamp", None)
+        if not isinstance(ts, str):
+            continue
+        try:
+            dt = datetime.fromisoformat(ts.replace("Z", "+00:00")).astimezone(timezone.utc)
+        except Exception:
+            continue
+        if observed_last_request_at is None:
+            observed_last_request_at = (dt, ts)
+            continue
+        if dt > observed_last_request_at[0]:
+            observed_last_request_at = (dt, ts)
+    observed_last_request_at_str = observed_last_request_at[1] if observed_last_request_at else None
 
     if not qualified_family_meters:
         return {
             "requests_24h": 0,
             "saved_tokens_24h": 0,
             "savings_ratio_24h": 0.0,
-            "last_request_at": None,
+            "last_request_at": observed_last_request_at_str or compile_last_request_at,
             "observed_requests_24h": len(observed_family_meters),
         }
 
@@ -471,7 +587,8 @@ def compute_family_24h_metrics(family_id: str) -> Dict[str, Any]:
     saved_tokens_24h = sum(m.saved_tokens_estimate for m in qualified_family_meters)
     baseline_total = sum(m.baseline_tokens_estimate for m in qualified_family_meters)
     savings_ratio_24h = saved_tokens_24h / baseline_total if baseline_total > 0 else 0.0
-    last_request_at = max((m.timestamp for m in qualified_family_meters), default=None)
+    qualified_last_request_at = max((m.timestamp for m in qualified_family_meters), default=None)
+    last_request_at = observed_last_request_at_str or compile_last_request_at or qualified_last_request_at
 
     return {
         "requests_24h": requests_24h,

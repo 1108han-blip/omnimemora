@@ -15,6 +15,7 @@ Action 分類：
 
 from __future__ import annotations
 
+import importlib
 from typing import Optional
 
 import httpx
@@ -22,8 +23,9 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from . import agent_routing_state as _route_state
-from .application import status_read_model as _srm
 from .config import config
+
+_srm = importlib.import_module("5_connectors.adapter.application.status_read_model")
 
 router = APIRouter()
 

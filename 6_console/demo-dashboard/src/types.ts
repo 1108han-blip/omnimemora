@@ -43,7 +43,7 @@ export interface AgentControlCard {
   // Truth surface fields (product boundary clarity — from backend)
   integration_truth?: 'detached' | 'mcp_attached' | 'attached_with_backup';
   route_truth?: 'off' | 'intent_on' | 'effective';
-  traffic_truth?: 'no_recent_evidence' | 'internal_only' | 'real_request_observed';
+  traffic_truth?: 'no_recent_evidence' | 'internal_only' | 'real_request_observed' | 'compile_empty' | 'bypassed';
   observed_client_truth?: {
     provider: string | null;
     model: string | null;
