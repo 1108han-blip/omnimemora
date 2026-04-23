@@ -1,0 +1,13 @@
+OMNIMEMORA CONTROLLED BETA TERMS
+Package version: {{PACKAGE_VERSION}}
+
+1. This package is provided only for controlled beta testing.
+2. Copyright © OmniMemora. All rights reserved.
+3. You may install and use this package only for evaluation and internal testing.
+4. You may not redistribute, sublicense, rent, host, resell, or use this package for commercial service delivery.
+5. You may not reverse engineer, modify, decompile, or extract source materials from this package except where non-waivable law requires otherwise.
+6. This package is provided "as is", without warranty of any kind.
+7. Beta use may require you to share diagnostic information such as version, platform, request_id, error_code, and request evidence excerpts for support and product improvement.
+8. By using this package, you agree that OmniMemora may use your beta feedback to improve the product.
+
+Support contact: {{SUPPORT_EMAIL}}

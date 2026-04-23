@@ -1,70 +1,59 @@
-# OmniMemora - Local Memory Plane for AI Agents
+# OmniMemora Controlled Beta
 
-Version 1.0.0
+Package version: {{PACKAGE_VERSION}}
 
-## What is OmniMemora?
+## What this package is
 
-OmniMemora is a local memory plane that helps AI agents (Codex, Claude Code, etc.) save tokens by intelligently compressing context from previous conversations.
+This is a closed beta build of OmniMemora.
+
+- Local-first product
+- 5173 = user control surface
+- 18011 = product ingress
+- 8765 = internal memory plane
+
+This package is for controlled user testing only. It is not an open-source release and not a public production installer.
 
 ## Quick Start
 
-1. Extract the archive
-2. Run: `./omnimemora start` (or `omnimemora.exe start` on Windows)
-3. Browser opens automatically to the dashboard
-4. See your token savings immediately!
+1. Extract the archive.
+2. Run `./omnimemora start` on macOS or `omnimemora.exe start` on Windows.
+3. Open the dashboard if it does not open automatically.
+4. Verify:
+   - `http://127.0.0.1:5173`
+   - `http://127.0.0.1:18011/health`
+   - `http://127.0.0.1:8765/health`
 
-## Commands
+## Main commands
 
 ```bash
-omnimemora start       # Start the runtime
-omnimemora status      # Show runtime status
-omnimemora stop        # Stop the runtime
-omnimemora dashboard   # Open dashboard in browser
-omnimemora connect codex   # Show Codex integration guide
-omnimemora connect claude  # Show Claude Code integration guide
-omnimemora version     # Show version
+omnimemora start
+omnimemora status
+omnimemora stop
+omnimemora dashboard
+omnimemora connect-codex
+omnimemora connect-claude
 ```
 
-## Connect to Your Agent
+## Feedback
 
-### Codex
-```bash
-omnimemora connect codex
-```
+When reporting problems, include:
 
-### Claude Code
-```bash
-omnimemora connect claude
-```
+- package version
+- operating system
+- request_id
+- error_code
+- steps to reproduce
+- request evidence excerpt or screenshot when available
 
-## How It Works
+Support contact: {{SUPPORT_EMAIL}}
 
-OmniMemora intercepts memory retrieval requests and applies intelligent context compression:
+## Known limits
 
-1. Your agent makes a memory query
-2. OmniMemora finds relevant memories
-3. Context is assembled using optimal strategy
-4. Token count is reduced while preserving relevance
-5. You save tokens on every query!
+- This is a controlled beta package.
+- No commercial use is permitted.
+- No redistribution is permitted.
+- Automatic update is not included.
 
-## System Requirements
+## Download base
 
-- macOS 10.14+ or Windows 10+
-- No external dependencies (fully self-contained)
-- Default port: 8765 (automatically selects next available if occupied)
-
-## Data Location
-
-All data is stored locally in:
-- macOS/Linux: `~/.omnimemora/`
-- Windows: `%USERPROFILE%\.omnimemora\`
-
-## Documentation
-
-For full documentation, visit:
-https://github.com/omnimemora/omnimemora
-
-## Support
-
-Report issues at:
-https://github.com/omnimemora/omnimemora/issues
+{{DOWNLOAD_BASE_URL}}

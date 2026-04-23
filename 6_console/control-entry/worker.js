@@ -1,0 +1,172 @@
+const PACKAGE_VERSION = "__PACKAGE_VERSION__";
+const DOWNLOAD_BASE_URL = `https://assets.doloclaw.com/omnimemora/beta/${PACKAGE_VERSION}`;
+const SUPPORT_EMAIL = "__SUPPORT_EMAIL__";
+
+function jsonResponse(url) {
+  return new Response(
+    JSON.stringify({
+      service: "omnimemora-control-entry",
+      role: "control-plane-entry",
+      host: url.hostname,
+      path: url.pathname,
+      message: "OmniMemora control entry is active."
+    }),
+    {
+      status: 200,
+      headers: {
+        "content-type": "application/json; charset=utf-8",
+        "cache-control": "no-store"
+      }
+    }
+  );
+}
+
+function downloadHtml() {
+  const downloads = [
+    {
+      label: "macOS (Apple Silicon)",
+      href: `${DOWNLOAD_BASE_URL}/omnimemora-darwin-arm64.zip`
+    },
+    {
+      label: "macOS (Intel)",
+      href: `${DOWNLOAD_BASE_URL}/omnimemora-darwin-amd64.zip`
+    },
+    {
+      label: "Windows (x64)",
+      href: `${DOWNLOAD_BASE_URL}/omnimemora-windows-amd64.zip`
+    }
+  ];
+
+  const list = downloads
+    .map(
+      (item) =>
+        `<li><a href="${item.href}">${item.label}</a></li>`
+    )
+    .join("");
+
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>OmniMemora Controlled Beta Download</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f4f1e8;
+      --panel: #fffdf7;
+      --ink: #17130d;
+      --muted: #60574a;
+      --line: #d8cfbf;
+      --accent: #1d6f63;
+    }
+    body {
+      margin: 0;
+      background: radial-gradient(circle at top left, #fff6d8 0, var(--bg) 35%, #ece6da 100%);
+      color: var(--ink);
+      font: 16px/1.6 Georgia, "Iowan Old Style", serif;
+    }
+    main {
+      max-width: 860px;
+      margin: 48px auto;
+      padding: 0 20px;
+    }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 28px;
+      box-shadow: 0 12px 50px rgba(23, 19, 13, 0.08);
+    }
+    h1, h2 {
+      margin: 0 0 12px;
+      line-height: 1.2;
+    }
+    h1 { font-size: 40px; }
+    h2 { font-size: 20px; margin-top: 28px; }
+    p, li { color: var(--muted); }
+    ul { padding-left: 20px; }
+    .badge {
+      display: inline-block;
+      margin-bottom: 16px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      background: #e4f3ef;
+      color: var(--accent);
+      font: 600 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .downloads a, .meta a {
+      color: var(--accent);
+      text-decoration: none;
+      font-weight: 600;
+    }
+    .meta {
+      display: grid;
+      gap: 8px;
+      margin-top: 16px;
+      padding-top: 16px;
+      border-top: 1px solid var(--line);
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 0.92em;
+      color: var(--ink);
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <section class="panel">
+      <span class="badge">Controlled Beta</span>
+      <h1>OmniMemora Download</h1>
+      <p>Closed beta package. Source code is not included. Copyright is reserved. Commercial use and redistribution are prohibited.</p>
+
+      <h2>Package Version</h2>
+      <p><code>${PACKAGE_VERSION}</code></p>
+
+      <h2>Supported Platforms</h2>
+      <ul class="downloads">${list}</ul>
+      <p><a href="${DOWNLOAD_BASE_URL}/SHA256SUMS.txt">Download SHA256SUMS.txt</a></p>
+
+      <h2>Install Steps</h2>
+      <ul>
+        <li>Download the package for your platform and extract it.</li>
+        <li>Run <code>./omnimemora start</code> on macOS or <code>omnimemora.exe start</code> on Windows.</li>
+        <li>Verify <code>5173</code>, <code>18011</code>, and <code>8765</code> are healthy.</li>
+      </ul>
+
+      <h2>Known Limits</h2>
+      <ul>
+        <li>This is a controlled beta package, not a public production installer.</li>
+        <li>Automatic updates are not included.</li>
+        <li>Feedback should include version, system, <code>request_id</code>, <code>error_code</code>, and reproduction steps.</li>
+      </ul>
+
+      <div class="meta">
+        <div>Feedback: <a href="mailto:${SUPPORT_EMAIL}?subject=OmniMemora%20Beta%20Feedback">${SUPPORT_EMAIL}</a></div>
+        <div>License: all rights reserved, beta only, no redistribution, no commercial use.</div>
+      </div>
+    </section>
+  </main>
+</body>
+</html>`;
+
+  return new Response(html, {
+    status: 200,
+    headers: {
+      "content-type": "text/html; charset=utf-8",
+      "cache-control": "no-store"
+    }
+  });
+}
+
+addEventListener("fetch", (event) => {
+  const url = new URL(event.request.url);
+  if (url.pathname === "/download") {
+    event.respondWith(downloadHtml());
+    return;
+  }
+  event.respondWith(jsonResponse(url));
+});
