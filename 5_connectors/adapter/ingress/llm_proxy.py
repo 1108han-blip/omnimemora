@@ -3414,6 +3414,12 @@ async def proxy_v1_responses(request: Request):
         _record_compile_event(
             request_id, agent_id, ingress_path, requested_model, compile_meta, truth_meta=truth_meta, trace_id=trace_id
         )
+        _persist_gateway_meter(
+            request_id=request_id,
+            agent_id=agent_id,
+            query=_extract_user_query(chat_body.get("messages")),
+            compile_meta=compile_meta,
+        )
         rebuilt_body = _compiled_chat_to_responses_request(body, compiled_body)
         upstream_url = _normalize_responses_upstream_url(contract.base_url_resolved or responses_upstream["base_url"])
         _mark_quota_audit(request, upstream_url=upstream_url, action="proxied")
@@ -3663,6 +3669,12 @@ async def proxy_v1_responses(request: Request):
     truth_meta["fallback_reason"] = "responses_upstream_unavailable"
     _record_compile_event(
         request_id, agent_id, ingress_path, requested_model, compile_meta, truth_meta=truth_meta, trace_id=trace_id
+    )
+    _persist_gateway_meter(
+        request_id=request_id,
+        agent_id=agent_id,
+        query=_extract_user_query(chat_body.get("messages")),
+        compile_meta=compile_meta,
     )
     if config.trace_events_enabled:
         append_trace_event(

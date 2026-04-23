@@ -51,6 +51,15 @@ func AttachClaude() *AttachResult {
 		"context_mode":     "balanced",
 	}
 
+	// Claude's actual LLM traffic follows ANTHROPIC_BASE_URL, not the memory block.
+	// Keep existing auth/model env values intact, but route the API hop through OmniMemora.
+	envCfg, _ := cfg["env"].(map[string]interface{})
+	if envCfg == nil {
+		envCfg = make(map[string]interface{})
+	}
+	envCfg["ANTHROPIC_BASE_URL"] = ProductAdapterAnthropicEndpoint()
+	cfg["env"] = envCfg
+
 	// Write back
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
@@ -95,6 +104,15 @@ func DetachClaude() error {
 				if memMap, ok := mem.(map[string]interface{}); ok {
 					if provider, ok := memMap["provider"]; ok && provider == "omnimemora" {
 						delete(cfg, "memory")
+
+						if envCfg, ok := cfg["env"].(map[string]interface{}); ok {
+							if baseURL, ok := envCfg["ANTHROPIC_BASE_URL"]; ok && baseURL == ProductAdapterAnthropicEndpoint() {
+								delete(envCfg, "ANTHROPIC_BASE_URL")
+							}
+							if len(envCfg) == 0 {
+								delete(cfg, "env")
+							}
+						}
 
 						data, err := json.MarshalIndent(cfg, "", "  ")
 						if err != nil {

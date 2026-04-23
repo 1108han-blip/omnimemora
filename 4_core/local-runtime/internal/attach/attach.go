@@ -46,6 +46,10 @@ func ProductAdapterResponsesEndpoint() string {
 	return fmt.Sprintf("%s/v1", ProductAdapterEndpoint())
 }
 
+func ProductAdapterAnthropicEndpoint() string {
+	return fmt.Sprintf("%s/llm", ProductAdapterEndpoint())
+}
+
 // ShimPythonExe returns the python executable to use for MCP shim.
 // Tries common names; returns empty string if none found.
 func ShimPythonExe() string {
