@@ -32,7 +32,7 @@
 | Cloud Reset Batch 6 Control Project Cutover | **已收口 ✓（replacement control entry + domain rebind complete）** | [OmniMemora_Cloud_Reset_Batch6_Control_Project_Cutover_2026-04-23.md](./OmniMemora_Cloud_Reset_Batch6_Control_Project_Cutover_2026-04-23.md) |
 | Cloud Reset Closeout | **已收口 ✓（mainline complete; legacy api hostname withdrawn from Railway edge）** | [OmniMemora_Cloud_Reset_Closeout_2026-04-23.md](./OmniMemora_Cloud_Reset_Closeout_2026-04-23.md) |
 | Controlled Beta Release v1 | **已收口 ✓（closed beta download flow live）** | [OmniMemora_Controlled_Beta_Release_v1_2026-04-23.md](./OmniMemora_Controlled_Beta_Release_v1_2026-04-23.md) |
-| Controlled Beta Next Step Engineering Plan | **进行中（Batch A complete; Batch B verified with truth caveats）** | [OmniMemora_Controlled_Beta_Next_Step_Engineering_Plan_2026-04-23.md](./OmniMemora_Controlled_Beta_Next_Step_Engineering_Plan_2026-04-23.md) |
+| Controlled Beta Next Step Engineering Plan | **进行中（Batch A+B 收口; Batch 4 执行完成）** | [OmniMemora_Controlled_Beta_Next_Step_Engineering_Plan_2026-04-23.md](./OmniMemora_Controlled_Beta_Next_Step_Engineering_Plan_2026-04-23.md) |
 
 > Cloud Reset `Batch 6.1` is classified as **optional cleanup only** (legacy project physical retire), not a mainline closeout prerequisite.
 

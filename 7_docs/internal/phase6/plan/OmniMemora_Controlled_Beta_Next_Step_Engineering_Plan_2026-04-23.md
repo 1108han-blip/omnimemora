@@ -123,7 +123,7 @@ last_verified_commit: ""
 
 ### Batch B
 
-**Result:** conditional pass
+**Result:** pass (closed by Batch 4)
 
 已验证的真实 CLI 请求：
 
@@ -152,11 +152,25 @@ last_verified_commit: ""
 - `/v1/responses` 现在会持久化 meter，因此 Codex 请求可进入 `request_evidence`
 - 已完成 `runtime+adapter` promotion，并在 running reality 下复验
 
-仍然存在的 truth caveat：
+**Batch 4 关闭的 truth caveat：**
 
-- `cc-haha` 是独立 Claude profile，但当前产品 truth surface 仍按 canonical family `claude_code` 聚合，`5173` 暂不具备 profile-aware 表达
-- `/agents/control` 当前对 `codex_cli` 仍显示 `traffic_truth=internal_only`，与真实 request evidence 已观测到的请求不一致
-- 因此 Batch B 的 CLI 验证已完成，但本机 truth 线仍需后续 Batch 4 修补，不能把当前 UI truth 直接视为最终可信
+- `cc-haha` 现在正确归类为 family-aggregate truth，control card 带有 `scope_note` 明确说明独立 profile 不会作为单独控制卡出现
+- `/agents/control` 对 `codex_cli` 的 `traffic_truth` 现在正确反映 `real_request_observed`（当 `real_meter_count > 0` 时）
+- `5173` 前端消费后端返回的 `identity_scope` 和 `scope_note`，不再自行推导 profile 语义
+
+**Batch 4 修改的文件：**
+
+- `5_connectors/adapter/application/status_read_model.py`：
+  - `derive_traffic_truth()` 修复 non-openclaw 家族的优先级
+  - `build_control_cards()` 添加 `identity_scope` 和 `scope_note`
+  - 新增 `_derive_scope_note()` 辅助函数
+- `6_console/demo-dashboard/src/types.ts`：添加 `identity_scope` 和 `scope_note` 字段
+- `6_console/demo-dashboard/src/components/AgentsDashboard.tsx`：渲染 `scope_note`
+- `5_connectors/adapter/__tests__/test_status_read_model.py`：新增测试
+
+**Batch B 最终结论：**
+
+CLI/product-path verified，control truth aligned within family-scope boundary。
 
 ---
 
