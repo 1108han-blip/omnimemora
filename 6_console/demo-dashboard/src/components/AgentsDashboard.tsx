@@ -266,6 +266,12 @@ export function AgentsDashboard({ highlightFamilyId }: AgentsDashboardProps) {
                   {card.truth_message || card.message || 'ready'}
                 </div>
 
+                {card.scope_note && (
+                  <div className="mt-2 rounded-lg px-3 py-2 text-[11px] text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950">
+                    {card.scope_note}
+                  </div>
+                )}
+
                 <div className="mt-4 space-y-2">
                   <div className="text-[11px] uppercase tracking-wider text-zinc-400">接入层</div>
                   <div className="flex flex-wrap gap-2">

@@ -325,6 +325,13 @@ def _count_real_meters_in_window(family_id: str, cutoff_ts: float) -> int:
 def derive_traffic_truth(family_id: str, window_minutes: int = 30) -> str:
     """
     Derive traffic_truth using dual evidence: compile_store + meter_store.
+
+    Priority for non-openclaw families:
+    - real_meter_count > 0  -> real_request_observed (real user traffic observed)
+    - real_meter_count == 0 and proxied_requests > 0 -> internal_only (compile evidence only)
+    - otherwise -> no_recent_evidence
+
+    openclaw keeps its legacy special logic unchanged.
     """
     import time as _time
 
@@ -349,10 +356,11 @@ def derive_traffic_truth(family_id: str, window_minutes: int = 30) -> str:
         else:
             return "no_recent_evidence"
 
-    if family_stats and family_stats.get("proxied_requests", 0) > 0:
-        return "internal_only"
+    # Non-openclaw families: real meter traffic takes priority over compile/proxy evidence
     if real_meter_count > 0:
         return "real_request_observed"
+    if family_stats and family_stats.get("proxied_requests", 0) > 0:
+        return "internal_only"
     return "no_recent_evidence"
 
 
@@ -404,9 +412,19 @@ def derive_truth_message(card: Dict[str, Any], integration_truth: str, route_tru
     return "ready"
 
 
-# ============================================================================
-# 24h Metrics Computation
-# ============================================================================
+def _derive_scope_note(family_id: str) -> Optional[str]:
+    """
+    Derive scope_note for control cards.
+    All control cards default to family scope.
+    claude_code gets an explicit note clarifying the family-aggregate nature.
+    """
+    if family_id == "claude_code":
+        return (
+            "此卡僅表達 Claude family 的聚合 truth。獨立 profile（如 cc-haha）不會作為單獨控制卡出現。"
+            "獨立 profile 的驗證應查看 request evidence / 驗證記錄，不看是否出現第二張卡。"
+        )
+    return None
+
 
 def compute_family_24h_metrics(family_id: str) -> Dict[str, Any]:
     """
@@ -517,6 +535,9 @@ async def build_control_cards() -> List[Dict[str, Any]]:
                 "traffic_truth": traffic_truth,
                 "observed_client_truth": observed_client_truth,
                 "truth_message": truth_message,
+                # Scope identity fields
+                "identity_scope": "family",
+                "scope_note": _derive_scope_note(family_id),
             }
         )
 

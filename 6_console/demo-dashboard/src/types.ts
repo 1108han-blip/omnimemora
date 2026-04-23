@@ -51,6 +51,9 @@ export interface AgentControlCard {
     base_url_class: string;
   };
   truth_message?: string;
+  // Scope identity fields
+  identity_scope?: 'family';
+  scope_note?: string | null;
   requests_24h?: number;
   saved_tokens_24h?: number;
   savings_ratio_24h?: number;
