@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { AgentControlCard, SystemStatus } from '../types';
 import {
   disableAgentRoute,
@@ -15,6 +15,9 @@ const MODE_ACTIONS = {
   enable: '使用 OmniMemora',
   disable: '停用產品路由',
 } as const;
+const AGENTS_POLL_MS = 12000;
+const CONTROL_FAILURE_BACKOFF_BASE_MS = 5000;
+const CONTROL_FAILURE_BACKOFF_MAX_MS = 60000;
 
 interface RescanResult {
   status: 'added' | 'removed' | 'no_change';
@@ -54,12 +57,25 @@ export function AgentsDashboard({ highlightFamilyId }: AgentsDashboardProps) {
   const [error, setError] = useState<string | null>(null);
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [rescanResult, setRescanResult] = useState<RescanResult | null>(null);
+  const [isPageVisible, setIsPageVisible] = useState<boolean>(document.visibilityState === 'visible');
+  const pollTimerRef = useRef<number | null>(null);
+  const backoffMsRef = useRef<number>(0);
 
-  const load = useCallback(async (mode: 'normal' | 'rescan' = 'normal') => {
+  const clearPollTimer = useCallback(() => {
+    if (pollTimerRef.current !== null) {
+      window.clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+  }, []);
+
+  const load = useCallback(async (mode: 'normal' | 'rescan' = 'normal'): Promise<boolean> => {
     try {
       const payload = mode === 'rescan' ? await rescanAgentControls() : await fetchAgentControls();
       setCards(payload.agents ?? []);
       setSystemStatus(payload.system_status ?? null);
+      if (mode === 'normal') {
+        backoffMsRef.current = 0;
+      }
       if (mode === 'rescan' && payload.rescan_status) {
         setRescanResult({
           status: payload.rescan_status,
@@ -69,20 +85,47 @@ export function AgentsDashboard({ highlightFamilyId }: AgentsDashboardProps) {
         });
       }
       setError(null);
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      if (mode === 'normal') {
+        const prev = backoffMsRef.current || CONTROL_FAILURE_BACKOFF_BASE_MS;
+        backoffMsRef.current = Math.min(prev * 2, CONTROL_FAILURE_BACKOFF_MAX_MS);
+      }
+      return false;
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    void load();
-    const interval = window.setInterval(() => {
-      void load();
-    }, 10000);
-    return () => window.clearInterval(interval);
-  }, [load]);
+    const onVisibilityChange = () => setIsPageVisible(document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
+
+  useEffect(() => {
+    clearPollTimer();
+    if (!isPageVisible) return;
+
+    let cancelled = false;
+    const tick = async () => {
+      const ok = await load('normal');
+      if (cancelled || document.visibilityState !== 'visible') return;
+      const nextDelay = ok
+        ? AGENTS_POLL_MS
+        : Math.max(CONTROL_FAILURE_BACKOFF_BASE_MS, backoffMsRef.current);
+      pollTimerRef.current = window.setTimeout(() => {
+        void tick();
+      }, nextDelay);
+    };
+
+    void tick();
+    return () => {
+      cancelled = true;
+      clearPollTimer();
+    };
+  }, [isPageVisible, load, clearPollTimer]);
 
   // Auto-clear rescan feedback after 5 seconds
   useEffect(() => {

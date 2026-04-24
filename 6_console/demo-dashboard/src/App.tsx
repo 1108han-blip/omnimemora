@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { HeroMetrics } from './components/HeroMetrics';
 import { LiveRequestFlow } from './components/LiveRequestFlow';
 import { ContextComparison } from './components/ContextComparison';
@@ -10,6 +10,11 @@ import { fetchRecentRequests, fetchUsageSummary, fetchTenants, fetchAgentControl
 import type { RecentRequest, UsageSummary, AgentControlCard, RequestEvidence, CoreCapabilitiesResponse, CoreCapabilitiesTrendResponse } from './types';
 import { SUPPORT_EMAIL, buildFeedbackMailto } from './feedback';
 import { isInternalEvent, normalizeAgentUsageList, normalizeRecentRequestUsageList, rankRecentRequests } from './utils/familyNormalization';
+
+const OVERVIEW_METRICS_POLL_MS = 5000;
+const OVERVIEW_CONTROLS_SNAPSHOT_MS = 60000;
+const CONTROL_FAILURE_BACKOFF_BASE_MS = 5000;
+const CONTROL_FAILURE_BACKOFF_MAX_MS = 60000;
 
 function inferInitialTab(): 'overview' | 'agents' {
   const params = new URLSearchParams(window.location.search);
@@ -54,37 +59,45 @@ export default function App() {
   const [highlightFamilyId, setHighlightFamilyId] = useState<string | null>(null);
   const [coreCap24h, setCoreCap24h] = useState<CoreCapabilitiesResponse | null>(null);
   const [coreCapTrend, setCoreCapTrend] = useState<CoreCapabilitiesTrendResponse | null>(null);
+  const [isPageVisible, setIsPageVisible] = useState<boolean>(document.visibilityState === 'visible');
+  const controlsBackoffMsRef = useRef<number>(0);
+  const controlsPollTimerRef = useRef<number | null>(null);
 
-  const loadMetrics = useCallback(async () => {
+  const clearControlsPollTimer = useCallback(() => {
+    if (controlsPollTimerRef.current !== null) {
+      window.clearTimeout(controlsPollTimerRef.current);
+      controlsPollTimerRef.current = null;
+    }
+  }, []);
+
+  const loadOverviewMetrics = useCallback(async () => {
     const failures: string[] = [];
     try {
-      const controlTab = activeTab === 'agents';
-      const [cc24hRes, ccTrendRes, rRes, uRes, ctrlRes] = await Promise.allSettled([
-        controlTab ? Promise.resolve(null) : fetchCoreCapabilities(tenant),
-        controlTab ? Promise.resolve(null) : fetchCoreCapabilitiesTrend(tenant, 7),
-        controlTab ? Promise.resolve(null) : fetchRecentRequests(tenant, 10, false),  // false = show observed task traffic (including task_non_value)
+      const [cc24hRes, ccTrendRes, rRes, uRes] = await Promise.allSettled([
+        fetchCoreCapabilities(tenant),
+        fetchCoreCapabilitiesTrend(tenant, 7),
+        fetchRecentRequests(tenant, 10, false),  // false = show observed task traffic (including task_non_value)
         fetchUsageSummary(tenant),
-        fetchAgentControls(),
       ]);
 
       // Core capabilities for 四卡 (HeroMetrics)
-      if (!controlTab && cc24hRes.status === 'fulfilled' && cc24hRes.value) {
+      if (cc24hRes.status === 'fulfilled' && cc24hRes.value) {
         setCoreCap24h(cc24hRes.value);
-      } else if (!controlTab) {
+      } else {
         const reason = cc24hRes.status === 'rejected' ? cc24hRes.reason : new Error('empty core capabilities response');
         failures.push(`coreCap24h: ${reason instanceof Error ? reason.message : String(reason)}`);
       }
 
       // Core capabilities trend for 四卡背面
-      if (!controlTab && ccTrendRes.status === 'fulfilled' && ccTrendRes.value) {
+      if (ccTrendRes.status === 'fulfilled' && ccTrendRes.value) {
         setCoreCapTrend(ccTrendRes.value);
       }
 
-      if (!controlTab && rRes.status === 'fulfilled' && rRes.value) {
+      if (rRes.status === 'fulfilled' && rRes.value) {
         // Overview shows observed task traffic (both task_non_value and value_qualified)
         // Live Request Flow reflects this observed traffic by default
         setRequests(rRes.value.requests.filter((req: RecentRequest) => req.request_class !== 'internal'));
-      } else if (!controlTab) {
+      } else {
         const reason = rRes.status === 'rejected' ? rRes.reason : new Error('empty recent response');
         failures.push(`recent: ${reason instanceof Error ? reason.message : String(reason)}`);
       }
@@ -95,20 +108,28 @@ export default function App() {
         failures.push(`usage: ${uRes.reason instanceof Error ? uRes.reason.message : String(uRes.reason)}`);
       }
 
-      // Fetch agent controls for unified activity truth
-      if (ctrlRes.status === 'fulfilled' && ctrlRes.value) {
-        setAgentControls(ctrlRes.value.agents ?? []);
-      } else if (ctrlRes.status === 'rejected') {
-        failures.push(`controls: ${ctrlRes.reason instanceof Error ? ctrlRes.reason.message : String(ctrlRes.reason)}`);
-      }
-
       setError(failures.length ? failures.join(' | ') : null);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoadingMetrics(false);
     }
-  }, [tenant, activeTab]);
+  }, [tenant]);
+
+  const loadOverviewControlsSnapshot = useCallback(async (): Promise<boolean> => {
+    try {
+      const payload = await fetchAgentControls();
+      setAgentControls(payload.agents ?? []);
+      controlsBackoffMsRef.current = 0;
+      return true;
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e);
+      setError(`controls: ${message}`);
+      const prev = controlsBackoffMsRef.current || CONTROL_FAILURE_BACKOFF_BASE_MS;
+      controlsBackoffMsRef.current = Math.min(prev * 2, CONTROL_FAILURE_BACKOFF_MAX_MS);
+      return false;
+    }
+  }, []);
 
   useEffect(() => {
     fetchTenants()
@@ -123,16 +144,52 @@ export default function App() {
   }, []);
 
   useEffect(() => {
+    const onVisibilityChange = () => setIsPageVisible(document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
+  }, []);
+
+  useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     params.set('tenant', tenant);
     params.set('tab', activeTab);
     if (highlightFamilyId) params.set('highlight', highlightFamilyId);
     const targetPath = buildPathForTab(activeTab);
     window.history.replaceState({}, '', `${targetPath}?${params.toString()}`);
-    loadMetrics();
-    const interval = setInterval(loadMetrics, 5000);
-    return () => clearInterval(interval);
-  }, [loadMetrics, tenant, activeTab, highlightFamilyId]);
+  }, [tenant, activeTab, highlightFamilyId]);
+
+  useEffect(() => {
+    if (activeTab !== 'overview') return;
+    void loadOverviewMetrics();
+    const interval = window.setInterval(() => {
+      void loadOverviewMetrics();
+    }, OVERVIEW_METRICS_POLL_MS);
+    return () => window.clearInterval(interval);
+  }, [activeTab, loadOverviewMetrics]);
+
+  useEffect(() => {
+    clearControlsPollTimer();
+    if (activeTab !== 'overview' || !isPageVisible) return;
+
+    let cancelled = false;
+    const tick = async () => {
+      const ok = await loadOverviewControlsSnapshot();
+      if (cancelled || activeTab !== 'overview' || document.visibilityState !== 'visible') return;
+      const failureBackoff = controlsBackoffMsRef.current;
+      const nextDelay = ok
+        ? OVERVIEW_CONTROLS_SNAPSHOT_MS
+        : Math.max(CONTROL_FAILURE_BACKOFF_BASE_MS, failureBackoff);
+      controlsPollTimerRef.current = window.setTimeout(() => {
+        void tick();
+      }, nextDelay);
+    };
+
+    void tick();
+    return () => {
+      cancelled = true;
+      clearControlsPollTimer();
+    };
+  }, [activeTab, tenant, isPageVisible, loadOverviewControlsSnapshot, clearControlsPollTimer]);
 
   const handleSelectRequest = useCallback(async (req: RecentRequest) => {
     setSelectedRequest(req);
