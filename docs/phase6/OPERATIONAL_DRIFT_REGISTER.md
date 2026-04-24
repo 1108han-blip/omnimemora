@@ -59,3 +59,4 @@ Each entry records:
 
 <!-- New entries appended by operational_drift_check.py -->
 | 2026-04-20T11:15:06.713226 | ADE-001 | Root README 'Start here' section points to phase5  | doc reality | D | P3 | False | resolved |
+| 2026-04-24T00:00:00.000000 | CSP-001-LOCAL-IMPORT-CLOSE | CSP-001 candidate pack local import: 4 files, 28 policy tests, full suite green, gofmt clean. commit `cb4d737`. Cloud download path marked deferred. | repo reality | A | P0 | False | resolved |

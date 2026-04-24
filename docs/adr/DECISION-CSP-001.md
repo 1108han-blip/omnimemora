@@ -2,7 +2,7 @@
 
 **Decision ID:** D-2026-04-24-CSP-001
 **Date:** 2026-04-24
-**Status:** Accepted — First Implementation Batch
+**Status:** Accepted — Local Import Implemented (Batch 1/3)
 
 ---
 
@@ -139,7 +139,21 @@ New fields are added to `metering.Event` and persisted to the
 Existing Phase 2c fields (`ContextStrategy`, `ContextMode`) map to
 `context_strategy_resolved` and `context_mode_resolved`.
 
-### 7 — Cloud candidate download (deferred)
+### 7 — Local candidate pack import (first batch — complete)
+
+The local candidate pack import entry is delivered as of 2026-04-24 (commit `cb4d737`).
+The entry reads a JSON candidate pack from the local filesystem, validates it
+(SHA-256 hash, structural fields), and writes it to the candidate cache via
+`Manager.AcceptCandidate()`. It does not trigger cloud download, does not
+auto-promote, and does not enter the compile hot path.
+
+CLI commands delivered:
+- `omnimemora import-candidate <path>` — import local JSON pack
+- `omnimemora policy-status [--json]` — report active/candidate version separation
+
+The cloud candidate download path remains deferred (see Next Batch below).
+
+### 8 — Cloud candidate download (deferred)
 
 The cloud candidate download path is out of scope for the first
 implementation batch.  The `manifest.json` `candidate_version` field
