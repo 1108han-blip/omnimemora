@@ -517,7 +517,45 @@ Implemented the local candidate pack acceptance and cache skeleton for future co
 - no promotion/live validation
 - no Codex validation
 
-**Next batch:** real cloud candidate source design/implementation may start only after this local candidate cache and validation skeleton remains protected by tests.
+**Next batch:** local import closeout → active sync → real cloud candidate source (cloud fetch must call the same AcceptCandidate/import path; no second candidate-write logic)
+
+### CSP-001 Candidate Pack Local Import Closeout (2026-04-24)
+
+**Result:** PASS
+
+Closed out the local candidate pack import entry. The `import-candidate` CLI command reads a JSON candidate pack from the local filesystem, validates it, and writes it to the candidate cache. No cloud download, no auto-promote, no compile hot-path entry.
+
+**Commits:**
+
+- `cb4d737 runtime: add local candidate pack import for CSP-001 compile strategy policy`
+- `e16e32d docs(phase6): sync CSP-001 local import closeout to active docs`
+
+**Repo reality:**
+
+- `policy/import.go`: `ImportCandidate(path, policyDir)` and `GetPolicyStatus(policyDir)` entry points
+- `internal/cli/commands.go`: `import-candidate` and `policy-status` CLI commands (+146 lines)
+- `main.go`: `import-candidate` and `policy-status` subcommand routing (+6 lines)
+- `policy/manager_test.go`: 521 lines covering AcceptCandidate/ImportCandidate scenarios
+- `3_governance/CSP-001-CANDIDATE-PACK-LOCAL-IMPORT-CLOSEOUT-2026-04-24.md`: closeout record
+- `docs/adr/DECISION-CSP-001.md`: status → "Local Import Implemented (Batch 1/3)"; new §7 documenting local import entry
+- `docs/phase6/OPERATIONAL_DRIFT_REGISTER.md`: evidence-level A closeout entry
+
+**Test results:**
+
+- `go test ./policy -v` → PASS — 28 tests (AcceptCandidate, ImportCandidate, GetPolicyStatus scenarios)
+- `go test ./...` → all packages ok
+- `gofmt` clean on all 4 modified/new files
+- `git diff --check` clean
+- worktree clean after both commits
+
+**Boundaries held:**
+
+- No cloud download: ✅ `import.go` reads only local files
+- No auto-promote: ✅ Candidate staged only; `PromoteCandidate()` requires explicit call
+- No compile hot-path: ✅ Candidate does not affect `LoadActive()`
+- Active policy untouched: ✅ `LoadActive()` reads `active_version`, not `candidate_version`
+
+**Next batch:** CSP-001 Real Cloud Candidate Source — pull-style cloud fetch → same `AcceptCandidate()` path; no second candidate-write logic; no cloud compilation; no auto-promotion
 
 ### Current Gate Override (2026-04-24)
 
