@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib
 from datetime import datetime, timezone, timedelta
 from typing import Any, Callable, Dict, Iterable, Optional
 
@@ -19,18 +20,46 @@ _BYPASS_COMPILE_REASONS = {
 }
 
 _DEFAULT_FAMILIES = ["claude_code", "codex_cli", "openclaw", "cursor"]
+_CLAUDE_CODE_PROFILE_ALIASES = {
+    "cc-haha",
+    "cc_haha",
+    "claude-code-haha",
+    "claude_code_haha",
+}
+
+
+def _resolve_canonical_agent_id(agent: str) -> str:
+    try:
+        identity_mod = importlib.import_module("5_connectors.adapter.agent_identity")
+        return str(identity_mod.resolve_canonical_agent_id(agent or "") or "")
+    except Exception:
+        return str(agent or "")
 
 
 def normalize_agent_to_family(agent: str) -> str:
-    lower = str(agent or "").lower()
+    raw = str(agent or "")
+    lower = raw.lower()
+    canonical = _resolve_canonical_agent_id(raw).lower()
     if lower in {"openclaw", "openclaw-agent", "openclaw-bundle-mcp", "openclaw_bundle_mcp"}:
         return "openclaw"
+    if lower in _CLAUDE_CODE_PROFILE_ALIASES:
+        return "claude_code"
     if lower in {"claude_code", "claude-code", "claude"}:
+        return "claude_code"
+    if canonical in _CLAUDE_CODE_PROFILE_ALIASES:
+        return "claude_code"
+    if canonical in {"claude_code", "claude-code", "claude-code-cli", "claude"}:
         return "claude_code"
     if lower in {"codex", "codex_cli", "codex-cli"}:
         return "codex_cli"
+    if canonical in {"codex", "codex_cli", "codex-cli"}:
+        return "codex_cli"
     if lower == "cursor":
         return "cursor"
+    if canonical == "cursor":
+        return "cursor"
+    if canonical in {"openclaw", "openclaw-agent", "openclaw-bundle-mcp", "openclaw_bundle_mcp"}:
+        return "openclaw"
     return str(agent or "")
 
 

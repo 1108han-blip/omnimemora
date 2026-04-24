@@ -644,3 +644,49 @@ def test_legacy_fallback_records_degraded_reason(monkeypatch):
     assert len(store.records) == 1
     assert store.records[0]["status"] == "degraded"
     assert store.records[0]["error"] == "summary_contract_invalid"
+
+
+def test_summary_builder_maps_cc_haha_meter_to_claude_code_family():
+    now = datetime.now(timezone.utc)
+    meter = Meter(
+        request_id="req-cc-haha-meter-1",
+        agent="cc-haha",
+        timestamp=now.isoformat(),
+        baseline_tokens_estimate=100,
+        saved_tokens_estimate=30,
+    )
+    payload = summary_builder.build_family_window_summary(
+        meters=[meter],
+        compile_rows_30m=[],
+        compile_rows_24h=[],
+        proxy_rows_30m=[],
+        now_utc=now,
+    )
+    families = payload["families"]
+    assert "claude_code" in families
+    assert "cc-haha" not in families
+    assert families["claude_code"]["metrics_24h"]["observed_requests_24h"] >= 1
+
+
+def test_summary_builder_maps_cc_haha_compile_rows_to_claude_code_family():
+    now = datetime.now(timezone.utc)
+    compile_rows = [
+        {
+            "agent_id": "cc-haha",
+            "compile_status": "compile_success",
+            "compile_reason": "runtime_compile",
+            "timestamp": now.timestamp(),
+        }
+    ]
+    payload = summary_builder.build_family_window_summary(
+        meters=[],
+        compile_rows_30m=compile_rows,
+        compile_rows_24h=compile_rows,
+        proxy_rows_30m=[],
+        now_utc=now,
+    )
+    families = payload["families"]
+    assert "claude_code" in families
+    assert "cc-haha" not in families
+    assert families["claude_code"]["compile_30m"]["proxied_requests"] == 1
+    assert families["claude_code"]["compile_24h"]["proxied_requests"] == 1
