@@ -434,7 +434,7 @@ CSP-001 adds a local-first compile strategy policy layer to the Go runtime. The 
 
 **Next batch:** CSP-001 running validation (runtime+adapter promotion; non-Codex request evidence check; verify meter/request_evidence expose policy version/source and requested/resolved strategy; Codex remains protected/deferred as local validation client)
 
-### CSP-001 Compile Strategy Policy Running Validation (2026-04-24)
+### CSP-001 Compile Strategy Policy Running Validation (2026-04-24 — pre-bundle)
 
 **Result:** PASS
 
@@ -457,6 +457,38 @@ Results:
 - AccessPlan `enforcement_trace` in write response: NOT regressed ✅
 
 **Next batch:** CSP-001 cloud candidate download path (future); no Codex live validation yet
+
+### CSP-001 Policy Bundle Promotion Path (2026-04-24)
+
+**Result:** PASS
+
+Wired the compile strategy policy bundle into the promotion workflow so that the bundle travels with the runtime binary and is discovered at runtime via `os.Executable()`.
+
+**Commit:**
+
+- `e92805f runtime: promote compile strategy policy bundle`
+
+**Repo reality:**
+
+- `NewManager("")` resolves policy directory via `resolvePolicyDir()`: binary-bundle layout (`os.Dir(exe)/config/compile_strategy_policies/`) first, then CWD layout, then built-in fallback
+- `promotion.sh` steps `[2b/5]` and `[2c/5]`: copies bundle to `$CURRENT_SERVICE_DIR/tools/config/compile_strategy_policies/`; fails explicitly if source dir is missing (no silent fallback)
+- Promotion log fields: `runtime_compile_strategy_policy_bundle`, `runtime_compile_strategy_policy_active_version`, `runtime_compile_strategy_policy_bundle_path`
+- 3 new tests: `TestLoadActive_BundleLayout`, `TestLoadActive_MissingBundlePath_FallsBack`, `TestResolveAuto_BundlePolicy` → 18/18 pass
+
+**Running evidence (SQLite, `runtime+adapter` promotion):**
+
+- `compile_strategy_policy_version`: `local-default-v1` ✅ (was `builtin` in pre-bundle validation — now confirmed served from bundle)
+- `compile_strategy_policy_source`: `bundled` ✅ (was `builtin` — now confirmed `bundled` after promotion)
+- `context_strategy_requested`: `auto` ✅
+- `context_strategy_resolved`: `recency_boost_select` ✅
+- `context_mode_resolved`: `balanced` ✅
+
+**Explicit boundaries:**
+
+- cloud candidate download: deferred
+- Codex live validation: protected/deferred
+
+**Worktree clean after commit:** ✅
 
 ### Current Gate Override (2026-04-24)
 
