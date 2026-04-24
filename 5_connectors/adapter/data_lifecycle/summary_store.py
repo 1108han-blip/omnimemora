@@ -72,3 +72,30 @@ def read_fresh_summary(
     if not is_summary_fresh(payload, policy=policy, now_ts=now_ts):
         return None
     return payload
+
+
+def is_summary_usable_when_stale(
+    payload: Optional[dict[str, Any]],
+    *,
+    policy: Optional[DataLifecyclePolicy] = None,
+    now_ts: Optional[float] = None,
+) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    generated_at = payload.get("generated_at")
+    if not isinstance(generated_at, (int, float)):
+        return False
+    current = policy or load_policy()
+    now = float(now_ts if now_ts is not None else time.time())
+    return (now - float(generated_at)) <= float(current.summary_stale_max_age_seconds)
+
+
+def read_stale_usable_summary(
+    policy: Optional[DataLifecyclePolicy] = None,
+    *,
+    now_ts: Optional[float] = None,
+) -> Optional[dict[str, Any]]:
+    payload = read_summary(policy)
+    if not is_summary_usable_when_stale(payload, policy=policy, now_ts=now_ts):
+        return None
+    return payload

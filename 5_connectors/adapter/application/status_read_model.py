@@ -627,25 +627,29 @@ def compute_family_24h_metrics(
     }
 
 
-def _read_fresh_family_window_summary() -> Optional[Dict[str, Dict[str, Any]]]:
+def _read_family_window_summary() -> tuple[Optional[Dict[str, Dict[str, Any]]], str]:
     """
-    Read fresh family/window summary from Data Lifecycle Plane.
-    Returns None when summary is missing or stale.
+    Read family/window summary from Data Lifecycle Plane.
+    Order: fresh summary -> stale-but-usable summary -> None.
     """
     try:
         policy_mod = _get_data_lifecycle_policy()
         summary_store = _get_data_lifecycle_summary_store()
         policy = policy_mod.load_policy()
         payload = summary_store.read_fresh_summary(policy=policy)
+        source = "fresh"
+        if payload is None:
+            payload = summary_store.read_stale_usable_summary(policy=policy)
+            source = "stale"
     except Exception:
-        return None
+        return None, "none"
 
     if not isinstance(payload, dict):
-        return None
+        return None, "none"
     families = payload.get("families")
     if not isinstance(families, dict):
-        return None
-    return families
+        return None, "none"
+    return families, source
 
 
 def _safe_family_summary(
@@ -674,7 +678,7 @@ async def build_control_cards() -> List[Dict[str, Any]]:
     runtime_payload = await _runtime_request("GET", "/agents/control")
     health_state = await _runtime_health_state()
     metrics_index = build_metrics_index()
-    summary_families = _read_fresh_family_window_summary()
+    summary_families, _summary_source = _read_family_window_summary()
     compile_rows_30m = None
     compile_rows_24h = None
     if summary_families is None:

@@ -188,6 +188,25 @@ _register_product_data_path(app)
 _register_control_plane(app)
 _register_read_model_and_diagnostics(app)
 
+_dlp_scheduler = None
+
+
+@app.on_event("startup")
+async def _startup_data_lifecycle_scheduler() -> None:
+    global _dlp_scheduler
+    scheduler_mod = __import__("5_connectors.adapter.data_lifecycle.scheduler", fromlist=["dummy"])
+    _dlp_scheduler = scheduler_mod.DataLifecycleScheduler()
+    _dlp_scheduler.start()
+
+
+@app.on_event("shutdown")
+async def _shutdown_data_lifecycle_scheduler() -> None:
+    global _dlp_scheduler
+    if _dlp_scheduler is None:
+        return
+    await _dlp_scheduler.stop()
+    _dlp_scheduler = None
+
 @app.middleware("http")
 async def attach_request_id(request: Request, call_next):
     context = ensure_request_context(request)

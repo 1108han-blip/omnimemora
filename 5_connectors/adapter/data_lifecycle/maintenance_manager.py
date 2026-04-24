@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import importlib
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -44,6 +46,7 @@ class MaintenanceManager:
         self._is_value_qualified_fn = is_value_qualified_fn
         self._collapse_retry_bursts_fn = collapse_retry_bursts_fn
         self._bytes_scanned_fn = bytes_scanned_fn
+        self._run_lock = threading.Lock()
 
     def _resolve_dependencies(self) -> None:
         if self._meter_export_fn is not None:
@@ -70,11 +73,26 @@ class MaintenanceManager:
             )
 
     def run_once(self, trigger: str) -> dict[str, Any]:
-        self._resolve_dependencies()
-        cycle_id = state_store.new_cycle_id()
-        started_at = datetime.now(timezone.utc)
+        if not self._run_lock.acquire(blocking=False):
+            cycle_id = state_store.new_cycle_id()
+            now = datetime.now(timezone.utc)
+            record = state_store.build_record(
+                cycle_id=cycle_id,
+                trigger=trigger,
+                started_at=now,
+                completed_at=now,
+                status="skipped",
+                bytes_scanned=0,
+                error="maintenance_cycle_in_progress",
+            )
+            state_store.append_state_record(record, policy=self._policy)
+            return record
 
         try:
+            started_monotonic = time.monotonic()
+            self._resolve_dependencies()
+            cycle_id = state_store.new_cycle_id()
+            started_at = datetime.now(timezone.utc)
             meters = list(self._meter_export_fn() if self._meter_export_fn else [])
             compile_rows_30m = list(self._compile_rows_30m_fn() if self._compile_rows_30m_fn else [])
             compile_rows_24h = list(self._compile_rows_24h_fn() if self._compile_rows_24h_fn else [])
@@ -89,6 +107,11 @@ class MaintenanceManager:
                 is_value_qualified=self._is_value_qualified_fn,
                 collapse_retry_bursts=self._collapse_retry_bursts_fn,
             )
+            elapsed = time.monotonic() - started_monotonic
+            if elapsed > float(self._policy.maintenance_budget_seconds):
+                raise TimeoutError(
+                    f"maintenance_budget_exceeded: {elapsed:.3f}s > {self._policy.maintenance_budget_seconds:.3f}s"
+                )
             summary_store.write_summary_atomic(summary_payload, policy=self._policy)
 
             completed_at = datetime.now(timezone.utc)
@@ -105,6 +128,8 @@ class MaintenanceManager:
             state_store.append_state_record(record, policy=self._policy)
             return record
         except Exception as exc:
+            cycle_id = locals().get("cycle_id", state_store.new_cycle_id())
+            started_at = locals().get("started_at", datetime.now(timezone.utc))
             completed_at = datetime.now(timezone.utc)
             bytes_scanned = int(self._bytes_scanned_fn() if self._bytes_scanned_fn else 0)
             record = state_store.build_record(
@@ -118,3 +143,5 @@ class MaintenanceManager:
             )
             state_store.append_state_record(record, policy=self._policy)
             return record
+        finally:
+            self._run_lock.release()

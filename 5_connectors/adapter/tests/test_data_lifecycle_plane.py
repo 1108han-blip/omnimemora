@@ -1,6 +1,8 @@
 import asyncio
 import importlib
 import json
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -9,6 +11,7 @@ summary_builder = importlib.import_module("5_connectors.adapter.data_lifecycle.s
 summary_store = importlib.import_module("5_connectors.adapter.data_lifecycle.summary_store")
 policy_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.policy")
 maintenance_manager_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.maintenance_manager")
+scheduler_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.scheduler")
 status_read_model = importlib.import_module("5_connectors.adapter.application.status_read_model")
 
 
@@ -121,6 +124,7 @@ def test_summary_builder_family_window_equivalent_to_legacy_logic(monkeypatch):
 def test_summary_store_atomic_read_and_freshness(tmp_path):
     custom_policy = policy_mod.DataLifecyclePolicy(
         summary_ttl_seconds=10.0,
+        summary_stale_max_age_seconds=120.0,
         summary_file=str(tmp_path / "family_window_summary.json"),
         maintenance_state_file=str(tmp_path / "maintenance_state.jsonl"),
     )
@@ -136,6 +140,10 @@ def test_summary_store_atomic_read_and_freshness(tmp_path):
     assert loaded == payload
     assert summary_store.is_summary_fresh(loaded, policy=custom_policy, now_ts=109.0)
     assert not summary_store.is_summary_fresh(loaded, policy=custom_policy, now_ts=111.0)
+    assert summary_store.read_fresh_summary(policy=custom_policy, now_ts=111.0) is None
+    stale = summary_store.read_stale_usable_summary(policy=custom_policy, now_ts=111.0)
+    assert stale == payload
+    assert summary_store.read_stale_usable_summary(policy=custom_policy, now_ts=221.0) is None
 
 
 def test_maintenance_manager_run_once_writes_summary_and_state_without_deleting_raw(tmp_path):
@@ -230,7 +238,7 @@ def test_status_read_model_fallbacks_to_legacy_path_when_summary_missing(monkeyp
         def read_recent_compile_events(limit=5000, window_minutes=30):
             return []
 
-    monkeypatch.setattr(status_read_model, "_read_fresh_family_window_summary", lambda: None)
+    monkeypatch.setattr(status_read_model, "_read_family_window_summary", lambda: (None, "none"))
     monkeypatch.setattr(status_read_model, "_runtime_request", fake_runtime_request)
     monkeypatch.setattr(status_read_model, "_runtime_health_state", fake_health_state)
     monkeypatch.setattr(status_read_model, "build_metrics_index", lambda: {"openclaw": {"active": False, "last_seen_at": None, "subagent_count_active": 0, "subagent_count_total_visible": 0}})
@@ -290,7 +298,7 @@ def test_status_read_model_prefers_fresh_summary_when_available(monkeypatch):
     def fail_if_called(*args, **kwargs):
         raise AssertionError("legacy aggregation should not run when fresh summary exists")
 
-    monkeypatch.setattr(status_read_model, "_read_fresh_family_window_summary", lambda: fresh_summary)
+    monkeypatch.setattr(status_read_model, "_read_family_window_summary", lambda: (fresh_summary, "fresh"))
     monkeypatch.setattr(status_read_model, "_runtime_request", fake_runtime_request)
     monkeypatch.setattr(status_read_model, "_runtime_health_state", fake_health_state)
     monkeypatch.setattr(status_read_model, "build_metrics_index", lambda: {"openclaw": {"active": False, "last_seen_at": None, "subagent_count_active": 0, "subagent_count_total_visible": 0}})
@@ -302,3 +310,182 @@ def test_status_read_model_prefers_fresh_summary_when_available(monkeypatch):
     cards = asyncio.run(status_read_model.build_control_cards())
     assert cards[0]["traffic_truth"] == "real_request_observed"
     assert cards[0]["requests_24h"] == 1
+
+
+def test_status_read_model_uses_stale_summary_before_legacy_fallback(monkeypatch):
+    async def fake_runtime_request(_method, _path, payload=None):
+        return {
+            "agents": [
+                {
+                    "family_id": "openclaw",
+                    "display_name": "OpenClaw",
+                    "installed": True,
+                    "backup_available": False,
+                    "detected": True,
+                    "message": "",
+                }
+            ]
+        }
+
+    async def fake_health_state():
+        return "healthy"
+
+    class RouteState:
+        @staticmethod
+        def routing_enabled(_family_id):
+            return False
+
+    stale_summary = {
+        "openclaw": {
+            "traffic_truth_30m": "internal_only",
+            "compile_30m": {"proxied_requests": 2, "compile_empty": 0, "bypassed": 0, "last_event_ts": None},
+            "compile_24h": {"proxied_requests": 3, "compile_empty": 0, "bypassed": 0, "last_event_ts": None},
+            "metrics_24h": {
+                "requests_24h": 2,
+                "saved_tokens_24h": 40,
+                "savings_ratio_24h": 0.2,
+                "last_request_at": datetime.now(timezone.utc).isoformat(),
+                "observed_requests_24h": 2,
+            },
+        }
+    }
+
+    def fail_if_called(*args, **kwargs):
+        raise AssertionError("legacy aggregation should not run when stale summary is usable")
+
+    monkeypatch.setattr(status_read_model, "_read_family_window_summary", lambda: (stale_summary, "stale"))
+    monkeypatch.setattr(status_read_model, "_runtime_request", fake_runtime_request)
+    monkeypatch.setattr(status_read_model, "_runtime_health_state", fake_health_state)
+    monkeypatch.setattr(status_read_model, "build_metrics_index", lambda: {"openclaw": {"active": False, "last_seen_at": None, "subagent_count_active": 0, "subagent_count_total_visible": 0}})
+    monkeypatch.setattr(status_read_model, "_get_agent_routing_state", lambda: RouteState())
+    monkeypatch.setattr(status_read_model, "_collect_observed_family_meters", fail_if_called)
+    monkeypatch.setattr(status_read_model, "_summarize_family_compile_events", fail_if_called)
+    monkeypatch.setattr(status_read_model, "compute_family_24h_metrics", fail_if_called)
+
+    cards = asyncio.run(status_read_model.build_control_cards())
+    assert cards[0]["traffic_truth"] == "internal_only"
+    assert cards[0]["requests_24h"] == 2
+
+
+def test_scheduler_startup_warm_calls_run_once():
+    triggers = []
+
+    class FakeManager:
+        def run_once(self, trigger):
+            triggers.append(trigger)
+            return {"status": "success"}
+
+    policy = policy_mod.DataLifecyclePolicy(
+        maintenance_enabled=True,
+        maintenance_startup_delay_seconds=0.01,
+        maintenance_interval_seconds=10.0,
+    )
+    scheduler = scheduler_mod.DataLifecycleScheduler(manager=FakeManager(), policy=policy)
+
+    async def _run():
+        scheduler.start()
+        await asyncio.sleep(0.05)
+        await scheduler.stop()
+
+    asyncio.run(_run())
+    assert "startup_warm" in triggers
+
+
+def test_scheduler_interval_refresh_calls_run_once():
+    triggers = []
+
+    class FakeManager:
+        def run_once(self, trigger):
+            triggers.append(trigger)
+            return {"status": "success"}
+
+    policy = policy_mod.DataLifecyclePolicy(
+        maintenance_enabled=True,
+        maintenance_startup_delay_seconds=0.0,
+        maintenance_interval_seconds=0.02,
+    )
+    scheduler = scheduler_mod.DataLifecycleScheduler(manager=FakeManager(), policy=policy)
+
+    async def _run():
+        scheduler.start()
+        await asyncio.sleep(0.09)
+        await scheduler.stop()
+
+    asyncio.run(_run())
+    assert "startup_warm" in triggers
+    assert any(t == "interval_refresh" for t in triggers)
+
+
+def test_maintenance_manager_singleflight_blocks_concurrent_runs(tmp_path):
+    custom_policy = policy_mod.DataLifecyclePolicy(
+        summary_file=str(tmp_path / "family_window_summary.json"),
+        maintenance_state_file=str(tmp_path / "maintenance_state.jsonl"),
+    )
+
+    start_gate = threading.Event()
+
+    def slow_meter_export():
+        start_gate.wait(timeout=0.2)
+        time.sleep(0.05)
+        return []
+
+    manager = maintenance_manager_mod.MaintenanceManager(
+        policy=custom_policy,
+        meter_export_fn=slow_meter_export,
+        compile_rows_30m_fn=lambda: [],
+        compile_rows_24h_fn=lambda: [],
+        proxy_rows_30m_fn=lambda: [],
+        is_default_overview_request_fn=lambda _: True,
+        is_value_qualified_fn=lambda _: True,
+        collapse_retry_bursts_fn=lambda rows: rows,
+        bytes_scanned_fn=lambda: 0,
+    )
+
+    results = []
+
+    def _first():
+        results.append(manager.run_once("first"))
+
+    t = threading.Thread(target=_first)
+    t.start()
+    time.sleep(0.02)
+    second = manager.run_once("second")
+    start_gate.set()
+    t.join()
+
+    assert second["status"] == "skipped"
+    assert second["error"] == "maintenance_cycle_in_progress"
+    assert any(r["status"] == "success" for r in results)
+
+
+def test_maintenance_manager_budget_exceeded_writes_failed_ledger(tmp_path):
+    custom_policy = policy_mod.DataLifecyclePolicy(
+        maintenance_budget_seconds=0.01,
+        summary_file=str(tmp_path / "family_window_summary.json"),
+        maintenance_state_file=str(tmp_path / "maintenance_state.jsonl"),
+    )
+
+    def slow_meter_export():
+        time.sleep(0.03)
+        return []
+
+    manager = maintenance_manager_mod.MaintenanceManager(
+        policy=custom_policy,
+        meter_export_fn=slow_meter_export,
+        compile_rows_30m_fn=lambda: [],
+        compile_rows_24h_fn=lambda: [],
+        proxy_rows_30m_fn=lambda: [],
+        is_default_overview_request_fn=lambda _: True,
+        is_value_qualified_fn=lambda _: True,
+        collapse_retry_bursts_fn=lambda rows: rows,
+        bytes_scanned_fn=lambda: 0,
+    )
+
+    record = manager.run_once("budget-test")
+    assert record["status"] == "failed"
+    assert "maintenance_budget_exceeded" in str(record["error"])
+
+    lines = Path(custom_policy.maintenance_state_file).read_text(encoding="utf-8").strip().splitlines()
+    assert len(lines) == 1
+    persisted = json.loads(lines[0])
+    assert persisted["status"] == "failed"
