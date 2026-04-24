@@ -205,6 +205,7 @@ async def run_gateway_compile(
     payload: dict,
     agent_id: str,
     session_id: Optional[str] = None,
+    access_plan: Optional[dict] = None,
     request_id: Optional[str] = None,
     trace_id: Optional[str] = None,
 ) -> Tuple[dict, dict]:
@@ -276,12 +277,15 @@ async def run_gateway_compile(
 
     from ..infrastructure import runtime_bridge as _rb
 
+    enforcement_capture: Dict[str, Any] = {}
     try:
         candidates = await _rb.fetch_memory_candidates(
             query=compile_context["query"],
             agent_id=agent_id,
             limit=16,
             scope="agent",
+            access_plan=access_plan,
+            enforcement_capture=enforcement_capture,
             request_id=request_id,
             trace_id=trace_id,
         )
@@ -364,6 +368,7 @@ async def run_gateway_compile(
         skill_policy_source=compile_result.get("skill_policy_source", "local_builtin"),
         skill_policy_status=compile_result.get("skill_policy_status", "fallback"),
         task_type=compile_result.get("task_type", compile_context.get("task_type", "continuation")),
+        enforcement_trace=enforcement_capture.get("enforcement_trace"),
     )
     if config.trace_events_enabled:
         append_trace_event(
@@ -469,6 +474,7 @@ def _build_meta(
     skill_policy_source: str = "local_builtin",
     skill_policy_status: str = "fallback",
     task_type: str = "continuation",
+    enforcement_trace: Optional[dict] = None,
 ) -> dict:
     """
     Build standardized compile metadata.
@@ -494,6 +500,7 @@ def _build_meta(
         "skill_policy_source": skill_policy_source,
         "skill_policy_status": skill_policy_status,
         "task_type": task_type,
+        "enforcement_trace": enforcement_trace if isinstance(enforcement_trace, dict) else None,
     }
 
 

@@ -259,6 +259,7 @@ def build_identity_and_access_plan(
         "read_domains": read_domains,
         "primary_write_domain": primary_write_domain,
         "secondary_write_domains": secondary_write_domains,
+        "allow_secondary_writes": allow_shared_write,
         "sharing_policy_source": sharing_policy_source,
     }
 

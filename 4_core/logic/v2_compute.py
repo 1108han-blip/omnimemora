@@ -97,6 +97,8 @@ class TokenSavingsMeter:
     secondary_write_domains: List[Dict[str, Any]] = field(default_factory=list)
     sharing_policy_source: Optional[str] = None
     access_plan: Dict[str, Any] = field(default_factory=dict)
+    enforcement_trace: Optional[Dict[str, Any]] = None
+    actual_enforcement: Optional[Dict[str, Any]] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

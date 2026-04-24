@@ -20,7 +20,7 @@ compile_orchestrator.py — Compile Application Entry Point
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 
 
 def _get_gateway_compile():
@@ -137,6 +137,51 @@ def _resolve_upstream_model(
     return requested_model or default_model
 
 
+def _build_identity_and_plan_from_payload(
+    *,
+    request_id: Optional[str],
+    agent_id: str,
+    payload: dict,
+    sharing_policy_source: str,
+) -> Dict[str, Any]:
+    _access_plan = _get_access_plan()
+    tenant = agent_id if agent_id and agent_id != "unknown" else "gateway"
+    try:
+        hints = _access_plan.extract_hints_from_request(request=None, body=payload)
+        if not hints.get("family_id"):
+            hints["family_id"] = agent_id
+        return _access_plan.build_identity_and_access_plan(
+            request_id=request_id or "unknown",
+            family_id=agent_id,
+            hints=hints,
+            sharing_policy_source=sharing_policy_source,
+        )
+    except Exception:
+        return {
+            "identity_spine": {
+                "tenant_id": tenant,
+                "family_id": agent_id or "unknown",
+                "instance_id": agent_id or "unknown",
+                "window_id": None,
+                "session_id": None,
+                "request_id": request_id or "unknown",
+                "raw_agent_id": agent_id or "unknown",
+            },
+            "access_plan": {},
+            "tenant_id": tenant,
+            "family_id": agent_id or "unknown",
+            "instance_id": agent_id or "unknown",
+            "session_id": None,
+            "window_id": None,
+            "raw_agent_id": agent_id or "unknown",
+            "workspace_id": None,
+            "primary_write_domain": None,
+            "read_domains": [],
+            "secondary_write_domains": [],
+            "sharing_policy_source": sharing_policy_source,
+        }
+
+
 async def _run_compile_and_resolve(
     payload: dict,
     agent_id: str,
@@ -174,12 +219,19 @@ async def _run_compile_and_resolve(
     """
     _gc = _get_gateway_compile()
     _tb = _get_truth_bridge()
+    identity_and_plan = _build_identity_and_plan_from_payload(
+        request_id=request_id,
+        agent_id=agent_id,
+        payload=payload,
+        sharing_policy_source="compile_orchestrator_private_first",
+    )
 
     # Step 1: Compile
     compiled_payload, compile_meta = await _gc.run_gateway_compile(
         payload=payload,
         agent_id=agent_id,
         session_id=session_id,
+        access_plan=identity_and_plan.get("access_plan"),
         request_id=request_id,
         trace_id=trace_id,
     )
@@ -253,6 +305,7 @@ async def _run_compile_and_resolve(
         compile_meta=compile_meta,
         truth_contract=truth_contract,
         payload=payload,
+        identity_and_plan=identity_and_plan,
     )
 
     return compiled_payload, compile_meta, truth_contract, truth_meta
@@ -292,11 +345,11 @@ def _persist_gateway_meter(
     compile_meta: dict,
     truth_contract: dict,
     payload: dict,
+    identity_and_plan: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Persist gateway meter artifact in TokenSavingsMeter-compatible shape."""
     _ms = _get_meter_store()
     _v2 = _get_v2_compute()
-    _access_plan = _get_access_plan()
     query = _extract_user_query(payload)
     baseline_tokens = int(compile_meta.get("original_token_estimate") or 0)
     actual_tokens = int(compile_meta.get("compiled_token_estimate") or 0)
@@ -311,40 +364,12 @@ def _persist_gateway_meter(
     saved_tokens = max(0, baseline_tokens - actual_tokens)
     saved_chars = max(0, baseline_chars - actual_chars)
     tenant = agent_id if agent_id and agent_id != "unknown" else "gateway"
-    try:
-        hints = _access_plan.extract_hints_from_request(request=None, body=payload)
-        if not hints.get("family_id"):
-            hints["family_id"] = agent_id
-        identity_and_plan = _access_plan.build_identity_and_access_plan(
-            request_id=request_id or "unknown",
-            family_id=agent_id,
-            hints=hints,
-            sharing_policy_source="compile_orchestrator_private_first",
-        )
-    except Exception:
-        identity_and_plan = {
-            "identity_spine": {
-                "tenant_id": tenant,
-                "family_id": agent_id or "unknown",
-                "instance_id": agent_id or "unknown",
-                "window_id": None,
-                "session_id": None,
-                "request_id": request_id or "unknown",
-                "raw_agent_id": agent_id or "unknown",
-            },
-            "access_plan": {},
-            "tenant_id": tenant,
-            "family_id": agent_id or "unknown",
-            "instance_id": agent_id or "unknown",
-            "session_id": None,
-            "window_id": None,
-            "raw_agent_id": agent_id or "unknown",
-            "workspace_id": None,
-            "primary_write_domain": None,
-            "read_domains": [],
-            "secondary_write_domains": [],
-            "sharing_policy_source": "compile_orchestrator_private_first",
-        }
+    identity_plan = identity_and_plan or _build_identity_and_plan_from_payload(
+        request_id=request_id,
+        agent_id=agent_id,
+        payload=payload,
+        sharing_policy_source="compile_orchestrator_private_first",
+    )
     try:
         meter = _v2.TokenSavingsMeter(
             request_id=request_id or "unknown",
@@ -379,22 +404,24 @@ def _persist_gateway_meter(
             matched_keywords=[],
             candidate_memories=[],
             dropped_memories=[],
-            tenant_id=identity_and_plan["tenant_id"],
-            family_id=identity_and_plan["family_id"],
-            instance_id=identity_and_plan["instance_id"],
-            window_id=identity_and_plan["window_id"],
-            session_id=identity_and_plan["session_id"],
-            raw_agent_id=identity_and_plan["raw_agent_id"] or agent_id,
-            workspace_id=identity_and_plan["workspace_id"],
-            domain_id=(identity_and_plan.get("primary_write_domain") or {}).get("domain_id"),
-            scope_type=(identity_and_plan.get("primary_write_domain") or {}).get("scope_type"),
-            sharing_mode=(identity_and_plan.get("primary_write_domain") or {}).get("sharing_mode"),
-            identity_spine=identity_and_plan["identity_spine"],
-            read_domains=identity_and_plan["read_domains"],
-            primary_write_domain=identity_and_plan["primary_write_domain"],
-            secondary_write_domains=identity_and_plan["secondary_write_domains"],
-            sharing_policy_source=identity_and_plan["sharing_policy_source"],
-            access_plan=identity_and_plan["access_plan"],
+            tenant_id=identity_plan["tenant_id"],
+            family_id=identity_plan["family_id"],
+            instance_id=identity_plan["instance_id"],
+            window_id=identity_plan["window_id"],
+            session_id=identity_plan["session_id"],
+            raw_agent_id=identity_plan["raw_agent_id"] or agent_id,
+            workspace_id=identity_plan["workspace_id"],
+            domain_id=(identity_plan.get("primary_write_domain") or {}).get("domain_id"),
+            scope_type=(identity_plan.get("primary_write_domain") or {}).get("scope_type"),
+            sharing_mode=(identity_plan.get("primary_write_domain") or {}).get("sharing_mode"),
+            identity_spine=identity_plan["identity_spine"],
+            read_domains=identity_plan["read_domains"],
+            primary_write_domain=identity_plan["primary_write_domain"],
+            secondary_write_domains=identity_plan["secondary_write_domains"],
+            sharing_policy_source=identity_plan["sharing_policy_source"],
+            access_plan=identity_plan["access_plan"],
+            enforcement_trace=compile_meta.get("enforcement_trace") if isinstance(compile_meta.get("enforcement_trace"), dict) else None,
+            actual_enforcement=compile_meta.get("enforcement_trace") if isinstance(compile_meta.get("enforcement_trace"), dict) else None,
         )
         _ms.store_meter(meter)
     except Exception:

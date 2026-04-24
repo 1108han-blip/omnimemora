@@ -1219,6 +1219,21 @@ def build_request_evidence_payload(request_id: str) -> Dict[str, Any]:
             "secondary_write_domains": meter_dict.get("secondary_write_domains") or [],
             "sharing_policy_source": meter_dict.get("sharing_policy_source") or "legacy_meter_projection",
         }
+    enforcement_trace = (
+        meter_dict.get("enforcement_trace")
+        if isinstance(meter_dict.get("enforcement_trace"), dict)
+        else None
+    )
+    if enforcement_trace is None and isinstance(meter_dict.get("actual_enforcement"), dict):
+        enforcement_trace = meter_dict.get("actual_enforcement")
+    actual_enforcement: Dict[str, Any]
+    if isinstance(enforcement_trace, dict):
+        actual_enforcement = enforcement_trace
+    else:
+        actual_enforcement = {
+            "status": "unavailable",
+            "reason": "runtime_enforcement_trace_unavailable",
+        }
 
     status = _infer_request_status(meter_dict, chain_dict)
     nodes = _derive_product_nodes(meter_dict, chain_dict)
@@ -1244,6 +1259,8 @@ def build_request_evidence_payload(request_id: str) -> Dict[str, Any]:
             "query_summary": meter_dict.get("query", "")[:100],
         },
         "access_plan": access_plan,
+        "enforcement_trace": enforcement_trace,
+        "actual_enforcement": actual_enforcement,
         "request_class": _classify_meter_request(meter),
         "status": status,
         "context": {

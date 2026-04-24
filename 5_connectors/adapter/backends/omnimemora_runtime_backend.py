@@ -86,12 +86,14 @@ class OmniMemoraRuntimeBackend(MemoryBackend):
         response.raise_for_status()
         return response.json()
 
-    async def search(self, request: MemorySearchRequest) -> MemorySearchResult:
+    async def search(self, request: MemorySearchRequest, **kwargs) -> MemorySearchResult:
         """Search via POST /memory/search"""
         body = {
             "query": request.query,
             "limit": request.limit,
         }
+        if isinstance(request.access_plan, dict) and request.access_plan:
+            body["access_plan"] = request.access_plan
         result = await self._runtime_request("POST", "/memory/search", json=body)
 
         memories = []
@@ -104,14 +106,16 @@ class OmniMemoraRuntimeBackend(MemoryBackend):
                 metadata={},
                 created_at=item.get("created_at"),
                 score=item.get("score"),
+                enforcement_trace=None,
             ))
         return MemorySearchResult(
             memories=memories,
             total=result.get("total", len(memories)),
             query=request.query,
+            enforcement_trace=result.get("enforcement_trace") if isinstance(result.get("enforcement_trace"), dict) else None,
         )
 
-    async def write(self, request: MemoryWriteRequest) -> MemoryRecord:
+    async def write(self, request: MemoryWriteRequest, **kwargs) -> MemoryRecord:
         """Write via POST /memory/write"""
         body = {
             "content": request.content,
@@ -120,6 +124,8 @@ class OmniMemoraRuntimeBackend(MemoryBackend):
             "metadata": request.metadata,
             "overwrite": request.overwrite,
         }
+        if isinstance(request.access_plan, dict) and request.access_plan:
+            body["access_plan"] = request.access_plan
         result = await self._runtime_request("POST", "/memory/write", json=body)
 
         return MemoryRecord(
@@ -129,6 +135,7 @@ class OmniMemoraRuntimeBackend(MemoryBackend):
             scope_ref=request.scope_ref,
             metadata=request.metadata,
             created_at=result.get("created_at"),
+            enforcement_trace=result.get("enforcement_trace") if isinstance(result.get("enforcement_trace"), dict) else None,
         )
 
     async def read(self, memory_id: str) -> Optional[MemoryRecord]:

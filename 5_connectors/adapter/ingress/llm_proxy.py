@@ -327,10 +327,27 @@ async def _compile_or_passthrough_for_route(
         meta["task_type"] = _classify_task_type_for_payload(payload)
         return dict(payload), meta
 
+    runtime_access_plan: Optional[dict] = None
+    try:
+        access_plan_mod = importlib.import_module("5_connectors.adapter.application.access_plan")
+        hints = access_plan_mod.extract_hints_from_request(request=None, body=payload)
+        if not hints.get("family_id"):
+            hints["family_id"] = agent_id
+        identity_and_plan = access_plan_mod.build_identity_and_access_plan(
+            request_id=request_id,
+            family_id=agent_id,
+            hints=hints,
+            sharing_policy_source="ingress_private_first",
+        )
+        runtime_access_plan = identity_and_plan.get("access_plan")
+    except Exception:
+        runtime_access_plan = None
+
     return await _gc.run_gateway_compile(
         payload=payload,
         agent_id=agent_id,
         session_id=None,
+        access_plan=runtime_access_plan,
         request_id=request_id,
         trace_id=trace_id,
     )
@@ -1931,6 +1948,8 @@ def _persist_gateway_meter(
             secondary_write_domains=identity_and_plan["secondary_write_domains"],
             sharing_policy_source=identity_and_plan["sharing_policy_source"],
             access_plan=identity_and_plan["access_plan"],
+            enforcement_trace=compile_meta.get("enforcement_trace") if isinstance(compile_meta.get("enforcement_trace"), dict) else None,
+            actual_enforcement=compile_meta.get("enforcement_trace") if isinstance(compile_meta.get("enforcement_trace"), dict) else None,
         )
         _meter_store.store_meter(meter)
     except Exception as exc:

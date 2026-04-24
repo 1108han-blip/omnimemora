@@ -28,6 +28,7 @@ class MemorySearchRequest:
     scope_ref: str = "default"
     score_threshold: float = 0.0
     metadata_filter: Optional[Dict[str, Any]] = None
+    access_plan: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -40,6 +41,7 @@ class MemoryRecord:
     metadata: Dict[str, Any] = field(default_factory=dict)
     created_at: Optional[datetime] = None
     score: Optional[float] = None
+    enforcement_trace: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -48,6 +50,7 @@ class MemorySearchResult:
     memories: List[MemoryRecord]
     total: int
     query: Optional[str] = None
+    enforcement_trace: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -58,6 +61,7 @@ class MemoryWriteRequest:
     scope_ref: str
     metadata: Dict[str, Any] = field(default_factory=dict)
     overwrite: bool = False
+    access_plan: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -82,7 +86,7 @@ class MemoryBackend(ABC):
         pass
 
     @abstractmethod
-    async def search(self, request: MemorySearchRequest) -> MemorySearchResult:
+    async def search(self, request: MemorySearchRequest, **kwargs) -> MemorySearchResult:
         """Search memory records
 
         Args:
@@ -94,7 +98,7 @@ class MemoryBackend(ABC):
         pass
 
     @abstractmethod
-    async def write(self, request: MemoryWriteRequest) -> MemoryRecord:
+    async def write(self, request: MemoryWriteRequest, **kwargs) -> MemoryRecord:
         """Write a memory record
 
         Args:

@@ -77,7 +77,20 @@ class _DummyMeter:
             "read_domains": self.read_domains,
             "primary_write_domain": self.primary_write_domain,
             "secondary_write_domains": self.secondary_write_domains,
+            "allow_secondary_writes": False,
             "sharing_policy_source": self.sharing_policy_source,
+        }
+        self.enforcement_trace = {
+            "planned_read_domains": self.read_domains,
+            "planned_write_domains": [self.primary_write_domain],
+            "actual_enforced_domains": [
+                {
+                    "domain_id": self.primary_write_domain["domain_id"],
+                    "operation": "query",
+                    "decision": "applied",
+                    "result_count": 1,
+                }
+            ],
         }
 
     def to_dict(self):
@@ -102,6 +115,8 @@ class _DummyMeter:
             "secondary_write_domains": self.secondary_write_domains,
             "sharing_policy_source": self.sharing_policy_source,
             "access_plan": self.access_plan,
+            "enforcement_trace": self.enforcement_trace,
+            "actual_enforcement": self.enforcement_trace,
         }
 
 
@@ -114,6 +129,8 @@ class _LegacyDummyMeter(_DummyMeter):
         payload.pop("primary_write_domain", None)
         payload.pop("secondary_write_domains", None)
         payload.pop("sharing_policy_source", None)
+        payload.pop("enforcement_trace", None)
+        payload.pop("actual_enforcement", None)
         return payload
 
 
@@ -229,6 +246,8 @@ def test_request_evidence_includes_identity_spine_and_access_plan():
     assert payload["request"]["identity"]["instance_id"] == "codex-instance-a"
     assert payload["access_plan"]["primary_write_domain"]["scope_type"] == "instance_private"
     assert payload["access_plan"]["sharing_policy_source"] == "ingress_private_first"
+    assert payload["enforcement_trace"]["actual_enforced_domains"][0]["decision"] == "applied"
+    assert payload["actual_enforcement"]["actual_enforced_domains"][0]["domain_id"].startswith("tenant-test:")
 
 
 def test_request_evidence_legacy_meter_keeps_stable_access_plan_shape():
@@ -245,3 +264,6 @@ def test_request_evidence_legacy_meter_keeps_stable_access_plan_shape():
     assert "access_plan" in payload
     assert isinstance(payload["access_plan"], dict)
     assert "read_domains" in payload["access_plan"]
+    assert payload["enforcement_trace"] is None
+    assert payload["actual_enforcement"]["status"] == "unavailable"
+    assert payload["actual_enforcement"]["reason"] == "runtime_enforcement_trace_unavailable"

@@ -210,6 +210,8 @@ async def fetch_memory_candidates(
     agent_id: str,
     limit: int = 16,
     scope: str = "agent",
+    access_plan: Optional[Dict[str, Any]] = None,
+    enforcement_capture: Optional[Dict[str, Any]] = None,
     request_id: Optional[str] = None,
     trace_id: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
@@ -227,11 +229,18 @@ async def fetch_memory_candidates(
                 scope=scope,
                 scope_ref=agent_id,
                 score_threshold=0.0,
+                access_plan=access_plan if isinstance(access_plan, dict) else None,
             ),
             request_id=request_id,
             trace_id=trace_id,
             agent_id=agent_id,
         )
+        if enforcement_capture is not None:
+            enforcement_capture["enforcement_trace"] = (
+                search_result.enforcement_trace
+                if isinstance(search_result.enforcement_trace, dict)
+                else None
+            )
         memories = []
         for record in search_result.memories:
             memories.append(
