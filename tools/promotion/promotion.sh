@@ -124,6 +124,157 @@ except Exception:
     echo "$parsed"
 }
 
+is_number() {
+    local value="${1:-}"
+    [[ "$value" =~ ^[0-9]+([.][0-9]+)?$ ]]
+}
+
+read_runtime_health_uptime() {
+    local payload
+    payload=$(curl -sf --connect-timeout 5 "http://127.0.0.1:${RUNTIME_PORT}/health" 2>/dev/null || true)
+    if [ -z "$payload" ]; then
+        echo "unknown"
+        return 1
+    fi
+    local parsed
+    parsed=$(printf '%s' "$payload" | python3 -c '
+import json, sys
+try:
+    obj = json.load(sys.stdin)
+    val = obj.get("uptime_seconds", "unknown")
+    print(val)
+except Exception:
+    print("unknown")
+' 2>/dev/null || true)
+    if [ -z "$parsed" ]; then
+        echo "unknown"
+        return 1
+    fi
+    echo "$parsed"
+}
+
+read_runtime_pid() {
+    local launchd_pid=""
+    if command -v launchctl >/dev/null 2>&1; then
+        launchd_pid=$(launchctl print "gui/$(id -u)/com.omnimemora.runtime" 2>/dev/null | awk '/pid = /{print $3; exit}' || true)
+        if [ -n "$launchd_pid" ] && [[ "$launchd_pid" =~ ^[0-9]+$ ]] && [ "$launchd_pid" -gt 0 ]; then
+            echo "$launchd_pid"
+            return 0
+        fi
+    fi
+
+    local pgrep_pid=""
+    pgrep_pid=$(pgrep -f "omnimemora-runtime.*serve" 2>/dev/null | head -n 1 || true)
+    if [ -n "$pgrep_pid" ] && [[ "$pgrep_pid" =~ ^[0-9]+$ ]] && [ "$pgrep_pid" -gt 0 ]; then
+        echo "$pgrep_pid"
+        return 0
+    fi
+
+    echo "unknown"
+    return 1
+}
+
+read_runtime_command() {
+    local pid="${1:-unknown}"
+    if [ -z "$pid" ] || [ "$pid" = "unknown" ]; then
+        echo "unknown"
+        return 1
+    fi
+    local cmd=""
+    cmd=$(ps -p "$pid" -o command= 2>/dev/null | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' || true)
+    if [ -z "$cmd" ]; then
+        echo "unknown"
+        return 1
+    fi
+    echo "$cmd"
+}
+
+# runtime fingerprint（pid|uptime_seconds|command）
+read_runtime_fingerprint() {
+    local pid uptime cmd
+    pid=$(read_runtime_pid || true)
+    uptime=$(read_runtime_health_uptime || true)
+    cmd=$(read_runtime_command "$pid" || true)
+    [ -n "$pid" ] || pid="unknown"
+    [ -n "$uptime" ] || uptime="unknown"
+    [ -n "$cmd" ] || cmd="unknown"
+    echo "${pid}|${uptime}|${cmd}"
+}
+
+wait_runtime_health() {
+    local retries="${1:-25}"
+    local delay="${2:-1}"
+    local i
+    for ((i=1; i<=retries; i++)); do
+        if curl -sf --connect-timeout 3 "http://127.0.0.1:${RUNTIME_PORT}/health" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep "$delay"
+    done
+    return 1
+}
+
+runtime_fingerprint_indicates_change() {
+    local pre_pid="$1"
+    local pre_uptime="$2"
+    local post_pid="$3"
+    local post_uptime="$4"
+
+    if [ -z "$post_pid" ] || [ "$post_pid" = "unknown" ]; then
+        return 1
+    fi
+
+    if [ -n "$pre_pid" ] && [ "$pre_pid" != "unknown" ] && [ "$post_pid" = "$pre_pid" ]; then
+        return 1
+    fi
+
+    if is_number "$pre_uptime" && is_number "$post_uptime"; then
+        if awk -v pre="$pre_uptime" -v post="$post_uptime" 'BEGIN{exit !(post < pre)}'; then
+            return 0
+        fi
+        # short window fallback: post uptime is fresh right after restart
+        if awk -v post="$post_uptime" 'BEGIN{exit !(post <= 120)}'; then
+            return 0
+        fi
+        return 1
+    fi
+
+    return 0
+}
+
+restart_runtime_with_method() {
+    local method="$1"
+    local service_runtime_dir="$2"
+    local launchd_label="gui/$(id -u)/com.omnimemora.runtime"
+
+    case "$method" in
+        launchctl_kickstart_k)
+            launchctl kickstart -k "$launchd_label" >/dev/null 2>&1
+            ;;
+        launchctl_stop_start)
+            launchctl stop "$launchd_label" >/dev/null 2>&1 || true
+            sleep 2
+            launchctl start "$launchd_label" >/dev/null 2>&1
+            ;;
+        direct_kill_start_fallback|direct_kill_start)
+            local runtime_pids
+            runtime_pids=$(pgrep -f "omnimemora-runtime.*serve" 2>/dev/null || true)
+            if [ -n "$runtime_pids" ]; then
+                kill $runtime_pids 2>/dev/null || true
+                sleep 2
+            fi
+            OMNIMEMORA_RUNTIME_PORT="$RUNTIME_PORT" \
+            OMNIMEMORA_ADAPTER_PORT="$ADAPTER_PORT" \
+            "$service_runtime_dir" serve >"$LOG_DIR/runtime_promotion.out.log" 2>"$LOG_DIR/runtime_promotion.err.log" &
+            ;;
+        *)
+            return 1
+            ;;
+    esac
+
+    return 0
+}
+
 # 前置条件校验
 check_prerequisites() {
     log_info "=== 前置条件校验 ===" | log_output
@@ -231,39 +382,124 @@ promote_runtime() {
     cp "$runtime_bin" "$service_runtime_dir"
     log_info "Runtime 同步完成" | log_output
 
-    # 3. 受控重载（通过 launchd 管理）
+    # 3. 受控重载 + restart truth gate
     log_info "[3/4] 重载 Runtime ..." | log_output
+    local pre_fingerprint pre_pid pre_uptime pre_command
+    pre_fingerprint=$(read_runtime_fingerprint)
+    IFS='|' read -r pre_pid pre_uptime pre_command <<< "$pre_fingerprint"
+    log_info "  pre-fingerprint: pid=$pre_pid uptime_seconds=$pre_uptime" | log_output
+    log_info "  pre-command: $pre_command" | log_output
+    echo "runtime_pre_pid=$pre_pid" >> "$PROMOTION_LOG"
+    echo "runtime_pre_uptime_seconds=$pre_uptime" >> "$PROMOTION_LOG"
+    echo "runtime_pre_command=$pre_command" >> "$PROMOTION_LOG"
+
+    local restart_method="unknown"
+    local restart_truth="unchanged"
+    local post_pid="unknown"
+    local post_uptime="unknown"
+    local post_command="unknown"
+    local launchctl_available=0
     if command -v launchctl >/dev/null 2>&1; then
-        log_info "  通过 launchd 重载 Runtime ..." | log_output
-        launchctl stop "gui/$(id -u)/com.omnimemora.runtime" 2>/dev/null || true
-        sleep 2
-        launchctl start "gui/$(id -u)/com.omnimemora.runtime" 2>/dev/null || true
-    else
-        # Fallback: 直接重启
-        log_info "  launchctl 不可用，使用直接重启 ..." | log_output
-        local runtime_pid
-        runtime_pid=$(pgrep -f "omnimemora-runtime.*serve" 2>/dev/null || true)
-        if [ -n "$runtime_pid" ]; then
-            kill "$runtime_pid" 2>/dev/null || true
-            sleep 2
-        fi
-        OMNIMEMORA_RUNTIME_PORT="$RUNTIME_PORT" \
-        OMNIMEMORA_ADAPTER_PORT="$ADAPTER_PORT" \
-        "$service_runtime_dir" serve >"$LOG_DIR/runtime_promotion.out.log" 2>"$LOG_DIR/runtime_promotion.err.log" &
+        launchctl_available=1
     fi
-    sleep 3
+
+    local methods=()
+    if [ "$launchctl_available" -eq 1 ]; then
+        methods=("launchctl_kickstart_k" "launchctl_stop_start" "direct_kill_start_fallback")
+    else
+        methods=("direct_kill_start")
+    fi
+
+    local method
+    for method in "${methods[@]}"; do
+        case "$method" in
+            launchctl_kickstart_k)
+                log_info "  优先使用 launchctl kickstart -k 重启 Runtime ..." | log_output
+                ;;
+            launchctl_stop_start)
+                log_warn "  kickstart 未生效，回退 launchctl stop/start ..." | log_output
+                ;;
+            direct_kill_start_fallback)
+                log_warn "  stop/start 未生效，回退 direct kill+start ..." | log_output
+                ;;
+            direct_kill_start)
+                log_info "  launchctl 不可用，使用 direct kill+start ..." | log_output
+                ;;
+        esac
+
+        if ! restart_runtime_with_method "$method" "$service_runtime_dir"; then
+            log_warn "  重启方法失败: $method" | log_output
+            continue
+        fi
+
+        if ! wait_runtime_health 30 1; then
+            log_warn "  Runtime 健康未恢复: $method" | log_output
+            continue
+        fi
+
+        local current_fingerprint
+        current_fingerprint=$(read_runtime_fingerprint)
+        IFS='|' read -r post_pid post_uptime post_command <<< "$current_fingerprint"
+        log_info "  post-fingerprint[$method]: pid=$post_pid uptime_seconds=$post_uptime" | log_output
+        log_info "  post-command[$method]: $post_command" | log_output
+
+        if runtime_fingerprint_indicates_change "$pre_pid" "$pre_uptime" "$post_pid" "$post_uptime"; then
+            restart_method="$method"
+            restart_truth="changed"
+            break
+        fi
+    done
 
     # 4. 验证
     log_info "[4/4] 验证 Runtime ..." | log_output
-    if curl -sf "http://127.0.0.1:${RUNTIME_PORT}/health" >/dev/null 2>&1; then
-        log_info "Runtime 健康检查通过" | log_output
-        echo "runtime:promoted" >> "$PROMOTION_LOG"
-        return 0
-    else
-        log_error "Runtime 健康检查失败"
-        echo "runtime:failed:health_check" >> "$PROMOTION_LOG"
+    echo "runtime_post_pid=$post_pid" >> "$PROMOTION_LOG"
+    echo "runtime_post_uptime_seconds=$post_uptime" >> "$PROMOTION_LOG"
+    echo "runtime_post_command=$post_command" >> "$PROMOTION_LOG"
+    echo "runtime_restart_truth=$restart_truth" >> "$PROMOTION_LOG"
+    echo "runtime_restart_method=$restart_method" >> "$PROMOTION_LOG"
+
+    if ! curl -sf "http://127.0.0.1:${RUNTIME_PORT}/health" >/dev/null 2>&1; then
+        log_error "Runtime 健康检查失败：API 不可达" | log_output
+        echo "runtime:failed:api_unreachable" >> "$PROMOTION_LOG"
         return 1
     fi
+
+    if [ -z "$post_pid" ] || [ "$post_pid" = "unknown" ]; then
+        log_error "Runtime restart 失败：post pid 为空或 unknown" | log_output
+        echo "runtime:failed:runtime_restart_not_effective" >> "$PROMOTION_LOG"
+        return 1
+    fi
+
+    if [ -n "$pre_pid" ] && [ "$pre_pid" != "unknown" ] && [ "$post_pid" = "$pre_pid" ]; then
+        log_error "Runtime restart 失败：pid 未变化 (pre=$pre_pid post=$post_pid)" | log_output
+        echo "runtime:failed:runtime_restart_pid_unchanged" >> "$PROMOTION_LOG"
+        return 1
+    fi
+
+    if is_number "$pre_uptime" && is_number "$post_uptime"; then
+        if ! awk -v pre="$pre_uptime" -v post="$post_uptime" 'BEGIN{exit (post < pre || post <= 120) ? 0 : 1}'; then
+            log_error "Runtime restart 失败：uptime 未重置且不在短窗口 (pre=$pre_uptime post=$post_uptime)" | log_output
+            echo "runtime:failed:runtime_restart_not_effective" >> "$PROMOTION_LOG"
+            return 1
+        fi
+    fi
+
+    local expected_runtime_cmd="$CURRENT_SERVICE_DIR/tools/omnimemora-runtime"
+    if [[ "$post_command" != *"$expected_runtime_cmd"* ]]; then
+        log_error "Runtime command 不匹配 running reality: $post_command" | log_output
+        echo "runtime:failed:command_mismatch" >> "$PROMOTION_LOG"
+        return 1
+    fi
+
+    if [ "$restart_truth" != "changed" ]; then
+        log_error "Runtime restart truth 未通过：fingerprint 未变化" | log_output
+        echo "runtime:failed:runtime_restart_not_effective" >> "$PROMOTION_LOG"
+        return 1
+    fi
+
+    log_info "Runtime 健康检查通过，restart truth 已通过" | log_output
+    echo "runtime:promoted" >> "$PROMOTION_LOG"
+    return 0
 }
 
 # Adapter promotion
