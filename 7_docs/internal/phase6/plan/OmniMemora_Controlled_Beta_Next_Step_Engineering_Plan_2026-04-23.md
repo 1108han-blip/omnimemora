@@ -396,6 +396,44 @@ Boundary:
 - no Codex validation
 - no UI/data-logic expansion
 
+### CSP-001 Compile Strategy Policy Snapshot (2026-04-24)
+
+**Result:** pass
+
+CSP-001 adds a local-first compile strategy policy layer to the Go runtime. The cloud is never involved in compile decisions; the local active policy is always authoritative. This is a pure repo-only batch with no running reality changes.
+
+**Commits:**
+
+- `a1dcad3 docs(runtime): add compile strategy policy design`
+- `08dc207 runtime: add local compile strategy policy manager`
+- `6d654c8 test(runtime): harden compile strategy policy contracts`
+
+**Repo reality:**
+
+- local-only compile strategy policy manager implemented (`policy/manager.go`)
+- bundled `local-default-v1` mirrors current hardcoded defaults exactly
+- service strategy resolution wired through policy manager (no hot-path change)
+- metering/SQLite persist five CSP evidence fields:
+  - `compile_strategy_policy_version`
+  - `compile_strategy_policy_source`
+  - `context_strategy_requested`
+  - `context_strategy_resolved`
+  - `context_mode_resolved`
+- repo contract tests cover 11 CSP paths (SQLite persistence, runtime metering, policy fallback, no-auto-promote boundary)
+- `go test ./...` → all ok
+
+**Explicit boundaries:**
+
+- no cloud compile
+- no per-request remote strategy decision
+- no automatic promotion
+- no promotion/live validation yet
+- no Codex validation
+- no UI/data-logic expansion
+- recommendation policy remains a separate family (`recommendation_policy` ≠ `compile_strategy_policy`)
+
+**Next batch:** CSP-001 running validation (runtime+adapter promotion; non-Codex request evidence check; verify meter/request_evidence expose policy version/source and requested/resolved strategy; Codex remains protected/deferred as local validation client)
+
 ### Current Gate Override (2026-04-24)
 
 - `Codex is product-compatible in principle, but protected/deferred as a local validation client.`
