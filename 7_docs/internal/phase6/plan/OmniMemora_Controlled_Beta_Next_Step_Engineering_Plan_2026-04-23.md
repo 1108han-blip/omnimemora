@@ -271,6 +271,37 @@ Boundary:
 - UI relief closeout only proves frontend no longer amplifies `/agents/control`.
 - Backend diagnosis record is evidence-only and does not include backend code/schema changes.
 
+### /agents/control Snapshot Cache Closeout Snapshot (2026-04-24)
+
+**Status summary:**
+
+- agents-control timeout tail stabilized.
+- CPU p95 residual remains.
+
+Record link:
+
+- `OmniMemora_Agents_Control_Snapshot_Cache_Closeout_2026-04-24.md`
+
+Key evidence:
+
+- commit `accfcfc`
+- promotion log `promotion_20260424_235103.log`
+- 120-request sampling:
+  - timeout ratio: `61.67% -> 1.67%`
+  - CPU mean: `85.96% -> 54.88%`
+  - CPU p95: `91.9% -> 92.8%` (residual)
+
+Conclusion boundary:
+
+- This closes the timeout-tail stabilization objective.
+- Backend performance line is not declared full pass because CPU p95 gate is still residual.
+
+Optional next backend batch (if CPU p95 reduction is still required):
+
+- cold-cache singleflight
+- rebuild-path split
+- incremental summaries
+
 ### AccessPlan Projection Layer Snapshot (2026-04-24)
 
 **Result:** pass (projection layer scope)
