@@ -134,6 +134,34 @@ OmniMemora 不做：
 
 > OmniMemora 不是一個由 agent 自主決定是否調用的增強工具；它是一個由用戶在 UI 中顯式控制接入與路由的本地網關層。
 
+## 3.1 Data Lifecycle Plane 邊界修正（2026-04-25）
+
+本節把 Data Lifecycle Plane 明確定義為**產品架構修正主線**，而不是 UI 優化或 CSP 後續增量。
+
+### 三類數據必須分離
+
+| 類別 | 定義 | 本產品責任 |
+|------|------|------------|
+| 用戶端記憶（Client Memory） | Claude Code / OpenClaw / Codex / plugin / skill 在各自客戶端或第三方插件持有的本地記憶 | **不讀取、不修改、不清理、不治理** |
+| OmniMemora 產品記憶（Product Memory） | OmniMemora 內部記憶面在產品路徑中使用的記憶內容 | 本產品負責其路徑使用與治理策略，但本節第一階段不刪除核心記憶內容 |
+| 運行證據與遙測（Evidence/Telemetry） | telemetry、evidence、meter、trace、summary、maintenance state | Data Lifecycle Plane 的第一治理對象 |
+
+### 治理對象與非目標
+
+Data Lifecycle Plane 只治理 OmniMemora 內部 evidence/telemetry 資產的生命周期，不擴張到用戶端記憶控制。
+
+明確非目標：
+
+- 不把客戶端記憶納入 OmniMemora 清理範圍。
+- 不侵入第三方記憶插件或 skill 數據。
+- 不把 `5173` 變成生命周期決策層。
+- 不改變 `18011` 用戶請求協議語義。
+
+### 第一階段硬約束
+
+- 第一階段不刪除產品核心記憶內容。
+- 若後續涉及產品記憶壓縮/歸檔，必須單獨設計用戶可見策略與獨立驗收 gate。
+
 ---
 
 ## 4. 技術實現約束
@@ -188,6 +216,11 @@ Gateway 位於本機應用層，先於用戶系統代理生效。
 - `:5173` = 用戶控制入口
 - `:18011` = 用戶開啟產品路由後的唯一產品數據入口
 - `:8765` = 內部 memory plane
+
+Data Lifecycle Plane 附加口徑：
+
+- `5173` 只顯示維護狀態並觸發手動維護，不定義生命周期規則。
+- `18011` 仍是產品數據入口，維護平面不得改寫既有請求協議。
 
 ## 5.1 Agent Identity Mature-State Target
 

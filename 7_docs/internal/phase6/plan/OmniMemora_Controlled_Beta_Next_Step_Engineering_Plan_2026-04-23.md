@@ -20,6 +20,13 @@ last_verified_commit: ""
 **Goal:** 把“轻量对外试用”与“本机直接反馈链修顺”收敛为一条可连续执行的工程主线  
 **Phase Note:** 不新增 roadmap phase，不改 `ROADMAP.md` 正式 phase 编号
 
+### Mainline Transition Note (2026-04-25)
+
+- This document remains as the controlled-beta execution line record.
+- The active formal architecture correction mainline is moved to Data Lifecycle Plane:
+  - `OmniMemora_Data_Lifecycle_Plane_Mainline_Launch_2026-04-25.md`
+- Data Lifecycle Plane is not a CSP follow-up enhancement and not a 5173 UI optimization extension.
+
 ---
 
 ## 1. 主线目标
