@@ -7,6 +7,7 @@ from typing import Optional, List, Dict, Any, Union
 import glob as _glob
 import os
 import tempfile
+import time
 
 # 兼容数字开头包：用 importlib 动态导入
 import importlib
@@ -18,6 +19,9 @@ TokenSavingsMeter = _4_core.TokenSavingsMeter
 _meter_store: Dict[str, TokenSavingsMeter] = {}
 _usage_aggregates: Dict[str, List[TokenSavingsMeter]] = {}
 _persistence_loaded = False
+_pending_persist: List[TokenSavingsMeter] = []
+_last_persist_ts: float = 0.0
+_persist_interval_seconds: float = float(os.getenv("OMNIMEMORA_METER_PERSIST_INTERVAL_SECONDS", "3"))
 
 
 # ------------------------------------------------------------------
@@ -106,6 +110,40 @@ def persist_tenant_aggregate(tenant: str, meter: TokenSavingsMeter) -> None:
     _atomic_write_json(agg_path, agg_list)
 
 
+def _flush_pending_persistence() -> None:
+    """
+    Flush pending meter updates in one batch.
+    This avoids per-request full-file read+rewrite amplification.
+    """
+    global _pending_persist
+    if not _pending_persist:
+        return
+
+    pending = _pending_persist
+    _pending_persist = []
+
+    idx_path = _meter_index_path()
+    index: Dict[str, Any] = _safe_read_json(idx_path) or {}
+    tenant_buffers: Dict[str, List[Dict[str, Any]]] = {}
+
+    touched_tenants: set[str] = set()
+    for meter in pending:
+        meter_dict = meter.to_dict()
+        index[meter.request_id] = meter_dict
+        touched_tenants.add(meter.tenant)
+
+    for tenant in touched_tenants:
+        agg_path = _tenant_aggregate_path(tenant)
+        tenant_buffers[tenant] = _safe_read_json(agg_path) or []
+
+    for meter in pending:
+        tenant_buffers[meter.tenant].append(meter.to_dict())
+
+    _atomic_write_json(idx_path, index)
+    for tenant, rows in tenant_buffers.items():
+        _atomic_write_json(_tenant_aggregate_path(tenant), rows)
+
+
 def load_meter(request_id: str) -> Optional[Dict[str, Any]]:
     """Load a single meter dict from the shared index (lazy disk fallback)."""
     index: Dict[str, Any] = _safe_read_json(_meter_index_path()) or {}
@@ -183,9 +221,13 @@ def store_meter(meter: Union[TokenSavingsMeter, Dict[str, Any]]) -> None:
         _usage_aggregates[tenant] = []
     _usage_aggregates[tenant].append(meter)
 
+    global _last_persist_ts
     try:
-        persist_meter(meter)
-        persist_tenant_aggregate(tenant, meter)
+        _pending_persist.append(meter)
+        now = time.time()
+        if _persist_interval_seconds <= 0 or (now - _last_persist_ts) >= _persist_interval_seconds:
+            _flush_pending_persistence()
+            _last_persist_ts = now
     except Exception:
         pass  # best-effort
 

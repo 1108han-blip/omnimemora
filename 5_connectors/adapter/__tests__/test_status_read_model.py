@@ -57,6 +57,7 @@ class MockMeterStore:
     def __init__(self, meters, persisted_index=None):
         self._usage_aggregates = {"default": meters}
         self._persisted_index = persisted_index or {}
+        self._meter_store = persisted_index or {}  # in-memory index for fallback lookups
         self.TokenSavingsMeter = MockMeterStore._PersistedMeter
 
     def _ensure_persistence_loaded(self):
@@ -250,10 +251,12 @@ def test_compute_family_24h_metrics_observed_last_request_at_priority_and_zero_k
 
 
 def test_derive_traffic_truth_uses_persisted_meter_fallback_when_aggregate_missing():
-    """Observed truth should still be detected when meter only exists in persisted index."""
+    """Observed truth should still be detected when meter only exists in in-memory _meter_store index."""
     import adapter.application.status_read_model as srm
 
     ts = datetime.now(timezone.utc).isoformat()
+    # _meter_store is the in-memory index used as fallback when no aggregate is present.
+    # Each value must be a dict with request_id + baseline_tokens_estimate >= 50.
     persisted = {
         "req-openclaw-fallback-1": {
             "request_id": "req-openclaw-fallback-1",

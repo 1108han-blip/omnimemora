@@ -14,6 +14,17 @@ import type {
 } from './types';
 
 const API_BASE = '';
+const CONTROL_REQUEST_TIMEOUT_MS = 4000;
+
+async function fetchWithTimeout(input: string, timeoutMs: number, init?: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
 
 export async function fetchMetricsSummary(tenant: string = 'all'): Promise<MetricsSummary> {
   const r = await fetch(`${API_BASE}/metrics/summary?tenant=${encodeURIComponent(tenant)}`);
@@ -124,8 +135,16 @@ export async function fetchAgentMetrics(agentId?: string): Promise<LiveAgent[]> 
 }
 
 export async function fetchAgentControls(): Promise<AgentControlResponse> {
-  const r = await fetch(`${API_BASE}/agents/control`);
-  if (!r.ok) throw new Error(`Failed to fetch agent controls: ${r.statusText}`);
+  let r: Response;
+  try {
+    r = await fetchWithTimeout(`${API_BASE}/agents/control`, CONTROL_REQUEST_TIMEOUT_MS);
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error(`Failed to fetch agent controls: timeout after ${CONTROL_REQUEST_TIMEOUT_MS}ms`);
+    }
+    throw error;
+  }
+  if (!r.ok) throw new Error(`Failed to fetch agent controls: ${r.status} ${r.statusText}`);
   return r.json();
 }
 

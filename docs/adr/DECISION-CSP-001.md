@@ -153,12 +153,20 @@ CLI commands delivered:
 
 The cloud candidate download path remains deferred (see Next Batch below).
 
-### 8 — Cloud candidate download (deferred)
+### 8 — Cloud candidate download (implemented)
 
-The cloud candidate download path is out of scope for the first
-implementation batch.  The `manifest.json` `candidate_version` field
-exists as a place-holder so that future cloud integration can set it
-without requiring a schema change.
+The cloud candidate download path is delivered as of 2026-04-24 (commit `eabe930`).
+A pull-style HTTP fetch entry (`omnimemora fetch-candidate <cloud-url> <candidate-id>`)
+reads a candidate pack from a configurable cloud URL and writes it to the local
+candidate cache via the same `AcceptCandidate()` path as local import — no second
+candidate-write logic.
+
+Explicit boundaries:
+- Cloud only distributes candidate pack; does not participate in compile decisions.
+- No per-request remote strategy decision.
+- No auto-promote; candidate staged only.
+- No background polling; each invocation is one discrete HTTP GET.
+- On HTTP/parse/validation/write failure, manifest and candidate file are unchanged.
 
 ---
 

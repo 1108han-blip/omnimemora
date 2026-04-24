@@ -346,48 +346,50 @@ def _collect_observed_family_meters(family_id: str, window_minutes: int = 30) ->
         for m in meters:
             _maybe_add_meter(m)
 
-    # Fallback source: persisted index snapshot (covers aggregate/index drift windows)
-    load_state = getattr(meter_store, "load_persisted_state", None)
-    meter_cls = getattr(meter_store, "TokenSavingsMeter", None)
-    if callable(load_state) and meter_cls is not None:
-        try:
-            persisted_index, _ = load_state()
-        except Exception:
-            persisted_index = {}
-        for meter_dict in (persisted_index or {}).values():
-            try:
-                meter_obj = meter_cls(**meter_dict)
-            except Exception:
-                continue
-            _maybe_add_meter(meter_obj)
-
-    # Secondary fallback: recent proxy request IDs resolved through meter getter.
+    # Secondary fallback: recent proxy request IDs resolved through in-memory meter index.
+    # Keep this path memory-only to avoid per-request disk replay under load.
     try:
         proxy_store = __import__("5_connectors.adapter.infrastructure.proxy_store", fromlist=["dummy"])
-        recent_events = proxy_store.read_recent_events(limit=5000)
+        recent_events = proxy_store.read_recent_events(limit=1000)
     except Exception:
         recent_events = []
+    meter_memory_index = getattr(meter_store, "_meter_store", None)
     meter_getter = _diag_get_meter_fn if callable(_diag_get_meter_fn) else getattr(meter_store, "get_meter", None)
-    if callable(meter_getter):
-        for event in recent_events:
-            try:
-                if event.get("type") != "proxy_request":
+    if isinstance(meter_memory_index, dict) or callable(meter_getter):
+        if len(recent_events) == 0 and isinstance(meter_memory_index, dict):
+            for event in recent_events:
+                try:
+                    if event.get("type") != "proxy_request":
+                        continue
+                    ts = float(event.get("timestamp") or 0)
+                    if ts < cutoff_epoch:
+                        continue
+                    agent_id = str(event.get("agent_id") or "")
+                    if _normalize_agent_to_family(agent_id) != family_id:
+                        continue
+                    request_id = str(event.get("request_id") or "")
+                    if not request_id or request_id in seen_request_ids:
+                        continue
+                    meter_obj = meter_memory_index.get(request_id) if isinstance(meter_memory_index, dict) else None
+                    if meter_obj is None and callable(meter_getter) and not isinstance(meter_memory_index, dict):
+                        meter_obj = meter_getter(request_id)
+                    if meter_obj is None:
+                        continue
+                    _maybe_add_meter(meter_obj)
+                except Exception:
                     continue
-                ts = float(event.get("timestamp") or 0)
-                if ts < cutoff_epoch:
-                    continue
-                agent_id = str(event.get("agent_id") or "")
-                if _normalize_agent_to_family(agent_id) != family_id:
-                    continue
-                request_id = str(event.get("request_id") or "")
-                if not request_id or request_id in seen_request_ids:
-                    continue
-                meter_obj = meter_getter(request_id)
-                if meter_obj is None:
-                    continue
-                _maybe_add_meter(meter_obj)
-            except Exception:
-                continue
+        else:
+            # No proxy events — directly iterate _meter_store dict values as fallback.
+            # Each value must be a dict with request_id + baseline_tokens_estimate >= 50.
+            if isinstance(meter_memory_index, dict):
+                for request_id, meter_dict in meter_memory_index.items():
+                    if request_id in seen_request_ids:
+                        continue
+                    if not isinstance(meter_dict, dict):
+                        continue
+                    # Construct a lightweight object that _maybe_add_meter can inspect
+                    meter_obj = type("Meter", (), meter_dict)()
+                    _maybe_add_meter(meter_obj)
 
     return request_classifier.collapse_retry_bursts(observed)
 
@@ -405,9 +407,16 @@ _BYPASS_COMPILE_REASONS = {
 }
 
 
-def _summarize_family_compile_events(family_id: str, window_minutes: int = 30) -> Dict[str, Any]:
-    compile_store = _get_compile_store()
-    rows = compile_store.read_recent_compile_events(limit=5000, window_minutes=window_minutes)
+def _summarize_family_compile_events(
+    family_id: str,
+    window_minutes: int = 30,
+    preloaded_rows: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    if preloaded_rows is None:
+        compile_store = _get_compile_store()
+        rows = compile_store.read_recent_compile_events(limit=5000, window_minutes=window_minutes)
+    else:
+        rows = preloaded_rows
     summary = {
         "proxied_requests": 0,
         "compile_empty": 0,
@@ -439,7 +448,12 @@ def _summarize_family_compile_events(family_id: str, window_minutes: int = 30) -
     return summary
 
 
-def derive_traffic_truth(family_id: str, window_minutes: int = 30) -> str:
+def derive_traffic_truth(
+    family_id: str,
+    window_minutes: int = 30,
+    observed_meters: Optional[List[Any]] = None,
+    compile_summary: Optional[Dict[str, Any]] = None,
+) -> str:
     """
     Derive traffic_truth using running-reality-first evidence.
 
@@ -450,8 +464,9 @@ def derive_traffic_truth(family_id: str, window_minutes: int = 30) -> str:
     4) internal compile evidence only
     5) no recent evidence
     """
-    observed_meters = _collect_observed_family_meters(family_id, window_minutes=window_minutes)
-    family_compile = _summarize_family_compile_events(family_id, window_minutes=window_minutes)
+    if observed_meters is None:
+        observed_meters = _collect_observed_family_meters(family_id, window_minutes=window_minutes)
+    family_compile = compile_summary or _summarize_family_compile_events(family_id, window_minutes=window_minutes)
 
     if observed_meters:
         return "real_request_observed"
@@ -526,7 +541,11 @@ def _derive_scope_note(family_id: str) -> Optional[str]:
     return None
 
 
-def compute_family_24h_metrics(family_id: str) -> Dict[str, Any]:
+def compute_family_24h_metrics(
+    family_id: str,
+    observed_family_meters: Optional[List[Any]] = None,
+    compile_24h_summary: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     """
     Compute 24-hour metrics for a given family_id from meter_store.
     Primary KPI fields (requests_24h, saved_tokens_24h, savings_ratio_24h) are
@@ -537,7 +556,8 @@ def compute_family_24h_metrics(family_id: str) -> Dict[str, Any]:
     request_classifier = _get_request_classifier()
 
     meter_store._ensure_persistence_loaded()
-    observed_family_meters = _collect_observed_family_meters(family_id, window_minutes=24 * 60)
+    if observed_family_meters is None:
+        observed_family_meters = _collect_observed_family_meters(family_id, window_minutes=24 * 60)
 
     all_meters: List[Any] = []
     for tenant_meters in meter_store._usage_aggregates.values():
@@ -556,7 +576,7 @@ def compute_family_24h_metrics(family_id: str) -> Dict[str, Any]:
 
     qualified_family_meters = request_classifier.collapse_retry_bursts(qualified_family_meters)
 
-    compile_24h = _summarize_family_compile_events(family_id, window_minutes=24 * 60)
+    compile_24h = compile_24h_summary or _summarize_family_compile_events(family_id, window_minutes=24 * 60)
     compile_last_request_at = _epoch_to_iso(compile_24h.get("last_event_ts"))
     observed_last_request_at = None
     for m in observed_family_meters:
@@ -613,16 +633,36 @@ async def build_control_cards() -> List[Dict[str, Any]]:
     runtime_payload = await _runtime_request("GET", "/agents/control")
     health_state = await _runtime_health_state()
     metrics_index = build_metrics_index()
+    compile_store = _get_compile_store()
+    compile_rows_30m = compile_store.read_recent_compile_events(limit=5000, window_minutes=30)
+    compile_rows_24h = compile_store.read_recent_compile_events(limit=5000, window_minutes=24 * 60)
 
     cards: List[Dict[str, Any]] = []
     for raw in runtime_payload.get("agents", []):
         family_id = str(raw.get("family_id") or "")
         metric = metrics_index.get(family_id, {})
-        metrics_24h = compute_family_24h_metrics(family_id)
+        observed_30m = _collect_observed_family_meters(family_id, window_minutes=30)
+        compile_30m = _summarize_family_compile_events(family_id, window_minutes=30, preloaded_rows=compile_rows_30m)
+        observed_24h = _collect_observed_family_meters(family_id, window_minutes=24 * 60)
+        compile_24h = _summarize_family_compile_events(
+            family_id,
+            window_minutes=24 * 60,
+            preloaded_rows=compile_rows_24h,
+        )
+        metrics_24h = compute_family_24h_metrics(
+            family_id,
+            observed_family_meters=observed_24h,
+            compile_24h_summary=compile_24h,
+        )
 
         integration_truth = derive_integration_truth(raw)
         route_truth = derive_route_truth(route_state.routing_enabled(family_id), health_state)
-        traffic_truth = derive_traffic_truth(family_id, window_minutes=30)
+        traffic_truth = derive_traffic_truth(
+            family_id,
+            window_minutes=30,
+            observed_meters=observed_30m,
+            compile_summary=compile_30m,
+        )
         observed_client_truth = derive_observed_client_truth(raw)
         truth_message = derive_truth_message(raw, integration_truth, route_truth, traffic_truth)
 
