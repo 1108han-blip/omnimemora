@@ -10,8 +10,8 @@ type ScopeType string
 const (
 	ScopeAgent     ScopeType = "agent"
 	ScopeWorkspace ScopeType = "workspace"
-	ScopeUser     ScopeType = "user"
-	ScopeCustom   ScopeType = "custom"
+	ScopeUser      ScopeType = "user"
+	ScopeCustom    ScopeType = "custom"
 )
 
 // SharingMode represents how memory can be shared within a scope
@@ -19,9 +19,9 @@ type SharingMode string
 
 const (
 	SharingModeIsolated       SharingMode = "isolated"
-	SharingModeShared        SharingMode = "shared"
+	SharingModeShared         SharingMode = "shared"
 	SharingModeSharedReadOnly SharingMode = "shared_read_only"
-	SharingModeCustom      SharingMode = "custom"
+	SharingModeCustom         SharingMode = "custom"
 )
 
 // ScopeRef is the governance body for memory access control
@@ -36,6 +36,65 @@ type ScopeRef struct {
 	CustomScopeID string      `json:"custom_scope_id,omitempty"` // populated when Scope == ScopeCustom
 }
 
+// MemoryDomainType is the high-level domain identity used by AccessPlan.
+type MemoryDomainType string
+
+const (
+	DomainInstancePrivate MemoryDomainType = "instance_private"
+	DomainWorkspaceShared MemoryDomainType = "workspace_shared"
+	DomainUserShared      MemoryDomainType = "user_shared"
+	DomainCustomShared    MemoryDomainType = "custom_shared"
+	DomainSharedReadOnly  MemoryDomainType = "shared_read_only"
+)
+
+// AccessPlanIdentity carries request-level identity spine fields.
+type AccessPlanIdentity struct {
+	TenantID   string `json:"tenant_id,omitempty"`
+	FamilyID   string `json:"family_id,omitempty"`
+	InstanceID string `json:"instance_id,omitempty"`
+	WindowID   string `json:"window_id,omitempty"`
+	SessionID  string `json:"session_id,omitempty"`
+	RequestID  string `json:"request_id,omitempty"`
+	RawAgentID string `json:"raw_agent_id,omitempty"`
+}
+
+// MemoryDomainRef represents one planned read/write domain in AccessPlan.
+type MemoryDomainRef struct {
+	DomainID    string           `json:"domain_id,omitempty"`
+	TenantID    string           `json:"tenant_id,omitempty"`
+	ScopeType   MemoryDomainType `json:"scope_type,omitempty"`
+	ScopeKey    string           `json:"scope_key,omitempty"`
+	SharingMode SharingMode      `json:"sharing_mode,omitempty"`
+}
+
+// AccessPlan describes planned memory-domain operations for one request.
+type AccessPlan struct {
+	Identity              *AccessPlanIdentity `json:"identity,omitempty"`
+	ReadDomains           []MemoryDomainRef   `json:"read_domains,omitempty"`
+	PrimaryWriteDomain    *MemoryDomainRef    `json:"primary_write_domain,omitempty"`
+	SecondaryWriteDomains []MemoryDomainRef   `json:"secondary_write_domains,omitempty"`
+	AllowSecondaryWrites  bool                `json:"allow_secondary_writes,omitempty"`
+	SharingPolicySource   string              `json:"sharing_policy_source,omitempty"`
+}
+
+// EnforcedDomain captures one actual enforcement decision.
+type EnforcedDomain struct {
+	DomainID    string    `json:"domain_id,omitempty"`
+	ScopeRef    *ScopeRef `json:"scope_ref,omitempty"`
+	Operation   string    `json:"operation,omitempty"`
+	Decision    string    `json:"decision,omitempty"`
+	Reason      string    `json:"reason,omitempty"`
+	MemoryID    string    `json:"memory_id,omitempty"`
+	ResultCount int       `json:"result_count,omitempty"`
+}
+
+// EnforcementTrace keeps planned-vs-actual domain execution details.
+type EnforcementTrace struct {
+	PlannedReadDomains    []MemoryDomainRef `json:"planned_read_domains,omitempty"`
+	PlannedWriteDomains   []MemoryDomainRef `json:"planned_write_domains,omitempty"`
+	ActualEnforcedDomains []EnforcedDomain  `json:"actual_enforced_domains,omitempty"`
+}
+
 // MemoryRecord represents a single memory entry
 // Aligns with RUNTIME_ARCHITECTURE.md Section 5.3
 type MemoryRecord struct {
@@ -43,38 +102,41 @@ type MemoryRecord struct {
 	Content     string         `json:"content"`
 	ContentHash string         `json:"content_hash"`
 	Metadata    map[string]any `json:"metadata,omitempty"`
-	ScopeRef    *ScopeRef    `json:"scope_ref"`
-	CreatedAt   time.Time     `json:"created_at"`
-	UpdatedAt   time.Time     `json:"updated_at"`
-	ExpiresAt   *time.Time    `json:"expires_at,omitempty"`
-	AccessCount int           `json:"access_count"`
+	ScopeRef    *ScopeRef      `json:"scope_ref"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	ExpiresAt   *time.Time     `json:"expires_at,omitempty"`
+	AccessCount int            `json:"access_count"`
 }
 
 // QueryRequest represents a memory query request
 type QueryRequest struct {
-	Query     string    `json:"query"`
-	ScopeRef  *ScopeRef `json:"scope_ref,omitempty"`
-	Limit     int       `json:"limit"`
-	RequestID string    `json:"request_id,omitempty"`
+	Query      string      `json:"query"`
+	ScopeRef   *ScopeRef   `json:"scope_ref,omitempty"`
+	AccessPlan *AccessPlan `json:"access_plan,omitempty"`
+	Limit      int         `json:"limit"`
+	RequestID  string      `json:"request_id,omitempty"`
 }
 
 // QueryResult represents query results
 type QueryResult struct {
-	RequestID    string        `json:"request_id"`
-	Query       string        `json:"query"`
-	Results     []QueryMatch `json:"results"`
-	Total       int          `json:"total"`
-	ScopeApplied ScopeType   `json:"scope_applied"`
-	TookMs      int64        `json:"took_ms"`
+	RequestID        string            `json:"request_id"`
+	Query            string            `json:"query"`
+	Results          []QueryMatch      `json:"results"`
+	Total            int               `json:"total"`
+	ScopeApplied     ScopeType         `json:"scope_applied"`
+	TookMs           int64             `json:"took_ms"`
+	EnforcementTrace *EnforcementTrace `json:"enforcement_trace,omitempty"`
 }
 
 // QueryMatch represents a single query match
 type QueryMatch struct {
 	MemoryID  string         `json:"memory_id"`
 	Content   string         `json:"content"`
-	Score     float64       `json:"score"`
-	Scope     ScopeType     `json:"scope"`
-	CreatedAt time.Time    `json:"created_at"`
+	Score     float64        `json:"score"`
+	Scope     ScopeType      `json:"scope"`
+	DomainID  string         `json:"domain_id,omitempty"`
+	CreatedAt time.Time      `json:"created_at"`
 	Metadata  map[string]any `json:"metadata,omitempty"`
 }
 
@@ -82,30 +144,32 @@ type QueryMatch struct {
 type WriteRequest struct {
 	Content     string         `json:"content"`
 	Metadata    map[string]any `json:"metadata,omitempty"`
-	Scope       ScopeType     `json:"scope,omitempty"`
+	Scope       ScopeType      `json:"scope,omitempty"`
 	AgentID     string         `json:"agent_id,omitempty"`
 	WorkspaceID string         `json:"workspace_id,omitempty"`
+	AccessPlan  *AccessPlan    `json:"access_plan,omitempty"`
 	Tags        []string       `json:"tags,omitempty"`
 	RequestID   string         `json:"request_id,omitempty"`
 }
 
 // WriteResponse represents a write operation response
 type WriteResponse struct {
-	MemoryID    string       `json:"memory_id"`
-	Status      string       `json:"status"`
-	Scope       ScopeType    `json:"scope"`
-	SharingMode SharingMode `json:"sharing_mode"`
-	CreatedAt   time.Time  `json:"created_at"`
-	RequestID   string      `json:"request_id"`
-	DedupHit    bool       `json:"dedup_hit,omitempty"`
+	MemoryID         string            `json:"memory_id"`
+	Status           string            `json:"status"`
+	Scope            ScopeType         `json:"scope"`
+	SharingMode      SharingMode       `json:"sharing_mode"`
+	CreatedAt        time.Time         `json:"created_at"`
+	RequestID        string            `json:"request_id"`
+	DedupHit         bool              `json:"dedup_hit,omitempty"`
+	EnforcementTrace *EnforcementTrace `json:"enforcement_trace,omitempty"`
 }
 
 // MetricsResponse represents the /metrics endpoint response
 type MetricsResponse struct {
-	Runtime RuntimeMetrics              `json:"runtime"`
-	Totals  TotalsMetrics             `json:"totals"`
+	Runtime RuntimeMetrics                     `json:"runtime"`
+	Totals  TotalsMetrics                      `json:"totals"`
 	ByScope map[string]map[string]ScopeMetrics `json:"by_scope"`
-	ByDay   []DailyMetrics           `json:"by_day"`
+	ByDay   []DailyMetrics                     `json:"by_day"`
 	// Phase 3: Token Savings Metrics
 	TokenSavings *TokenSavingsMetrics `json:"token_savings,omitempty"`
 	Efficiency   *EfficiencyMetrics   `json:"efficiency,omitempty"`
@@ -117,19 +181,19 @@ type MetricsResponse struct {
 
 // MCPMetrics contains protocol-level integration signals for agent connectivity.
 type MCPMetrics struct {
-	Handshakes                    int64  `json:"handshakes"`
-	ToolInvocations               int64  `json:"tool_invocations"`
-	MemoryWriteCalls              int64  `json:"memory_write_calls"`
-	MemorySearchContextRecallCalls int64 `json:"memory_search_context_recall_calls"`
-	LastStartupError              string `json:"last_startup_error,omitempty"`
+	Handshakes                     int64  `json:"handshakes"`
+	ToolInvocations                int64  `json:"tool_invocations"`
+	MemoryWriteCalls               int64  `json:"memory_write_calls"`
+	MemorySearchContextRecallCalls int64  `json:"memory_search_context_recall_calls"`
+	LastStartupError               string `json:"last_startup_error,omitempty"`
 }
 
 // TokenSavingsMetrics contains token savings aggregations (Phase 3)
 type TokenSavingsMetrics struct {
-	TotalSavedTokens  int64 `json:"total_saved_tokens"`
-	TodaySavedTokens  int64 `json:"today_saved_tokens"`
-	WeekSavedTokens   int64 `json:"week_saved_tokens"`
-	MonthSavedTokens  int64 `json:"month_saved_tokens"`
+	TotalSavedTokens int64 `json:"total_saved_tokens"`
+	TodaySavedTokens int64 `json:"today_saved_tokens"`
+	WeekSavedTokens  int64 `json:"week_saved_tokens"`
+	MonthSavedTokens int64 `json:"month_saved_tokens"`
 }
 
 // EfficiencyMetrics contains efficiency indicators (Phase 3)
@@ -170,11 +234,11 @@ type RuntimeMetrics struct {
 
 // TotalsMetrics contains aggregate metrics
 type TotalsMetrics struct {
-	MemoryCount            int64 `json:"memory_count"`
+	MemoryCount           int64 `json:"memory_count"`
 	TotalWrites           int64 `json:"total_writes"`
 	TotalQueries          int64 `json:"total_queries"`
 	TotalInputTokens      int64 `json:"total_input_tokens"`
-	TotalCompressedTokens  int64 `json:"total_compressed_tokens"`
+	TotalCompressedTokens int64 `json:"total_compressed_tokens"`
 	TotalSavedTokens      int64 `json:"total_saved_tokens"`
 	TotalQueryCount       int64 `json:"total_query_count"`
 	TotalRecallHits       int64 `json:"total_recall_hits"`
@@ -182,7 +246,7 @@ type TotalsMetrics struct {
 
 // ScopeMetrics contains metrics for a specific scope
 type ScopeMetrics struct {
-	MemoryCount     int64 `json:"memory_count"`
+	MemoryCount      int64 `json:"memory_count"`
 	TotalSavedTokens int64 `json:"total_saved_tokens"`
 }
 
@@ -213,22 +277,22 @@ type ErrorResponse struct {
 
 // SearchOptions contains optional search behavior flags
 type SearchOptions struct {
-	IncludeBreakdown  bool `json:"include_breakdown,omitempty"`
-	AssembleContext   bool `json:"assemble_context,omitempty"`
-	ContextLimit      int  `json:"context_limit,omitempty"`
-	MaxContextTokens  int  `json:"max_context_tokens,omitempty"`
+	IncludeBreakdown bool `json:"include_breakdown,omitempty"`
+	AssembleContext  bool `json:"assemble_context,omitempty"`
+	ContextLimit     int  `json:"context_limit,omitempty"`
+	MaxContextTokens int  `json:"max_context_tokens,omitempty"`
 	// Phase 2c fields
 	ContextStrategy string `json:"context_strategy,omitempty"` // topk_excerpt, recency_boost_select, diversity_select
-	ContextMode    string `json:"context_mode,omitempty"`     // precise, balanced, aggressive
+	ContextMode     string `json:"context_mode,omitempty"`     // precise, balanced, aggressive
 }
 
 // StrategySearchResult represents a search result for strategy selection (Phase 2c)
 type StrategySearchResult struct {
-	MemoryID       string    `json:"memory_id"`
-	Content        string    `json:"content"`
-	Score          float64   `json:"score"`
-	TokenEstimate  int       `json:"token_estimate"`
-	CreatedAt      time.Time `json:"created_at,omitempty"`
+	MemoryID      string    `json:"memory_id"`
+	Content       string    `json:"content"`
+	Score         float64   `json:"score"`
+	TokenEstimate int       `json:"token_estimate"`
+	CreatedAt     time.Time `json:"created_at,omitempty"`
 }
 
 // StrategyContextItem represents a selected context item for strategy assembly (Phase 2c)
@@ -268,7 +332,7 @@ type AssembledContext struct {
 	Assembled        bool          `json:"assembled"`
 	Strategy         string        `json:"strategy"`
 	Items            []ContextItem `json:"items"`
-	CombinedText    string        `json:"combined_text"`
+	CombinedText     string        `json:"combined_text"`
 	RawTokens        int           `json:"raw_tokens"`
 	CompressedTokens int           `json:"compressed_tokens"`
 	SavedTokens      int           `json:"saved_tokens"`
@@ -284,6 +348,7 @@ type AssembledContext struct {
 type SearchRequest struct {
 	Keyword    string        `json:"keyword"`
 	ScopeRef   *ScopeRef     `json:"scope_ref,omitempty"`
+	AccessPlan *AccessPlan   `json:"access_plan,omitempty"`
 	Limit      int           `json:"limit"`
 	RequestID  string        `json:"request_id,omitempty"`
 	Options    SearchOptions `json:"options,omitempty"`
@@ -303,6 +368,8 @@ type SearchResultItem struct {
 	Content        string          `json:"content"`
 	Score          float64         `json:"score"`
 	VectorScore    float64         `json:"vector_score"`
+	Scope          ScopeType       `json:"scope,omitempty"`
+	DomainID       string          `json:"domain_id,omitempty"`
 	TokenEstimate  int             `json:"token_estimate"`
 	ScoreBreakdown *ScoreBreakdown `json:"score_breakdown,omitempty"`
 	CreatedAt      time.Time       `json:"created_at,omitempty"`
@@ -311,20 +378,21 @@ type SearchResultItem struct {
 
 // SearchResponse represents a keyword search response
 type SearchResponse struct {
-	RequestID    string             `json:"request_id"`
-	Keyword      string             `json:"keyword"`
-	Results      []SearchResultItem `json:"results"`
-	Total        int                `json:"total"`
-	ScopeApplied ScopeType         `json:"scope_applied"`
-	TookMs       int64             `json:"took_ms"`
-	Context      *AssembledContext `json:"context,omitempty"`
+	RequestID        string             `json:"request_id"`
+	Keyword          string             `json:"keyword"`
+	Results          []SearchResultItem `json:"results"`
+	Total            int                `json:"total"`
+	ScopeApplied     ScopeType          `json:"scope_applied"`
+	TookMs           int64              `json:"took_ms"`
+	Context          *AssembledContext  `json:"context,omitempty"`
+	EnforcementTrace *EnforcementTrace  `json:"enforcement_trace,omitempty"`
 }
 
 // DeleteRequest represents a memory delete request
 type DeleteRequest struct {
-	MemoryID   string `json:"memory_id"`
-	Scope      ScopeType `json:"scope,omitempty"`
-	RequestID  string `json:"request_id,omitempty"`
+	MemoryID  string    `json:"memory_id"`
+	Scope     ScopeType `json:"scope,omitempty"`
+	RequestID string    `json:"request_id,omitempty"`
 }
 
 // DeleteResponse represents a memory delete response

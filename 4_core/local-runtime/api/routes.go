@@ -60,12 +60,19 @@ func (s *Server) handleWrite(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if scopeRef.Scope == pkg.ScopeCustom {
-		writeError(w, 501, "NOT_IMPLEMENTED", "custom scope not implemented")
-		return
+	var (
+		resp *pkg.WriteResponse
+		err  error
+	)
+	if req.AccessPlan != nil {
+		resp, err = s.service.WriteMemoryWithAccessPlan(r.Context(), &req, scopeRef)
+	} else {
+		if scopeRef.Scope == pkg.ScopeCustom {
+			writeError(w, 501, "NOT_IMPLEMENTED", "custom scope not implemented")
+			return
+		}
+		resp, err = s.service.WriteMemory(r.Context(), &req, scopeRef)
 	}
-
-	resp, err := s.service.WriteMemory(r.Context(), &req, scopeRef)
 	if err != nil {
 		if appErr, ok := err.(*app.AppError); ok {
 			writeError(w, appErr.HTTPCode, appErr.Code, appErr.Message)
@@ -98,12 +105,19 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if scopeRef.Scope == pkg.ScopeCustom {
-		writeError(w, 501, "NOT_IMPLEMENTED", "custom scope not implemented")
-		return
+	var (
+		resp *pkg.QueryResult
+		err  error
+	)
+	if req.AccessPlan != nil {
+		resp, err = s.service.QueryMemoryWithAccessPlan(r.Context(), &req, scopeRef)
+	} else {
+		if scopeRef.Scope == pkg.ScopeCustom {
+			writeError(w, 501, "NOT_IMPLEMENTED", "custom scope not implemented")
+			return
+		}
+		resp, err = s.service.QueryMemory(r.Context(), &req, scopeRef)
 	}
-
-	resp, err := s.service.QueryMemory(r.Context(), &req, scopeRef)
 	if err != nil {
 		if appErr, ok := err.(*app.AppError); ok {
 			writeError(w, appErr.HTTPCode, appErr.Code, appErr.Message)
@@ -136,12 +150,19 @@ func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	if scopeRef.Scope == pkg.ScopeCustom {
-		writeError(w, 501, "NOT_IMPLEMENTED", "custom scope not implemented")
-		return
+	var (
+		resp *pkg.SearchResponse
+		err  error
+	)
+	if req.AccessPlan != nil {
+		resp, err = s.service.SearchMemoryWithAccessPlan(r.Context(), &req, scopeRef)
+	} else {
+		if scopeRef.Scope == pkg.ScopeCustom {
+			writeError(w, 501, "NOT_IMPLEMENTED", "custom scope not implemented")
+			return
+		}
+		resp, err = s.service.SearchMemory(r.Context(), &req, scopeRef)
 	}
-
-	resp, err := s.service.SearchMemory(r.Context(), &req, scopeRef)
 	if err != nil {
 		if appErr, ok := err.(*app.AppError); ok {
 			writeError(w, appErr.HTTPCode, appErr.Code, appErr.Message)

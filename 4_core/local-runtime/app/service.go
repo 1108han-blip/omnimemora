@@ -334,6 +334,397 @@ func (s *Service) SearchMemory(ctx context.Context, req *pkg.SearchRequest, scop
 	return response, nil
 }
 
+// WriteMemoryWithAccessPlan orchestrates multi-domain write execution from request-level AccessPlan.
+// Store remains a single-scope executor; orchestration stays in service layer.
+func (s *Service) WriteMemoryWithAccessPlan(ctx context.Context, req *pkg.WriteRequest, fallbackScope *pkg.ScopeRef) (*pkg.WriteResponse, error) {
+	if req == nil {
+		return nil, NewScopeError("write request is nil")
+	}
+	if req.AccessPlan == nil {
+		return s.WriteMemory(ctx, req, fallbackScope)
+	}
+
+	plan := req.AccessPlan
+	if plan.PrimaryWriteDomain == nil {
+		return nil, NewScopeError("access_plan.primary_write_domain is required")
+	}
+
+	trace := &pkg.EnforcementTrace{
+		PlannedReadDomains:    append([]pkg.MemoryDomainRef{}, plan.ReadDomains...),
+		PlannedWriteDomains:   make([]pkg.MemoryDomainRef, 0, 1+len(plan.SecondaryWriteDomains)),
+		ActualEnforcedDomains: []pkg.EnforcedDomain{},
+	}
+	trace.PlannedWriteDomains = append(trace.PlannedWriteDomains, *plan.PrimaryWriteDomain)
+	trace.PlannedWriteDomains = append(trace.PlannedWriteDomains, plan.SecondaryWriteDomains...)
+
+	primaryResp, primaryTrace, primaryErr := s.writeOneDomainWithPlan(ctx, req, fallbackScope, plan, *plan.PrimaryWriteDomain, true)
+	trace.ActualEnforcedDomains = append(trace.ActualEnforcedDomains, primaryTrace)
+	if primaryErr != nil {
+		if appErr, ok := primaryErr.(*AppError); ok {
+			return nil, appErr
+		}
+		return nil, NewStoreError("access-plan primary write failed", primaryErr)
+	}
+
+	for _, secondary := range plan.SecondaryWriteDomains {
+		if !plan.AllowSecondaryWrites {
+			trace.ActualEnforcedDomains = append(trace.ActualEnforcedDomains, pkg.EnforcedDomain{
+				DomainID:  secondary.DomainID,
+				Operation: "write",
+				Decision:  "rejected",
+				Reason:    "secondary_write_not_authorized",
+			})
+			continue
+		}
+		_, secondaryTrace, secondaryErr := s.writeOneDomainWithPlan(ctx, req, fallbackScope, plan, secondary, false)
+		if secondaryErr != nil {
+			secondaryTrace.Decision = "failed"
+			if secondaryTrace.Reason == "" {
+				secondaryTrace.Reason = secondaryErr.Error()
+			}
+		}
+		trace.ActualEnforcedDomains = append(trace.ActualEnforcedDomains, secondaryTrace)
+	}
+
+	primaryResp.EnforcementTrace = trace
+	return primaryResp, nil
+}
+
+// QueryMemoryWithAccessPlan orchestrates ordered multi-domain read execution.
+func (s *Service) QueryMemoryWithAccessPlan(ctx context.Context, req *pkg.QueryRequest, fallbackScope *pkg.ScopeRef) (*pkg.QueryResult, error) {
+	if req == nil {
+		return nil, NewScopeError("query request is nil")
+	}
+	if req.AccessPlan == nil {
+		return s.QueryMemory(ctx, req, fallbackScope)
+	}
+
+	startTime := time.Now()
+	plan := req.AccessPlan
+	trace := &pkg.EnforcementTrace{
+		PlannedReadDomains:    append([]pkg.MemoryDomainRef{}, plan.ReadDomains...),
+		PlannedWriteDomains:   []pkg.MemoryDomainRef{},
+		ActualEnforcedDomains: []pkg.EnforcedDomain{},
+	}
+
+	combined := make([]pkg.QueryMatch, 0)
+	scopeApplied := pkg.ScopeType("")
+	queryReq := *req
+	queryReq.AccessPlan = nil
+
+	for _, domain := range plan.ReadDomains {
+		scopeRef, rejectReason, err := s.scopeRefFromAccessDomain(plan, fallbackScope, domain)
+		if rejectReason != "" {
+			trace.ActualEnforcedDomains = append(trace.ActualEnforcedDomains, pkg.EnforcedDomain{
+				DomainID:  domain.DomainID,
+				Operation: "query",
+				Decision:  "rejected",
+				Reason:    rejectReason,
+			})
+			continue
+		}
+		if err != nil {
+			trace.ActualEnforcedDomains = append(trace.ActualEnforcedDomains, pkg.EnforcedDomain{
+				DomainID:  domain.DomainID,
+				Operation: "query",
+				Decision:  "failed",
+				Reason:    err.Error(),
+			})
+			continue
+		}
+
+		subResp, subErr := s.QueryMemory(ctx, &queryReq, scopeRef)
+		if subErr != nil {
+			trace.ActualEnforcedDomains = append(trace.ActualEnforcedDomains, pkg.EnforcedDomain{
+				DomainID:  domain.DomainID,
+				ScopeRef:  scopeRef,
+				Operation: "query",
+				Decision:  "failed",
+				Reason:    subErr.Error(),
+			})
+			continue
+		}
+		if scopeApplied == "" {
+			scopeApplied = subResp.ScopeApplied
+		}
+		for i := range subResp.Results {
+			subResp.Results[i].DomainID = domain.DomainID
+		}
+		combined = append(combined, subResp.Results...)
+		trace.ActualEnforcedDomains = append(trace.ActualEnforcedDomains, pkg.EnforcedDomain{
+			DomainID:    domain.DomainID,
+			ScopeRef:    scopeRef,
+			Operation:   "query",
+			Decision:    "applied",
+			ResultCount: len(subResp.Results),
+		})
+	}
+
+	if req.Limit > 0 && len(combined) > req.Limit {
+		combined = combined[:req.Limit]
+	}
+	if scopeApplied == "" && fallbackScope != nil {
+		scopeApplied = fallbackScope.Scope
+	}
+
+	return &pkg.QueryResult{
+		RequestID:        req.RequestID,
+		Query:            req.Query,
+		Results:          combined,
+		Total:            len(combined),
+		ScopeApplied:     scopeApplied,
+		TookMs:           time.Since(startTime).Milliseconds(),
+		EnforcementTrace: trace,
+	}, nil
+}
+
+// SearchMemoryWithAccessPlan orchestrates ordered multi-domain search execution.
+func (s *Service) SearchMemoryWithAccessPlan(ctx context.Context, req *pkg.SearchRequest, fallbackScope *pkg.ScopeRef) (*pkg.SearchResponse, error) {
+	if req == nil {
+		return nil, NewScopeError("search request is nil")
+	}
+	if req.AccessPlan == nil {
+		return s.SearchMemory(ctx, req, fallbackScope)
+	}
+
+	startTime := time.Now()
+	plan := req.AccessPlan
+	trace := &pkg.EnforcementTrace{
+		PlannedReadDomains:    append([]pkg.MemoryDomainRef{}, plan.ReadDomains...),
+		PlannedWriteDomains:   []pkg.MemoryDomainRef{},
+		ActualEnforcedDomains: []pkg.EnforcedDomain{},
+	}
+
+	combined := make([]pkg.SearchResultItem, 0)
+	scopeApplied := pkg.ScopeType("")
+	searchReq := *req
+	searchReq.AccessPlan = nil
+
+	for _, domain := range plan.ReadDomains {
+		scopeRef, rejectReason, err := s.scopeRefFromAccessDomain(plan, fallbackScope, domain)
+		if rejectReason != "" {
+			trace.ActualEnforcedDomains = append(trace.ActualEnforcedDomains, pkg.EnforcedDomain{
+				DomainID:  domain.DomainID,
+				Operation: "search",
+				Decision:  "rejected",
+				Reason:    rejectReason,
+			})
+			continue
+		}
+		if err != nil {
+			trace.ActualEnforcedDomains = append(trace.ActualEnforcedDomains, pkg.EnforcedDomain{
+				DomainID:  domain.DomainID,
+				Operation: "search",
+				Decision:  "failed",
+				Reason:    err.Error(),
+			})
+			continue
+		}
+
+		subResp, subErr := s.SearchMemory(ctx, &searchReq, scopeRef)
+		if subErr != nil {
+			trace.ActualEnforcedDomains = append(trace.ActualEnforcedDomains, pkg.EnforcedDomain{
+				DomainID:  domain.DomainID,
+				ScopeRef:  scopeRef,
+				Operation: "search",
+				Decision:  "failed",
+				Reason:    subErr.Error(),
+			})
+			continue
+		}
+		if scopeApplied == "" {
+			scopeApplied = subResp.ScopeApplied
+		}
+		for i := range subResp.Results {
+			subResp.Results[i].DomainID = domain.DomainID
+			if subResp.Results[i].Scope == "" {
+				subResp.Results[i].Scope = subResp.ScopeApplied
+			}
+		}
+		combined = append(combined, subResp.Results...)
+		trace.ActualEnforcedDomains = append(trace.ActualEnforcedDomains, pkg.EnforcedDomain{
+			DomainID:    domain.DomainID,
+			ScopeRef:    scopeRef,
+			Operation:   "search",
+			Decision:    "applied",
+			ResultCount: len(subResp.Results),
+		})
+	}
+
+	if req.Limit > 0 && len(combined) > req.Limit {
+		combined = combined[:req.Limit]
+	}
+	if scopeApplied == "" && fallbackScope != nil {
+		scopeApplied = fallbackScope.Scope
+	}
+
+	return &pkg.SearchResponse{
+		RequestID:        req.RequestID,
+		Keyword:          req.Keyword,
+		Results:          combined,
+		Total:            len(combined),
+		ScopeApplied:     scopeApplied,
+		TookMs:           time.Since(startTime).Milliseconds(),
+		Context:          nil,
+		EnforcementTrace: trace,
+	}, nil
+}
+
+func (s *Service) writeOneDomainWithPlan(
+	ctx context.Context,
+	req *pkg.WriteRequest,
+	fallbackScope *pkg.ScopeRef,
+	plan *pkg.AccessPlan,
+	domain pkg.MemoryDomainRef,
+	primary bool,
+) (*pkg.WriteResponse, pkg.EnforcedDomain, error) {
+	if domain.ScopeType == pkg.DomainSharedReadOnly {
+		trace := pkg.EnforcedDomain{
+			DomainID:  domain.DomainID,
+			Operation: "write",
+			Decision:  "rejected",
+			Reason:    "shared_read_only domain is read-only",
+		}
+		if primary {
+			return nil, trace, NewScopeError(trace.Reason)
+		}
+		return nil, trace, nil
+	}
+
+	scopeRef, rejectReason, err := s.scopeRefFromAccessDomain(plan, fallbackScope, domain)
+	if rejectReason != "" {
+		trace := pkg.EnforcedDomain{
+			DomainID:  domain.DomainID,
+			Operation: "write",
+			Decision:  "rejected",
+			Reason:    rejectReason,
+		}
+		if primary {
+			if domain.ScopeType == pkg.DomainCustomShared {
+				return nil, trace, NewNotImplementedError("custom_shared access-plan domain")
+			}
+			return nil, trace, NewScopeError(rejectReason)
+		}
+		return nil, trace, nil
+	}
+	if err != nil {
+		trace := pkg.EnforcedDomain{
+			DomainID:  domain.DomainID,
+			Operation: "write",
+			Decision:  "failed",
+			Reason:    err.Error(),
+		}
+		return nil, trace, err
+	}
+
+	writeReq := *req
+	writeReq.AccessPlan = nil
+	resp, writeErr := s.WriteMemory(ctx, &writeReq, scopeRef)
+	if writeErr != nil {
+		trace := pkg.EnforcedDomain{
+			DomainID:  domain.DomainID,
+			ScopeRef:  scopeRef,
+			Operation: "write",
+			Decision:  "failed",
+			Reason:    writeErr.Error(),
+		}
+		return nil, trace, writeErr
+	}
+
+	trace := pkg.EnforcedDomain{
+		DomainID:  domain.DomainID,
+		ScopeRef:  scopeRef,
+		Operation: "write",
+		Decision:  "applied",
+		MemoryID:  resp.MemoryID,
+	}
+	return resp, trace, nil
+}
+
+func (s *Service) scopeRefFromAccessDomain(
+	plan *pkg.AccessPlan,
+	fallbackScope *pkg.ScopeRef,
+	domain pkg.MemoryDomainRef,
+) (*pkg.ScopeRef, string, error) {
+	identity := &pkg.AccessPlanIdentity{}
+	if plan != nil && plan.Identity != nil {
+		identity = plan.Identity
+	}
+
+	scopeRef := &pkg.ScopeRef{}
+	if fallbackScope != nil {
+		*scopeRef = *fallbackScope
+	}
+
+	tenantID := strings.TrimSpace(domain.TenantID)
+	if tenantID == "" {
+		tenantID = strings.TrimSpace(identity.TenantID)
+	}
+	if tenantID == "" && fallbackScope != nil {
+		tenantID = strings.TrimSpace(fallbackScope.TenantID)
+	}
+	scopeRef.TenantID = tenantID
+
+	switch domain.ScopeType {
+	case pkg.DomainInstancePrivate:
+		instanceID := strings.TrimSpace(identity.InstanceID)
+		if instanceID == "" {
+			instanceID = strings.TrimSpace(domain.ScopeKey)
+		}
+		if instanceID == "" {
+			return nil, "", fmt.Errorf("instance_id is required for instance_private domain")
+		}
+		scopeRef.Scope = pkg.ScopeAgent
+		scopeRef.AgentID = instanceID
+		scopeRef.SharingMode = pkg.SharingModeIsolated
+		scopeRef.WorkspaceID = ""
+		scopeRef.UserID = ""
+		scopeRef.CustomScopeID = ""
+	case pkg.DomainWorkspaceShared:
+		workspaceID := strings.TrimSpace(domain.ScopeKey)
+		if workspaceID == "" {
+			return nil, "", fmt.Errorf("scope_key is required for workspace_shared domain")
+		}
+		scopeRef.Scope = pkg.ScopeWorkspace
+		scopeRef.WorkspaceID = workspaceID
+		scopeRef.SharingMode = pkg.SharingModeShared
+		scopeRef.UserID = ""
+		scopeRef.CustomScopeID = ""
+	case pkg.DomainUserShared:
+		userID := strings.TrimSpace(domain.ScopeKey)
+		if userID == "" {
+			return nil, "", fmt.Errorf("scope_key is required for user_shared domain")
+		}
+		scopeRef.Scope = pkg.ScopeUser
+		scopeRef.UserID = userID
+		scopeRef.SharingMode = pkg.SharingModeShared
+		scopeRef.WorkspaceID = ""
+		scopeRef.CustomScopeID = ""
+	case pkg.DomainSharedReadOnly:
+		workspaceID := strings.TrimSpace(domain.ScopeKey)
+		if workspaceID == "" {
+			return nil, "", fmt.Errorf("scope_key is required for shared_read_only domain")
+		}
+		scopeRef.Scope = pkg.ScopeWorkspace
+		scopeRef.WorkspaceID = workspaceID
+		scopeRef.SharingMode = pkg.SharingModeSharedReadOnly
+		scopeRef.UserID = ""
+		scopeRef.CustomScopeID = ""
+	case pkg.DomainCustomShared:
+		return nil, "custom_shared domain is not implemented", nil
+	default:
+		return nil, "", fmt.Errorf("unsupported access-plan domain scope_type=%q", domain.ScopeType)
+	}
+
+	if domain.ScopeType == pkg.DomainSharedReadOnly {
+		return scopeRef, "", nil
+	}
+	if domain.SharingMode != "" {
+		scopeRef.SharingMode = domain.SharingMode
+	}
+	return scopeRef, "", nil
+}
+
 // DeleteMemory handles memory deletion with scope enforcement
 func (s *Service) DeleteMemory(ctx context.Context, req *pkg.DeleteRequest, scopeRef *pkg.ScopeRef) (*pkg.DeleteResponse, error) {
 	// Custom scope not implemented
