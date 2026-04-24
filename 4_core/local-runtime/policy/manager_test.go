@@ -3,9 +3,13 @@
 package policy
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/omnimemora/local-runtime/app/context"
 )
@@ -813,5 +817,692 @@ func TestResolveAuto_BundlePolicy(t *testing.T) {
 	result = m.ResolveAuto("hello world")
 	if result != "recency_boost_select" {
 		t.Errorf("expected recency_boost_select for short non-question, got %s", result)
+	}
+}
+
+// --- CandidatePack type tests ---
+
+func TestCandidatePack_Validate_Valid(t *testing.T) {
+	policy := &CompileStrategyPolicy{
+		Version:                 "cloud-v1",
+		DefaultContextStrategy: "diversity_select",
+		AllowedStrategies:       []string{"diversity_select"},
+	}
+	pack := &CandidatePack{
+		CandidateID:     "cloud-candidate-001",
+		PolicyVersion:   "cloud-v1",
+		Policy:          policy,
+		SignatureStatus: SignatureStatusNotRequired,
+		Source:          CandidateSourceCloud,
+		FetchedAt:       time.Now(),
+	}
+	// Compute correct SHA256
+	canonical, _ := json.Marshal(policy)
+	h := sha256.Sum256(canonical)
+	pack.SHA256 = hex.EncodeToString(h[:])
+
+	if err := pack.Validate(); err != nil {
+		t.Errorf("valid pack should pass: %v", err)
+	}
+}
+
+func TestCandidatePack_Validate_MissingCandidateID(t *testing.T) {
+	policy := &CompileStrategyPolicy{Version: "v1", DefaultContextStrategy: "topk_excerpt"}
+	pack := &CandidatePack{
+		CandidateID:   "", // empty
+		PolicyVersion: "v1",
+		Policy:        policy,
+		SHA256:        "abc123",
+	}
+	if err := pack.Validate(); err == nil {
+		t.Error("expected error for missing candidate_id")
+	}
+}
+
+func TestCandidatePack_Validate_MissingPolicyVersion(t *testing.T) {
+	policy := &CompileStrategyPolicy{Version: "v1", DefaultContextStrategy: "topk_excerpt"}
+	pack := &CandidatePack{
+		CandidateID:   "id-001",
+		PolicyVersion: "", // empty
+		Policy:        policy,
+		SHA256:        "abc123",
+	}
+	if err := pack.Validate(); err == nil {
+		t.Error("expected error for missing policy_version")
+	}
+}
+
+func TestCandidatePack_Validate_NilPolicy(t *testing.T) {
+	pack := &CandidatePack{
+		CandidateID:   "id-001",
+		PolicyVersion: "v1",
+		Policy:        nil,
+		SHA256:        "abc123",
+	}
+	if err := pack.Validate(); err == nil {
+		t.Error("expected error for nil policy")
+	}
+}
+
+func TestCandidatePack_Validate_VersionMismatch(t *testing.T) {
+	policy := &CompileStrategyPolicy{Version: "v2", DefaultContextStrategy: "topk_excerpt"}
+	pack := &CandidatePack{
+		CandidateID:   "id-001",
+		PolicyVersion: "v1", // differs from policy.Version
+		Policy:        policy,
+		SHA256:        "abc123",
+	}
+	if err := pack.Validate(); err == nil {
+		t.Error("expected error for version mismatch")
+	}
+}
+
+func TestCandidatePack_Validate_MissingSHA256(t *testing.T) {
+	policy := &CompileStrategyPolicy{Version: "v1", DefaultContextStrategy: "topk_excerpt"}
+	pack := &CandidatePack{
+		CandidateID:   "id-001",
+		PolicyVersion: "v1",
+		Policy:        policy,
+		SHA256:        "", // empty
+	}
+	if err := pack.Validate(); err == nil {
+		t.Error("expected error for missing sha256")
+	}
+}
+
+func makeTestPack(t *testing.T, version, defaultStrategy string, sha256Override string) *CandidatePack {
+	t.Helper()
+	policy := &CompileStrategyPolicy{
+		Version:                 version,
+		DefaultContextStrategy:  defaultStrategy,
+		AllowedStrategies:       []string{"topk_excerpt", "recency_boost_select", "diversity_select"},
+		AutoResolution: &AutoResolutionConfig{
+			Enabled: true,
+			Rules: AutoResolutionRules{
+				QuestionPatterns:        "topk_excerpt",
+				LongQueryThresholdChars: 50,
+				LongQueryStrategy:       "diversity_select",
+				DefaultStrategy:         "recency_boost_select",
+			},
+		},
+		ModeDefaults: map[string]ModeDefaults{
+			"precise":    {TokenBudget: 300, MaxItems: 3},
+			"balanced":   {TokenBudget: 800, MaxItems: 6},
+			"aggressive": {TokenBudget: 1500, MaxItems: 10},
+		},
+	}
+	canonical, err := json.Marshal(policy)
+	if err != nil {
+		t.Fatalf("failed to marshal policy: %v", err)
+	}
+	h := sha256.Sum256(canonical)
+	pack := &CandidatePack{
+		CandidateID:     version,
+		PolicyVersion:   version,
+		Policy:          policy,
+		SHA256:          hex.EncodeToString(h[:]),
+		SignatureStatus: SignatureStatusNotRequired,
+		Source:          CandidateSourceCloud,
+		FetchedAt:       time.Now(),
+	}
+	if sha256Override != "" {
+		pack.SHA256 = sha256Override
+	}
+	return pack
+}
+
+// --- AcceptCandidate tests ---
+
+func TestAcceptCandidate_ValidPackWritesCandidateFileAndUpdatesCandidateVersion(t *testing.T) {
+	dir, cleanup := tempPolicyDir(t)
+	defer cleanup()
+
+	// Pre-write an active version so manifest exists
+	writeFile(t, dir, "manifest.json", `{
+  "active_version": "active-v1",
+  "candidate_version": null,
+  "versions": [
+    {
+      "version": "active-v1",
+      "status": "active",
+      "policy_file": "active-v1.json",
+      "source": "bundled"
+    }
+  ]
+}`)
+	writeFile(t, dir, "active-v1.json", `{
+  "version": "active-v1",
+  "default_context_strategy": "topk_excerpt",
+  "allowed_strategies": ["topk_excerpt"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 50,
+      "long_query_strategy": "diversity_select",
+      "default_strategy": "recency_boost_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 300,  "max_items": 3  },
+    "balanced":  { "token_budget": 800,  "max_items": 6  },
+    "aggressive": { "token_budget": 1500, "max_items": 10 }
+  }
+}`)
+
+	m := NewManager(dir)
+	if err := m.LoadActive(); err != nil {
+		t.Fatalf("LoadActive failed: %v", err)
+	}
+
+	// Accept a candidate pack
+	pack := makeTestPack(t, "candidate-cloud-v2", "diversity_select", "")
+	if err := m.AcceptCandidate(pack); err != nil {
+		t.Fatalf("AcceptCandidate failed: %v", err)
+	}
+
+	// Candidate file should exist
+	candidatePath := filepath.Join(dir, "candidate-cloud-v2.json")
+	if _, err := os.Stat(candidatePath); os.IsNotExist(err) {
+		t.Error("candidate file should have been written")
+	}
+
+	// Manifest should have candidate_version set but active_version unchanged
+	manifest, err := m.readManifest()
+	if err != nil {
+		t.Fatalf("failed to read manifest: %v", err)
+	}
+	if manifest.ActiveVersion != "active-v1" {
+		t.Errorf("active_version should remain active-v1, got %s", manifest.ActiveVersion)
+	}
+	if manifest.CandidateVersion == nil || *manifest.CandidateVersion != "candidate-cloud-v2" {
+		t.Errorf("candidate_version should be candidate-cloud-v2, got %v", manifest.CandidateVersion)
+	}
+}
+
+func TestAcceptCandidate_InvalidHashRejected(t *testing.T) {
+	dir, cleanup := tempPolicyDir(t)
+	defer cleanup()
+
+	writeFile(t, dir, "manifest.json", `{
+  "active_version": "active-v1",
+  "candidate_version": null,
+  "versions": [
+    {
+      "version": "active-v1",
+      "status": "active",
+      "policy_file": "active-v1.json",
+      "source": "bundled"
+    }
+  ]
+}`)
+	writeFile(t, dir, "active-v1.json", `{
+  "version": "active-v1",
+  "default_context_strategy": "topk_excerpt",
+  "allowed_strategies": ["topk_excerpt"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 50,
+      "long_query_strategy": "diversity_select",
+      "default_strategy": "recency_boost_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 300,  "max_items": 3  },
+    "balanced":  { "token_budget": 800,  "max_items": 6  },
+    "aggressive": { "token_budget": 1500, "max_items": 10 }
+  }
+}`)
+
+	m := NewManager(dir)
+	if err := m.LoadActive(); err != nil {
+		t.Fatalf("LoadActive failed: %v", err)
+	}
+
+	// Wrong SHA256
+	pack := makeTestPack(t, "candidate-cloud-v2", "diversity_select", "deadbeef00000000000000000000000000000000000000000000000000000000")
+	err := m.AcceptCandidate(pack)
+	if err == nil {
+		t.Error("AcceptCandidate should reject wrong SHA256")
+	}
+
+	// Manifest should be unchanged
+	manifest, _ := m.readManifest()
+	if manifest.CandidateVersion != nil {
+		t.Error("candidate_version should still be nil after rejected pack")
+	}
+	// Candidate file should not exist
+	candidatePath := filepath.Join(dir, "candidate-cloud-v2.json")
+	if _, err := os.Stat(candidatePath); !os.IsNotExist(err) {
+		t.Error("candidate file should not exist after rejected pack")
+	}
+}
+
+func TestAcceptCandidate_InvalidPolicyRejected(t *testing.T) {
+	dir, cleanup := tempPolicyDir(t)
+	defer cleanup()
+
+	writeFile(t, dir, "manifest.json", `{
+  "active_version": "active-v1",
+  "candidate_version": null,
+  "versions": [
+    {
+      "version": "active-v1",
+      "status": "active",
+      "policy_file": "active-v1.json",
+      "source": "bundled"
+    }
+  ]
+}`)
+	writeFile(t, dir, "active-v1.json", `{
+  "version": "active-v1",
+  "default_context_strategy": "topk_excerpt",
+  "allowed_strategies": ["topk_excerpt"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 50,
+      "long_query_strategy": "diversity_select",
+      "default_strategy": "recency_boost_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 300,  "max_items": 3  },
+    "balanced":  { "token_budget": 800,  "max_items": 6  },
+    "aggressive": { "token_budget": 1500, "max_items": 10 }
+  }
+}`)
+
+	m := NewManager(dir)
+	if err := m.LoadActive(); err != nil {
+		t.Fatalf("LoadActive failed: %v", err)
+	}
+
+	// Pack with missing candidate_id
+	pack := &CandidatePack{
+		CandidateID:     "", // empty — fails Validate()
+		PolicyVersion:   "bad-pack-v1",
+		Policy:          &CompileStrategyPolicy{Version: "bad-pack-v1", DefaultContextStrategy: "topk_excerpt"},
+		SHA256:          "deadbeef00000000000000000000000000000000000000000000000000000000",
+		SignatureStatus: SignatureStatusNotRequired,
+		Source:          CandidateSourceCloud,
+		FetchedAt:       time.Now(),
+	}
+	err := m.AcceptCandidate(pack)
+	if err == nil {
+		t.Error("AcceptCandidate should reject pack with empty candidate_id")
+	}
+
+	// Manifest unchanged
+	manifest, _ := m.readManifest()
+	if manifest.CandidateVersion != nil {
+		t.Error("candidate_version should still be nil after rejected invalid pack")
+	}
+}
+
+func TestAcceptCandidate_CannotOverwriteActiveVersion(t *testing.T) {
+	dir, cleanup := tempPolicyDir(t)
+	defer cleanup()
+
+	writeFile(t, dir, "manifest.json", `{
+  "active_version": "active-v1",
+  "candidate_version": null,
+  "versions": [
+    {
+      "version": "active-v1",
+      "status": "active",
+      "policy_file": "active-v1.json",
+      "source": "bundled"
+    }
+  ]
+}`)
+	writeFile(t, dir, "active-v1.json", `{
+  "version": "active-v1",
+  "default_context_strategy": "topk_excerpt",
+  "allowed_strategies": ["topk_excerpt"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 50,
+      "long_query_strategy": "diversity_select",
+      "default_strategy": "recency_boost_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 300,  "max_items": 3  },
+    "balanced":  { "token_budget": 800,  "max_items": 6  },
+    "aggressive": { "token_budget": 1500, "max_items": 10 }
+  }
+}`)
+
+	m := NewManager(dir)
+	if err := m.LoadActive(); err != nil {
+		t.Fatalf("LoadActive failed: %v", err)
+	}
+
+	// Try to accept a pack with the same version as the active policy
+	pack := makeTestPack(t, "active-v1", "topk_excerpt", "")
+	err := m.AcceptCandidate(pack)
+	if err == nil {
+		t.Error("AcceptCandidate should reject overwriting active version")
+	}
+}
+
+func TestAcceptCandidate_CandidateDoesNotAffectLoadActive(t *testing.T) {
+	dir, cleanup := tempPolicyDir(t)
+	defer cleanup()
+
+	// Write active and candidate in manifest (simulating a prior AcceptCandidate)
+	writeFile(t, dir, "manifest.json", `{
+  "active_version": "active-v1",
+  "candidate_version": "candidate-v1",
+  "versions": [
+    {
+      "version": "active-v1",
+      "status": "active",
+      "policy_file": "active-v1.json",
+      "source": "bundled"
+    },
+    {
+      "version": "candidate-v1",
+      "status": "candidate",
+      "policy_file": "candidate-v1.json",
+      "source": "cloud"
+    }
+  ]
+}`)
+	writeFile(t, dir, "active-v1.json", `{
+  "version": "active-v1",
+  "default_context_strategy": "topk_excerpt",
+  "allowed_strategies": ["topk_excerpt"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 50,
+      "long_query_strategy": "diversity_select",
+      "default_strategy": "recency_boost_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 300,  "max_items": 3  },
+    "balanced":  { "token_budget": 800,  "max_items": 6  },
+    "aggressive": { "token_budget": 1500, "max_items": 10 }
+  }
+}`)
+	writeFile(t, dir, "candidate-v1.json", `{
+  "version": "candidate-v1",
+  "default_context_strategy": "diversity_select",
+  "allowed_strategies": ["diversity_select"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 30,
+      "long_query_strategy": "topk_excerpt",
+      "default_strategy": "diversity_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 100,  "max_items": 1  },
+    "balanced":  { "token_budget": 200,  "max_items": 2  },
+    "aggressive": { "token_budget": 400,  "max_items": 4  }
+  }
+}`)
+
+	m := NewManager(dir)
+	if err := m.LoadActive(); err != nil {
+		t.Fatalf("LoadActive failed: %v", err)
+	}
+
+	// Active behavior must come from active-v1, not candidate-v1
+	resolved := m.GetResolved()
+	if resolved.DefaultStrategy != "topk_excerpt" {
+		t.Errorf("active strategy should be topk_excerpt (from active-v1), got %s", resolved.DefaultStrategy)
+	}
+	tb, mi := m.GetModeDefaults("balanced")
+	if tb != 800 || mi != 6 {
+		t.Errorf("active mode should be (800, 6), got (%d, %d)", tb, mi)
+	}
+
+	// Candidate is also loadable but does not affect active
+	candidate, _ := m.LoadCandidate()
+	if candidate == nil {
+		t.Fatal("LoadCandidate should return the candidate")
+	}
+	if candidate.DefaultContextStrategy != "diversity_select" {
+		t.Errorf("candidate strategy should be diversity_select, got %s", candidate.DefaultContextStrategy)
+	}
+	// Active still unchanged
+	if resolved.DefaultStrategy != "topk_excerpt" {
+		t.Errorf("active strategy still topk_excerpt, got %s", resolved.DefaultStrategy)
+	}
+}
+
+func TestPromoteCandidate_ActivatesCandidateOnlyAfterExplicitCall(t *testing.T) {
+	dir, cleanup := tempPolicyDir(t)
+	defer cleanup()
+
+	writeFile(t, dir, "manifest.json", `{
+  "active_version": "active-v1",
+  "candidate_version": "candidate-v1",
+  "versions": [
+    {
+      "version": "active-v1",
+      "status": "active",
+      "policy_file": "active-v1.json",
+      "source": "bundled"
+    },
+    {
+      "version": "candidate-v1",
+      "status": "candidate",
+      "policy_file": "candidate-v1.json",
+      "source": "cloud"
+    }
+  ]
+}`)
+	writeFile(t, dir, "active-v1.json", `{
+  "version": "active-v1",
+  "default_context_strategy": "topk_excerpt",
+  "allowed_strategies": ["topk_excerpt"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 50,
+      "long_query_strategy": "diversity_select",
+      "default_strategy": "recency_boost_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 300,  "max_items": 3  },
+    "balanced":  { "token_budget": 800,  "max_items": 6  },
+    "aggressive": { "token_budget": 1500, "max_items": 10 }
+  }
+}`)
+	writeFile(t, dir, "candidate-v1.json", `{
+  "version": "candidate-v1",
+  "default_context_strategy": "recency_boost_select",
+  "allowed_strategies": ["recency_boost_select"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 50,
+      "long_query_strategy": "diversity_select",
+      "default_strategy": "topk_excerpt"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 400,  "max_items": 4  },
+    "balanced":  { "token_budget": 900,  "max_items": 7  },
+    "aggressive": { "token_budget": 1800, "max_items": 12 }
+  }
+}`)
+
+	m := NewManager(dir)
+	if err := m.LoadActive(); err != nil {
+		t.Fatalf("LoadActive failed: %v", err)
+	}
+
+	// Pre-promotion: active is v1
+	if m.GetDefaultStrategy() != "topk_excerpt" {
+		t.Fatalf("pre-promotion default should be topk_excerpt")
+	}
+
+	// Load candidate
+	if _, err := m.LoadCandidate(); err != nil {
+		t.Fatalf("LoadCandidate failed: %v", err)
+	}
+
+	// Promote
+	if err := m.PromoteCandidate(); err != nil {
+		t.Fatalf("PromoteCandidate failed: %v", err)
+	}
+
+	// Post-promotion: active is candidate-v1
+	if m.GetDefaultStrategy() != "recency_boost_select" {
+		t.Errorf("post-promotion default should be recency_boost_select, got %s", m.GetDefaultStrategy())
+	}
+	tb, mi := m.GetModeDefaults("balanced")
+	if tb != 900 || mi != 7 {
+		t.Errorf("post-promotion balanced should be (900, 7), got (%d, %d)", tb, mi)
+	}
+
+	// Verify manifest state
+	manifest, err := m.readManifest()
+	if err != nil {
+		t.Fatalf("readManifest failed: %v", err)
+	}
+	if manifest.ActiveVersion != "candidate-v1" {
+		t.Errorf("active_version should be candidate-v1, got %s", manifest.ActiveVersion)
+	}
+	if manifest.CandidateVersion != nil {
+		t.Errorf("candidate_version should be nil after promotion, got %v", manifest.CandidateVersion)
+	}
+}
+
+func TestGetCandidateInfo_ReturnsMetadata(t *testing.T) {
+	dir, cleanup := tempPolicyDir(t)
+	defer cleanup()
+
+	writeFile(t, dir, "manifest.json", `{
+  "active_version": "active-v1",
+  "candidate_version": "candidate-v1",
+  "versions": [
+    {
+      "version": "active-v1",
+      "status": "active",
+      "policy_file": "active-v1.json",
+      "source": "bundled"
+    },
+    {
+      "version": "candidate-v1",
+      "status": "candidate",
+      "policy_file": "candidate-v1.json",
+      "source": "cloud"
+    }
+  ]
+}`)
+	writeFile(t, dir, "active-v1.json", `{
+  "version": "active-v1",
+  "default_context_strategy": "topk_excerpt",
+  "allowed_strategies": ["topk_excerpt"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 50,
+      "long_query_strategy": "diversity_select",
+      "default_strategy": "recency_boost_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 300,  "max_items": 3  },
+    "balanced":  { "token_budget": 800,  "max_items": 6  },
+    "aggressive": { "token_budget": 1500, "max_items": 10 }
+  }
+}`)
+	writeFile(t, dir, "candidate-v1.json", `{
+  "version": "candidate-v1",
+  "default_context_strategy": "diversity_select",
+  "allowed_strategies": ["diversity_select"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 50,
+      "long_query_strategy": "diversity_select",
+      "default_strategy": "recency_boost_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 300,  "max_items": 3  },
+    "balanced":  { "token_budget": 800,  "max_items": 6  },
+    "aggressive": { "token_budget": 1500, "max_items": 10 }
+  }
+}`)
+
+	m := NewManager(dir)
+
+	info, err := m.GetCandidateInfo()
+	if err != nil {
+		t.Fatalf("GetCandidateInfo failed: %v", err)
+	}
+	if info == nil {
+		t.Fatal("GetCandidateInfo should return info when candidate is present")
+	}
+	if info.PolicyVersion != "candidate-v1" {
+		t.Errorf("expected candidate version candidate-v1, got %s", info.PolicyVersion)
+	}
+	if info.Source != CandidateSourceCloud {
+		t.Errorf("expected source cloud, got %s", info.Source)
+	}
+	if info.SignatureStatus != SignatureStatusNotRequired {
+		t.Errorf("expected signature_status not_required, got %s", info.SignatureStatus)
+	}
+}
+
+func TestGetCandidateInfo_NoCandidate_ReturnsNil(t *testing.T) {
+	dir, cleanup := tempPolicyDir(t)
+	defer cleanup()
+	// No manifest
+
+	m := NewManager(dir)
+
+	info, err := m.GetCandidateInfo()
+	if err != nil {
+		t.Fatalf("GetCandidateInfo should not error on no candidate: %v", err)
+	}
+	if info != nil {
+		t.Error("GetCandidateInfo should return nil when no candidate")
+	}
+}
+
+func TestAcceptCandidate_NewManifestCreated(t *testing.T) {
+	dir, cleanup := tempPolicyDir(t)
+	defer cleanup()
+	// No manifest at all
+
+	m := NewManager(dir)
+	pack := makeTestPack(t, "cloud-v1", "diversity_select", "")
+	if err := m.AcceptCandidate(pack); err != nil {
+		t.Fatalf("AcceptCandidate failed: %v", err)
+	}
+
+	// Manifest should have been created
+	manifest, err := m.readManifest()
+	if err != nil {
+		t.Fatalf("manifest should be created: %v", err)
+	}
+	if manifest.ActiveVersion != "builtin" {
+		t.Errorf("active_version should default to builtin, got %s", manifest.ActiveVersion)
+	}
+	if manifest.CandidateVersion == nil || *manifest.CandidateVersion != "cloud-v1" {
+		t.Errorf("candidate_version should be cloud-v1, got %v", manifest.CandidateVersion)
 	}
 }

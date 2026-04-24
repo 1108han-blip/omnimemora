@@ -3,6 +3,7 @@
 package policy
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -61,6 +62,60 @@ const (
 	PolicySourceCloudCandidate PolicySource = "cloud-candidate"
 	PolicySourceBuiltIn        PolicySource = "builtin" // fallback when no policy file exists
 )
+
+// CandidateSource identifies where a candidate pack originated.
+type CandidateSource string
+
+const (
+	CandidateSourceLocal CandidateSource = "local"
+	CandidateSourceCloud CandidateSource = "cloud"
+)
+
+// SignatureStatus records the result of signature verification.
+type SignatureStatus string
+
+const (
+	SignatureStatusNotRequired SignatureStatus = "not_required" // local skeleton — signatures out of scope for phase 1
+	SignatureStatusValid        SignatureStatus = "valid"
+	SignatureStatusInvalid      SignatureStatus = "invalid"
+	SignatureStatusAbsent      SignatureStatus = "absent"
+)
+
+// CandidatePack represents a downloadable compile strategy policy candidate.
+// It carries its own integrity hash and optional signature so callers can
+// validate before writing to the local candidate store.
+type CandidatePack struct {
+	CandidateID      string          `json:"candidate_id"`
+	PolicyVersion    string          `json:"policy_version"`
+	Policy           *CompileStrategyPolicy `json:"policy"`
+	SHA256           string          `json:"sha256"`
+	Signature        *string         `json:"signature,omitempty"`
+	SignatureStatus  SignatureStatus `json:"signature_status"`
+	Source           CandidateSource `json:"source"`
+	FetchedAt        time.Time       `json:"fetched_at"`
+}
+
+// Validate validates the candidate pack. Returns an error if required fields are
+// missing or the policy is invalid. Unknown JSON fields are silently ignored.
+// A pack that fails validation must never affect the active policy.
+func (p *CandidatePack) Validate() error {
+	if p.CandidateID == "" {
+		return fmt.Errorf("candidate_id is required")
+	}
+	if p.PolicyVersion == "" {
+		return fmt.Errorf("policy_version is required")
+	}
+	if p.Policy == nil {
+		return fmt.Errorf("policy is nil")
+	}
+	if p.Policy.Version != p.PolicyVersion {
+		return fmt.Errorf("policy.Version %q != candidate policy_version %q", p.Policy.Version, p.PolicyVersion)
+	}
+	if p.SHA256 == "" {
+		return fmt.Errorf("sha256 is required")
+	}
+	return nil
+}
 
 // ResolvedDefaults holds the effective defaults derived from active policy.
 type ResolvedDefaults struct {

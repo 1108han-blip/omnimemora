@@ -3,15 +3,29 @@
 package policy
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/omnimemora/local-runtime/app/context"
 )
+
+// CandidateFetcher is implemented by sources that can supply a CandidatePack.
+// The interface is intentionally narrow — callers provide metadata (bytes, source)
+// and the implementation is free to fetch from network, filesystem, or in-process
+// generation. No concrete implementations exist in this batch; the interface
+// exists to define the contract for future Cloudflare/Railway/embedding sources.
+type CandidateFetcher interface {
+	// Fetch returns a validated CandidatePack for the given candidateID, or an error.
+	// Implementations must return packs that already pass CandidatePack.Validate().
+	Fetch(candidateID string, policyJSON []byte) (*CandidatePack, error)
+}
 
 // Manager loads, validates, and serves the active compile strategy policy.
 // All methods are safe for concurrent use. Invalid policy never causes a runtime
@@ -321,6 +335,16 @@ func (m *Manager) GetResolved() *ResolvedDefaults {
 	return m.resolved
 }
 
+// CandidateInfo holds metadata about the current candidate without loading the policy.
+type CandidateInfo struct {
+	CandidateID   string          `json:"candidate_id"`
+	PolicyVersion string          `json:"policy_version"`
+	SHA256        string          `json:"sha256"`
+	SignatureStatus SignatureStatus `json:"signature_status"`
+	Source        CandidateSource `json:"source"`
+	FetchedAt     time.Time       `json:"fetched_at"`
+}
+
 // InvalidateCache forces the manager to reload the manifest and active policy
 // on the next call to LoadActive. Call this after external changes to the
 // policy directory.
@@ -328,6 +352,117 @@ func (m *Manager) InvalidateCache() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	// Keep built-in as baseline; next LoadActive will re-read
+}
+
+// AcceptCandidate validates and stores a candidate pack to disk, then updates
+// the manifest's candidate_version field only. It does NOT change active_version.
+// The active policy is unaffected until PromoteCandidate() is called explicitly.
+// Returns an error if validation fails or the write fails; in that case the
+// manifest is left unchanged.
+func (m *Manager) AcceptCandidate(pack *CandidatePack) error {
+	if err := pack.Validate(); err != nil {
+		return fmt.Errorf("accept: candidate validation failed: %w", err)
+	}
+
+	// Verify SHA256 against canonical policy JSON
+	canonical, err := json.Marshal(pack.Policy)
+	if err != nil {
+		return fmt.Errorf("accept: cannot marshal policy for hash: %w", err)
+	}
+	hash := sha256.Sum256(canonical)
+	hexHash := hex.EncodeToString(hash[:])
+	if hexHash != pack.SHA256 {
+		return fmt.Errorf("accept: sha256 mismatch: expected %s, got %s", pack.SHA256, hexHash)
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Write candidate file
+	candidatePath := filepath.Join(m.policyDir, pack.PolicyVersion+".json")
+	if err := os.WriteFile(candidatePath, canonical, 0644); err != nil {
+		return fmt.Errorf("accept: cannot write candidate file %s: %w", candidatePath, err)
+	}
+
+	// Read manifest; create from scratch if missing
+	manifest, err := m.readManifestNoLock()
+	if os.IsNotExist(err) {
+		manifest = &Manifest{
+			ActiveVersion:    "builtin",
+			CandidateVersion: nil,
+			Versions:         []PolicyVersion{},
+		}
+	} else if err != nil {
+		return fmt.Errorf("accept: cannot read manifest: %w", err)
+	}
+
+	// Check that version is not already present as active
+	for _, v := range manifest.Versions {
+		if v.Version == pack.PolicyVersion && v.Status == "active" {
+			return fmt.Errorf("accept: cannot overwrite active version %q", pack.PolicyVersion)
+		}
+	}
+
+	// Update or append candidate version in manifest
+	found := false
+	for i := range manifest.Versions {
+		if manifest.Versions[i].Version == pack.PolicyVersion {
+			manifest.Versions[i] = PolicyVersion{
+				Version:    pack.PolicyVersion,
+				Status:     "candidate",
+				PolicyFile: pack.PolicyVersion + ".json",
+				Source:     string(pack.Source),
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		manifest.Versions = append(manifest.Versions, PolicyVersion{
+			Version:    pack.PolicyVersion,
+			Status:     "candidate",
+			PolicyFile: pack.PolicyVersion + ".json",
+			Source:     string(pack.Source),
+		})
+	}
+	manifest.CandidateVersion = &pack.PolicyVersion
+
+	// Write manifest atomically: write to temp then rename
+	if err := m.writeManifestAtomicNoLock(manifest); err != nil {
+		// Manifest write failed — remove candidate file to leave state unchanged
+		os.Remove(candidatePath)
+		return fmt.Errorf("accept: manifest write failed, candidate file removed: %w", err)
+	}
+
+	return nil
+}
+
+// GetCandidateInfo returns metadata about the current candidate without loading the policy.
+func (m *Manager) GetCandidateInfo() (*CandidateInfo, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	manifest, err := m.readManifestNoLock()
+	if err != nil {
+		return nil, nil // No manifest — no candidate
+	}
+
+	if manifest.CandidateVersion == nil || *manifest.CandidateVersion == "" {
+		return nil, nil
+	}
+
+	for _, v := range manifest.Versions {
+		if v.Version == *manifest.CandidateVersion {
+			return &CandidateInfo{
+				CandidateID:      v.Version,
+				PolicyVersion:    v.Version,
+				Source:           CandidateSource(v.Source),
+				SignatureStatus:  SignatureStatusNotRequired,
+				FetchedAt:        v.VerifiedAt,
+			}, nil
+		}
+	}
+	return nil, nil
 }
 
 // GetActivePolicy returns the currently active policy (or built-in fallback).
@@ -369,6 +504,35 @@ func (m *Manager) writeManifestNoLock(manifest *Manifest) error {
 		return err
 	}
 	return os.WriteFile(m.manifestPath, data, 0644)
+}
+
+// writeManifestAtomicNoLock writes the manifest atomically by writing to a temp
+// file and renaming it over the target. This ensures the manifest is never left
+// in a partially-written state.
+func (m *Manager) writeManifestAtomicNoLock(manifest *Manifest) error {
+	data, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(m.policyDir, "manifest-*.tmp")
+	if err != nil {
+		return fmt.Errorf("atomic manifest: cannot create temp file: %w", err)
+	}
+	tmpPath := tmp.Name()
+	_, err = tmp.Write(data)
+	if closeErr := tmp.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("atomic manifest: write failed: %w", err)
+	}
+	// Atomic rename
+	if err := os.Rename(tmpPath, m.manifestPath); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("atomic manifest: rename failed: %w", err)
+	}
+	return nil
 }
 
 func (m *Manager) readPolicyFile(filename string) (*CompileStrategyPolicy, error) {
