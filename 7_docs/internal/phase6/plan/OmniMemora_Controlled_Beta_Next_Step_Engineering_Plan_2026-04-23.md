@@ -254,6 +254,23 @@ CLI/product-path verifiedï¼Œcontrol truth aligned within family-scope boundaryã€
 
 - `OmniMemora_Batch3_NonCodex_Negative_Impact_Gate_2026-04-24.md`
 
+### 5173 Polling Relief + 18011 Diagnosis Snapshot (2026-04-24)
+
+**Status summary:**
+
+- `5173` controls polling pressure reduced.
+- backend performance diagnosis pending implementation batch.
+
+Record links:
+
+- `OmniMemora_5173_Agents_Control_Polling_Relief_Closeout_2026-04-24.md`
+- `OmniMemora_18011_Agents_Control_Performance_Diagnosis_2026-04-24.md`
+
+Boundary:
+
+- UI relief closeout only proves frontend no longer amplifies `/agents/control`.
+- Backend diagnosis record is evidence-only and does not include backend code/schema changes.
+
 ### AccessPlan Projection Layer Snapshot (2026-04-24)
 
 **Result:** pass (projection layer scope)
