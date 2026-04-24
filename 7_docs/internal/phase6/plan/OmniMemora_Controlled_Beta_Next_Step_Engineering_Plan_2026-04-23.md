@@ -336,6 +336,27 @@ CLI/product-path verifiedï¼Œcontrol truth aligned within family-scope boundaryã€
 
 - `OmniMemora_AccessPlan_Actual_Enforcement_Running_Revalidation_After_Restart_Repair_2026-04-24.md`
 
+### Token Saving Effectiveness Gate Snapshot (2026-04-24)
+
+**Result:** Passed for non-Codex token-saving effectiveness gate
+
+Gate record commit:
+
+- `ba46b22 docs(phase6): record token saving effectiveness gate`
+
+Validation objects and savings:
+
+- Claude Code default `5b827a546f74`: saved `124`
+- Claude Code `cc-haha` `e9bd3b614702`: saved `124`
+- OpenClaw `86c8bea8faf4`: saved `2519`
+
+Boundary:
+
+- no code changes
+- no promotion
+- no Codex validation
+- no UI/data-logic expansion
+
 ### Current Gate Override (2026-04-24)
 
 - `Codex is product-compatible in principle, but protected/deferred as a local validation client.`
