@@ -357,6 +357,23 @@ Boundary:
 - no Codex validation
 - no UI/data-logic expansion
 
+### Product North Star Evidence Closeout (2026-04-24)
+
+**Result:** Passed for non-Codex product north-star evidence
+
+Gate commits:
+
+- Token saving effectiveness: `ba46b22`
+- Quality no-regression: `06bd9e5`
+- Non-interference: `eb4a6e2`
+
+Boundary:
+
+- non-Codex only
+- no Codex install/run/live validation
+- no UI/data-logic expansion
+- no thick memory-product expansion
+
 ### Current Gate Override (2026-04-24)
 
 - `Codex is product-compatible in principle, but protected/deferred as a local validation client.`
