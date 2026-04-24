@@ -557,6 +557,46 @@ Closed out the local candidate pack import entry. The `import-candidate` CLI com
 
 **Next batch:** CSP-001 Real Cloud Candidate Source — pull-style cloud fetch → same `AcceptCandidate()` path; no second candidate-write logic; no cloud compilation; no auto-promotion
 
+### CSP-001 Real Cloud Candidate Source (2026-04-24)
+
+**Result:** PASS
+
+Implemented a pull-style HTTP cloud candidate source that fetches a candidate pack from a configurable URL and writes it to the local candidate cache via `AcceptCandidate()`. Reuses the same `AcceptCandidate()` path as local import — no second candidate-write logic.
+
+**Commit:**
+
+- `eabe930 runtime: add real cloud candidate source for CSP-001 compile strategy policy`
+
+**Repo reality:**
+
+- `policy/cloud_source.go`: `CloudCandidateFetcher.Fetch()` and `FetchWithManager()` — HTTP GET to `<baseURL>/<candidateID>.json`, parse JSON, validate SHA-256, call `AcceptCandidate()`
+- `internal/cli/commands.go`: `FetchCandidate(args)` — operator-triggered CLI command with usage docs and exit-code propagation
+- `main.go`: `fetch-candidate` routing (+2 lines)
+- 12 new tests covering: valid pack, hash mismatch, HTTP/network failure, connection refused, malformed JSON, missing required fields, active overwrite attempt, new manifest, active unchanged, manifest untouched on error
+
+**Test results:**
+
+- `go test ./policy -v` → PASS — 40 total tests (28 pre-existing + 12 new cloud source)
+- `go test ./...` → all packages ok
+- `gofmt` clean on all modified/new files
+- `git diff --check` clean
+- worktree clean after commit
+
+**Boundaries held:**
+
+- Cloud only distributes candidate pack: ✅ fetch fetches policy JSON, no compile offloading
+- No per-request remote decision: ✅ fetch is discrete operator action; candidate does not affect `LoadActive()` until `PromoteCandidate()` is called
+- No auto-promote: ✅ candidate staged only; explicit `PromoteCandidate()` required
+- No background polling: ✅ each `fetch-candidate` invocation is one discrete HTTP GET
+- Error path: ✅ on HTTP/parse/validation/write failure, manifest and candidate file left unchanged
+
+**Explicit boundaries:**
+
+- no cloud compile / no per-request remote strategy decision
+- no automatic promotion
+- no Codex validation
+- no background polling
+
 ### Current Gate Override (2026-04-24)
 
 - `Codex is product-compatible in principle, but protected/deferred as a local validation client.`
