@@ -238,7 +238,7 @@ def test_status_read_model_fallbacks_to_legacy_path_when_summary_missing(monkeyp
         def read_recent_compile_events(limit=5000, window_minutes=30):
             return []
 
-    monkeypatch.setattr(status_read_model, "_read_family_window_summary", lambda: (None, "none"))
+    monkeypatch.setattr(status_read_model, "_read_family_window_summary", lambda: (None, "none", "summary_missing"))
     monkeypatch.setattr(status_read_model, "_runtime_request", fake_runtime_request)
     monkeypatch.setattr(status_read_model, "_runtime_health_state", fake_health_state)
     monkeypatch.setattr(status_read_model, "build_metrics_index", lambda: {"openclaw": {"active": False, "last_seen_at": None, "subagent_count_active": 0, "subagent_count_total_visible": 0}})
@@ -298,7 +298,7 @@ def test_status_read_model_prefers_fresh_summary_when_available(monkeypatch):
     def fail_if_called(*args, **kwargs):
         raise AssertionError("legacy aggregation should not run when fresh summary exists")
 
-    monkeypatch.setattr(status_read_model, "_read_family_window_summary", lambda: (fresh_summary, "fresh"))
+    monkeypatch.setattr(status_read_model, "_read_family_window_summary", lambda: (fresh_summary, "fresh", None))
     monkeypatch.setattr(status_read_model, "_runtime_request", fake_runtime_request)
     monkeypatch.setattr(status_read_model, "_runtime_health_state", fake_health_state)
     monkeypatch.setattr(status_read_model, "build_metrics_index", lambda: {"openclaw": {"active": False, "last_seen_at": None, "subagent_count_active": 0, "subagent_count_total_visible": 0}})
@@ -353,7 +353,7 @@ def test_status_read_model_uses_stale_summary_before_legacy_fallback(monkeypatch
     def fail_if_called(*args, **kwargs):
         raise AssertionError("legacy aggregation should not run when stale summary is usable")
 
-    monkeypatch.setattr(status_read_model, "_read_family_window_summary", lambda: (stale_summary, "stale"))
+    monkeypatch.setattr(status_read_model, "_read_family_window_summary", lambda: (stale_summary, "stale", None))
     monkeypatch.setattr(status_read_model, "_runtime_request", fake_runtime_request)
     monkeypatch.setattr(status_read_model, "_runtime_health_state", fake_health_state)
     monkeypatch.setattr(status_read_model, "build_metrics_index", lambda: {"openclaw": {"active": False, "last_seen_at": None, "subagent_count_active": 0, "subagent_count_total_visible": 0}})
@@ -489,3 +489,158 @@ def test_maintenance_manager_budget_exceeded_writes_failed_ledger(tmp_path):
     assert len(lines) == 1
     persisted = json.loads(lines[0])
     assert persisted["status"] == "failed"
+
+
+def test_summary_builder_contract_metadata_fields():
+    now = datetime.now(timezone.utc)
+    payload = summary_builder.build_family_window_summary(
+        meters=[],
+        compile_rows_30m=[],
+        compile_rows_24h=[],
+        proxy_rows_30m=[],
+        now_utc=now,
+        builder_version="test-builder-v1",
+    )
+    assert payload["schema_version"] == "dlp-family-window-summary-v1"
+    assert isinstance(payload["generated_at"], (int, float))
+    assert payload["builder_version"] == "test-builder-v1"
+    assert isinstance(payload["source_counts"], dict)
+    assert payload["source_counts"]["meters"] == 0
+    assert payload["source_counts"]["compile_rows_30m"] == 0
+    assert isinstance(payload["families"], dict)
+    assert "degraded_reason" not in payload
+
+    degraded = summary_builder.build_family_window_summary(
+        meters=[],
+        compile_rows_30m=[],
+        compile_rows_24h=[],
+        proxy_rows_30m=[],
+        now_utc=now,
+        degraded_reason="fixture_degraded",
+    )
+    assert degraded["degraded_reason"] == "fixture_degraded"
+
+
+def test_summary_path_and_legacy_path_key_fields_match(monkeypatch):
+    async def fake_runtime_request(_method, _path, payload=None):
+        return {
+            "agents": [
+                {
+                    "family_id": "openclaw",
+                    "display_name": "OpenClaw",
+                    "installed": True,
+                    "backup_available": False,
+                    "detected": True,
+                    "message": "",
+                }
+            ]
+        }
+
+    async def fake_health_state():
+        return "healthy"
+
+    class RouteState:
+        @staticmethod
+        def routing_enabled(_family_id):
+            return False
+
+    metrics_24h = {
+        "requests_24h": 7,
+        "saved_tokens_24h": 700,
+        "savings_ratio_24h": 0.35,
+        "last_request_at": datetime.now(timezone.utc).isoformat(),
+        "observed_requests_24h": 9,
+    }
+    compile_30 = {"proxied_requests": 5, "compile_empty": 0, "bypassed": 0, "last_event_ts": None}
+    compile_24 = {"proxied_requests": 9, "compile_empty": 0, "bypassed": 0, "last_event_ts": None}
+    traffic_truth = "internal_only"
+
+    monkeypatch.setattr(status_read_model, "_runtime_request", fake_runtime_request)
+    monkeypatch.setattr(status_read_model, "_runtime_health_state", fake_health_state)
+    monkeypatch.setattr(status_read_model, "build_metrics_index", lambda: {"openclaw": {"active": False, "last_seen_at": None, "subagent_count_active": 0, "subagent_count_total_visible": 0}})
+    monkeypatch.setattr(status_read_model, "_get_agent_routing_state", lambda: RouteState())
+    monkeypatch.setattr(status_read_model, "_record_degraded_path", lambda *_: None)
+
+    summary_families = {
+        "openclaw": {
+            "traffic_truth_30m": traffic_truth,
+            "compile_30m": compile_30,
+            "compile_24h": compile_24,
+            "metrics_24h": metrics_24h,
+        }
+    }
+    monkeypatch.setattr(status_read_model, "_read_family_window_summary", lambda: (summary_families, "fresh", None))
+    cards_summary = asyncio.run(status_read_model.build_control_cards())
+
+    class CompileStore:
+        @staticmethod
+        def read_recent_compile_events(limit=5000, window_minutes=30):
+            return []
+
+    monkeypatch.setattr(status_read_model, "_read_family_window_summary", lambda: (None, "none", "summary_missing"))
+    monkeypatch.setattr(status_read_model, "_get_compile_store", lambda: CompileStore())
+    monkeypatch.setattr(status_read_model, "_collect_observed_family_meters", lambda *_args, **_kwargs: [])
+    def fake_compile_summary(_family_id, window_minutes=30, preloaded_rows=None):
+        return compile_24 if window_minutes == 24 * 60 else compile_30
+
+    monkeypatch.setattr(status_read_model, "_summarize_family_compile_events", fake_compile_summary)
+    monkeypatch.setattr(status_read_model, "compute_family_24h_metrics", lambda *_args, **_kwargs: metrics_24h)
+    monkeypatch.setattr(status_read_model, "derive_traffic_truth", lambda *_args, **_kwargs: traffic_truth)
+    cards_legacy = asyncio.run(status_read_model.build_control_cards())
+
+    for key in [
+        "traffic_truth",
+        "requests_24h",
+        "saved_tokens_24h",
+        "savings_ratio_24h",
+        "last_request_at",
+        "observed_requests_24h",
+    ]:
+        assert cards_summary[0][key] == cards_legacy[0][key]
+
+
+def test_legacy_fallback_records_degraded_reason(monkeypatch):
+    async def fake_runtime_request(_method, _path, payload=None):
+        return {"agents": []}
+
+    async def fake_health_state():
+        return "healthy"
+
+    class FakeStateStore:
+        def __init__(self):
+            self.records = []
+
+        @staticmethod
+        def new_cycle_id():
+            return "cycle-x"
+
+        @staticmethod
+        def build_record(**kwargs):
+            return kwargs
+
+        def append_state_record(self, record):
+            self.records.append(record)
+
+    store = FakeStateStore()
+
+    monkeypatch.setattr(status_read_model, "_runtime_request", fake_runtime_request)
+    monkeypatch.setattr(status_read_model, "_runtime_health_state", fake_health_state)
+    monkeypatch.setattr(status_read_model, "build_metrics_index", lambda: {})
+    monkeypatch.setattr(status_read_model, "_get_agent_routing_state", lambda: type("RouteState", (), {"routing_enabled": staticmethod(lambda _f: False)})())
+    monkeypatch.setattr(status_read_model, "_read_family_window_summary", lambda: (None, "none", "summary_contract_invalid"))
+    monkeypatch.setattr(
+        status_read_model,
+        "_get_compile_store",
+        lambda: type(
+            "CompileStore",
+            (),
+            {"read_recent_compile_events": staticmethod(lambda limit=5000, window_minutes=30: [])},
+        )(),
+    )
+    monkeypatch.setattr(status_read_model, "_get_data_lifecycle_state_store", lambda: store)
+    monkeypatch.setattr(status_read_model, "_diag_last_degraded_record_ts", 0.0)
+
+    _ = asyncio.run(status_read_model.build_control_cards())
+    assert len(store.records) == 1
+    assert store.records[0]["status"] == "degraded"
+    assert store.records[0]["error"] == "summary_contract_invalid"

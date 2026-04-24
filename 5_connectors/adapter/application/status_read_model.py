@@ -22,6 +22,8 @@ import importlib
 import inspect as _inspect
 import os
 import sys
+import threading
+import time
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, List, Optional, TYPE_CHECKING
 
@@ -50,6 +52,8 @@ _diag_agent_identity_module = None
 _diag_get_meter_fn = None
 _diag_support_schema_version = ""
 _diag_support_error_catalog: Dict[str, Dict[str, Any]] = {}
+_diag_last_degraded_record_ts = 0.0
+_diag_degraded_record_lock = threading.Lock()
 
 
 def configure_diagnostics_read_model(
@@ -123,6 +127,14 @@ def _get_data_lifecycle_policy():
 
 def _get_data_lifecycle_summary_store():
     return __import__("5_connectors.adapter.data_lifecycle.summary_store", fromlist=["dummy"])
+
+
+def _get_data_lifecycle_state_store():
+    return __import__("5_connectors.adapter.data_lifecycle.state_store", fromlist=["dummy"])
+
+
+def _get_data_lifecycle_summary_builder():
+    return __import__("5_connectors.adapter.data_lifecycle.summary_builder", fromlist=["dummy"])
 
 
 # ============================================================================
@@ -253,21 +265,12 @@ def build_metrics_index() -> dict[str, dict[str, Any]]:
 # ============================================================================
 
 def _normalize_agent_to_family(agent: str) -> str:
-    """
-    Normalize an agent identifier from meter records to its canonical family.
-    """
-    lower = agent.lower()
-    if lower in {"openclaw", "openclaw-agent", "openclaw-bundle-mcp", "openclaw_bundle_mcp"}:
-        return "openclaw"
-    if lower in {"claude_code", "claude-code", "claude"}:
-        return "claude_code"
-    if lower in {"codex", "codex_cli", "codex-cli"}:
-        return "codex_cli"
-    if lower == "cursor":
-        return "cursor"
-    if lower == "test":
+    """Normalize an agent identifier to its canonical family."""
+    summary_builder = _get_data_lifecycle_summary_builder()
+    normalized = summary_builder.normalize_agent_to_family(agent)
+    if normalized == str(agent or "") and str(agent or "").lower() == "test":
         return "test"
-    return agent
+    return normalized
 
 
 # ============================================================================
@@ -402,19 +405,6 @@ def _collect_observed_family_meters(family_id: str, window_minutes: int = 30) ->
     return request_classifier.collapse_retry_bursts(observed)
 
 
-_COMPILE_EMPTY_REASONS = {
-    "empty_query",
-    "no_messages",
-    "no_user_message",
-    "assistant_only_continuation",
-}
-
-_BYPASS_COMPILE_REASONS = {
-    "agent_route_disabled",
-    "codex_env_bypass",
-}
-
-
 def _summarize_family_compile_events(
     family_id: str,
     window_minutes: int = 30,
@@ -425,35 +415,8 @@ def _summarize_family_compile_events(
         rows = compile_store.read_recent_compile_events(limit=5000, window_minutes=window_minutes)
     else:
         rows = preloaded_rows
-    summary = {
-        "proxied_requests": 0,
-        "compile_empty": 0,
-        "bypassed": 0,
-        "last_event_ts": None,
-    }
-
-    for row in rows:
-        normalized = _normalize_agent_to_family(str(row.get("agent_id") or ""))
-        if normalized != family_id:
-            continue
-        summary["proxied_requests"] += 1
-
-        status = str(row.get("compile_status") or "").strip().lower()
-        reason = str(row.get("compile_reason") or "").strip().lower()
-
-        if status == "compile_skipped":
-            if reason in _COMPILE_EMPTY_REASONS:
-                summary["compile_empty"] += 1
-            elif reason in _BYPASS_COMPILE_REASONS:
-                summary["bypassed"] += 1
-
-        ts = row.get("timestamp")
-        if isinstance(ts, (int, float)):
-            current = summary["last_event_ts"] or 0
-            if ts > current:
-                summary["last_event_ts"] = float(ts)
-
-    return summary
+    summary_builder = _get_data_lifecycle_summary_builder()
+    return summary_builder.summarize_compile_rows_for_family(rows, family_id)
 
 
 def derive_traffic_truth(
@@ -475,16 +438,8 @@ def derive_traffic_truth(
     if observed_meters is None:
         observed_meters = _collect_observed_family_meters(family_id, window_minutes=window_minutes)
     family_compile = compile_summary or _summarize_family_compile_events(family_id, window_minutes=window_minutes)
-
-    if observed_meters:
-        return "real_request_observed"
-    if family_compile["bypassed"] > 0:
-        return "bypassed"
-    if family_compile["compile_empty"] > 0:
-        return "compile_empty"
-    if family_compile["proxied_requests"] > 0:
-        return "internal_only"
-    return "no_recent_evidence"
+    summary_builder = _get_data_lifecycle_summary_builder()
+    return summary_builder.derive_traffic_truth_from_counts(len(observed_meters), family_compile)
 
 
 def derive_observed_client_truth(raw: Dict[str, Any]) -> Dict[str, Any]:
@@ -627,7 +582,35 @@ def compute_family_24h_metrics(
     }
 
 
-def _read_family_window_summary() -> tuple[Optional[Dict[str, Dict[str, Any]]], str]:
+def _is_valid_summary_contract(payload: Any) -> bool:
+    if not isinstance(payload, dict):
+        return False
+    required_keys = {
+        "schema_version",
+        "generated_at",
+        "source_counts",
+        "builder_version",
+        "families",
+    }
+    if not required_keys.issubset(set(payload.keys())):
+        return False
+    if payload.get("schema_version") != "dlp-family-window-summary-v1":
+        return False
+    if not isinstance(payload.get("generated_at"), (int, float)):
+        return False
+    if not isinstance(payload.get("source_counts"), dict):
+        return False
+    if not isinstance(payload.get("builder_version"), str):
+        return False
+    if not isinstance(payload.get("families"), dict):
+        return False
+    degraded_reason = payload.get("degraded_reason")
+    if degraded_reason is not None and not isinstance(degraded_reason, str):
+        return False
+    return True
+
+
+def _read_family_window_summary() -> tuple[Optional[Dict[str, Dict[str, Any]]], str, Optional[str]]:
     """
     Read family/window summary from Data Lifecycle Plane.
     Order: fresh summary -> stale-but-usable summary -> None.
@@ -642,14 +625,38 @@ def _read_family_window_summary() -> tuple[Optional[Dict[str, Dict[str, Any]]], 
             payload = summary_store.read_stale_usable_summary(policy=policy)
             source = "stale"
     except Exception:
-        return None, "none"
+        return None, "none", "summary_read_error"
 
-    if not isinstance(payload, dict):
-        return None, "none"
+    if payload is None:
+        return None, "none", "summary_missing"
+    if not _is_valid_summary_contract(payload):
+        return None, "none", "summary_contract_invalid"
     families = payload.get("families")
-    if not isinstance(families, dict):
-        return None, "none"
-    return families, source
+    return families, source, None
+
+
+def _record_degraded_path(reason: str) -> None:
+    global _diag_last_degraded_record_ts
+    now_ts = time.time()
+    with _diag_degraded_record_lock:
+        if (now_ts - _diag_last_degraded_record_ts) < 60.0:
+            return
+        _diag_last_degraded_record_ts = now_ts
+    try:
+        state_store = _get_data_lifecycle_state_store()
+        now = datetime.now(timezone.utc)
+        record = state_store.build_record(
+            cycle_id=state_store.new_cycle_id(),
+            trigger="read_model_degraded",
+            started_at=now,
+            completed_at=now,
+            status="degraded",
+            bytes_scanned=0,
+            error=reason,
+        )
+        state_store.append_state_record(record)
+    except Exception:
+        pass
 
 
 def _safe_family_summary(
@@ -678,11 +685,12 @@ async def build_control_cards() -> List[Dict[str, Any]]:
     runtime_payload = await _runtime_request("GET", "/agents/control")
     health_state = await _runtime_health_state()
     metrics_index = build_metrics_index()
-    summary_families, _summary_source = _read_family_window_summary()
+    summary_families, _summary_source, degraded_reason = _read_family_window_summary()
     compile_rows_30m = None
     compile_rows_24h = None
+    using_legacy_fallback = summary_families is None
     if summary_families is None:
-        # Compatibility fallback path when DLP summary is missing/stale.
+        # Degraded compatibility path when DLP summary contract cannot be used.
         compile_store = _get_compile_store()
         compile_rows_30m = compile_store.read_recent_compile_events(limit=5000, window_minutes=30)
         compile_rows_24h = compile_store.read_recent_compile_events(limit=5000, window_minutes=24 * 60)
@@ -782,6 +790,8 @@ async def build_control_cards() -> List[Dict[str, Any]]:
                 "scope_note": _derive_scope_note(family_id),
             }
         )
+    if using_legacy_fallback:
+        _record_degraded_path(degraded_reason or "legacy_fallback_path")
 
     cards.sort(key=lambda item: (not item["active"], item["display_name"].lower()))
     return cards

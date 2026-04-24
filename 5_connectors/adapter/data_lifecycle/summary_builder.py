@@ -52,7 +52,7 @@ def _epoch_to_iso(epoch_value: Optional[float]) -> Optional[str]:
         return None
 
 
-def _summarize_compile_rows(rows: Iterable[dict[str, Any]], family_id: str) -> dict[str, Any]:
+def summarize_compile_rows_for_family(rows: Iterable[dict[str, Any]], family_id: str) -> dict[str, Any]:
     summary = {
         "proxied_requests": 0,
         "compile_empty": 0,
@@ -81,7 +81,7 @@ def _summarize_compile_rows(rows: Iterable[dict[str, Any]], family_id: str) -> d
     return summary
 
 
-def _derive_traffic_truth(observed_count: int, compile_summary: dict[str, Any]) -> str:
+def derive_traffic_truth_from_counts(observed_count: int, compile_summary: dict[str, Any]) -> str:
     if observed_count > 0:
         return "real_request_observed"
     if int(compile_summary.get("bypassed", 0)) > 0:
@@ -103,6 +103,8 @@ def build_family_window_summary(
     is_default_overview_request: Optional[Callable[[Any], bool]] = None,
     is_value_qualified: Optional[Callable[[Any], bool]] = None,
     collapse_retry_bursts: Optional[Callable[[Iterable[Any]], list[Any]]] = None,
+    builder_version: str = "dlp-summary-builder-v2",
+    degraded_reason: Optional[str] = None,
 ) -> dict[str, Any]:
     now = now_utc.astimezone(timezone.utc) if now_utc else datetime.now(timezone.utc)
     cutoff_30m = now - timedelta(minutes=30)
@@ -158,8 +160,8 @@ def build_family_window_summary(
         observed_24h = collapse(observed_24h)
         qualified_24h = collapse(qualified_24h)
 
-        compile_30 = _summarize_compile_rows(compile_30_list, family_id)
-        compile_24 = _summarize_compile_rows(compile_24_list, family_id)
+        compile_30 = summarize_compile_rows_for_family(compile_30_list, family_id)
+        compile_24 = summarize_compile_rows_for_family(compile_24_list, family_id)
 
         compile_last_request_at = _epoch_to_iso(compile_24.get("last_event_ts"))
 
@@ -196,7 +198,7 @@ def build_family_window_summary(
                 proxy_requests_30m += 1
 
         summary_families[family_id] = {
-            "traffic_truth_30m": _derive_traffic_truth(len(observed_30m), compile_30),
+            "traffic_truth_30m": derive_traffic_truth_from_counts(len(observed_30m), compile_30),
             "compile_30m": compile_30,
             "compile_24h": compile_24,
             "metrics_24h": metrics_24h,
@@ -210,8 +212,18 @@ def build_family_window_summary(
             },
         }
 
-    return {
+    payload: dict[str, Any] = {
         "schema_version": "dlp-family-window-summary-v1",
         "generated_at": now.timestamp(),
+        "source_counts": {
+            "meters": len(meter_list),
+            "compile_rows_30m": len(compile_30_list),
+            "compile_rows_24h": len(compile_24_list),
+            "proxy_rows_30m": len(proxy_30_list),
+        },
+        "builder_version": builder_version,
         "families": summary_families,
     }
+    if degraded_reason:
+        payload["degraded_reason"] = str(degraded_reason)
+    return payload
