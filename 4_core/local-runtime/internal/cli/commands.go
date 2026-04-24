@@ -1092,3 +1092,91 @@ func PolicyStatus(args []string) error {
 
 	return nil
 }
+
+// printFetchCandidateUsage displays help for the fetch-candidate command
+func printFetchCandidateUsage() {
+	fmt.Print(`
+Usage:
+  omnimemora fetch-candidate <cloud-url> <candidate-id> [options]
+
+Fetch a compile strategy candidate pack from a cloud URL and import it into
+the runtime's candidate cache. This makes one HTTP GET request to
+<cloud-url>/<candidate-id>.json, validates the response, and calls AcceptCandidate
+to write the candidate to disk.
+
+The cloud endpoint must return a JSON body matching the CandidatePack schema:
+  - candidate_id
+  - policy_version
+  - policy (CompileStrategyPolicy object)
+  - sha256 (SHA-256 of canonical policy JSON)
+  - source ("cloud")
+  - fetched_at (RFC3339 timestamp)
+
+Exit codes:
+  0  success — candidate fetched and staged
+  1  failure — HTTP error, non-200 status, parse error, hash mismatch,
+              or manifest write error; no partial state is left.
+
+Options:
+  --help, -h  Show this help
+
+Examples:
+  omnimemora fetch-candidate https://cdn.example.com/candidates cloud-v2
+  omnimemora fetch-candidate http://localhost:8080/policies candidate-001
+`)
+}
+
+// FetchCandidate fetches a candidate pack from a cloud URL and stages it locally.
+func FetchCandidate(args []string) error {
+	// Check for help flags
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			printFetchCandidateUsage()
+			return nil
+		}
+	}
+
+	if len(args) < 2 {
+		fmt.Println("Error: cloud-url and candidate-id are required")
+		fmt.Println()
+		printFetchCandidateUsage()
+		return fmt.Errorf("fetch-candidate: missing cloud-url or candidate-id argument")
+	}
+
+	cloudURL := args[0]
+	candidateID := args[1]
+
+	pack, err := policy.FetchWithManager(cloudURL, candidateID, "")
+	if err != nil {
+		errStr := err.Error()
+		if strings.Contains(errStr, "sha256 mismatch") {
+			fmt.Fprintf(os.Stderr, "Error: SHA-256 hash mismatch — candidate pack may be corrupted or tampered with.\n  %v\n", err)
+			os.Exit(policy.ExitHashMismatch)
+		}
+		if strings.Contains(errStr, "cannot overwrite active") {
+			fmt.Fprintf(os.Stderr, "Error: Cannot fetch candidate %q — it matches the active policy version.\n  %v\n", candidateID, err)
+			os.Exit(policy.ExitActiveOverwrite)
+		}
+		if strings.Contains(errStr, "manifest write failed") {
+			fmt.Fprintf(os.Stderr, "Error: Manifest write failed.\n  %v\n", err)
+			os.Exit(policy.ExitManifestWrite)
+		}
+		if strings.Contains(errStr, "HTTP ") {
+			fmt.Fprintf(os.Stderr, "Error: HTTP fetch failed.\n  %v\n", err)
+			os.Exit(policy.ExitValidation)
+		}
+		fmt.Fprintf(os.Stderr, "Error: Candidate fetch failed.\n  %v\n", err)
+		os.Exit(policy.ExitValidation)
+	}
+
+	fmt.Printf("Candidate fetched and staged successfully.\n")
+	fmt.Printf("  candidate_id:   %s\n", pack.CandidateID)
+	fmt.Printf("  policy_version: %s\n", pack.PolicyVersion)
+	fmt.Printf("  source:         %s\n", pack.Source)
+	fmt.Printf("  sha256:         %s\n", pack.SHA256)
+	fmt.Println()
+	fmt.Println("The candidate is staged. Run 'omnimemora policy-status' to confirm.")
+	fmt.Println("To activate, call PromoteCandidate explicitly (not done automatically).")
+
+	return nil
+}

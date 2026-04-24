@@ -87,6 +87,8 @@ func runCommand(command string, args []string) error {
 		return nil
 	case "import-candidate":
 		return cli.ImportCandidate(args)
+	case "fetch-candidate":
+		return cli.FetchCandidate(args)
 	case "policy-status":
 		return cli.PolicyStatus(args)
 	default:
@@ -111,6 +113,7 @@ Usage:
   omnimemora connect-codex
   omnimemora connect-claude
   omnimemora import-candidate <path-to-candidate-pack.json>
+  omnimemora fetch-candidate <cloud-url> <candidate-id>
   omnimemora policy-status
   omnimemora validate openclaw [--profile p0-3] [--runs 3]
 `, Version)
