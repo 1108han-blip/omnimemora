@@ -374,6 +374,28 @@ Boundary:
 - no UI/data-logic expansion
 - no thick memory-product expansion
 
+### Evidence Reliability Hardening Snapshot (2026-04-24)
+
+Commit:
+
+- `fc8d658 test(adapter): harden evidence reliability contracts`
+
+Protected contracts:
+
+- planned `access_plan` visibility
+- planned/actual separation
+- unavailable actual trace fallback
+- meter/request_evidence consistency
+- token-saving readability
+- quality/non-interference template recordability
+
+Boundary:
+
+- repo-only tests/docs
+- no promotion/live validation
+- no Codex validation
+- no UI/data-logic expansion
+
 ### Current Gate Override (2026-04-24)
 
 - `Codex is product-compatible in principle, but protected/deferred as a local validation client.`
