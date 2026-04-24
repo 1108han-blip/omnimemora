@@ -15,7 +15,9 @@ Action 分類：
 
 from __future__ import annotations
 
+import copy
 import importlib
+import time
 from typing import Optional
 
 import httpx
@@ -28,6 +30,10 @@ from .config import config
 _srm = importlib.import_module("5_connectors.adapter.application.status_read_model")
 
 router = APIRouter()
+
+_AGENTS_CONTROL_CACHE_TTL_SECONDS = 10.0
+_agents_control_snapshot_payload: Optional[dict] = None
+_agents_control_snapshot_expires_at: float = 0.0
 
 _DISPLAY_NAMES = {
     "codex_cli": "Codex",
@@ -57,6 +63,36 @@ def _find_card(cards, family_id):
     return None
 
 
+def _cache_now() -> float:
+    return time.monotonic()
+
+
+def _invalidate_agents_control_snapshot() -> None:
+    global _agents_control_snapshot_payload, _agents_control_snapshot_expires_at
+    _agents_control_snapshot_payload = None
+    _agents_control_snapshot_expires_at = 0.0
+
+
+def _load_cached_agents_control_snapshot() -> Optional[dict]:
+    if _agents_control_snapshot_payload is None:
+        return None
+    if _cache_now() >= _agents_control_snapshot_expires_at:
+        return None
+    return copy.deepcopy(_agents_control_snapshot_payload)
+
+
+def _store_agents_control_snapshot(payload: dict, ttl_seconds: float = _AGENTS_CONTROL_CACHE_TTL_SECONDS) -> None:
+    global _agents_control_snapshot_payload, _agents_control_snapshot_expires_at
+    _agents_control_snapshot_payload = copy.deepcopy(payload)
+    _agents_control_snapshot_expires_at = _cache_now() + max(0.0, ttl_seconds)
+
+
+async def _build_agents_control_payload() -> dict:
+    cards = await _srm.build_control_cards()
+    system_status = await _srm.build_system_status()
+    return {"agents": cards, "count": len(cards), "system_status": system_status}
+
+
 # ============================================================================
 # Read Model Proxy (delegates to status_read_model.py)
 # ============================================================================
@@ -67,12 +103,18 @@ async def get_agents_control():
     Read model endpoint — delegates to status_read_model.
     Kept here for API surface stability.
     """
+    cached = _load_cached_agents_control_snapshot()
+    if cached is not None:
+        return cached
+
     try:
-        cards = await _srm.build_control_cards()
-        system_status = await _srm.build_system_status()
+        payload = await _build_agents_control_payload()
+        _store_agents_control_snapshot(payload)
+        return copy.deepcopy(payload)
     except httpx.HTTPError as exc:
+        # Failures are not cached; keep next read eligible for rebuild.
+        _invalidate_agents_control_snapshot()
         raise HTTPException(status_code=503, detail=f"runtime control unavailable: {exc}") from exc
-    return {"agents": cards, "count": len(cards), "system_status": system_status}
 
 
 @router.post("/agents/control/rescan")
@@ -81,6 +123,7 @@ async def rescan_agents_control():
     integration_action: rescan agents.
     Reads state before/after to report diff, but does not own read-model.
     """
+    _invalidate_agents_control_snapshot()
     try:
         cards_before = await _srm.build_control_cards()
         families_before = {c["family_id"] for c in cards_before}
@@ -105,6 +148,7 @@ async def rescan_agents_control():
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"runtime rescan unavailable: {exc}") from exc
 
+    _invalidate_agents_control_snapshot()
     system_status = await _srm.build_system_status()
     return {
         "agents": cards,
@@ -126,6 +170,7 @@ async def install_agent_control(request: AgentControlRequest):
     """
     integration_action: install an agent.
     """
+    _invalidate_agents_control_snapshot()
     # 保存 OpenClaw attach metadata upstream truth snapshot
     if request.family_id == "openclaw" and request.upstream_truth:
         _openclaw_attach = __import__(
@@ -150,6 +195,7 @@ async def install_agent_control(request: AgentControlRequest):
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"runtime install unavailable: {exc}") from exc
 
+    _invalidate_agents_control_snapshot()
     card = _find_card(cards, request.family_id)
     if not card:
         raise HTTPException(status_code=404, detail=f"family not found after install: {request.family_id}")
@@ -163,6 +209,7 @@ async def uninstall_agent_control(request: AgentControlRequest):
     Note: routing_state is cleared here as part of the uninstall contract,
     not as a separate routing_action.
     """
+    _invalidate_agents_control_snapshot()
     # 清除 OpenClaw attach metadata
     if request.family_id == "openclaw":
         _openclaw_attach = __import__(
@@ -182,6 +229,7 @@ async def uninstall_agent_control(request: AgentControlRequest):
     except httpx.HTTPError as exc:
         raise HTTPException(status_code=503, detail=f"runtime uninstall unavailable: {exc}") from exc
 
+    _invalidate_agents_control_snapshot()
     card = _find_card(cards, request.family_id)
     if not card:
         return {
@@ -220,6 +268,7 @@ async def enable_agent_control(request: AgentControlRequest):
     """
     routing_action: enable routing for an installed agent.
     """
+    _invalidate_agents_control_snapshot()
     cards = await _srm.build_control_cards()
     card = _find_card(cards, request.family_id)
     if not card:
@@ -235,6 +284,7 @@ async def enable_agent_control(request: AgentControlRequest):
     if updated is None:
         raise HTTPException(status_code=404, detail=f"family not found after enable: {request.family_id}")
     updated["message"] = "routing enabled"
+    _invalidate_agents_control_snapshot()
     return updated
 
 
@@ -243,10 +293,12 @@ async def disable_agent_control(request: AgentControlRequest):
     """
     routing_action: disable routing for an agent.
     """
+    _invalidate_agents_control_snapshot()
     _route_state.set_family_routing_enabled(request.family_id, False)
     refreshed = await _srm.build_control_cards()
     updated = _find_card(refreshed, request.family_id)
     if updated is None:
         raise HTTPException(status_code=404, detail=f"family not found after disable: {request.family_id}")
     updated["message"] = "routing disabled"
+    _invalidate_agents_control_snapshot()
     return updated

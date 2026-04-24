@@ -11,6 +11,12 @@ agent_routing_state = importlib.import_module("5_connectors.adapter.agent_routin
 
 
 class AgentControlApiTests(unittest.TestCase):
+    def setUp(self) -> None:
+        agent_control_api._invalidate_agents_control_snapshot()
+
+    def tearDown(self) -> None:
+        agent_control_api._invalidate_agents_control_snapshot()
+
     def test_get_agents_control_delegates_read_model(self) -> None:
         cards = [
             {
@@ -123,6 +129,243 @@ class AgentControlApiTests(unittest.TestCase):
 
         self.assertIn("system_status", payload)
         self.assertEqual(payload["system_status"]["status"], "healthy")
+
+    def test_get_agents_control_reuses_snapshot_within_ttl(self) -> None:
+        calls = {"cards": 0, "status": 0}
+
+        async def fake_build_cards():
+            calls["cards"] += 1
+            return [
+                {
+                    "family_id": "openclaw",
+                    "display_name": "OpenClaw",
+                    "installed": True,
+                    "routing_enabled": False,
+                    "detected": True,
+                    "active": False,
+                    "health_state": "healthy",
+                    "message": "",
+                }
+            ]
+
+        async def fake_build_system_status():
+            calls["status"] += 1
+            return {"status": "healthy"}
+
+        with mock.patch.object(agent_control_api._srm, "build_control_cards", side_effect=fake_build_cards):
+            with mock.patch.object(agent_control_api._srm, "build_system_status", side_effect=fake_build_system_status):
+                first = asyncio.run(agent_control_api.get_agents_control())
+                second = asyncio.run(agent_control_api.get_agents_control())
+
+        self.assertEqual(first, second)
+        self.assertEqual(calls["cards"], 1)
+        self.assertEqual(calls["status"], 1)
+
+    def test_get_agents_control_rebuilds_after_ttl_expiry(self) -> None:
+        calls = {"cards": 0, "status": 0}
+
+        async def fake_build_cards():
+            calls["cards"] += 1
+            return [
+                {
+                    "family_id": "openclaw",
+                    "display_name": "OpenClaw",
+                    "installed": True,
+                    "routing_enabled": False,
+                    "detected": True,
+                    "active": False,
+                    "health_state": "healthy",
+                    "message": f"run-{calls['cards']}",
+                }
+            ]
+
+        async def fake_build_system_status():
+            calls["status"] += 1
+            return {"status": "healthy", "run": calls["status"]}
+
+        with mock.patch.object(agent_control_api._srm, "build_control_cards", side_effect=fake_build_cards):
+            with mock.patch.object(agent_control_api._srm, "build_system_status", side_effect=fake_build_system_status):
+                first = asyncio.run(agent_control_api.get_agents_control())
+                agent_control_api._agents_control_snapshot_expires_at = 0.0
+                second = asyncio.run(agent_control_api.get_agents_control())
+
+        self.assertNotEqual(first["agents"][0]["message"], second["agents"][0]["message"])
+        self.assertEqual(calls["cards"], 2)
+        self.assertEqual(calls["status"], 2)
+
+    def test_rescan_invalidates_snapshot_cache(self) -> None:
+        async def warm_build_cards():
+            return [
+                {
+                    "family_id": "openclaw",
+                    "display_name": "OpenClaw",
+                    "installed": True,
+                    "routing_enabled": False,
+                    "detected": True,
+                    "active": False,
+                    "health_state": "healthy",
+                    "message": "warm",
+                }
+            ]
+
+        async def warm_status():
+            return {"status": "healthy"}
+
+        with mock.patch.object(agent_control_api._srm, "build_control_cards", side_effect=warm_build_cards):
+            with mock.patch.object(agent_control_api._srm, "build_system_status", side_effect=warm_status):
+                _ = asyncio.run(agent_control_api.get_agents_control())
+                _ = asyncio.run(agent_control_api.get_agents_control())
+
+        action_cards = [
+            [
+                {
+                    "family_id": "openclaw",
+                    "display_name": "OpenClaw",
+                    "installed": True,
+                    "routing_enabled": False,
+                    "detected": True,
+                    "active": False,
+                    "health_state": "healthy",
+                    "message": "before",
+                }
+            ],
+            [
+                {
+                    "family_id": "openclaw",
+                    "display_name": "OpenClaw",
+                    "installed": True,
+                    "routing_enabled": False,
+                    "detected": True,
+                    "active": False,
+                    "health_state": "healthy",
+                    "message": "after",
+                }
+            ],
+        ]
+
+        async def fake_rescan_build_cards():
+            return action_cards.pop(0)
+
+        async def fake_runtime_request(_method, _path, _payload):
+            return {"ok": True}
+
+        async def fake_rescan_system_status():
+            return {"status": "healthy"}
+
+        with mock.patch.object(agent_control_api._srm, "build_control_cards", side_effect=fake_rescan_build_cards):
+            with mock.patch.object(agent_control_api._srm, "build_system_status", side_effect=fake_rescan_system_status):
+                with mock.patch.object(agent_control_api, "_runtime_request", side_effect=fake_runtime_request):
+                    _ = asyncio.run(agent_control_api.rescan_agents_control())
+
+        after_calls = {"cards": 0, "status": 0}
+
+        async def post_build_cards():
+            after_calls["cards"] += 1
+            return [
+                {
+                    "family_id": "openclaw",
+                    "display_name": "OpenClaw",
+                    "installed": True,
+                    "routing_enabled": False,
+                    "detected": True,
+                    "active": False,
+                    "health_state": "healthy",
+                    "message": "post-rescan",
+                }
+            ]
+
+        async def post_status():
+            after_calls["status"] += 1
+            return {"status": "healthy"}
+
+        with mock.patch.object(agent_control_api._srm, "build_control_cards", side_effect=post_build_cards):
+            with mock.patch.object(agent_control_api._srm, "build_system_status", side_effect=post_status):
+                _ = asyncio.run(agent_control_api.get_agents_control())
+
+        self.assertEqual(after_calls["cards"], 1)
+        self.assertEqual(after_calls["status"], 1)
+
+    def test_disable_invalidates_snapshot_cache(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="omnimemora-agent-control-") as tmpdir:
+            path = Path(tmpdir) / "agent_modes.json"
+            path.write_text(
+                json.dumps({"per_agent_modes": {"openclaw": "force_if_possible"}, "default_mode": "off"}),
+                encoding="utf-8",
+            )
+
+            async def warm_build_cards():
+                return [
+                    {
+                        "family_id": "openclaw",
+                        "display_name": "OpenClaw",
+                        "installed": True,
+                        "routing_enabled": True,
+                        "detected": True,
+                        "active": True,
+                        "health_state": "healthy",
+                        "message": "",
+                    }
+                ]
+
+            async def warm_status():
+                return {"status": "healthy"}
+
+            with mock.patch.object(agent_routing_state, "_agent_modes_path", return_value=path):
+                agent_routing_state.reload_agent_modes()
+                with mock.patch.object(agent_control_api._srm, "build_control_cards", side_effect=warm_build_cards):
+                    with mock.patch.object(agent_control_api._srm, "build_system_status", side_effect=warm_status):
+                        _ = asyncio.run(agent_control_api.get_agents_control())
+                        _ = asyncio.run(agent_control_api.get_agents_control())
+
+                async def disable_build_cards():
+                    routing_enabled = agent_routing_state.routing_enabled("openclaw")
+                    return [
+                        {
+                            "family_id": "openclaw",
+                            "display_name": "OpenClaw",
+                            "installed": True,
+                            "routing_enabled": routing_enabled,
+                            "detected": True,
+                            "active": routing_enabled,
+                            "health_state": "healthy",
+                            "message": "",
+                        }
+                    ]
+
+                with mock.patch.object(agent_control_api._srm, "build_control_cards", side_effect=disable_build_cards):
+                    _ = asyncio.run(
+                        agent_control_api.disable_agent_control(
+                            agent_control_api.AgentControlRequest(family_id="openclaw")
+                        )
+                    )
+
+                after_calls = {"cards": 0, "status": 0}
+
+                async def post_build_cards():
+                    after_calls["cards"] += 1
+                    return [
+                        {
+                            "family_id": "openclaw",
+                            "display_name": "OpenClaw",
+                            "installed": True,
+                            "routing_enabled": False,
+                            "detected": True,
+                            "active": False,
+                            "health_state": "healthy",
+                            "message": "",
+                        }
+                    ]
+
+                async def post_status():
+                    after_calls["status"] += 1
+                    return {"status": "healthy"}
+
+                with mock.patch.object(agent_control_api._srm, "build_control_cards", side_effect=post_build_cards):
+                    with mock.patch.object(agent_control_api._srm, "build_system_status", side_effect=post_status):
+                        _ = asyncio.run(agent_control_api.get_agents_control())
+
+                self.assertEqual(after_calls["cards"], 1)
+                self.assertEqual(after_calls["status"], 1)
 
 
 if __name__ == "__main__":
