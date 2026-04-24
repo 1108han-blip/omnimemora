@@ -37,4 +37,10 @@ type Event struct {
 	ContextMode     string `json:"context_mode,omitempty"`
 	// Phase 2c.5 fields
 	StrategyEffectiveness *pkg.StrategyEffectiveness `json:"strategy_effectiveness,omitempty"`
+	// Phase CSP-001 fields: compile strategy policy evidence
+	CompileStrategyPolicyVersion  string `json:"compile_strategy_policy_version,omitempty"`
+	CompileStrategyPolicySource   string `json:"compile_strategy_policy_source,omitempty"`
+	ContextStrategyRequested     string `json:"context_strategy_requested,omitempty"`
+	ContextStrategyResolved      string `json:"context_strategy_resolved,omitempty"`
+	ContextModeResolved          string `json:"context_mode_resolved,omitempty"`
 }

@@ -455,6 +455,57 @@ func (s *SQLiteStore) migrateMeteringPhase2b() error {
 		}
 	}
 
+	// Phase CSP-001: Add compile strategy policy evidence columns
+	err = s.db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('metering_events') WHERE name='compile_strategy_policy_version'").Scan(&colExists)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("failed to check compile_strategy_policy_version column: %w", err)
+	}
+	if colExists == 0 {
+		if _, err := s.db.Exec("ALTER TABLE metering_events ADD COLUMN compile_strategy_policy_version TEXT NOT NULL DEFAULT ''"); err != nil {
+			return fmt.Errorf("failed to add compile_strategy_policy_version column: %w", err)
+		}
+	}
+
+	err = s.db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('metering_events') WHERE name='compile_strategy_policy_source'").Scan(&colExists)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("failed to check compile_strategy_policy_source column: %w", err)
+	}
+	if colExists == 0 {
+		if _, err := s.db.Exec("ALTER TABLE metering_events ADD COLUMN compile_strategy_policy_source TEXT NOT NULL DEFAULT ''"); err != nil {
+			return fmt.Errorf("failed to add compile_strategy_policy_source column: %w", err)
+		}
+	}
+
+	err = s.db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('metering_events') WHERE name='context_strategy_requested'").Scan(&colExists)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("failed to check context_strategy_requested column: %w", err)
+	}
+	if colExists == 0 {
+		if _, err := s.db.Exec("ALTER TABLE metering_events ADD COLUMN context_strategy_requested TEXT NOT NULL DEFAULT ''"); err != nil {
+			return fmt.Errorf("failed to add context_strategy_requested column: %w", err)
+		}
+	}
+
+	err = s.db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('metering_events') WHERE name='context_strategy_resolved'").Scan(&colExists)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("failed to check context_strategy_resolved column: %w", err)
+	}
+	if colExists == 0 {
+		if _, err := s.db.Exec("ALTER TABLE metering_events ADD COLUMN context_strategy_resolved TEXT NOT NULL DEFAULT ''"); err != nil {
+			return fmt.Errorf("failed to add context_strategy_resolved column: %w", err)
+		}
+	}
+
+	err = s.db.QueryRow("SELECT COUNT(*) FROM pragma_table_info('metering_events') WHERE name='context_mode_resolved'").Scan(&colExists)
+	if err != nil && err != sql.ErrNoRows {
+		return fmt.Errorf("failed to check context_mode_resolved column: %w", err)
+	}
+	if colExists == 0 {
+		if _, err := s.db.Exec("ALTER TABLE metering_events ADD COLUMN context_mode_resolved TEXT NOT NULL DEFAULT ''"); err != nil {
+			return fmt.Errorf("failed to add context_mode_resolved column: %w", err)
+		}
+	}
+
 	return nil
 }
 

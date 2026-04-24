@@ -39,8 +39,10 @@ func (c *Collector) Record(event *Event) error {
 		event_id, request_id, event_type, tenant_id, user_id, workspace_id, agent_id,
 		scope, sharing_mode, input_tokens, compressed_tokens, saved_tokens,
 		query_count, recall_hits, recall_hit_rate, timestamp, runtime_version, store_type,
-		raw_tokens, assembled_hits, context_strategy, context_mode
-	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		raw_tokens, assembled_hits, context_strategy, context_mode,
+		compile_strategy_policy_version, compile_strategy_policy_source,
+		context_strategy_requested, context_strategy_resolved, context_mode_resolved
+	) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`
 
 	_, err := c.db.Exec(query,
@@ -66,6 +68,11 @@ func (c *Collector) Record(event *Event) error {
 		event.AssembledHits,
 		event.ContextStrategy,
 		event.ContextMode,
+		event.CompileStrategyPolicyVersion,
+		event.CompileStrategyPolicySource,
+		event.ContextStrategyRequested,
+		event.ContextStrategyResolved,
+		event.ContextModeResolved,
 	)
 
 	return err

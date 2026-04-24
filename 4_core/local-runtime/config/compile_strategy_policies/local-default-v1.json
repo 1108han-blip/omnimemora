@@ -1,0 +1,24 @@
+{
+  "version": "local-default-v1",
+  "description": "Initial production-ready default; mirrors pre-policy runtime hardcoded defaults",
+  "default_context_strategy": "topk_excerpt",
+  "allowed_strategies": [
+    "topk_excerpt",
+    "recency_boost_select",
+    "diversity_select"
+  ],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 50,
+      "long_query_strategy": "diversity_select",
+      "default_strategy": "recency_boost_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 300,  "max_items": 3  },
+    "balanced":  { "token_budget": 800,  "max_items": 6  },
+    "aggressive": { "token_budget": 1500, "max_items": 10 }
+  }
+}

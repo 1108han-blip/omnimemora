@@ -1,0 +1,13 @@
+{
+  "active_version": "local-default-v1",
+  "candidate_version": null,
+  "versions": [
+    {
+      "version": "local-default-v1",
+      "status": "active",
+      "policy_file": "local-default-v1.json",
+      "source": "bundled",
+      "verified_at": "2026-04-24T00:00:00Z"
+    }
+  ]
+}

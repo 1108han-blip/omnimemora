@@ -16,27 +16,38 @@ import (
 	"github.com/omnimemora/local-runtime/config"
 	"github.com/omnimemora/local-runtime/metering"
 	"github.com/omnimemora/local-runtime/pkg"
+	"github.com/omnimemora/local-runtime/policy"
 	"github.com/omnimemora/local-runtime/scope"
 	"github.com/omnimemora/local-runtime/store"
 )
 
 // Service is the core application service
 type Service struct {
-	cfg          *config.RuntimeConfig
-	store        store.Store
-	scopeModel   *scope.Model
-	metering     *metering.Collector
-	ctxAssembler *ctxpkg.Assembler // Phase 2c: context strategy assembler
+	cfg            *config.RuntimeConfig
+	store          store.Store
+	scopeModel     *scope.Model
+	metering       *metering.Collector
+	ctxAssembler   *ctxpkg.Assembler // Phase 2c: context strategy assembler
+	policyManager  *policy.Manager   // CSP-001: compile strategy policy manager
 }
 
-// NewService creates a new application service
+// NewService creates a new application service.
+// CSP-001: policy manager is initialised here and LoadActive is called once at
+// startup; strategy resolution consults the policy manager but falls back to
+// built-in defaults safely if the policy directory is missing or corrupt.
 func NewService(cfg *config.RuntimeConfig, store store.Store, meterCollector *metering.Collector) *Service {
+	pm := policy.NewManager("")
+	// Load active policy at startup; errors are logged but never fail service init
+	if err := pm.LoadActive(); err != nil {
+		log.Printf("policy manager: LoadActive warning (builtin fallback active): %v", err)
+	}
 	return &Service{
-		cfg:          cfg,
-		store:        store,
-		scopeModel:   scope.NewModel(cfg),
-		metering:     meterCollector,
-		ctxAssembler: ctxpkg.NewAssembler(), // Phase 2c
+		cfg:           cfg,
+		store:         store,
+		scopeModel:    scope.NewModel(cfg),
+		metering:      meterCollector,
+		ctxAssembler:  ctxpkg.NewAssembler(), // Phase 2c
+		policyManager: pm,
 	}
 }
 
@@ -264,20 +275,34 @@ func (s *Service) SearchMemory(ctx context.Context, req *pkg.SearchRequest, scop
 			}
 		}
 
-		// Determine strategy (default: topk_excerpt, only "auto" triggers auto-resolution)
+		// CSP-001: Strategy resolution via policy manager
+		// requestedStrategy is the raw value from request (may be "auto" or empty or explicit)
 		requestedStrategy := req.Options.ContextStrategy
+
 		if requestedStrategy == "auto" {
-			resolvedStrategy = ctxpkg.ResolveAutoStrategy(req.Keyword)
+			// Use policy auto rules (or built-in fallback)
+			resolvedStrategy = s.policyManager.ResolveAuto(req.Keyword)
 		} else if requestedStrategy != "" {
-			resolvedStrategy = requestedStrategy
+			// Explicit strategy: validate it is known, fall back to topk_excerpt if unknown
+			if ctxpkg.GetStrategy(requestedStrategy) == nil {
+				resolvedStrategy = ctxpkg.DefaultStrategy
+			} else {
+				resolvedStrategy = requestedStrategy
+			}
 		} else {
-			resolvedStrategy = ctxpkg.DefaultStrategy // default to topk_excerpt
+			// Blank strategy: use policy default (or built-in fallback)
+			resolvedStrategy = s.policyManager.GetDefaultStrategy()
 		}
 
-		// Determine mode and options
+		// CSP-001: Mode resolution — use policy mode defaults (or built-in fallback)
 		contextMode = req.Options.ContextMode
 		mode := ctxpkg.ResolveMode(contextMode)
-		opts := ctxpkg.StrategyOptions{Mode: mode}
+		tokenBudget, maxItems := s.policyManager.GetModeDefaults(string(mode))
+		opts := ctxpkg.StrategyOptions{
+			Mode:        mode,
+			TokenBudget: tokenBudget,
+			MaxItems:    maxItems,
+		}
 
 		// Build cache key components with scope info
 		cacheComp := ctxpkg.CacheKeyComponents{
@@ -329,7 +354,27 @@ func (s *Service) SearchMemory(ctx context.Context, req *pkg.SearchRequest, scop
 	}
 	// When assemble_context=false, all token fields remain 0 (honest default)
 
-	s.recordSearchMetering(scopeRef, req.RequestID, result.Total, len(scoredResults), rawTokens, compressedTokens, savedTokens, assembledHits, resolvedStrategy, contextMode, strategyEffectiveness)
+	// CSP-001: Capture policy evidence from active policy
+	policyResolved := s.policyManager.GetResolved()
+
+	s.recordSearchMetering(
+		scopeRef,
+		req.RequestID,
+		result.Total,
+		len(scoredResults),
+		rawTokens,
+		compressedTokens,
+		savedTokens,
+		assembledHits,
+		resolvedStrategy,
+		contextMode,
+		strategyEffectiveness,
+		policyResolved.PolicyVersion,
+		string(policyResolved.PolicySource),
+		req.Options.ContextStrategy, // raw requested (may be "auto" or empty)
+		resolvedStrategy,
+		string(ctxpkg.ResolveMode(contextMode)),
+	)
 
 	return response, nil
 }
@@ -1079,8 +1124,15 @@ func estimateTokens(text string) int {
 	return len(text) / 4
 }
 
-// recordSearchMetering records a metering event for search operations (Phase 2c.5)
-func (s *Service) recordSearchMetering(scopeRef *pkg.ScopeRef, requestID string, recallHits, returnedHits, rawTokens, compressedTokens, savedTokens, assembledHits int, contextStrategy, contextMode string, strategyEffectiveness *pkg.StrategyEffectiveness) {
+// recordSearchMetering records a metering event for search operations (Phase 2c.5 + CSP-001)
+func (s *Service) recordSearchMetering(
+	scopeRef *pkg.ScopeRef,
+	requestID string,
+	recallHits, returnedHits, rawTokens, compressedTokens, savedTokens, assembledHits int,
+	contextStrategy, contextMode string,
+	strategyEffectiveness *pkg.StrategyEffectiveness,
+	policyVersion, policySource, strategyRequested, strategyResolved, modeResolved string,
+) {
 	inputTokens := 1 // Placeholder for query token estimation
 	// Note: when assemble_context=false, rawTokens/compressedTokens/savedTokens/assembledHits
 	// are all 0 - this is honest, not a gap. No fake compressed_tokens for non-assembly searches.
@@ -1106,9 +1158,15 @@ func (s *Service) recordSearchMetering(scopeRef *pkg.ScopeRef, requestID string,
 		StoreType:             s.cfg.Local.DBType,
 		RawTokens:             rawTokens,
 		AssembledHits:         assembledHits,
-		ContextStrategy:       contextStrategy,
-		ContextMode:           contextMode,
+		ContextStrategy:       strategyResolved, // Phase 2c: maps to context_strategy_resolved
+		ContextMode:           contextMode,     // Phase 2c: maps to context_mode_resolved
 		StrategyEffectiveness: strategyEffectiveness,
+		// CSP-001: compile strategy policy evidence fields
+		CompileStrategyPolicyVersion:  policyVersion,
+		CompileStrategyPolicySource:   policySource,
+		ContextStrategyRequested:     strategyRequested,
+		ContextStrategyResolved:      strategyResolved,
+		ContextModeResolved:          modeResolved,
 	}
 
 	if err := s.metering.Record(event); err != nil {
