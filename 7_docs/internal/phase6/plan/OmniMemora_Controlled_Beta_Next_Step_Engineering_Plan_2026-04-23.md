@@ -490,6 +490,35 @@ Wired the compile strategy policy bundle into the promotion workflow so that the
 
 **Worktree clean after commit:** ✅
 
+### CSP-001 Cloud Candidate Download Path Skeleton (2026-04-24)
+
+**Result:** PASS (repo-only skeleton)
+
+Implemented the local candidate pack acceptance and cache skeleton for future compile strategy policy downloads. This batch defines the candidate validation boundary only; it does not connect a real Cloudflare/Railway source.
+
+**Commit:**
+
+- `4dc0856 runtime: add compile strategy cloud candidate skeleton`
+
+**Repo reality:**
+
+- `CandidatePack` type added with `candidate_id`, `policy_version`, `policy`, `sha256`, optional `signature`, `signature_status`, `source`, and `fetched_at`
+- `AcceptCandidate` validates a candidate pack, verifies SHA256, writes the candidate policy file atomically, and updates only `candidate_version`
+- `GetCandidateInfo` exposes candidate metadata without loading or activating the candidate policy
+- `CandidateFetcher` interface exists as a future source contract; no concrete Cloudflare/Railway fetcher is connected in this batch
+- 32 policy tests pass, including 15 new candidate-pack and candidate-cache tests
+
+**Explicit boundaries:**
+
+- no real Cloudflare/Railway integration
+- no cloud compile
+- no per-request remote strategy decision
+- no automatic promotion
+- no promotion/live validation
+- no Codex validation
+
+**Next batch:** real cloud candidate source design/implementation may start only after this local candidate cache and validation skeleton remains protected by tests.
+
 ### Current Gate Override (2026-04-24)
 
 - `Codex is product-compatible in principle, but protected/deferred as a local validation client.`
