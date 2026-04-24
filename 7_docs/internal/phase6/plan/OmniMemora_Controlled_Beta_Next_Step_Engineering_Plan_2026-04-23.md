@@ -107,7 +107,8 @@ last_verified_commit: ""
 - runtime agent detection 仍是家族级粗探测，`rescan` 只是重新返回列表，未体现真实本机变体
 - `Claude Code` 本机变体/包装链仍可能“机器上存在但产品里搜不到”
 - 压缩负面影响尚未通过当前主线对象的最小对照 gate
-- Codex live validation 仍未回到当前执行线，后续需单独补批
+- `runtime multi-domain read/write enforcement` 尚未实现（当前仅有 AccessPlan projection）
+- Codex live validation 不再作为当前 gate；Codex 维持 protected/deferred 并排除在 install/run/live validation gates 之外
 - 轻量外触达（Batch 5）尚未启动
 
 ## 4.1 Batch A-B Execution Snapshot (2026-04-23)
@@ -248,6 +249,33 @@ CLI/product-path verified，control truth aligned within family-scope boundary�
 证据记录：
 
 - `OmniMemora_Batch3_NonCodex_Negative_Impact_Gate_2026-04-24.md`
+
+### AccessPlan Projection Layer Snapshot (2026-04-24)
+
+**Result:** pass (projection layer scope)
+
+已成立：
+
+- `18011` ingress/application 侧可生成并持久化 `identity + access_plan` projection
+- `request_evidence` 可稳定呈现 `request.identity` 与顶层 `access_plan`
+- legacy `tenant/user` 聚合语义未被新 `tenant_id` 破坏
+- `adapter+ui` promotion 后 adapter fingerprint 已换代
+- OpenClaw live request 在 running reality 下可回查 `identity/access_plan`
+- OpenClaw control truth 最终对齐为 `real_request_observed`
+- Codex 未进入本批 live gate（protected/deferred boundary preserved）
+
+精确定义：
+
+`Identity Spine + AccessPlan projection is available in meter/request_evidence and verified in running reality; runtime multi-domain read/write enforcement remains a later batch.`
+
+证据记录：
+
+- `OmniMemora_AccessPlan_Projection_Layer_Closeout_2026-04-24.md`
+
+### Current Gate Override (2026-04-24)
+
+- `Codex is protected/deferred indefinitely and excluded from install/run/live validation gates.`
+- 本文第 5-10 节中凡是要求 Codex 进入测试链/验收链的条目，视为历史原始计划基线，不代表当前执行 gate。
 
 ---
 
