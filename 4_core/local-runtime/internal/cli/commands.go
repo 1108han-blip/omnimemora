@@ -17,6 +17,7 @@ import (
 	"github.com/omnimemora/local-runtime/internal/attach"
 	rtpkg "github.com/omnimemora/local-runtime/internal/runtime"
 	"github.com/omnimemora/local-runtime/internal/verify"
+	"github.com/omnimemora/local-runtime/policy"
 )
 
 // Start starts the OmniMemora runtime and surfaces detected agents in the UI.
@@ -945,4 +946,149 @@ Examples:
   omnimemora detach claude      Disconnect from Claude Code
   omnimemora detach all         Disconnect all agents
 `)
+}
+
+// printImportCandidateUsage displays help for the import-candidate command
+func printImportCandidateUsage() {
+	fmt.Print(`
+Usage:
+  omnimemora import-candidate <path-to-candidate-pack.json>
+
+Import a compile strategy candidate pack from a local JSON file into the
+runtime's candidate cache. This writes the candidate policy to disk and
+updates the manifest's candidate_version field. It does NOT change the
+active policy or trigger promotion.
+
+The candidate pack JSON must include:
+  - candidate_id
+  - policy_version
+  - policy (CompileStrategyPolicy object)
+  - sha256 (SHA-256 of canonical policy JSON)
+  - source ("local" or "cloud")
+  - fetched_at (RFC3339 timestamp)
+
+Exit codes:
+  0  success — candidate imported
+  1  failure — invalid pack, hash mismatch, active-overwrite attempt,
+              or manifest write error; no partial state is written.
+
+Examples:
+  omnimemora import-candidate ./candidate-pack-cloud-v2.json
+  omnimemora import-candidate /path/to/candidate.json
+`)
+}
+
+// printPolicyStatusUsage displays help for the policy-status command
+func printPolicyStatusUsage() {
+	fmt.Print(`
+Usage:
+  omnimemora policy-status [--json]
+
+Show the current active and candidate compile strategy versions.
+
+The --json flag emits machine-readable output.
+
+Exit codes:
+  0  success
+  1  failure
+`)
+}
+
+// ImportCandidate imports a local candidate pack JSON into the runtime cache.
+func ImportCandidate(args []string) error {
+	// Check for help flags
+	for _, arg := range args {
+		if arg == "--help" || arg == "-h" {
+			printImportCandidateUsage()
+			return nil
+		}
+	}
+
+	if len(args) == 0 {
+		fmt.Println("Error: candidate pack path required")
+		fmt.Println()
+		printImportCandidateUsage()
+		return fmt.Errorf("import-candidate: missing path argument")
+	}
+
+	path := args[0]
+
+	pack, err := policy.ImportCandidate(path, "")
+	if err != nil {
+		errStr := err.Error()
+		if strings.Contains(errStr, "sha256 mismatch") {
+			fmt.Fprintf(os.Stderr, "Error: SHA-256 hash mismatch — candidate pack may be corrupted or tampered with.\n  %v\n", err)
+			os.Exit(policy.ExitHashMismatch)
+		}
+		if strings.Contains(errStr, "overwrite active") {
+			version := ""
+			if pack != nil {
+				version = pack.PolicyVersion
+			}
+			fmt.Fprintf(os.Stderr, "Error: Cannot import candidate with version %q — it matches the active policy version.\n  %v\n", version, err)
+			os.Exit(policy.ExitActiveOverwrite)
+		}
+		if strings.Contains(errStr, "cannot write manifest") {
+			fmt.Fprintf(os.Stderr, "Error: Manifest write failed.\n  %v\n", err)
+			os.Exit(policy.ExitManifestWrite)
+		}
+		fmt.Fprintf(os.Stderr, "Error: Candidate import failed.\n  %v\n", err)
+		os.Exit(policy.ExitValidation)
+	}
+
+	fmt.Printf("Candidate imported successfully.\n")
+	fmt.Printf("  candidate_id:   %s\n", pack.CandidateID)
+	fmt.Printf("  policy_version: %s\n", pack.PolicyVersion)
+	fmt.Printf("  source:         %s\n", pack.Source)
+	fmt.Printf("  sha256:         %s\n", pack.SHA256)
+	fmt.Println()
+	fmt.Println("The candidate is staged. Run 'omnimemora policy-status' to confirm.")
+	fmt.Println("To activate, call PromoteCandidate explicitly (not done automatically).")
+
+	return nil
+}
+
+// PolicyStatus prints the current active and candidate version separation.
+func PolicyStatus(args []string) error {
+	jsonOutput := false
+	for _, arg := range args {
+		if arg == "--json" {
+			jsonOutput = true
+		}
+		if arg == "--help" || arg == "-h" {
+			printPolicyStatusUsage()
+			return nil
+		}
+	}
+
+	status := policy.GetPolicyStatus("")
+
+	if jsonOutput {
+		data, err := json.MarshalIndent(status, "", "  ")
+		if err != nil {
+			return fmt.Errorf("failed to marshal status: %w", err)
+		}
+		fmt.Println(string(data))
+		return nil
+	}
+
+	fmt.Println("Compile Strategy Policy Status")
+	fmt.Println(strings.Repeat("─", 40))
+	fmt.Printf("Active version:   %s (%s)\n", status.ActiveVersion, status.ActiveSource)
+	if status.CandidateVersion != nil {
+		fmt.Printf("Candidate version: %s (%s)\n", *status.CandidateVersion, status.CandidateSource)
+		fmt.Println()
+		fmt.Println("A candidate is staged but NOT active.")
+		fmt.Println("The active policy is unaffected until promotion.")
+	} else {
+		fmt.Println("Candidate version: (none staged)")
+	}
+	fmt.Println()
+	candStr := "none"
+	if status.CandidateVersion != nil {
+		candStr = *status.CandidateVersion
+	}
+	fmt.Printf("Active version: %s | Candidate version: %s\n", status.ActiveVersion, candStr)
+
+	return nil
 }

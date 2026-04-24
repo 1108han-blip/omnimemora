@@ -85,6 +85,10 @@ func runCommand(command string, args []string) error {
 		return cli.Recover(args)
 	case "serve":
 		return nil
+	case "import-candidate":
+		return cli.ImportCandidate(args)
+	case "policy-status":
+		return cli.PolicyStatus(args)
 	default:
 		printUsage()
 		return fmt.Errorf("unknown command: %s", command)
@@ -106,6 +110,8 @@ Usage:
   omnimemora recover uninstall <family>
   omnimemora connect-codex
   omnimemora connect-claude
+  omnimemora import-candidate <path-to-candidate-pack.json>
+  omnimemora policy-status
   omnimemora validate openclaw [--profile p0-3] [--runs 3]
 `, Version)
 }

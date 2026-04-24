@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -824,9 +825,9 @@ func TestResolveAuto_BundlePolicy(t *testing.T) {
 
 func TestCandidatePack_Validate_Valid(t *testing.T) {
 	policy := &CompileStrategyPolicy{
-		Version:                 "cloud-v1",
+		Version:                "cloud-v1",
 		DefaultContextStrategy: "diversity_select",
-		AllowedStrategies:       []string{"diversity_select"},
+		AllowedStrategies:      []string{"diversity_select"},
 	}
 	pack := &CandidatePack{
 		CandidateID:     "cloud-candidate-001",
@@ -913,9 +914,9 @@ func TestCandidatePack_Validate_MissingSHA256(t *testing.T) {
 func makeTestPack(t *testing.T, version, defaultStrategy string, sha256Override string) *CandidatePack {
 	t.Helper()
 	policy := &CompileStrategyPolicy{
-		Version:                 version,
-		DefaultContextStrategy:  defaultStrategy,
-		AllowedStrategies:       []string{"topk_excerpt", "recency_boost_select", "diversity_select"},
+		Version:                version,
+		DefaultContextStrategy: defaultStrategy,
+		AllowedStrategies:      []string{"topk_excerpt", "recency_boost_select", "diversity_select"},
 		AutoResolution: &AutoResolutionConfig{
 			Enabled: true,
 			Rules: AutoResolutionRules{
@@ -1504,5 +1505,525 @@ func TestAcceptCandidate_NewManifestCreated(t *testing.T) {
 	}
 	if manifest.CandidateVersion == nil || *manifest.CandidateVersion != "cloud-v1" {
 		t.Errorf("candidate_version should be cloud-v1, got %v", manifest.CandidateVersion)
+	}
+}
+
+// --- ImportCandidate (file-based import) tests ---
+
+func TestImportCandidate_ValidPackFile(t *testing.T) {
+	dir, cleanup := tempPolicyDir(t)
+	defer cleanup()
+
+	// Write active policy first
+	writeFile(t, dir, "manifest.json", `{
+  "active_version": "active-v1",
+  "candidate_version": null,
+  "versions": [
+    {
+      "version": "active-v1",
+      "status": "active",
+      "policy_file": "active-v1.json",
+      "source": "bundled"
+    }
+  ]
+}`)
+	writeFile(t, dir, "active-v1.json", `{
+  "version": "active-v1",
+  "default_context_strategy": "topk_excerpt",
+  "allowed_strategies": ["topk_excerpt"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 50,
+      "long_query_strategy": "diversity_select",
+      "default_strategy": "recency_boost_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 300,  "max_items": 3  },
+    "balanced":  { "token_budget": 800,  "max_items": 6  },
+    "aggressive": { "token_budget": 1500, "max_items": 10 }
+  }
+}`)
+
+	// Write a candidate pack JSON file. policyJSON is the valid policy object
+	// (without extra fields) — the hash is computed from the canonical JSON
+	// after parsing to ensure it matches what AcceptCandidate will re-marshal.
+	policyJSON := `{
+  "version": "imported-v2",
+  "default_context_strategy": "recency_boost_select",
+  "allowed_strategies": ["recency_boost_select", "topk_excerpt"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 50,
+      "long_query_strategy": "diversity_select",
+      "default_strategy": "recency_boost_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 300,  "max_items": 3  },
+    "balanced":  { "token_budget": 800,  "max_items": 6  },
+    "aggressive": { "token_budget": 1500, "max_items": 10 }
+  }
+}`
+	packPath := filepath.Join(dir, "candidate-pack.json")
+	if err := os.WriteFile(packPath, []byte(policyJSON), 0644); err != nil {
+		t.Fatalf("failed to write pack file: %v", err)
+	}
+
+	// Parse the policy JSON to get a clean *CompileStrategyPolicy, then
+	// re-marshal it to get the canonical bytes for SHA-256. This mirrors the
+	// exact computation AcceptCandidate does.
+	var cleanPolicy CompileStrategyPolicy
+	if err := json.Unmarshal([]byte(policyJSON), &cleanPolicy); err != nil {
+		t.Fatalf("failed to parse policy JSON: %v", err)
+	}
+	canonical, err := json.Marshal(&cleanPolicy)
+	if err != nil {
+		t.Fatalf("failed to marshal policy for hash: %v", err)
+	}
+	h := sha256.Sum256(canonical)
+	shaHex := hex.EncodeToString(h[:])
+
+	// Write the full candidate pack JSON with hash and metadata
+	candJSON := fmt.Sprintf(`{
+  "candidate_id": "test-candidate-001",
+  "policy_version": "imported-v2",
+  "policy": %s,
+  "sha256": "%s",
+  "signature_status": "not_required",
+  "source": "local",
+  "fetched_at": "2026-04-24T10:00:00Z"
+}`, policyJSON, shaHex)
+	if err := os.WriteFile(packPath, []byte(candJSON), 0644); err != nil {
+		t.Fatalf("failed to write candidate pack: %v", err)
+	}
+
+	// Import via ImportCandidate
+	pack, err := ImportCandidate(packPath, dir)
+	if err != nil {
+		t.Fatalf("ImportCandidate failed: %v", err)
+	}
+	if pack.CandidateID != "test-candidate-001" {
+		t.Errorf("expected candidate_id test-candidate-001, got %s", pack.CandidateID)
+	}
+	if pack.PolicyVersion != "imported-v2" {
+		t.Errorf("expected policy_version imported-v2, got %s", pack.PolicyVersion)
+	}
+
+	// Verify manifest updated
+	manifest, err := readManifestFromPath(filepath.Join(dir, "manifest.json"))
+	if err != nil {
+		t.Fatalf("failed to read manifest: %v", err)
+	}
+	if manifest.ActiveVersion != "active-v1" {
+		t.Errorf("active_version should remain active-v1, got %s", manifest.ActiveVersion)
+	}
+	if manifest.CandidateVersion == nil || *manifest.CandidateVersion != "imported-v2" {
+		t.Errorf("candidate_version should be imported-v2, got %v", manifest.CandidateVersion)
+	}
+
+	// Candidate file written to disk
+	candFile := filepath.Join(dir, "imported-v2.json")
+	if _, err := os.Stat(candFile); os.IsNotExist(err) {
+		t.Error("candidate file imported-v2.json should exist on disk")
+	}
+}
+
+func TestImportCandidate_InvalidHash_FailsManifestUnchanged(t *testing.T) {
+	dir, cleanup := tempPolicyDir(t)
+	defer cleanup()
+
+	writeFile(t, dir, "manifest.json", `{
+  "active_version": "active-v1",
+  "candidate_version": null,
+  "versions": [
+    {
+      "version": "active-v1",
+      "status": "active",
+      "policy_file": "active-v1.json",
+      "source": "bundled"
+    }
+  ]
+}`)
+	writeFile(t, dir, "active-v1.json", `{
+  "version": "active-v1",
+  "default_context_strategy": "topk_excerpt",
+  "allowed_strategies": ["topk_excerpt"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 50,
+      "long_query_strategy": "diversity_select",
+      "default_strategy": "recency_boost_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 300,  "max_items": 3  },
+    "balanced":  { "token_budget": 800,  "max_items": 6  },
+    "aggressive": { "token_budget": 1500, "max_items": 10 }
+  }
+}`)
+
+	policyJSON := `{
+  "version": "bad-hash-v2",
+  "default_context_strategy": "diversity_select",
+  "allowed_strategies": ["diversity_select"]
+}`
+	badHash := "deadbeef00000000000000000000000000000000000000000000000000000000"
+	candJSON := fmt.Sprintf(`{
+  "candidate_id": "test-bad-hash",
+  "policy_version": "bad-hash-v2",
+  "policy": %s,
+  "sha256": "%s",
+  "signature_status": "not_required",
+  "source": "local",
+  "fetched_at": "2026-04-24T10:00:00Z"
+}`, policyJSON, badHash)
+	packPath := filepath.Join(dir, "bad-pack.json")
+	if err := os.WriteFile(packPath, []byte(candJSON), 0644); err != nil {
+		t.Fatalf("failed to write pack file: %v", err)
+	}
+
+	_, err := ImportCandidate(packPath, dir)
+	if err == nil {
+		t.Error("ImportCandidate should fail on hash mismatch")
+	}
+
+	// Manifest unchanged
+	manifest, err := readManifestFromPath(filepath.Join(dir, "manifest.json"))
+	if err != nil {
+		t.Fatalf("failed to read manifest: %v", err)
+	}
+	if manifest.CandidateVersion != nil {
+		t.Error("candidate_version should still be nil")
+	}
+
+	// No candidate file written
+	candFile := filepath.Join(dir, "bad-hash-v2.json")
+	if _, err := os.Stat(candFile); !os.IsNotExist(err) {
+		t.Error("candidate file should not exist after failed import")
+	}
+}
+
+func TestImportCandidate_InvalidPolicy_FailsManifestUnchanged(t *testing.T) {
+	dir, cleanup := tempPolicyDir(t)
+	defer cleanup()
+
+	writeFile(t, dir, "manifest.json", `{
+  "active_version": "active-v1",
+  "candidate_version": null,
+  "versions": [
+    {
+      "version": "active-v1",
+      "status": "active",
+      "policy_file": "active-v1.json",
+      "source": "bundled"
+    }
+  ]
+}`)
+	writeFile(t, dir, "active-v1.json", `{
+  "version": "active-v1",
+  "default_context_strategy": "topk_excerpt",
+  "allowed_strategies": ["topk_excerpt"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 50,
+      "long_query_strategy": "diversity_select",
+      "default_strategy": "recency_boost_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 300,  "max_items": 3  },
+    "balanced":  { "token_budget": 800,  "max_items": 6  },
+    "aggressive": { "token_budget": 1500, "max_items": 10 }
+  }
+}`)
+
+	// Missing candidate_id and empty sha256 — fails Validate()
+	candJSON := `{
+  "candidate_id": "",
+  "policy_version": "bad-v2",
+  "policy": {"version": "bad-v2", "default_context_strategy": "topk_excerpt"},
+  "sha256": "",
+  "signature_status": "not_required",
+  "source": "local",
+  "fetched_at": "2026-04-24T10:00:00Z"
+}`
+	packPath := filepath.Join(dir, "bad-pack.json")
+	if err := os.WriteFile(packPath, []byte(candJSON), 0644); err != nil {
+		t.Fatalf("failed to write pack file: %v", err)
+	}
+
+	_, err := ImportCandidate(packPath, dir)
+	if err == nil {
+		t.Error("ImportCandidate should fail on invalid policy")
+	}
+
+	// Manifest unchanged
+	manifest, err := readManifestFromPath(filepath.Join(dir, "manifest.json"))
+	if err != nil {
+		t.Fatalf("failed to read manifest: %v", err)
+	}
+	if manifest.CandidateVersion != nil {
+		t.Error("candidate_version should still be nil")
+	}
+}
+
+func TestImportCandidate_ActiveOverwriteAttempt_Fails(t *testing.T) {
+	dir, cleanup := tempPolicyDir(t)
+	defer cleanup()
+
+	writeFile(t, dir, "manifest.json", `{
+  "active_version": "active-v1",
+  "candidate_version": null,
+  "versions": [
+    {
+      "version": "active-v1",
+      "status": "active",
+      "policy_file": "active-v1.json",
+      "source": "bundled"
+    }
+  ]
+}`)
+	writeFile(t, dir, "active-v1.json", `{
+  "version": "active-v1",
+  "default_context_strategy": "topk_excerpt",
+  "allowed_strategies": ["topk_excerpt"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 50,
+      "long_query_strategy": "diversity_select",
+      "default_strategy": "recency_boost_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 300,  "max_items": 3  },
+    "balanced":  { "token_budget": 800,  "max_items": 6  },
+    "aggressive": { "token_budget": 1500, "max_items": 10 }
+  }
+}`)
+
+	policyJSON := `{
+  "version": "active-v1",
+  "default_context_strategy": "diversity_select",
+  "allowed_strategies": ["diversity_select"]
+}`
+	h := sha256.Sum256([]byte(policyJSON))
+	shaHex := hex.EncodeToString(h[:])
+
+	candJSON := fmt.Sprintf(`{
+  "candidate_id": "overwrite-attempt",
+  "policy_version": "active-v1",
+  "policy": %s,
+  "sha256": "%s",
+  "signature_status": "not_required",
+  "source": "local",
+  "fetched_at": "2026-04-24T10:00:00Z"
+}`, policyJSON, shaHex)
+	packPath := filepath.Join(dir, "overwrite-pack.json")
+	if err := os.WriteFile(packPath, []byte(candJSON), 0644); err != nil {
+		t.Fatalf("failed to write pack file: %v", err)
+	}
+
+	_, err := ImportCandidate(packPath, dir)
+	if err == nil {
+		t.Error("ImportCandidate should fail when trying to overwrite active version")
+	}
+
+	// Manifest unchanged
+	manifest, err := readManifestFromPath(filepath.Join(dir, "manifest.json"))
+	if err != nil {
+		t.Fatalf("failed to read manifest: %v", err)
+	}
+	if manifest.CandidateVersion != nil {
+		t.Error("candidate_version should still be nil")
+	}
+}
+
+func TestImportCandidate_LoadActiveUnaffected(t *testing.T) {
+	dir, cleanup := tempPolicyDir(t)
+	defer cleanup()
+
+	writeFile(t, dir, "manifest.json", `{
+  "active_version": "active-v1",
+  "candidate_version": "imported-v2",
+  "versions": [
+    {
+      "version": "active-v1",
+      "status": "active",
+      "policy_file": "active-v1.json",
+      "source": "bundled"
+    },
+    {
+      "version": "imported-v2",
+      "status": "candidate",
+      "policy_file": "imported-v2.json",
+      "source": "local"
+    }
+  ]
+}`)
+	writeFile(t, dir, "active-v1.json", `{
+  "version": "active-v1",
+  "default_context_strategy": "topk_excerpt",
+  "allowed_strategies": ["topk_excerpt"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 50,
+      "long_query_strategy": "diversity_select",
+      "default_strategy": "recency_boost_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 300,  "max_items": 3  },
+    "balanced":  { "token_budget": 800,  "max_items": 6  },
+    "aggressive": { "token_budget": 1500, "max_items": 10 }
+  }
+}`)
+	writeFile(t, dir, "imported-v2.json", `{
+  "version": "imported-v2",
+  "default_context_strategy": "diversity_select",
+  "allowed_strategies": ["diversity_select"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 30,
+      "long_query_strategy": "topk_excerpt",
+      "default_strategy": "diversity_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 100,  "max_items": 1  },
+    "balanced":  { "token_budget": 200,  "max_items": 2  },
+    "aggressive": { "token_budget": 400,  "max_items": 4  }
+  }
+}`)
+
+	m := NewManager(dir)
+	if err := m.LoadActive(); err != nil {
+		t.Fatalf("LoadActive failed: %v", err)
+	}
+
+	// Active behavior from active-v1
+	resolved := m.GetResolved()
+	if resolved.DefaultStrategy != "topk_excerpt" {
+		t.Errorf("LoadActive should return active-v1 strategy, got %s", resolved.DefaultStrategy)
+	}
+	tb, mi := m.GetModeDefaults("balanced")
+	if tb != 800 || mi != 6 {
+		t.Errorf("LoadActive should return active-v1 mode, got (%d,%d)", tb, mi)
+	}
+
+	// Candidate is loadable but irrelevant to LoadActive
+	cand, _ := m.LoadCandidate()
+	if cand == nil {
+		t.Fatal("candidate should be loadable")
+	}
+	if cand.DefaultContextStrategy != "diversity_select" {
+		t.Errorf("candidate strategy should be diversity_select, got %s", cand.DefaultContextStrategy)
+	}
+
+	// Active unchanged
+	resolved2 := m.GetResolved()
+	if resolved2.DefaultStrategy != "topk_excerpt" {
+		t.Errorf("active strategy still topk_excerpt, got %s", resolved2.DefaultStrategy)
+	}
+}
+
+// readManifestFromPath reads a manifest file from a specific path.
+func readManifestFromPath(path string) (*Manifest, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var m Manifest
+	if err := json.Unmarshal(data, &m); err != nil {
+		return nil, err
+	}
+	return &m, nil
+}
+
+// --- GetPolicyStatus tests ---
+
+func TestGetPolicyStatus_ActiveOnly(t *testing.T) {
+	dir, cleanup := tempPolicyDir(t)
+	defer cleanup()
+
+	status := GetPolicyStatus(dir)
+	if status.ActiveVersion == "" {
+		t.Error("active_version should not be empty")
+	}
+	if status.CandidateVersion != nil {
+		t.Error("CandidateVersion should be nil when no candidate is staged")
+	}
+}
+
+func TestGetPolicyStatus_WithCandidate(t *testing.T) {
+	dir, cleanup := tempPolicyDir(t)
+	defer cleanup()
+
+	writeFile(t, dir, "manifest.json", `{
+  "active_version": "active-v1",
+  "candidate_version": "cand-v2",
+  "versions": [
+    {
+      "version": "active-v1",
+      "status": "active",
+      "policy_file": "active-v1.json",
+      "source": "bundled"
+    },
+    {
+      "version": "cand-v2",
+      "status": "candidate",
+      "policy_file": "cand-v2.json",
+      "source": "local"
+    }
+  ]
+}`)
+	writeFile(t, dir, "active-v1.json", `{
+  "version": "active-v1",
+  "default_context_strategy": "topk_excerpt",
+  "allowed_strategies": ["topk_excerpt"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 50,
+      "long_query_strategy": "diversity_select",
+      "default_strategy": "recency_boost_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 300,  "max_items": 3  },
+    "balanced":  { "token_budget": 800,  "max_items": 6  },
+    "aggressive": { "token_budget": 1500, "max_items": 10 }
+  }
+}`)
+	writeFile(t, dir, "cand-v2.json", `{
+  "version": "cand-v2",
+  "default_context_strategy": "diversity_select",
+  "allowed_strategies": ["diversity_select"]
+}`)
+
+	status := GetPolicyStatus(dir)
+	if status.ActiveVersion != "active-v1" {
+		t.Errorf("expected active-version active-v1, got %s", status.ActiveVersion)
+	}
+	if status.CandidateVersion == nil || *status.CandidateVersion != "cand-v2" {
+		t.Errorf("expected candidate-version cand-v2, got %v", status.CandidateVersion)
+	}
+	if status.CandidateSource != "local" {
+		t.Errorf("expected candidate source local, got %s", status.CandidateSource)
 	}
 }
