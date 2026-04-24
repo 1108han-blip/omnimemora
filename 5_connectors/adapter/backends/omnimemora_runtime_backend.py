@@ -89,12 +89,16 @@ class OmniMemoraRuntimeBackend(MemoryBackend):
     async def search(self, request: MemorySearchRequest, **kwargs) -> MemorySearchResult:
         """Search via POST /memory/search"""
         body = {
+            "keyword": request.query,
             "query": request.query,
             "limit": request.limit,
         }
         if isinstance(request.access_plan, dict) and request.access_plan:
             body["access_plan"] = request.access_plan
         result = await self._runtime_request("POST", "/memory/search", json=body)
+        enforcement = result.get("enforcement_trace") if isinstance(result.get("enforcement_trace"), dict) else None
+        if enforcement is None and isinstance(result.get("actual_enforcement"), dict):
+            enforcement = result.get("actual_enforcement")
 
         memories = []
         for item in result.get("results", []):
@@ -106,13 +110,13 @@ class OmniMemoraRuntimeBackend(MemoryBackend):
                 metadata={},
                 created_at=item.get("created_at"),
                 score=item.get("score"),
-                enforcement_trace=None,
+                enforcement_trace=enforcement,
             ))
         return MemorySearchResult(
             memories=memories,
             total=result.get("total", len(memories)),
             query=request.query,
-            enforcement_trace=result.get("enforcement_trace") if isinstance(result.get("enforcement_trace"), dict) else None,
+            enforcement_trace=enforcement,
         )
 
     async def write(self, request: MemoryWriteRequest, **kwargs) -> MemoryRecord:
@@ -127,6 +131,9 @@ class OmniMemoraRuntimeBackend(MemoryBackend):
         if isinstance(request.access_plan, dict) and request.access_plan:
             body["access_plan"] = request.access_plan
         result = await self._runtime_request("POST", "/memory/write", json=body)
+        enforcement = result.get("enforcement_trace") if isinstance(result.get("enforcement_trace"), dict) else None
+        if enforcement is None and isinstance(result.get("actual_enforcement"), dict):
+            enforcement = result.get("actual_enforcement")
 
         return MemoryRecord(
             memory_id=result.get("memory_id", ""),
@@ -135,7 +142,7 @@ class OmniMemoraRuntimeBackend(MemoryBackend):
             scope_ref=request.scope_ref,
             metadata=request.metadata,
             created_at=result.get("created_at"),
-            enforcement_trace=result.get("enforcement_trace") if isinstance(result.get("enforcement_trace"), dict) else None,
+            enforcement_trace=enforcement,
         )
 
     async def read(self, memory_id: str) -> Optional[MemoryRecord]:

@@ -235,12 +235,18 @@ async def fetch_memory_candidates(
             trace_id=trace_id,
             agent_id=agent_id,
         )
+        runtime_enforcement = (
+            search_result.enforcement_trace
+            if isinstance(search_result.enforcement_trace, dict)
+            else None
+        )
+        if runtime_enforcement is None:
+            for record in search_result.memories:
+                if isinstance(getattr(record, "enforcement_trace", None), dict):
+                    runtime_enforcement = record.enforcement_trace
+                    break
         if enforcement_capture is not None:
-            enforcement_capture["enforcement_trace"] = (
-                search_result.enforcement_trace
-                if isinstance(search_result.enforcement_trace, dict)
-                else None
-            )
+            enforcement_capture["enforcement_trace"] = runtime_enforcement
         memories = []
         for record in search_result.memories:
             memories.append(
