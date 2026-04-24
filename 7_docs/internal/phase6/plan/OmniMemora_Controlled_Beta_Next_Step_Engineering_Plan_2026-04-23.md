@@ -33,6 +33,10 @@ last_verified_commit: ""
 
 这是一条以**真实错误、真实 request、真实 evidence** 驱动下一轮产品修正的工程线。
 
+### Product North Star
+
+`OmniMemora 的目标是在不侵入、不降质的前提下，把用户跨窗口、跨实例的必要上下文压缩成可验证、可追溯、可控制的最小 token 投入。`
+
 ---
 
 ## 2. 固定边界
@@ -107,8 +111,8 @@ last_verified_commit: ""
 - runtime agent detection 仍是家族级粗探测，`rescan` 只是重新返回列表，未体现真实本机变体
 - `Claude Code` 本机变体/包装链仍可能“机器上存在但产品里搜不到”
 - 压缩负面影响尚未通过当前主线对象的最小对照 gate
-- `runtime multi-domain read/write enforcement` 尚未实现（当前仅有 AccessPlan projection）
-- Codex live validation 不再作为当前 gate；Codex 维持 protected/deferred 并排除在 install/run/live validation gates 之外
+- runtime enforcement 已进入 repo wiring（planned AccessPlan -> runtime calls; actual enforcement_trace -> meter/request_evidence）；running reality 的 promotion/live 验证仍待执行
+- Codex is product-compatible in principle, but protected/deferred as a local validation client.
 - 轻量外触达（Batch 5）尚未启动
 
 ## 4.1 Batch A-B Execution Snapshot (2026-04-23)
@@ -180,7 +184,7 @@ CLI/product-path verified，control truth aligned within family-scope boundary�
   - Claude Code default
   - Claude Code `cc-haha`
   - OpenClaw
-- Codex live validation 继续排除在该 D1 gate 之外
+- Codex live validation 继续排除在该 D1 gate 之外（该 gate 只覆盖非-Codex 客户端验证）
 
 已成立的 running/user-path 结果：
 
@@ -263,6 +267,7 @@ CLI/product-path verified，control truth aligned within family-scope boundary�
 - OpenClaw live request 在 running reality 下可回查 `identity/access_plan`
 - OpenClaw control truth 最终对齐为 `real_request_observed`
 - Codex 未进入本批 live gate（protected/deferred boundary preserved）
+- Codex is product-compatible in principle, but protected/deferred as a local validation client.
 
 精确定义：
 
@@ -272,9 +277,28 @@ CLI/product-path verified，control truth aligned within family-scope boundary�
 
 - `OmniMemora_AccessPlan_Projection_Layer_Closeout_2026-04-24.md`
 
+### AccessPlan Runtime Evidence Repo Snapshot (2026-04-24)
+
+**Result:** repo reality advanced; running reality pending
+
+已成立（repo-only, commit `fad9498`）：
+
+- planned `access_plan` 已接入 adapter -> runtime `/memory/search`/`/memory/write` 调用链
+- runtime 返回的 `enforcement_trace` 已回收并写入 meter
+- `request_evidence` 已可分离呈现 planned `access_plan` 与 actual `enforcement_trace`
+- legacy meter 仍保持兼容；当 runtime trace 缺失时，actual enforcement 明确标注 unavailable
+
+固定口径：
+
+`Repo reality: planned AccessPlan is wired into runtime calls and actual enforcement_trace is captured into meter/request_evidence. Running reality: promotion and non-Codex live validation remain pending.`
+
+证据记录：
+
+- `OmniMemora_AccessPlan_Runtime_Evidence_Repo_Sync_2026-04-24.md`
+
 ### Current Gate Override (2026-04-24)
 
-- `Codex is protected/deferred indefinitely and excluded from install/run/live validation gates.`
+- `Codex is product-compatible in principle, but protected/deferred as a local validation client.`
 - 本文第 5-10 节中凡是要求 Codex 进入测试链/验收链的条目，视为历史原始计划基线，不代表当前执行 gate。
 
 ---
