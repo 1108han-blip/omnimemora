@@ -434,6 +434,30 @@ CSP-001 adds a local-first compile strategy policy layer to the Go runtime. The 
 
 **Next batch:** CSP-001 running validation (runtime+adapter promotion; non-Codex request evidence check; verify meter/request_evidence expose policy version/source and requested/resolved strategy; Codex remains protected/deferred as local validation client)
 
+### CSP-001 Compile Strategy Policy Running Validation (2026-04-24)
+
+**Result:** PASS
+
+Actions taken:
+- Built new runtime binary from commit `08dc207`
+- Promoted to running instance (PID restart confirmed; uptime ~220s)
+- Sent test request with `assemble_context=true, context_strategy=auto, context_mode=balanced`
+- Queried SQLite metering events for evidence fields
+
+Evidence:
+- SQLite `/Users/sc/.omnimemora/runtime/memory.db` → `metering_events` → `evt_b6b0f4d1`
+- Test request: `csp001-val-full`
+
+Results:
+- `compile_strategy_policy_version`: `builtin` (correct — no bundled config dir in binary; falls back correctly)
+- `compile_strategy_policy_source`: `builtin`
+- `context_strategy_requested`: `auto` ✅
+- `context_strategy_resolved`: `recency_boost_select` ✅ (auto resolution correct for short non-question query)
+- `context_mode_resolved`: `balanced` ✅
+- AccessPlan `enforcement_trace` in write response: NOT regressed ✅
+
+**Next batch:** CSP-001 cloud candidate download path (future); no Codex live validation yet
+
 ### Current Gate Override (2026-04-24)
 
 - `Codex is product-compatible in principle, but protected/deferred as a local validation client.`
