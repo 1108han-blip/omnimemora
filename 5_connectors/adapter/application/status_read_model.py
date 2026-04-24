@@ -117,6 +117,14 @@ def _get_config():
     return __import__("5_connectors.adapter.config", fromlist=["dummy"]).config
 
 
+def _get_data_lifecycle_policy():
+    return __import__("5_connectors.adapter.data_lifecycle.policy", fromlist=["dummy"])
+
+
+def _get_data_lifecycle_summary_store():
+    return __import__("5_connectors.adapter.data_lifecycle.summary_store", fromlist=["dummy"])
+
+
 # ============================================================================
 # Runtime Health & System Status
 # ============================================================================
@@ -619,6 +627,39 @@ def compute_family_24h_metrics(
     }
 
 
+def _read_fresh_family_window_summary() -> Optional[Dict[str, Dict[str, Any]]]:
+    """
+    Read fresh family/window summary from Data Lifecycle Plane.
+    Returns None when summary is missing or stale.
+    """
+    try:
+        policy_mod = _get_data_lifecycle_policy()
+        summary_store = _get_data_lifecycle_summary_store()
+        policy = policy_mod.load_policy()
+        payload = summary_store.read_fresh_summary(policy=policy)
+    except Exception:
+        return None
+
+    if not isinstance(payload, dict):
+        return None
+    families = payload.get("families")
+    if not isinstance(families, dict):
+        return None
+    return families
+
+
+def _safe_family_summary(
+    summary_families: Optional[Dict[str, Dict[str, Any]]],
+    family_id: str,
+) -> Optional[Dict[str, Any]]:
+    if not summary_families:
+        return None
+    payload = summary_families.get(family_id)
+    if isinstance(payload, dict):
+        return payload
+    return None
+
+
 # ============================================================================
 # Control Cards Aggregation (Read Model)
 # ============================================================================
@@ -633,36 +674,76 @@ async def build_control_cards() -> List[Dict[str, Any]]:
     runtime_payload = await _runtime_request("GET", "/agents/control")
     health_state = await _runtime_health_state()
     metrics_index = build_metrics_index()
-    compile_store = _get_compile_store()
-    compile_rows_30m = compile_store.read_recent_compile_events(limit=5000, window_minutes=30)
-    compile_rows_24h = compile_store.read_recent_compile_events(limit=5000, window_minutes=24 * 60)
+    summary_families = _read_fresh_family_window_summary()
+    compile_rows_30m = None
+    compile_rows_24h = None
+    if summary_families is None:
+        # Compatibility fallback path when DLP summary is missing/stale.
+        compile_store = _get_compile_store()
+        compile_rows_30m = compile_store.read_recent_compile_events(limit=5000, window_minutes=30)
+        compile_rows_24h = compile_store.read_recent_compile_events(limit=5000, window_minutes=24 * 60)
 
     cards: List[Dict[str, Any]] = []
     for raw in runtime_payload.get("agents", []):
         family_id = str(raw.get("family_id") or "")
         metric = metrics_index.get(family_id, {})
-        observed_30m = _collect_observed_family_meters(family_id, window_minutes=30)
-        compile_30m = _summarize_family_compile_events(family_id, window_minutes=30, preloaded_rows=compile_rows_30m)
-        observed_24h = _collect_observed_family_meters(family_id, window_minutes=24 * 60)
-        compile_24h = _summarize_family_compile_events(
-            family_id,
-            window_minutes=24 * 60,
-            preloaded_rows=compile_rows_24h,
-        )
-        metrics_24h = compute_family_24h_metrics(
-            family_id,
-            observed_family_meters=observed_24h,
-            compile_24h_summary=compile_24h,
-        )
+        family_summary = _safe_family_summary(summary_families, family_id)
+        if family_summary is not None:
+            compile_30m = family_summary.get("compile_30m") or {
+                "proxied_requests": 0,
+                "compile_empty": 0,
+                "bypassed": 0,
+                "last_event_ts": None,
+            }
+            compile_24h = family_summary.get("compile_24h") or {
+                "proxied_requests": 0,
+                "compile_empty": 0,
+                "bypassed": 0,
+                "last_event_ts": None,
+            }
+            metrics_24h = family_summary.get("metrics_24h") or {
+                "requests_24h": 0,
+                "saved_tokens_24h": 0,
+                "savings_ratio_24h": 0.0,
+                "last_request_at": None,
+                "observed_requests_24h": 0,
+            }
+            observed_30m = []
+            traffic_truth = str(family_summary.get("traffic_truth_30m") or "").strip().lower()
+            if not traffic_truth:
+                traffic_truth = derive_traffic_truth(
+                    family_id,
+                    window_minutes=30,
+                    observed_meters=[],
+                    compile_summary=compile_30m,
+                )
+        else:
+            observed_30m = _collect_observed_family_meters(family_id, window_minutes=30)
+            compile_30m = _summarize_family_compile_events(
+                family_id,
+                window_minutes=30,
+                preloaded_rows=compile_rows_30m,
+            )
+            observed_24h = _collect_observed_family_meters(family_id, window_minutes=24 * 60)
+            compile_24h = _summarize_family_compile_events(
+                family_id,
+                window_minutes=24 * 60,
+                preloaded_rows=compile_rows_24h,
+            )
+            metrics_24h = compute_family_24h_metrics(
+                family_id,
+                observed_family_meters=observed_24h,
+                compile_24h_summary=compile_24h,
+            )
+            traffic_truth = derive_traffic_truth(
+                family_id,
+                window_minutes=30,
+                observed_meters=observed_30m,
+                compile_summary=compile_30m,
+            )
 
         integration_truth = derive_integration_truth(raw)
         route_truth = derive_route_truth(route_state.routing_enabled(family_id), health_state)
-        traffic_truth = derive_traffic_truth(
-            family_id,
-            window_minutes=30,
-            observed_meters=observed_30m,
-            compile_summary=compile_30m,
-        )
         observed_client_truth = derive_observed_client_truth(raw)
         truth_message = derive_truth_message(raw, integration_truth, route_truth, traffic_truth)
 

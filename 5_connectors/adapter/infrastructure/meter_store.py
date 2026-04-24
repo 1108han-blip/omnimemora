@@ -249,6 +249,18 @@ def get_meter(request_id: str) -> Optional[TokenSavingsMeter]:
     return None
 
 
+def export_meters_for_summary() -> List[TokenSavingsMeter]:
+    """
+    Read-only export helper for Data Lifecycle summary builders.
+    This does not mutate persistence semantics or store contents.
+    """
+    _ensure_persistence_loaded()
+    exported: List[TokenSavingsMeter] = []
+    for tenant_meters in _usage_aggregates.values():
+        exported.extend(list(tenant_meters))
+    return exported
+
+
 def _token_savings_by_period(meters: List[TokenSavingsMeter]) -> Dict[str, int]:
     """Compute saved_tokens totals for today/week/month windows."""
     now = datetime.now(timezone.utc)
