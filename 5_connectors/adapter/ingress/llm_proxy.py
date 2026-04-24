@@ -1829,6 +1829,8 @@ def _persist_gateway_meter(
     agent_id: str,
     query: str,
     compile_meta: dict,
+    request: Optional[Request] = None,
+    body: Optional[dict] = None,
 ) -> None:
     baseline_tokens = int(compile_meta.get("original_token_estimate") or 0)
     actual_tokens = int(compile_meta.get("compiled_token_estimate") or 0)
@@ -1843,6 +1845,41 @@ def _persist_gateway_meter(
     saved_chars = max(0, baseline_chars - actual_chars)
     packed_count = int(compile_meta.get("selected_memory_count") or 0)
     tenant = agent_id if agent_id and agent_id != "unknown" else "gateway"
+    try:
+        access_plan_mod = importlib.import_module("5_connectors.adapter.application.access_plan")
+        hints = access_plan_mod.extract_hints_from_request(request=request, body=body)
+        if not hints.get("family_id"):
+            hints["family_id"] = agent_id
+        identity_and_plan = access_plan_mod.build_identity_and_access_plan(
+            request_id=request_id,
+            family_id=agent_id,
+            hints=hints,
+            sharing_policy_source="ingress_private_first",
+        )
+    except Exception:
+        identity_and_plan = {
+            "identity_spine": {
+                "tenant_id": tenant,
+                "family_id": agent_id or "unknown",
+                "instance_id": agent_id or "unknown",
+                "window_id": None,
+                "session_id": None,
+                "request_id": request_id,
+                "raw_agent_id": agent_id or "unknown",
+            },
+            "access_plan": {},
+            "tenant_id": tenant,
+            "family_id": agent_id or "unknown",
+            "instance_id": agent_id or "unknown",
+            "session_id": None,
+            "window_id": None,
+            "raw_agent_id": agent_id or "unknown",
+            "workspace_id": None,
+            "primary_write_domain": None,
+            "read_domains": [],
+            "secondary_write_domains": [],
+            "sharing_policy_source": "ingress_private_first",
+        }
 
     try:
         meter = _v2_compute.TokenSavingsMeter(
@@ -1878,6 +1915,22 @@ def _persist_gateway_meter(
             matched_keywords=[],
             candidate_memories=[],
             dropped_memories=[],
+            tenant_id=identity_and_plan["tenant_id"],
+            family_id=identity_and_plan["family_id"],
+            instance_id=identity_and_plan["instance_id"],
+            window_id=identity_and_plan["window_id"],
+            session_id=identity_and_plan["session_id"],
+            raw_agent_id=identity_and_plan["raw_agent_id"] or (agent_id or "unknown"),
+            workspace_id=identity_and_plan["workspace_id"],
+            domain_id=(identity_and_plan.get("primary_write_domain") or {}).get("domain_id"),
+            scope_type=(identity_and_plan.get("primary_write_domain") or {}).get("scope_type"),
+            sharing_mode=(identity_and_plan.get("primary_write_domain") or {}).get("sharing_mode"),
+            identity_spine=identity_and_plan["identity_spine"],
+            read_domains=identity_and_plan["read_domains"],
+            primary_write_domain=identity_and_plan["primary_write_domain"],
+            secondary_write_domains=identity_and_plan["secondary_write_domains"],
+            sharing_policy_source=identity_and_plan["sharing_policy_source"],
+            access_plan=identity_and_plan["access_plan"],
         )
         _meter_store.store_meter(meter)
     except Exception as exc:
@@ -1894,6 +1947,8 @@ def _record_ingress_compile_and_meter(
     truth_meta: Optional[dict],
     trace_id: Optional[str],
     query_messages: object,
+    request: Optional[Request] = None,
+    body: Optional[dict] = None,
 ) -> None:
     """
     D1a: fixed ingress responsibility for compile/meter persistence.
@@ -1913,6 +1968,8 @@ def _record_ingress_compile_and_meter(
         agent_id=agent_id,
         query=_extract_user_query(query_messages),
         compile_meta=compile_meta,
+        request=request,
+        body=body,
     )
 
 
@@ -2719,6 +2776,8 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
         truth_meta=truth_meta,
         trace_id=trace_id,
         query_messages=compiled_body.get("messages"),
+        request=request,
+        body=body,
     )
 
     _trace_anthropic_payload(
@@ -3438,6 +3497,8 @@ async def proxy_v1_responses(request: Request):
             truth_meta=truth_meta,
             trace_id=trace_id,
             query_messages=chat_body.get("messages"),
+            request=request,
+            body=body,
         )
         rebuilt_body = _compiled_chat_to_responses_request(body, compiled_body)
         upstream_url = _normalize_responses_upstream_url(contract.base_url_resolved or responses_upstream["base_url"])
@@ -3695,6 +3756,8 @@ async def proxy_v1_responses(request: Request):
         truth_meta=truth_meta,
         trace_id=trace_id,
         query_messages=chat_body.get("messages"),
+        request=request,
+        body=body,
     )
     if config.trace_events_enabled:
         append_trace_event(

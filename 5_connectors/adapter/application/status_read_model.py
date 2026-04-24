@@ -1195,9 +1195,30 @@ def build_request_evidence_payload(request_id: str) -> Dict[str, Any]:
         m for m in candidate_memories if m.get("content", "").strip() not in dropped_content_set
     ]
 
-    raw_agent_id = meter_dict.get("agent", "unknown")
+    raw_agent_id = meter_dict.get("raw_agent_id") or meter_dict.get("agent", "unknown")
     agent_identity = _diag_agent_identity()
-    agent_family = agent_identity.resolve_canonical_agent_id(raw_agent_id)
+    agent_family = meter_dict.get("family_id") or agent_identity.resolve_canonical_agent_id(raw_agent_id)
+    identity_spine = meter_dict.get("identity_spine", {}) if isinstance(meter_dict.get("identity_spine"), dict) else {}
+    if not identity_spine:
+        identity_spine = {
+            "tenant_id": meter_dict.get("tenant_id") or meter_dict.get("tenant"),
+            "family_id": meter_dict.get("family_id") or agent_family,
+            "instance_id": meter_dict.get("instance_id"),
+            "window_id": meter_dict.get("window_id"),
+            "session_id": meter_dict.get("session_id"),
+            "request_id": request_id,
+            "raw_agent_id": raw_agent_id,
+        }
+
+    access_plan = meter_dict.get("access_plan", {}) if isinstance(meter_dict.get("access_plan"), dict) else {}
+    if not access_plan:
+        access_plan = {
+            "identity": identity_spine,
+            "read_domains": meter_dict.get("read_domains") or [],
+            "primary_write_domain": meter_dict.get("primary_write_domain"),
+            "secondary_write_domains": meter_dict.get("secondary_write_domains") or [],
+            "sharing_policy_source": meter_dict.get("sharing_policy_source") or "legacy_meter_projection",
+        }
 
     status = _infer_request_status(meter_dict, chain_dict)
     nodes = _derive_product_nodes(meter_dict, chain_dict)
@@ -1218,9 +1239,11 @@ def build_request_evidence_payload(request_id: str) -> Dict[str, Any]:
             "timestamp": meter_dict.get("timestamp", ""),
             "raw_agent_id": raw_agent_id,
             "agent_family": agent_family,
+            "identity": identity_spine,
             "task_type": task_type,
             "query_summary": meter_dict.get("query", "")[:100],
         },
+        "access_plan": access_plan,
         "request_class": _classify_meter_request(meter),
         "status": status,
         "context": {

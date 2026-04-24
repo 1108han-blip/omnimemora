@@ -76,6 +76,28 @@ class TokenSavingsMeter:
     candidate_memories: List[Dict[str, Any]] = field(default_factory=list)
     dropped_memories: List[Dict[str, Any]] = field(default_factory=list)
 
+    # Identity spine (product-core traceability fields)
+    tenant_id: Optional[str] = None
+    family_id: Optional[str] = None
+    instance_id: Optional[str] = None
+    window_id: Optional[str] = None
+    session_id: Optional[str] = None
+    raw_agent_id: Optional[str] = None
+
+    # Domain-level traceability aliases (flat fields for legacy aggregators)
+    workspace_id: Optional[str] = None
+    domain_id: Optional[str] = None
+    scope_type: Optional[str] = None
+    sharing_mode: Optional[str] = None
+
+    # Access-plan first-class projection
+    identity_spine: Dict[str, Any] = field(default_factory=dict)
+    read_domains: List[Dict[str, Any]] = field(default_factory=list)
+    primary_write_domain: Optional[Dict[str, Any]] = None
+    secondary_write_domains: List[Dict[str, Any]] = field(default_factory=list)
+    sharing_policy_source: Optional[str] = None
+    access_plan: Dict[str, Any] = field(default_factory=dict)
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 

@@ -88,13 +88,15 @@ class TestResponsesMeterPersistence(unittest.IsolatedAsyncioTestCase):
         def _fake_record_compile(*args, **kwargs):
             captured["compile_rows"].append({"args": args, "kwargs": kwargs})
 
-        def _fake_persist_meter(*, request_id, agent_id, query, compile_meta):
+        def _fake_persist_meter(*, request_id, agent_id, query, compile_meta, request=None, body=None):
             captured["meters"].append(
                 {
                     "request_id": request_id,
                     "agent_id": agent_id,
                     "query": query,
                     "compile_meta": dict(compile_meta),
+                    "has_request": request is not None,
+                    "body_model": (body or {}).get("model") if isinstance(body, dict) else None,
                 }
             )
 
@@ -124,3 +126,47 @@ class TestResponsesMeterPersistence(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(captured["meters"][0]["agent_id"], "codex_cli")
         self.assertEqual(captured["meters"][0]["query"], "hello from codex")
         self.assertEqual(captured["meters"][0]["compile_meta"]["compile_status"], "compile_success")
+        self.assertTrue(captured["meters"][0]["has_request"])
+        self.assertEqual(captured["meters"][0]["body_model"], "gpt-5.4")
+
+    async def test_persist_gateway_meter_keeps_legacy_tenant_and_sets_tenant_id(self):
+        captured = {"meter": None}
+
+        def _capture_meter(meter):
+            captured["meter"] = meter
+
+        original_store = llm_proxy._meter_store.store_meter
+        llm_proxy._meter_store.store_meter = _capture_meter
+        try:
+            request = SimpleNamespace(
+                headers={
+                    "X-OmniMemora-Tenant": "tenant-legacy-keep",
+                    "X-OmniMemora-Workspace": "ws-a",
+                    "X-OmniMemora-Agent": "openclaw",
+                },
+                query_params={},
+            )
+            llm_proxy._persist_gateway_meter(
+                request_id="req-meter-legacy-1",
+                agent_id="openclaw",
+                query="hello",
+                compile_meta={
+                    "compile_status": "compile_success",
+                    "selected_memory_count": 1,
+                    "original_token_estimate": 100,
+                    "compiled_token_estimate": 80,
+                },
+                request=request,
+                body={"tenant_id": "tenant-legacy-keep", "workspace_id": "ws-a"},
+            )
+        finally:
+            llm_proxy._meter_store.store_meter = original_store
+
+        meter = captured["meter"]
+        self.assertIsNotNone(meter)
+        meter_dict = meter.to_dict()
+        # Legacy aggregate semantics stay unchanged.
+        self.assertEqual(meter_dict["tenant"], "openclaw")
+        # New identity semantics projected in dedicated field.
+        self.assertEqual(meter_dict["tenant_id"], "tenant-legacy-keep")
+        self.assertEqual(meter_dict["access_plan"]["identity"]["tenant_id"], "tenant-legacy-keep")

@@ -51,6 +51,34 @@ class _DummyMeter:
         self.packed_memory_count = 1
         self.local_cards_used = 1
         self.remote_used_count = 0
+        self.identity_spine = {
+            "tenant_id": "tenant-test",
+            "family_id": "codex_cli",
+            "instance_id": "codex-instance-a",
+            "window_id": "window-1",
+            "session_id": "session-1",
+            "request_id": request_id,
+            "raw_agent_id": "codex-cli",
+        }
+        self.read_domains = [
+            {
+                "domain_id": "tenant-test:instance_private:codex-instance-a",
+                "tenant_id": "tenant-test",
+                "scope_type": "instance_private",
+                "scope_key": "codex-instance-a",
+                "sharing_mode": "isolated",
+            }
+        ]
+        self.primary_write_domain = self.read_domains[0]
+        self.secondary_write_domains = []
+        self.sharing_policy_source = "ingress_private_first"
+        self.access_plan = {
+            "identity": self.identity_spine,
+            "read_domains": self.read_domains,
+            "primary_write_domain": self.primary_write_domain,
+            "secondary_write_domains": self.secondary_write_domains,
+            "sharing_policy_source": self.sharing_policy_source,
+        }
 
     def to_dict(self):
         return {
@@ -68,7 +96,25 @@ class _DummyMeter:
             "packed_memory_count": self.packed_memory_count,
             "local_cards_used": self.local_cards_used,
             "remote_used_count": self.remote_used_count,
+            "identity_spine": self.identity_spine,
+            "read_domains": self.read_domains,
+            "primary_write_domain": self.primary_write_domain,
+            "secondary_write_domains": self.secondary_write_domains,
+            "sharing_policy_source": self.sharing_policy_source,
+            "access_plan": self.access_plan,
         }
+
+
+class _LegacyDummyMeter(_DummyMeter):
+    def to_dict(self):
+        payload = super().to_dict()
+        payload.pop("identity_spine", None)
+        payload.pop("access_plan", None)
+        payload.pop("read_domains", None)
+        payload.pop("primary_write_domain", None)
+        payload.pop("secondary_write_domains", None)
+        payload.pop("sharing_policy_source", None)
+        return payload
 
 
 def _configure(get_meter_fn):
@@ -167,3 +213,35 @@ def test_request_evidence_implementation_keeps_empty_suggestions_and_policy_stat
     assert payload["request"]["task_type"] == "implementation"
     assert payload["skill_suggestions"] == []
     assert payload["skill_policy_status"] == "disabled"
+
+
+def test_request_evidence_includes_identity_spine_and_access_plan():
+    request_id = "req-identity-spine"
+    meter = _DummyMeter(request_id=request_id, task_type="decision")
+    payload = _build_payload(
+        request_id,
+        meter,
+        compile_events=[{"request_id": request_id}],
+    )
+
+    assert payload["request"]["identity"]["tenant_id"] == "tenant-test"
+    assert payload["request"]["identity"]["family_id"] == "codex_cli"
+    assert payload["request"]["identity"]["instance_id"] == "codex-instance-a"
+    assert payload["access_plan"]["primary_write_domain"]["scope_type"] == "instance_private"
+    assert payload["access_plan"]["sharing_policy_source"] == "ingress_private_first"
+
+
+def test_request_evidence_legacy_meter_keeps_stable_access_plan_shape():
+    request_id = "req-legacy-meter-shape"
+    meter = _LegacyDummyMeter(request_id=request_id, task_type="continuation")
+    payload = _build_payload(
+        request_id,
+        meter,
+        compile_events=[{"request_id": request_id}],
+    )
+
+    assert "identity" in payload["request"]
+    assert payload["request"]["identity"]["request_id"] == request_id
+    assert "access_plan" in payload
+    assert isinstance(payload["access_plan"], dict)
+    assert "read_domains" in payload["access_plan"]
