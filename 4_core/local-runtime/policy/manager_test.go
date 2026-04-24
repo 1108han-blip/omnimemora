@@ -666,3 +666,152 @@ func TestInvalidateCache_DoesNotLoseBuiltinBaseline(t *testing.T) {
 		t.Errorf("after InvalidateCache+LoadActive, version should be %s, got %s", baselineVersion, m.GetResolved().PolicyVersion)
 	}
 }
+
+// --- Bundle-path tests (CSP-001 promotion bundle) ---
+
+// TestLoadActive_BundleLayout verifies the manager can load a policy from a
+// service-current-style bundle path (binary_dir/config/compile_strategy_policies/).
+func TestLoadActive_BundleLayout(t *testing.T) {
+	dir, cleanup := tempPolicyDir(t)
+	defer cleanup()
+
+	// Simulate service-current/tools/config/compile_strategy_policies/ layout
+	bundleDir := filepath.Join(dir, "config", "compile_strategy_policies")
+	if err := os.MkdirAll(bundleDir, 0755); err != nil {
+		t.Fatalf("failed to create bundle dir: %v", err)
+	}
+	writeFile(t, bundleDir, "manifest.json", `{
+  "active_version": "local-default-v1",
+  "candidate_version": null,
+  "versions": [
+    {
+      "version": "local-default-v1",
+      "status": "active",
+      "policy_file": "local-default-v1.json",
+      "source": "bundled"
+    }
+  ]
+}`)
+	writeFile(t, bundleDir, "local-default-v1.json", `{
+  "version": "local-default-v1",
+  "default_context_strategy": "topk_excerpt",
+  "allowed_strategies": ["topk_excerpt", "recency_boost_select", "diversity_select"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 50,
+      "long_query_strategy": "diversity_select",
+      "default_strategy": "recency_boost_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 300,  "max_items": 3  },
+    "balanced":  { "token_budget": 800,  "max_items": 6  },
+    "aggressive": { "token_budget": 1500, "max_items": 10 }
+  }
+}`)
+
+	// Explicit path (simulates promotion-bundle layout)
+	m := NewManager(filepath.Join(dir, "config", "compile_strategy_policies"))
+	if err := m.LoadActive(); err != nil {
+		t.Fatalf("LoadActive failed: %v", err)
+	}
+
+	resolved := m.GetResolved()
+	if resolved.PolicyVersion != "local-default-v1" {
+		t.Errorf("expected version local-default-v1, got %s", resolved.PolicyVersion)
+	}
+	if resolved.PolicySource != PolicySourceBundled {
+		t.Errorf("expected source bundled, got %s", resolved.PolicySource)
+	}
+	if resolved.DefaultStrategy != "topk_excerpt" {
+		t.Errorf("expected default strategy topk_excerpt, got %s", resolved.DefaultStrategy)
+	}
+}
+
+// TestLoadActive_MissingBundlePath_FallsBack verifies that when the policy
+// directory does not exist (neither bundle nor CWD layout), the manager falls
+// back to built-in defaults and does not return an error.
+func TestLoadActive_MissingBundlePath_FallsBack(t *testing.T) {
+	// NewManager("") with no valid policy directory should return a manager
+	// that falls back to built-in without error.
+	m := NewManager("")
+	if err := m.LoadActive(); err != nil {
+		t.Fatalf("LoadActive should not error on missing bundle: %v", err)
+	}
+
+	resolved := m.GetResolved()
+	if resolved.PolicyVersion != "builtin" {
+		t.Errorf("expected builtin fallback, got %s", resolved.PolicyVersion)
+	}
+	if resolved.PolicySource != PolicySourceBuiltIn {
+		t.Errorf("expected source builtin, got %s", resolved.PolicySource)
+	}
+}
+
+// TestResolveAuto_BundlePolicy verifies auto resolution works when the policy
+// is loaded from a bundle path.
+func TestResolveAuto_BundlePolicy(t *testing.T) {
+	dir, cleanup := tempPolicyDir(t)
+	defer cleanup()
+
+	bundleDir := filepath.Join(dir, "config", "compile_strategy_policies")
+	if err := os.MkdirAll(bundleDir, 0755); err != nil {
+		t.Fatalf("failed to create bundle dir: %v", err)
+	}
+	writeFile(t, bundleDir, "manifest.json", `{
+  "active_version": "local-default-v1",
+  "candidate_version": null,
+  "versions": [
+    {
+      "version": "local-default-v1",
+      "status": "active",
+      "policy_file": "local-default-v1.json",
+      "source": "bundled"
+    }
+  ]
+}`)
+	writeFile(t, bundleDir, "local-default-v1.json", `{
+  "version": "local-default-v1",
+  "default_context_strategy": "topk_excerpt",
+  "allowed_strategies": ["topk_excerpt", "recency_boost_select", "diversity_select"],
+  "auto_resolution": {
+    "enabled": true,
+    "rules": {
+      "question_patterns": "topk_excerpt",
+      "long_query_threshold_chars": 50,
+      "long_query_strategy": "diversity_select",
+      "default_strategy": "recency_boost_select"
+    }
+  },
+  "mode_defaults": {
+    "precise":   { "token_budget": 300,  "max_items": 3  },
+    "balanced":  { "token_budget": 800,  "max_items": 6  },
+    "aggressive": { "token_budget": 1500, "max_items": 10 }
+  }
+}`)
+
+	m := NewManager(filepath.Join(dir, "config", "compile_strategy_policies"))
+	if err := m.LoadActive(); err != nil {
+		t.Fatalf("LoadActive failed: %v", err)
+	}
+
+	// Question query
+	result := m.ResolveAuto("What is Docker?")
+	if result != "topk_excerpt" {
+		t.Errorf("expected topk_excerpt for question, got %s", result)
+	}
+
+	// Long query (>50 chars)
+	result = m.ResolveAuto("this query is definitely longer than fifty characters and should trigger long query logic")
+	if result != "diversity_select" {
+		t.Errorf("expected diversity_select for long query, got %s", result)
+	}
+
+	// Short non-question
+	result = m.ResolveAuto("hello world")
+	if result != "recency_boost_select" {
+		t.Errorf("expected recency_boost_select for short non-question, got %s", result)
+	}
+}

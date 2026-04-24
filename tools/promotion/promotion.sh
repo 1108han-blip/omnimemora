@@ -377,13 +377,45 @@ promote_runtime() {
     log_info "Runtime 构建成功" | log_output
 
     # 2. 同步到 service/current
-    log_info "[2/4] 同步 Runtime 到 $CURRENT_SERVICE_DIR ..." | log_output
+    log_info "[2/5] 同步 Runtime 到 $CURRENT_SERVICE_DIR ..." | log_output
     mkdir -p "$CURRENT_SERVICE_DIR/tools"
     cp "$runtime_bin" "$service_runtime_dir"
     log_info "Runtime 同步完成" | log_output
 
+    # 2b. 同步 CSP-001 compile strategy policy bundle
+    local policy_src="$runtime_src/config/compile_strategy_policies"
+    local policy_dest="$CURRENT_SERVICE_DIR/tools/config/compile_strategy_policies"
+    log_info "[2b/5] 同步 Compile Strategy Policy Bundle ..." | log_output
+    if [ ! -d "$policy_src" ]; then
+        log_error "Policy bundle 源目录不存在（应为 $policy_src）：promotion 必须失败，禁止静默 fallback"
+        echo "runtime_compile_strategy_policy_bundle=missing" >> "$PROMOTION_LOG"
+        echo "runtime_compile_strategy_policy_active_version=" >> "$PROMOTION_LOG"
+        echo "runtime_compile_strategy_policy_bundle_path=" >> "$PROMOTION_LOG"
+        echo "failed:policy_bundle_missing" >> "$PROMOTION_LOG"
+        return 1
+    fi
+    mkdir -p "$policy_dest"
+    cp "$policy_src/manifest.json" "$policy_dest/"
+    cp "$policy_src/local-default-v1.json" "$policy_dest/"
+    log_info "  Policy bundle 同步完成" | log_output
+
+    # 2c. 验证 policy bundle（manifest 必须存在且有效）
+    local manifest="$policy_dest/manifest.json"
+    if [ ! -f "$manifest" ]; then
+        log_error "Policy manifest.json 未找到：promotion 必须失败"
+        echo "runtime_compile_strategy_policy_bundle=missing" >> "$PROMOTION_LOG"
+        echo "failed:policy_manifest_missing" >> "$PROMOTION_LOG"
+        return 1
+    fi
+    local active_version
+    active_version=$(python3 -c "import json; d=json.load(open('$manifest')); print(d.get('active_version','unknown'))" 2>/dev/null || echo "unknown")
+    log_info "  Policy bundle 验证通过: active_version=$active_version" | log_output
+    echo "runtime_compile_strategy_policy_bundle=present" >> "$PROMOTION_LOG"
+    echo "runtime_compile_strategy_policy_active_version=$active_version" >> "$PROMOTION_LOG"
+    echo "runtime_compile_strategy_policy_bundle_path=$policy_dest" >> "$PROMOTION_LOG"
+
     # 3. 受控重载 + restart truth gate
-    log_info "[3/4] 重载 Runtime ..." | log_output
+    log_info "[3/5] 重载 Runtime ..." | log_output
     local pre_fingerprint pre_pid pre_uptime pre_command
     pre_fingerprint=$(read_runtime_fingerprint)
     IFS='|' read -r pre_pid pre_uptime pre_command <<< "$pre_fingerprint"
@@ -451,7 +483,7 @@ promote_runtime() {
     done
 
     # 4. 验证
-    log_info "[4/4] 验证 Runtime ..." | log_output
+    log_info "[4/5] 验证 Runtime ..." | log_output
     echo "runtime_post_pid=$post_pid" >> "$PROMOTION_LOG"
     echo "runtime_post_uptime_seconds=$post_uptime" >> "$PROMOTION_LOG"
     echo "runtime_post_command=$post_command" >> "$PROMOTION_LOG"

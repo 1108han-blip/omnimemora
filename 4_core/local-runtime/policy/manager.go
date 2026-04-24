@@ -26,22 +26,64 @@ type Manager struct {
 }
 
 // NewManager creates a policy manager rooted at policyDir.
-// If manifestPath is empty the default "config/compile_strategy_policies/manifest.json"
-// is used relative to the binary working directory.
-// If the policy directory cannot be read the manager initialises with built-in
-// defaults (never returns an error).
+//
+// When policyDir is empty, it resolves the policy directory by checking, in order:
+//
+//  1. A "config/compile_strategy_policies/" subdirectory of the binary's own
+//     directory (promotion-bundle layout: binary lives in
+//     ~/.omnimemora/service/current/tools/ and the policy directory lives at
+//     ~/.omnimemora/service/current/tools/config/compile_strategy_policies/).
+//  2. A "config/compile_strategy_policies/" subdirectory of the current
+//     working directory (repo / dev layout).
+//
+// If neither exists the manager initialises with built-in defaults and never
+// returns an error — LoadActive will fall back to the built-in policy silently.
 func NewManager(policyDir string) *Manager {
-	if policyDir == "" {
-		// Default to the bundled config directory
-		policyDir = "config/compile_strategy_policies"
+	if policyDir != "" {
+		// Explicit path provided (useful for tests or custom deployments)
+		m := &Manager{
+			policyDir:    policyDir,
+			manifestPath: filepath.Join(policyDir, "manifest.json"),
+		}
+		m.initBuiltin()
+		return m
 	}
 
+	// Auto-discover: try binary-bundle layout first, then CWD layout.
+	resolved := resolvePolicyDir("")
 	m := &Manager{
-		policyDir:    policyDir,
-		manifestPath: filepath.Join(policyDir, "manifest.json"),
+		policyDir:    resolved,
+		manifestPath: filepath.Join(resolved, "manifest.json"),
 	}
 	m.initBuiltin()
 	return m
+}
+
+// resolvePolicyDir returns the effective policy directory path.
+// If the path argument is non-empty, it is returned as-is.
+// Otherwise, binary-bundle layout is checked first (sibling of the executable),
+// then CWD layout, then a safe empty string (triggering built-in fallback).
+func resolvePolicyDir(explicit string) string {
+	if explicit != "" {
+		return explicit
+	}
+
+	// 1. Try binary-bundle layout: binary_dir/config/compile_strategy_policies
+	if exe, err := os.Executable(); err == nil {
+		bundleDir := filepath.Join(filepath.Dir(exe), "config", "compile_strategy_policies")
+		if fi, err := os.Stat(bundleDir); err == nil && fi.IsDir() {
+			return bundleDir
+		}
+	}
+
+	// 2. Try CWD layout: CWD/config/compile_strategy_policies
+	cwdDir := filepath.Join("config", "compile_strategy_policies")
+	if fi, err := os.Stat(cwdDir); err == nil && fi.IsDir() {
+		return cwdDir
+	}
+
+	// 3. Not found — return empty so LoadActive falls back to built-in.
+	return ""
 }
 
 // initBuiltin seeds the manager with hardcoded built-in defaults so that
