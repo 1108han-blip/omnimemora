@@ -105,13 +105,13 @@ last_verified_commit: ""
 - 当前反馈字段口径已经固定为 `version / platform / request_id / error_code / steps`
 - `5173` 已有 `Agent Control`、`Live Request Flow`、`Request Evidence` 基础面
 - `request_evidence` 已是下半区证据面的后端 truth source
+- AccessPlan actual enforcement 已完成 repo 修补、runtime restart-truth 修补与 non-Codex running validation 闭环
 
 当前缺口：
 
 - runtime agent detection 仍是家族级粗探测，`rescan` 只是重新返回列表，未体现真实本机变体
 - `Claude Code` 本机变体/包装链仍可能“机器上存在但产品里搜不到”
 - 压缩负面影响尚未通过当前主线对象的最小对照 gate
-- runtime enforcement 已进入 repo wiring（planned AccessPlan -> runtime calls; actual enforcement_trace -> meter/request_evidence）；running reality 的 promotion/live 验证仍待执行
 - Codex is product-compatible in principle, but protected/deferred as a local validation client.
 - 轻量外触达（Batch 5）尚未启动
 
@@ -295,6 +295,46 @@ CLI/product-path verified，control truth aligned within family-scope boundary�
 证据记录：
 
 - `OmniMemora_AccessPlan_Runtime_Evidence_Repo_Sync_2026-04-24.md`
+
+### AccessPlan Actual Enforcement Running Validation Snapshot (2026-04-24)
+
+**Result:** Passed for non-Codex running validation
+
+闭环链路：
+
+- `8975395` repo repair: adapter preserved runtime enforcement trace in evidence
+- `51b268a` runtime restart truth repair: promotion verified runtime process rollover
+- `69f6f49` running revalidation passed: non-Codex actual enforcement evidence complete
+
+验证对象：
+
+- Claude Code default: `941a65ec4c90`
+- Claude Code `cc-haha`: `5fd005303f09`
+- OpenClaw: `89e922878065`
+
+已成立：
+
+- promotion restart-truth precondition passed for runtime and adapter
+- all three non-Codex objects produced live product-path requests
+- all three request_ids are queryable in `request_evidence`
+- all three meters contain planned `access_plan` plus actual `actual_enforcement` / `enforcement_trace`
+- no target emitted `actual_enforcement.status=unavailable`
+- `/agents/control` did not materially contradict request evidence
+
+边界：
+
+- no Codex install/run/live validation
+- no new UI/product logic changes
+- `5173` remains display/control only, not data logic
+- Codex product-compatible in principle; local validation protected/deferred
+
+固定口径：
+
+`AccessPlan actual enforcement passed for non-Codex running validation. Historical failure records are not rewritten; the later restart-truth repair and running revalidation supersede the previous pending/failure state.`
+
+证据记录：
+
+- `OmniMemora_AccessPlan_Actual_Enforcement_Running_Revalidation_After_Restart_Repair_2026-04-24.md`
 
 ### Current Gate Override (2026-04-24)
 
