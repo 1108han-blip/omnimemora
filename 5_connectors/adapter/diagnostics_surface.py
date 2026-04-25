@@ -127,9 +127,17 @@ async def get_call_chain(request_id: str):
 
 
 @router.get("/debug/request_evidence")
-async def get_request_evidence(request_id: str):
+async def get_request_evidence(request_id: str, response: Response):
     try:
-        return _srm.build_request_evidence_payload(request_id)
+        payload = _srm.build_request_evidence_payload_resolved(request_id)
+        meter_read = payload.get("request_evidence_meter_read") if isinstance(payload, dict) else None
+        shadow = payload.get("request_evidence_meter_shadow") if isinstance(payload, dict) else None
+        if isinstance(meter_read, dict):
+            response.headers["x-omnimemora-request-evidence-meter-read-mode"] = str(meter_read.get("mode") or "")
+            response.headers["x-omnimemora-request-evidence-meter-read-source"] = str(meter_read.get("source") or "")
+        if isinstance(shadow, dict):
+            response.headers["x-omnimemora-request-evidence-meter-shadow-status"] = str(shadow.get("status") or "")
+        return payload
     except LookupError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 

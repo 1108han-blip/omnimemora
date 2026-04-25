@@ -1308,13 +1308,7 @@ def _project_task_type(request_id: str, meter_dict: Dict[str, Any]) -> str:
     return "continuation"
 
 
-def build_request_evidence_payload(request_id: str) -> Dict[str, Any]:
-    if _diag_get_meter_fn is None:
-        raise LookupError(f"Meter not found for request_id={request_id}")
-    meter = _diag_get_meter_fn(request_id)
-    if not meter:
-        raise LookupError(f"Meter not found for request_id={request_id}")
-
+def _build_request_evidence_payload_from_meter(request_id: str, meter: Any) -> Dict[str, Any]:
     meter_dict = meter.to_dict()
     trace_store = __import__("5_connectors.adapter.infrastructure.trace_store", fromlist=["dummy"])
     chain_dict = trace_store.get_trace_dict(request_id)
@@ -1419,6 +1413,82 @@ def build_request_evidence_payload(request_id: str) -> Dict[str, Any]:
         "skill_policy_source": policy_meta["skill_policy_source"],
         "skill_policy_status": policy_meta["skill_policy_status"],
     }
+
+
+def build_request_evidence_payload(request_id: str) -> Dict[str, Any]:
+    if _diag_get_meter_fn is None:
+        raise LookupError(f"Meter not found for request_id={request_id}")
+    meter = _diag_get_meter_fn(request_id)
+    if not meter:
+        raise LookupError(f"Meter not found for request_id={request_id}")
+    return _build_request_evidence_payload_from_meter(request_id, meter)
+
+
+def _request_evidence_shadow_core_fields(payload: Dict[str, Any]) -> Dict[str, Any]:
+    context = payload.get("context") if isinstance(payload.get("context"), dict) else {}
+    return {
+        "identity": (payload.get("request") or {}).get("identity"),
+        "access_plan": payload.get("access_plan"),
+        "actual_enforcement": payload.get("actual_enforcement"),
+        "tokens": {
+            "before_tokens": context.get("before_tokens"),
+            "after_tokens": context.get("after_tokens"),
+            "saved_tokens": context.get("saved_tokens"),
+            "savings_ratio": context.get("savings_ratio"),
+        },
+        "request_class": payload.get("request_class"),
+        "status": payload.get("status"),
+    }
+
+
+def build_request_evidence_payload_resolved(request_id: str) -> Dict[str, Any]:
+    if _diag_get_meter_fn is None:
+        raise LookupError(f"Meter not found for request_id={request_id}")
+
+    resolver = __import__(
+        "5_connectors.adapter.application.request_evidence_meter_read_resolver",
+        fromlist=["dummy"],
+    )
+    resolution = resolver.resolve_request_evidence_meter(
+        request_id,
+        legacy_get_meter_fn=_diag_get_meter_fn,
+    )
+    if resolution.selected_meter is None:
+        raise LookupError(f"Meter not found for request_id={request_id}")
+
+    selected_payload = _build_request_evidence_payload_from_meter(request_id, resolution.selected_meter)
+    selected_payload["request_evidence_meter_read"] = {
+        "mode": resolution.mode,
+        "source": resolution.selected_source,
+        "degraded": resolution.degraded,
+        "degraded_reason": resolution.degraded_reason,
+    }
+
+    shadow_status = "degraded"
+    mismatch_fields: List[str] = []
+
+    if resolution.sqlite_meter is not None and resolution.legacy_meter is not None:
+        sqlite_payload = _build_request_evidence_payload_from_meter(request_id, resolution.sqlite_meter)
+        legacy_payload = _build_request_evidence_payload_from_meter(request_id, resolution.legacy_meter)
+        sqlite_core = _request_evidence_shadow_core_fields(sqlite_payload)
+        legacy_core = _request_evidence_shadow_core_fields(legacy_payload)
+        for key in sqlite_core.keys():
+            if sqlite_core.get(key) != legacy_core.get(key):
+                mismatch_fields.append(key)
+        shadow_status = "passed" if len(mismatch_fields) == 0 else "degraded"
+    else:
+        if resolution.sqlite_meter is None:
+            mismatch_fields.append("sqlite_meter_missing")
+        if resolution.legacy_meter is None:
+            mismatch_fields.append("legacy_meter_missing")
+
+    selected_payload["request_evidence_meter_shadow"] = {
+        "status": shadow_status,
+        "mode": resolution.mode,
+        "read_source": resolution.selected_source,
+        "mismatch_fields": mismatch_fields,
+    }
+    return selected_payload
 
 
 def build_agents_live_payload(window_minutes: int = 30) -> Dict[str, Any]:
