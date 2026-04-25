@@ -85,7 +85,9 @@ def _validate_approval(
 
     approved_plan_hash = approved_hashes.get("candidate_plan_hash")
     mismatch_keys = []
-    for key, expected in artifact_hashes.items():
+    required_hash_keys = ["candidate_plan_hash", "transaction_preview_hash", "restore_readiness_hash"]
+    for key in required_hash_keys:
+        expected = artifact_hashes.get(key)
         actual = approved_hashes.get(key)
         if str(actual or "") != str(expected or ""):
             mismatch_keys.append(key)
