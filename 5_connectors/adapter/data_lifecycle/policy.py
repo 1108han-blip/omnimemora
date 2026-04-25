@@ -23,6 +23,7 @@ class DataLifecyclePolicy:
     archive_pilot_root: str = ""
     archive_pilot_record_file: str = ""
     archive_readthrough_report_file: str = ""
+    archive_fallback_simulation_file: str = ""
     maintenance_enabled: bool = True
     maintenance_startup_delay_seconds: float = 5.0
     maintenance_interval_seconds: float = 60.0
@@ -85,6 +86,10 @@ def load_policy() -> DataLifecyclePolicy:
         "OMNIMEMORA_DLP_ARCHIVE_READTHROUGH_REPORT_FILE",
         str(base_dir / "archive_readthrough_report.json"),
     )
+    archive_fallback_simulation_file = os.getenv(
+        "OMNIMEMORA_DLP_ARCHIVE_FALLBACK_SIMULATION_FILE",
+        str(base_dir / "archive_fallback_simulation_report.json"),
+    )
     ttl_seconds = float(os.getenv("OMNIMEMORA_DLP_SUMMARY_TTL_SECONDS", "30"))
     stale_max_age_seconds = float(
         os.getenv("OMNIMEMORA_DLP_SUMMARY_STALE_MAX_AGE_SECONDS", "3600")
@@ -116,6 +121,7 @@ def load_policy() -> DataLifecyclePolicy:
         archive_pilot_root=archive_pilot_root,
         archive_pilot_record_file=archive_pilot_record_file,
         archive_readthrough_report_file=archive_readthrough_report_file,
+        archive_fallback_simulation_file=archive_fallback_simulation_file,
         maintenance_enabled=maintenance_enabled,
         maintenance_startup_delay_seconds=max(0.0, maintenance_startup_delay_seconds),
         maintenance_interval_seconds=max(1.0, maintenance_interval_seconds),

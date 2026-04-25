@@ -20,6 +20,7 @@ _archive_gate_mod = importlib.import_module("5_connectors.adapter.data_lifecycle
 _archive_approval_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_approval")
 _archive_pilot_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_pilot")
 _archive_readthrough_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_readthrough")
+_archive_fallback_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_fallback_contract")
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -310,6 +311,41 @@ async def post_data_lifecycle_archive_readthrough_report_rebuild():
         ) from exc
     return {
         "schema_version": _archive_readthrough_mod.ARCHIVE_READTHROUGH_REPORT_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "report": report,
+    }
+
+
+@router.get("/data-lifecycle/archive/fallback/simulation")
+async def get_data_lifecycle_archive_fallback_simulation():
+    policy = _policy_mod.load_policy()
+    report = _archive_fallback_mod.read_report(policy=policy)
+    if report is None:
+        return {
+            "schema_version": _archive_fallback_mod.ARCHIVE_FALLBACK_SIMULATION_SCHEMA_VERSION,
+            "status": "missing",
+        }
+    return report
+
+
+@router.post("/data-lifecycle/archive/fallback/simulation/rebuild")
+async def post_data_lifecycle_archive_fallback_simulation_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, report = _archive_fallback_mod.rebuild_report(policy=policy)
+    except Exception as exc:
+        latest = _archive_fallback_mod.read_report(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _archive_fallback_mod.ARCHIVE_FALLBACK_SIMULATION_REBUILD_SCHEMA_VERSION,
+                "message": "archive fallback simulation rebuild failed",
+                "error": str(exc),
+                "report": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _archive_fallback_mod.ARCHIVE_FALLBACK_SIMULATION_REBUILD_SCHEMA_VERSION,
         "record": record,
         "report": report,
     }

@@ -18,6 +18,7 @@ from . import (
     archive_execution_gate,
     archive_pilot,
     archive_readthrough,
+    archive_fallback_contract,
 )
 from .policy import DataLifecyclePolicy, load_policy
 
@@ -371,6 +372,34 @@ def build_health_payload(
             "read_path_unchanged": True,
             "validated_at": None,
         }
+    archive_fallback = archive_fallback_contract.read_report(policy=current_policy)
+    if isinstance(archive_fallback, dict):
+        fallback_summary = archive_fallback.get("summary") or {}
+        archive_fallback_view = {
+            "status": str(archive_fallback.get("status") or "present"),
+            "mode": archive_fallback.get("mode"),
+            "fallback_available": bool(archive_fallback.get("fallback_available", False)),
+            "archive_copy_readable": bool(archive_fallback.get("archive_copy_readable", False)),
+            "checksum_match": bool(archive_fallback.get("checksum_match", False)),
+            "source_missing_simulated": bool(archive_fallback.get("source_missing_simulated", False)),
+            "production_read_path_unchanged": bool(
+                archive_fallback.get("production_read_path_unchanged", True)
+            ),
+            "request_evidence_fallback_status": fallback_summary.get("request_evidence_fallback_status"),
+            "validated_at": fallback_summary.get("validated_at", archive_fallback.get("generated_at")),
+        }
+    else:
+        archive_fallback_view = {
+            "status": "missing",
+            "mode": None,
+            "fallback_available": False,
+            "archive_copy_readable": False,
+            "checksum_match": False,
+            "source_missing_simulated": False,
+            "production_read_path_unchanged": True,
+            "request_evidence_fallback_status": None,
+            "validated_at": None,
+        }
     status, recommended_action = _derive_status(
         summary_freshness=summary_freshness,
         last_maintenance=last_maintenance,
@@ -418,4 +447,5 @@ def build_health_payload(
         "archive_execution_gate": archive_gate_view,
         "archive_pilot": archive_pilot_view,
         "archive_readthrough": archive_readthrough_view,
+        "archive_fallback_simulation": archive_fallback_view,
     }
