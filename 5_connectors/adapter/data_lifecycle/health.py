@@ -27,6 +27,7 @@ from . import (
     archive_non_active_execution_gate,
     archive_non_active_quarantine,
     raw_evidence_segments,
+    meter_storage_v2,
 )
 from .policy import DataLifecyclePolicy, load_policy
 
@@ -644,6 +645,25 @@ def build_health_payload(
         last_maintenance=last_maintenance,
         recent_degraded_count=len(recent_degraded),
     )
+    try:
+        meter_storage_v2_view = meter_storage_v2.get_status_payload()
+    except Exception:
+        meter_storage_v2_view = {
+            "schema_version": meter_storage_v2.METER_STORAGE_STATUS_SCHEMA_VERSION,
+            "status": "missing",
+            "mode": meter_storage_v2.METER_STORAGE_MODE,
+            "read_path": {
+                "legacy_authoritative": True,
+                "request_meter_switch_enabled": False,
+                "request_evidence_switch_enabled": False,
+            },
+            "storage": {
+                "sqlite_path": None,
+                "sqlite_count": 0,
+                "legacy_count": 0,
+            },
+            "write_errors": {"count": 0, "latest": None},
+        }
 
     return {
         "schema_version": HEALTH_SCHEMA_VERSION,
@@ -679,6 +699,7 @@ def build_health_payload(
             ),
         },
         "raw_evidence_segments": raw_evidence_segments_view,
+        "meter_storage_v2": meter_storage_v2_view,
         "retention_manifest": retention_manifest_view,
         "traceability_report": traceability_report_view,
         "archive_plan": archive_plan_view,

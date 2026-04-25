@@ -1359,3 +1359,81 @@ def test_dlp_health_exposes_archive_non_active_quarantine_record_summary(tmp_pat
     assert quarantine["non_active_copy_move_executed"] is True
     assert quarantine["delete_compress_executed"] is False
     assert quarantine["production_read_path_unchanged"] is True
+
+
+def test_data_lifecycle_meter_storage_status_endpoint(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected = {
+        "schema_version": "dlp-meter-storage-v2-status-v1",
+        "status": "healthy",
+        "mode": "dual_write_observe_only",
+    }
+    monkeypatch.setattr(data_lifecycle_api._meter_storage_v2_mod, "get_status_payload", lambda: expected)
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/status")
+    assert response.status_code == 200
+    assert response.json() == expected
+
+
+def test_data_lifecycle_meter_storage_rebuild_endpoint(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+
+    expected_record = {
+        "schema_version": "dlp-meter-storage-v2-rebuild-v1",
+        "trigger": "meter_storage_v2_rebuild",
+        "status": "success",
+    }
+    expected_parity = {
+        "schema_version": "dlp-meter-storage-v2-parity-v1",
+        "status": "passed",
+        "critical_mismatch_count": 0,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_storage_v2_mod,
+        "rebuild_from_legacy",
+        lambda: (expected_record, expected_parity),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/meter-storage/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-meter-storage-v2-rebuild-v1"
+    assert payload["record"]["trigger"] == "meter_storage_v2_rebuild"
+    assert payload["parity"]["critical_mismatch_count"] == 0
+
+
+def test_data_lifecycle_meter_storage_parity_endpoint(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected = {
+        "schema_version": "dlp-meter-storage-v2-parity-v1",
+        "status": "passed",
+        "critical_mismatch_count": 0,
+    }
+    monkeypatch.setattr(data_lifecycle_api._meter_storage_v2_mod, "build_parity_report", lambda: expected)
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/parity")
+    assert response.status_code == 200
+    assert response.json() == expected
+
+
+def test_data_lifecycle_meter_storage_parity_rebuild_endpoint(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+
+    expected = {
+        "schema_version": "dlp-meter-storage-v2-parity-rebuild-v1",
+        "record": {"trigger": "meter_storage_v2_rebuild"},
+        "parity": {"critical_mismatch_count": 0},
+    }
+    monkeypatch.setattr(data_lifecycle_api._meter_storage_v2_mod, "parity_with_rebuild", lambda: expected)
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/meter-storage/parity/rebuild")
+    assert response.status_code == 200
+    assert response.json()["schema_version"] == "dlp-meter-storage-v2-parity-rebuild-v1"

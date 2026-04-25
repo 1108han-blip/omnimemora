@@ -31,6 +31,7 @@ _archive_non_active_quarantine_exec_mod = importlib.import_module(
     "5_connectors.adapter.data_lifecycle.archive_non_active_quarantine"
 )
 _raw_evidence_segments_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.raw_evidence_segments")
+_meter_storage_v2_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_storage_v2")
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -56,6 +57,56 @@ async def post_data_lifecycle_manual_refresh():
             "record": record,
         },
     )
+
+
+@router.get("/data-lifecycle/meter-storage/status")
+async def get_data_lifecycle_meter_storage_status():
+    return _meter_storage_v2_mod.get_status_payload()
+
+
+@router.post("/data-lifecycle/meter-storage/rebuild")
+async def post_data_lifecycle_meter_storage_rebuild():
+    try:
+        record, parity = _meter_storage_v2_mod.rebuild_from_legacy()
+    except Exception as exc:
+        latest_status = _meter_storage_v2_mod.get_status_payload()
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _meter_storage_v2_mod.METER_STORAGE_REBUILD_SCHEMA_VERSION,
+                "message": "meter storage rebuild failed",
+                "error": str(exc),
+                "status": latest_status,
+            },
+        ) from exc
+    return {
+        "schema_version": _meter_storage_v2_mod.METER_STORAGE_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "parity": parity,
+    }
+
+
+@router.get("/data-lifecycle/meter-storage/parity")
+async def get_data_lifecycle_meter_storage_parity():
+    return _meter_storage_v2_mod.build_parity_report()
+
+
+@router.post("/data-lifecycle/meter-storage/parity/rebuild")
+async def post_data_lifecycle_meter_storage_parity_rebuild():
+    try:
+        payload = _meter_storage_v2_mod.parity_with_rebuild()
+    except Exception as exc:
+        latest_parity = _meter_storage_v2_mod.build_parity_report()
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _meter_storage_v2_mod.METER_STORAGE_PARITY_REBUILD_SCHEMA_VERSION,
+                "message": "meter storage parity rebuild failed",
+                "error": str(exc),
+                "parity": latest_parity,
+            },
+        ) from exc
+    return payload
 
 
 @router.get("/data-lifecycle/retention/manifest")

@@ -1,0 +1,92 @@
+import importlib
+import json
+
+
+meter_v2 = importlib.import_module("5_connectors.adapter.infrastructure.meter_store_v2")
+meter_storage_v2 = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_storage_v2")
+
+
+def _payload(request_id: str, saved_tokens: int = 100) -> dict:
+    return {
+        "request_id": request_id,
+        "tenant": "all",
+        "agent": "claude_code",
+        "family_id": "claude_code",
+        "timestamp": "2026-04-25T12:00:00+00:00",
+        "task_type": "implementation",
+        "context_state": "normal",
+        "baseline_tokens_estimate": 1000,
+        "actual_tokens_estimate": 900,
+        "saved_tokens_estimate": saved_tokens,
+        "savings_ratio": 0.1,
+        "query": "hello",
+    }
+
+
+def _write_legacy_index(data_dir, rows: dict[str, dict]):
+    data_dir.mkdir(parents=True, exist_ok=True)
+    index_path = data_dir / "meters_index.json"
+    index_path.write_text(json.dumps(rows), encoding="utf-8")
+
+
+def test_parity_report_passes_when_legacy_and_sqlite_match(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    sqlite_path = tmp_path / "meter_store.sqlite3"
+    monkeypatch.setenv("OMNIMEMORA_METER_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("OMNIMEMORA_METER_STORE_V2_FILE", str(sqlite_path))
+
+    payload = _payload("req-match")
+    _write_legacy_index(data_dir, {"req-match": payload})
+    meter_v2.upsert_meter(payload)
+
+    report = meter_storage_v2.build_parity_report()
+    assert report["status"] == "passed"
+    assert report["critical_mismatch_count"] == 0
+    assert report["matching_request_id_count"] == 1
+
+
+def test_parity_report_detects_missing_and_hash_mismatch(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    sqlite_path = tmp_path / "meter_store.sqlite3"
+    monkeypatch.setenv("OMNIMEMORA_METER_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("OMNIMEMORA_METER_STORE_V2_FILE", str(sqlite_path))
+
+    legacy_a = _payload("req-a", saved_tokens=100)
+    legacy_b = _payload("req-b", saved_tokens=200)
+    _write_legacy_index(data_dir, {"req-a": legacy_a, "req-b": legacy_b})
+
+    sqlite_a = _payload("req-a", saved_tokens=777)  # hash mismatch
+    sqlite_c = _payload("req-c", saved_tokens=300)  # missing in legacy
+    meter_v2.upsert_meter(sqlite_a)
+    meter_v2.upsert_meter(sqlite_c)
+
+    report = meter_storage_v2.build_parity_report()
+    assert report["status"] == "degraded"
+    assert report["missing_in_sqlite_count"] == 1
+    assert report["missing_in_legacy_count"] == 1
+    assert report["payload_hash_mismatch_count"] == 1
+    assert report["critical_mismatch_count"] == 3
+
+
+def test_rebuild_and_status_payload_keep_legacy_authoritative(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    sqlite_path = tmp_path / "meter_store.sqlite3"
+    monkeypatch.setenv("OMNIMEMORA_METER_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("OMNIMEMORA_METER_STORE_V2_FILE", str(sqlite_path))
+
+    _write_legacy_index(
+        data_dir,
+        {
+            "req-1": _payload("req-1", saved_tokens=11),
+            "req-2": _payload("req-2", saved_tokens=22),
+        },
+    )
+    record, parity = meter_storage_v2.rebuild_from_legacy()
+    status = meter_storage_v2.get_status_payload()
+
+    assert record["non_destructive"] is True
+    assert record["legacy_scanned_count"] == 2
+    assert parity["critical_mismatch_count"] == 0
+    assert status["read_path"]["legacy_authoritative"] is True
+    assert status["read_path"]["request_meter_switch_enabled"] is False
+    assert status["read_path"]["request_evidence_switch_enabled"] is False
