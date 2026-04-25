@@ -26,6 +26,7 @@ _archive_quarantine_exec_mod = importlib.import_module("5_connectors.adapter.dat
 _archive_restore_pilot_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_restore_pilot")
 _archive_non_active_candidates_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_non_active_candidates")
 _archive_non_active_quarantine_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_non_active_quarantine_readiness")
+_archive_non_active_gate_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_non_active_execution_gate")
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -528,4 +529,39 @@ async def post_data_lifecycle_archive_non_active_quarantine_readiness_rebuild():
         "schema_version": _archive_non_active_quarantine_mod.NON_ACTIVE_QUARANTINE_READINESS_REBUILD_SCHEMA_VERSION,
         "record": record,
         "plan": plan,
+    }
+
+
+@router.get("/data-lifecycle/archive/non-active-quarantine/execution/gate")
+async def get_data_lifecycle_archive_non_active_quarantine_execution_gate():
+    policy = _policy_mod.load_policy()
+    gate = _archive_non_active_gate_mod.read_gate(policy=policy)
+    if gate is None:
+        return {
+            "schema_version": _archive_non_active_gate_mod.NON_ACTIVE_EXECUTION_GATE_SCHEMA_VERSION,
+            "status": "missing",
+        }
+    return gate
+
+
+@router.post("/data-lifecycle/archive/non-active-quarantine/execution/gate/rebuild")
+async def post_data_lifecycle_archive_non_active_quarantine_execution_gate_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, gate = _archive_non_active_gate_mod.rebuild_gate(policy=policy)
+    except Exception as exc:
+        latest = _archive_non_active_gate_mod.read_gate(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _archive_non_active_gate_mod.NON_ACTIVE_EXECUTION_GATE_REBUILD_SCHEMA_VERSION,
+                "message": "archive non-active execution gate rebuild failed",
+                "error": str(exc),
+                "gate": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _archive_non_active_gate_mod.NON_ACTIVE_EXECUTION_GATE_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "gate": gate,
     }

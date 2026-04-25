@@ -36,6 +36,7 @@ def _build_policy(tmp_path, *, ttl_seconds=10.0, stale_max_age_seconds=300.0):
         archive_restore_staging_root=str(tmp_path / "restore" / "staging"),
         archive_non_active_candidate_report_file=str(tmp_path / "archive_non_active_candidate_report.json"),
         archive_non_active_quarantine_readiness_file=str(tmp_path / "archive_non_active_quarantine_readiness_plan.json"),
+        archive_non_active_execution_gate_file=str(tmp_path / "archive_non_active_execution_gate.json"),
     )
 
 
@@ -702,6 +703,8 @@ def test_data_lifecycle_api_has_no_archive_batch_or_cleanup_endpoint():
     assert client.post("/data-lifecycle/archive/non-active-quarantine/move-one").status_code == 404
     assert client.post("/data-lifecycle/archive/non-active-quarantine/delete").status_code == 404
     assert client.post("/data-lifecycle/archive/non-active-quarantine/compress").status_code == 404
+    assert client.post("/data-lifecycle/archive/non-active-quarantine/execution/execute").status_code == 404
+    assert client.post("/data-lifecycle/archive/non-active-quarantine/execution/move-one").status_code == 404
 
 
 def test_dlp_health_exposes_archive_pilot_summary(tmp_path):
@@ -1165,3 +1168,66 @@ def test_dlp_health_exposes_archive_non_active_quarantine_readiness_summary(tmp_
     assert readiness["source_move_executed"] is False
     assert readiness["non_active_copy_move_executed"] is False
     assert readiness["delete_compress_executed"] is False
+
+
+def test_data_lifecycle_archive_non_active_execution_gate_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._archive_non_active_gate_mod, "read_gate", lambda policy=None: None)
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/archive/non-active-quarantine/execution/gate")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-non-active-copy-execution-gate-v1"
+    assert payload["status"] == "missing"
+
+
+def test_data_lifecycle_archive_non_active_execution_gate_rebuild_endpoint_returns_gate(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-non-active-gate-1",
+        "trigger": "archive_non_active_execution_gate_rebuild",
+        "status": "success",
+        "error": None,
+    }
+    expected_gate = {
+        "schema_version": "dlp-non-active-copy-execution-gate-v1",
+        "gate_id": "ng1",
+        "mode": "gate_only",
+        "allowed": False,
+        "status": "blocked",
+        "blocking_reasons": ["missing_operator_approval"],
+        "summary": {"blocking_count": 1, "source_move_allowed": False},
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._archive_non_active_gate_mod,
+        "rebuild_gate",
+        lambda policy=None: (expected_record, expected_gate),
+    )
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/archive/non-active-quarantine/execution/gate/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-non-active-copy-execution-gate-rebuild-v1"
+    assert payload["record"]["trigger"] == "archive_non_active_execution_gate_rebuild"
+    assert payload["gate"]["schema_version"] == "dlp-non-active-copy-execution-gate-v1"
+
+
+def test_dlp_health_exposes_archive_non_active_execution_gate_summary(tmp_path):
+    policy = _build_policy(tmp_path)
+    gate_path = tmp_path / "archive_non_active_execution_gate.json"
+    gate_path.write_text(
+        '{"schema_version":"dlp-non-active-copy-execution-gate-v1","gate_id":"ng1","generated_at":"2026-04-25T00:00:00+00:00","mode":"gate_only","allowed":false,"status":"blocked","blocking_reasons":["missing_operator_approval"],"approval":{"status":"missing"},"summary":{"allowed":false,"status":"blocked","blocking_count":1,"approval_status":"missing","source_move_allowed":false,"delete_allowed":false,"compress_allowed":false,"warnings_count":1},"warnings":[]}',
+        encoding="utf-8",
+    )
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    gate = payload.get("archive_non_active_execution_gate") or {}
+    assert gate["status"] == "present"
+    assert gate["allowed"] is False
+    assert gate["gate_status"] == "blocked"
+    assert gate["blocking_count"] == 1
+    assert gate["approval_status"] == "missing"
+    assert gate["source_move_allowed"] is False
+    assert gate["delete_allowed"] is False
+    assert gate["compress_allowed"] is False

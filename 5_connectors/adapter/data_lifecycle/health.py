@@ -24,6 +24,7 @@ from . import (
     archive_restore_pilot,
     archive_non_active_candidates,
     archive_non_active_quarantine_readiness,
+    archive_non_active_execution_gate,
 )
 from .policy import DataLifecyclePolicy, load_policy
 
@@ -542,6 +543,33 @@ def build_health_payload(
             "non_active_copy_move_executed": False,
             "delete_compress_executed": False,
         }
+    non_active_gate = archive_non_active_execution_gate.read_gate(policy=current_policy)
+    if isinstance(non_active_gate, dict):
+        gate_summary = non_active_gate.get("summary") or {}
+        gate_approval = non_active_gate.get("approval") or {}
+        archive_non_active_gate_view = {
+            "status": "present",
+            "allowed": bool(non_active_gate.get("allowed", False)),
+            "gate_status": non_active_gate.get("status"),
+            "mode": non_active_gate.get("mode"),
+            "blocking_count": int(gate_summary.get("blocking_count", 0) or 0),
+            "approval_status": gate_approval.get("status", gate_summary.get("approval_status")),
+            "source_move_allowed": bool(gate_summary.get("source_move_allowed", False)),
+            "delete_allowed": bool(gate_summary.get("delete_allowed", False)),
+            "compress_allowed": bool(gate_summary.get("compress_allowed", False)),
+        }
+    else:
+        archive_non_active_gate_view = {
+            "status": "missing",
+            "allowed": False,
+            "gate_status": "missing",
+            "mode": None,
+            "blocking_count": 0,
+            "approval_status": "missing",
+            "source_move_allowed": False,
+            "delete_allowed": False,
+            "compress_allowed": False,
+        }
     status, recommended_action = _derive_status(
         summary_freshness=summary_freshness,
         last_maintenance=last_maintenance,
@@ -595,4 +623,5 @@ def build_health_payload(
         "archive_restore_pilot": archive_restore_pilot_view,
         "archive_non_active_candidates": archive_non_active_view,
         "archive_non_active_quarantine_readiness": archive_non_active_quarantine_view,
+        "archive_non_active_execution_gate": archive_non_active_gate_view,
     }
