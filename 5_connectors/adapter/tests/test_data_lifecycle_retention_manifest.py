@@ -15,6 +15,8 @@ def _build_policy(tmp_path):
         summary_file=str(tmp_path / "family_window_summary.json"),
         maintenance_state_file=str(tmp_path / "maintenance_state.jsonl"),
         retention_manifest_file=str(tmp_path / "retention_manifest.json"),
+        traceability_report_file=str(tmp_path / "traceability_report.json"),
+        archive_plan_file=str(tmp_path / "archive_candidate_plan.json"),
     )
 
 
