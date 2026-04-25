@@ -8,6 +8,7 @@ import glob as _glob
 import os
 import tempfile
 import time
+from datetime import datetime as _dt
 
 # 兼容数字开头包：用 importlib 动态导入
 import importlib
@@ -22,6 +23,42 @@ _persistence_loaded = False
 _pending_persist: List[TokenSavingsMeter] = []
 _last_persist_ts: float = 0.0
 _persist_interval_seconds: float = float(os.getenv("OMNIMEMORA_METER_PERSIST_INTERVAL_SECONDS", "3"))
+_meter_store_v2_mode: str = os.getenv("OMNIMEMORA_METER_STORE_V2_MODE", "dual_write_observe_only").strip()
+
+
+def _mirror_meter_to_v2_non_fatal(meter: TokenSavingsMeter) -> None:
+    if _meter_store_v2_mode != "dual_write_observe_only":
+        return
+    meter_payload = meter.to_dict()
+    try:
+        meter_store_v2 = importlib.import_module("5_connectors.adapter.infrastructure.meter_store_v2")
+        meter_store_v2.upsert_meter(meter_payload)
+    except Exception as exc:
+        try:
+            meter_store_v2 = importlib.import_module("5_connectors.adapter.infrastructure.meter_store_v2")
+            meter_store_v2.record_write_error(
+                request_id=str(meter_payload.get("request_id") or ""),
+                error_type="dual_write_mirror_failed",
+                error_message=str(exc),
+                payload=meter_payload,
+            )
+        except Exception:
+            pass
+        try:
+            state_store = importlib.import_module("5_connectors.adapter.data_lifecycle.state_store")
+            now = _dt.now(timezone.utc)
+            record = state_store.build_record(
+                cycle_id=state_store.new_cycle_id(),
+                trigger="meter_store_v2_dual_write",
+                started_at=now,
+                completed_at=now,
+                status="degraded",
+                bytes_scanned=0,
+                error=f"dual_write_mirror_failed:{exc}",
+            )
+            state_store.append_state_record(record)
+        except Exception:
+            pass
 
 
 # ------------------------------------------------------------------
@@ -223,6 +260,7 @@ def store_meter(meter: Union[TokenSavingsMeter, Dict[str, Any]]) -> None:
 
     global _last_persist_ts
     try:
+        # Legacy write path remains authoritative and executes first.
         _pending_persist.append(meter)
         now = time.time()
         if _persist_interval_seconds <= 0 or (now - _last_persist_ts) >= _persist_interval_seconds:
@@ -230,6 +268,9 @@ def store_meter(meter: Union[TokenSavingsMeter, Dict[str, Any]]) -> None:
             _last_persist_ts = now
     except Exception:
         pass  # best-effort
+
+    # SQLite mirror is observe-only and must not block request path.
+    _mirror_meter_to_v2_non_fatal(meter)
 
 
 def get_meter(request_id: str) -> Optional[TokenSavingsMeter]:
