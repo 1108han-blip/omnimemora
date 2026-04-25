@@ -73,3 +73,52 @@ def test_malformed_payload_rejected(tmp_path, monkeypatch):
     with pytest.raises(ValueError):
         meter_store_v2.upsert_meter({"tenant": "all"})
     assert meter_store_v2.count_records() == 0
+
+
+def test_query_recent_supports_tenant_and_since_filters(tmp_path, monkeypatch):
+    sqlite_path = tmp_path / "meter_store.sqlite3"
+    monkeypatch.setenv("OMNIMEMORA_METER_STORE_V2_FILE", str(sqlite_path))
+
+    p1 = _sample_payload("req-tenant-a-old")
+    p1["tenant"] = "tenant-a"
+    p1["timestamp"] = "2026-04-24T10:00:00+00:00"
+    p2 = _sample_payload("req-tenant-a-new")
+    p2["tenant"] = "tenant-a"
+    p2["timestamp"] = "2026-04-25T10:00:00+00:00"
+    p3 = _sample_payload("req-tenant-b-new")
+    p3["tenant"] = "tenant-b"
+    p3["timestamp"] = "2026-04-25T11:00:00+00:00"
+
+    meter_store_v2.upsert_meter(p1)
+    meter_store_v2.upsert_meter(p2)
+    meter_store_v2.upsert_meter(p3)
+
+    rows = meter_store_v2.query_recent(
+        tenant="tenant-a",
+        since_iso="2026-04-25T00:00:00+00:00",
+        limit=50,
+    )
+    assert [row["request_id"] for row in rows] == ["req-tenant-a-new"]
+
+
+def test_query_window_and_list_tenants(tmp_path, monkeypatch):
+    sqlite_path = tmp_path / "meter_store.sqlite3"
+    monkeypatch.setenv("OMNIMEMORA_METER_STORE_V2_FILE", str(sqlite_path))
+
+    p1 = _sample_payload("req-window-1")
+    p1["tenant"] = "tenant-z"
+    p1["timestamp"] = "2026-04-25T09:00:00+00:00"
+    p2 = _sample_payload("req-window-2")
+    p2["tenant"] = "tenant-a"
+    p2["timestamp"] = "2026-04-25T10:00:00+00:00"
+    meter_store_v2.upsert_meter(p1)
+    meter_store_v2.upsert_meter(p2)
+
+    rows = meter_store_v2.query_window(
+        since_iso="2026-04-25T09:30:00+00:00",
+        limit=50,
+    )
+    assert [row["request_id"] for row in rows] == ["req-window-2"]
+
+    tenants = meter_store_v2.list_tenants()
+    assert tenants == ["tenant-a", "tenant-z"]

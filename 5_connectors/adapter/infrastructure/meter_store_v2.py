@@ -236,6 +236,7 @@ def query_recent(
     tenant: Optional[str] = None,
     family_id: Optional[str] = None,
     agent: Optional[str] = None,
+    since_iso: Optional[str] = None,
     path: Optional[str] = None,
 ) -> list[dict[str, Any]]:
     init_schema(path)
@@ -250,9 +251,13 @@ def query_recent(
     if agent:
         clauses.append("agent = ?")
         params.append(agent)
+    if since_iso:
+        clauses.append("timestamp >= ?")
+        params.append(since_iso)
 
     where_sql = f"WHERE {' AND '.join(clauses)}" if clauses else ""
-    params.append(max(1, int(limit)))
+    bounded_limit = max(1, min(int(limit), 100000))
+    params.append(bounded_limit)
     sql = (
         "SELECT payload_json FROM meter_records "
         f"{where_sql} "
@@ -271,6 +276,43 @@ def query_recent(
         if isinstance(payload, dict):
             output.append(payload)
     return output
+
+
+def query_window(
+    *,
+    since_iso: str,
+    limit: int = 1000,
+    tenant: Optional[str] = None,
+    path: Optional[str] = None,
+) -> list[dict[str, Any]]:
+    return query_recent(
+        limit=limit,
+        tenant=tenant,
+        since_iso=since_iso,
+        path=path,
+    )
+
+
+def list_tenants(*, path: Optional[str] = None, limit: int = 1000) -> list[str]:
+    init_schema(path)
+    bounded_limit = max(1, min(int(limit), 100000))
+    with _connect(path) as conn:
+        rows = conn.execute(
+            """
+            SELECT DISTINCT tenant
+            FROM meter_records
+            WHERE tenant IS NOT NULL AND tenant != ''
+            ORDER BY tenant ASC
+            LIMIT ?
+            """,
+            (bounded_limit,),
+        ).fetchall()
+    tenants: list[str] = []
+    for row in rows:
+        tenant = row["tenant"]
+        if isinstance(tenant, str) and tenant.strip():
+            tenants.append(tenant.strip())
+    return tenants
 
 
 def count_records(*, path: Optional[str] = None) -> int:
