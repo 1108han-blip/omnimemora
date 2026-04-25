@@ -76,6 +76,8 @@ def test_traceability_report_sample_pass_when_all_sources_present(tmp_path):
     assert sample["status"] == "pass"
     assert sample["trace_id_found"] == "trace-pass"
     assert sample["request_evidence_buildable"] is True
+    assert sample["partial_reason"] is None
+    assert sample["recommendation"] == "none"
 
 
 def test_traceability_report_sample_partial_when_meter_only(tmp_path):
@@ -91,6 +93,8 @@ def test_traceability_report_sample_partial_when_meter_only(tmp_path):
     assert sample["status"] == "partial"
     assert "compile" in sample["missing_sources"]
     assert "trace" in sample["missing_sources"]
+    assert sample["partial_reason"] == "sampling_policy_mismatch"
+    assert "proxy" in sample["optional_sources"]
 
 
 def test_traceability_report_sample_fail_when_meter_missing_or_unbuildable(tmp_path):
@@ -105,6 +109,7 @@ def test_traceability_report_sample_fail_when_meter_missing_or_unbuildable(tmp_p
     sample = report["samples"][0]
     assert sample["status"] == "fail"
     assert "meter" in sample["missing_sources"]
+    assert sample["partial_reason"] == "request_evidence_unbuildable"
 
 
 def test_traceability_report_atomic_write_no_half_state_on_failure(tmp_path, monkeypatch):
@@ -145,3 +150,87 @@ def test_traceability_rebuild_writes_ledger_trigger(tmp_path):
     ledger_records = state_store.read_recent_records(limit=1, trigger="traceability_report_rebuild", policy=policy)
     assert len(ledger_records) == 1
     assert ledger_records[0]["trigger"] == "traceability_report_rebuild"
+
+
+def test_traceability_report_sampling_prefers_recent_timestamp_not_request_id_order(tmp_path):
+    policy = _build_policy(tmp_path)
+    meter_index = tmp_path / "meters_index.json"
+    meter_index.write_text(
+        json.dumps(
+            {
+                "req-zzz-old": {"request_id": "req-zzz-old", "timestamp": "2026-04-24T00:00:00Z"},
+                "req-aaa-new": {"request_id": "req-aaa-new", "timestamp": "2026-04-25T00:00:00Z"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    _write_manifest(policy, [{"kind": "meter_index", "path": str(meter_index)}])
+    report = traceability_mod.build_report(policy=policy, request_evidence_buildable_fn=lambda _rid: True, max_samples=1)
+    assert report["samples"][0]["request_id"] == "req-aaa-new"
+
+
+def test_traceability_report_marks_legacy_before_trace_events(tmp_path):
+    policy = _build_policy(tmp_path)
+    meter_index = tmp_path / "meters_index.json"
+    trace_events = tmp_path / "trace_events.jsonl"
+    meter_index.write_text(
+        json.dumps({"req-legacy": {"request_id": "req-legacy", "timestamp": "2026-04-24T00:00:00Z"}}),
+        encoding="utf-8",
+    )
+    trace_events.write_text(
+        '{"request_id":"req-current","trace_id":"trace-current","timestamp":"2026-04-25T00:00:00Z"}\n',
+        encoding="utf-8",
+    )
+    _write_manifest(
+        policy,
+        [
+            {"kind": "meter_index", "path": str(meter_index)},
+            {"kind": "trace_events", "path": str(trace_events)},
+        ],
+    )
+    report = traceability_mod.build_report(policy=policy, request_evidence_buildable_fn=lambda _rid: True)
+    sample = report["samples"][0]
+    assert sample["status"] == "partial"
+    assert sample["evidence_epoch"] == "legacy"
+    assert sample["partial_reason"] == "legacy_before_trace_events"
+    assert "trace" in sample["optional_sources"]
+
+
+def test_traceability_report_current_epoch_trace_missing_reason(tmp_path):
+    policy = _build_policy(tmp_path)
+    meter_index = tmp_path / "meters_index.json"
+    compile_events = tmp_path / "compile_events.jsonl"
+    trace_events = tmp_path / "trace_events.jsonl"
+    meter_index.write_text(
+        json.dumps({"req-current": {"request_id": "req-current", "timestamp": "2026-04-25T00:00:00Z"}}),
+        encoding="utf-8",
+    )
+    compile_events.write_text('{"request_id":"req-current","timestamp":"2026-04-25T00:00:00Z"}\n', encoding="utf-8")
+    trace_events.write_text(
+        '{"request_id":"req-anchor","trace_id":"trace-anchor","timestamp":"2026-04-25T00:00:00Z"}\n',
+        encoding="utf-8",
+    )
+    _write_manifest(
+        policy,
+        [
+            {"kind": "meter_index", "path": str(meter_index)},
+            {"kind": "compile_events", "path": str(compile_events)},
+            {"kind": "trace_events", "path": str(trace_events)},
+        ],
+    )
+    report = traceability_mod.build_report(policy=policy, request_evidence_buildable_fn=lambda _rid: True)
+    sample = report["samples"][0]
+    assert sample["status"] == "partial"
+    assert sample["evidence_epoch"] == "current"
+    assert sample["partial_reason"] == "trace_event_missing"
+
+
+def test_traceability_report_keeps_backward_compatible_sample_fields(tmp_path):
+    policy = _build_policy(tmp_path)
+    meter_index = tmp_path / "meters_index.json"
+    meter_index.write_text(json.dumps({"req-backward": {"request_id": "req-backward"}}), encoding="utf-8")
+    _write_manifest(policy, [{"kind": "meter_index", "path": str(meter_index)}])
+    report = traceability_mod.build_report(policy=policy, request_evidence_buildable_fn=lambda _rid: True)
+    sample = report["samples"][0]
+    for field in ["request_id", "sources_found", "missing_sources", "request_evidence_buildable", "trace_id_found", "status"]:
+        assert field in sample

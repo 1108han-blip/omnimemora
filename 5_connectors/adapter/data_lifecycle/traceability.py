@@ -76,6 +76,44 @@ def _collect_meter_index_request_ids(paths: list[Path]) -> tuple[list[str], dict
     return [], {}
 
 
+def _parse_timestamp(value: Any) -> Optional[float]:
+    if isinstance(value, (int, float)):
+        ts = float(value)
+        return ts if ts > 0 else None
+    if isinstance(value, str):
+        text = value.strip()
+        if not text:
+            return None
+        try:
+            return datetime.fromisoformat(text.replace("Z", "+00:00")).astimezone(timezone.utc).timestamp()
+        except Exception:
+            return None
+    return None
+
+
+def _collect_meter_index_entries(paths: list[Path]) -> tuple[list[dict[str, Any]], dict[str, dict[str, Any]]]:
+    for path in paths:
+        if not path.exists() or not path.is_file():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except Exception:
+            continue
+        if not isinstance(payload, dict):
+            continue
+        entries: list[dict[str, Any]] = []
+        for key, value in payload.items():
+            request_id = str(key or "").strip()
+            if not request_id:
+                continue
+            meter_payload = value if isinstance(value, dict) else {}
+            ts = _parse_timestamp(meter_payload.get("timestamp"))
+            entries.append({"request_id": request_id, "timestamp": ts})
+        entries.sort(key=lambda item: (item.get("timestamp") or 0.0, item["request_id"]), reverse=True)
+        return entries, payload
+    return [], {}
+
+
 def _collect_request_id_set_from_events(paths: list[Path]) -> set[str]:
     request_ids: set[str] = set()
     for path in paths:
@@ -86,9 +124,28 @@ def _collect_request_id_set_from_events(paths: list[Path]) -> set[str]:
     return request_ids
 
 
-def _collect_trace_lookup(paths: list[Path]) -> tuple[set[str], dict[str, str]]:
+def _collect_request_id_ts_from_events(paths: list[Path]) -> dict[str, float]:
+    request_ts: dict[str, float] = {}
+    for path in paths:
+        for row in _read_jsonl_tolerant(path):
+            request_id = row.get("request_id")
+            if not isinstance(request_id, str) or not request_id.strip():
+                continue
+            ts = _parse_timestamp(row.get("timestamp"))
+            if ts is None:
+                continue
+            request_id = request_id.strip()
+            previous = request_ts.get(request_id)
+            if previous is None or ts > previous:
+                request_ts[request_id] = ts
+    return request_ts
+
+
+def _collect_trace_lookup(paths: list[Path]) -> tuple[set[str], dict[str, str], dict[str, float], Optional[float]]:
     request_ids: set[str] = set()
     trace_map: dict[str, str] = {}
+    request_ts: dict[str, float] = {}
+    min_event_ts: Optional[float] = None
     for path in paths:
         for row in _read_jsonl_tolerant(path):
             request_id = row.get("request_id")
@@ -98,7 +155,14 @@ def _collect_trace_lookup(paths: list[Path]) -> tuple[set[str], dict[str, str]]:
                 trace_id = row.get("trace_id")
                 if isinstance(trace_id, str) and trace_id.strip():
                     trace_map[request_id] = trace_id.strip()
-    return request_ids, trace_map
+                ts = _parse_timestamp(row.get("timestamp"))
+                if ts is not None:
+                    prev = request_ts.get(request_id)
+                    if prev is None or ts > prev:
+                        request_ts[request_id] = ts
+                    if min_event_ts is None or ts < min_event_ts:
+                        min_event_ts = ts
+    return request_ids, trace_map, request_ts, min_event_ts
 
 
 def _request_evidence_buildable(request_id: str) -> bool:
@@ -123,6 +187,43 @@ def _sample_status(
     if compile_found and proxy_found and trace_found:
         return "pass"
     return "partial"
+
+
+def _evidence_epoch_for_sample(*, meter_ts: Optional[float], trace_epoch_start_ts: Optional[float]) -> str:
+    if meter_ts is None:
+        return "unknown"
+    if trace_epoch_start_ts is None:
+        return "current"
+    if meter_ts < trace_epoch_start_ts:
+        return "legacy"
+    return "current"
+
+
+def _partial_reason_and_recommendation(
+    *,
+    status: str,
+    meter_found: bool,
+    compile_found: bool,
+    proxy_found: bool,
+    trace_found: bool,
+    request_evidence_buildable: bool,
+    evidence_epoch: str,
+) -> tuple[Optional[str], str]:
+    if status == "pass":
+        return None, "none"
+    if not request_evidence_buildable:
+        return "request_evidence_unbuildable", "repair_request_evidence_builder_for_current_epoch"
+    if not meter_found:
+        return "sampling_policy_mismatch", "verify_sampling_policy_and_meter_index_alignment"
+    if evidence_epoch == "legacy" and not trace_found:
+        return "legacy_before_trace_events", "legacy_epoch_trace_optional_no_backfill"
+    if not compile_found and trace_found:
+        return "compile_event_missing", "repair_compile_event_write_path_for_current_epoch"
+    if compile_found and not trace_found:
+        return "trace_event_missing", "repair_trace_event_write_path_for_current_epoch"
+    if not compile_found and not trace_found:
+        return "sampling_policy_mismatch", "verify_sampling_policy_and_expected_sources_for_epoch"
+    return None, "inspect_traceability_sample"
 
 
 def build_report(
@@ -156,16 +257,34 @@ def build_report(
         }
 
     paths = _resolve_paths_from_manifest(manifest)
-    meter_ids, _meter_index_payload = _collect_meter_index_request_ids(paths["meter_index"])
+    meter_entries, _meter_index_payload = _collect_meter_index_entries(paths["meter_index"])
+    meter_ids = [str(item.get("request_id")) for item in meter_entries]
+    meter_ts_map = {
+        str(item.get("request_id")): item.get("timestamp")
+        for item in meter_entries
+        if isinstance(item.get("request_id"), str)
+    }
     compile_ids = _collect_request_id_set_from_events(paths["compile_events"])
+    compile_ts_map = _collect_request_id_ts_from_events(paths["compile_events"])
     proxy_ids = _collect_request_id_set_from_events(paths["proxy_events"])
-    trace_ids, trace_map = _collect_trace_lookup(paths["trace_events"])
+    proxy_ts_map = _collect_request_id_ts_from_events(paths["proxy_events"])
+    trace_ids, trace_map, trace_ts_map, trace_epoch_start_ts = _collect_trace_lookup(paths["trace_events"])
 
     sample_limit = max(1, int(max_samples))
-    if meter_ids:
-        sample_ids = meter_ids[:sample_limit]
+    if meter_entries:
+        sample_ids = [entry["request_id"] for entry in meter_entries[:sample_limit]]
     else:
-        fallback_ids = sorted(set().union(compile_ids, proxy_ids, trace_ids))
+        fallback_pool: set[str] = set().union(compile_ids, proxy_ids, trace_ids)
+        fallback_rows: list[dict[str, Any]] = []
+        for request_id in fallback_pool:
+            ts = max(
+                compile_ts_map.get(request_id, 0.0),
+                proxy_ts_map.get(request_id, 0.0),
+                trace_ts_map.get(request_id, 0.0),
+            )
+            fallback_rows.append({"request_id": request_id, "timestamp": ts})
+        fallback_rows.sort(key=lambda item: (item.get("timestamp") or 0.0, item["request_id"]), reverse=True)
+        fallback_ids = [item["request_id"] for item in fallback_rows]
         sample_ids = fallback_ids[:sample_limit]
     if not sample_ids:
         warnings.append({"code": "no_meter_samples", "message": "meter index had no request ids"})
@@ -182,10 +301,18 @@ def build_report(
         proxy_found = request_id in proxy_ids
         trace_found = request_id in trace_ids
         buildable = bool(evidence_buildable(request_id))
+        evidence_epoch = _evidence_epoch_for_sample(
+            meter_ts=_parse_timestamp(meter_ts_map.get(request_id)),
+            trace_epoch_start_ts=trace_epoch_start_ts,
+        )
         trace_id_found = trace_map.get(request_id)
 
         sources_found: list[str] = []
         missing_sources: list[str] = []
+        expected_sources = ["meter", "compile", "trace"]
+        optional_sources = ["proxy"]
+        if evidence_epoch == "legacy":
+            optional_sources.append("trace")
         for name, found in [
             ("meter", meter_found),
             ("compile", compile_found),
@@ -204,6 +331,15 @@ def build_report(
             trace_found=trace_found,
             request_evidence_buildable=buildable,
         )
+        partial_reason, recommendation = _partial_reason_and_recommendation(
+            status=status,
+            meter_found=meter_found,
+            compile_found=compile_found,
+            proxy_found=proxy_found,
+            trace_found=trace_found,
+            request_evidence_buildable=buildable,
+            evidence_epoch=evidence_epoch,
+        )
         if status == "pass":
             pass_count += 1
         elif status == "partial":
@@ -219,6 +355,11 @@ def build_report(
                 "request_evidence_buildable": buildable,
                 "trace_id_found": trace_id_found,
                 "status": status,
+                "partial_reason": partial_reason,
+                "expected_sources": expected_sources,
+                "optional_sources": optional_sources,
+                "evidence_epoch": evidence_epoch,
+                "recommendation": recommendation,
             }
         )
 
