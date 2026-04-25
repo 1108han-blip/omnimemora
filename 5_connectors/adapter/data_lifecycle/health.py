@@ -16,6 +16,7 @@ from . import (
     archive_transaction,
     archive_restore_contract,
     archive_execution_gate,
+    archive_pilot,
 )
 from .policy import DataLifecyclePolicy, load_policy
 
@@ -327,6 +328,29 @@ def build_health_payload(
             "approval_status": "missing",
             "expires_at": None,
         }
+    latest_pilot = archive_pilot.read_latest_pilot_record(policy=current_policy)
+    if isinstance(latest_pilot, dict):
+        archive_pilot_view = {
+            "status": "present",
+            "pilot_id": latest_pilot.get("pilot_id"),
+            "source_kind": latest_pilot.get("source_kind"),
+            "source_bytes": int(latest_pilot.get("source_bytes", 0) or 0),
+            "archive_bytes": int(latest_pilot.get("archive_bytes", 0) or 0),
+            "checksum_match": bool(latest_pilot.get("checksum_match")),
+            "source_retained": bool(latest_pilot.get("source_retained", False)),
+            "read_path_unchanged": bool(latest_pilot.get("read_path_unchanged", True)),
+        }
+    else:
+        archive_pilot_view = {
+            "status": "missing",
+            "pilot_id": None,
+            "source_kind": None,
+            "source_bytes": 0,
+            "archive_bytes": 0,
+            "checksum_match": False,
+            "source_retained": False,
+            "read_path_unchanged": True,
+        }
     status, recommended_action = _derive_status(
         summary_freshness=summary_freshness,
         last_maintenance=last_maintenance,
@@ -372,4 +396,5 @@ def build_health_payload(
         "archive_transaction_preview": archive_txn_view,
         "archive_restore_readiness": archive_restore_view,
         "archive_execution_gate": archive_gate_view,
+        "archive_pilot": archive_pilot_view,
     }

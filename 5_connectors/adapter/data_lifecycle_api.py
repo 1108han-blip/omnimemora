@@ -18,6 +18,7 @@ _archive_txn_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.
 _archive_restore_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_restore_contract")
 _archive_gate_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_execution_gate")
 _archive_approval_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_approval")
+_archive_pilot_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_pilot")
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -244,3 +245,35 @@ async def get_data_lifecycle_archive_approval():
     if approval is None:
         return {"schema_version": _archive_approval_mod.ARCHIVE_OPERATOR_APPROVAL_SCHEMA_VERSION, "status": "missing"}
     return approval
+
+
+@router.post("/data-lifecycle/archive/pilot/copy-one")
+async def post_data_lifecycle_archive_pilot_copy_one():
+    policy = _policy_mod.load_policy()
+    try:
+        record, pilot = _archive_pilot_mod.copy_one_pilot(policy=policy)
+    except Exception as exc:
+        latest = _archive_pilot_mod.read_latest_pilot_record(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _archive_pilot_mod.ARCHIVE_PILOT_RECORD_SCHEMA_VERSION,
+                "message": "archive pilot copy-one failed",
+                "error": str(exc),
+                "pilot": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _archive_pilot_mod.ARCHIVE_PILOT_RECORD_SCHEMA_VERSION,
+        "record": record,
+        "pilot": pilot,
+    }
+
+
+@router.get("/data-lifecycle/archive/pilot/latest")
+async def get_data_lifecycle_archive_pilot_latest():
+    policy = _policy_mod.load_policy()
+    latest = _archive_pilot_mod.read_latest_pilot_record(policy=policy)
+    if latest is None:
+        return {"schema_version": _archive_pilot_mod.ARCHIVE_PILOT_RECORD_SCHEMA_VERSION, "status": "missing"}
+    return latest

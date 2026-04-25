@@ -25,6 +25,8 @@ def _build_policy(tmp_path, *, ttl_seconds=10.0, stale_max_age_seconds=300.0):
         archive_restore_readiness_file=str(tmp_path / "archive_restore_readiness_report.json"),
         archive_execution_gate_file=str(tmp_path / "archive_execution_gate.json"),
         archive_operator_approval_file=str(tmp_path / "archive_operator_approval.json"),
+        archive_pilot_root=str(tmp_path / "archive" / "pilot"),
+        archive_pilot_record_file=str(tmp_path / "archive_pilot_record.json"),
     )
 
 
@@ -625,3 +627,73 @@ def test_dlp_health_exposes_archive_execution_gate_summary(tmp_path):
     assert gate["gate_status"] == "blocked"
     assert gate["blocking_count"] == 1
     assert gate["approval_status"] == "missing"
+
+
+def test_data_lifecycle_archive_pilot_copy_one_endpoint_returns_record(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-pilot-1",
+        "trigger": "archive_pilot_copy_one",
+        "status": "success",
+        "error": None,
+    }
+    expected_pilot = {
+        "schema_version": "dlp-archive-pilot-record-v1",
+        "pilot_id": "pilot-1",
+        "mode": "copy_to_archive_only",
+        "status": "success",
+        "source_kind": "compile_events",
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._archive_pilot_mod,
+        "copy_one_pilot",
+        lambda policy=None: (expected_record, expected_pilot),
+    )
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/archive/pilot/copy-one")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-archive-pilot-record-v1"
+    assert payload["record"]["trigger"] == "archive_pilot_copy_one"
+    assert payload["pilot"]["pilot_id"] == "pilot-1"
+
+
+def test_data_lifecycle_archive_pilot_latest_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._archive_pilot_mod, "read_latest_pilot_record", lambda policy=None: None)
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/archive/pilot/latest")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-archive-pilot-record-v1"
+    assert payload["status"] == "missing"
+
+
+def test_data_lifecycle_api_has_no_archive_batch_or_cleanup_endpoint():
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    client = TestClient(app)
+    assert client.post("/data-lifecycle/archive/pilot/batch-copy").status_code == 404
+    assert client.post("/data-lifecycle/archive/pilot/delete-source").status_code == 404
+    assert client.post("/data-lifecycle/archive/pilot/compress").status_code == 404
+
+
+def test_dlp_health_exposes_archive_pilot_summary(tmp_path):
+    policy = _build_policy(tmp_path)
+    pilot_path = tmp_path / "archive_pilot_record.json"
+    pilot_path.write_text(
+        '{"schema_version":"dlp-archive-pilot-record-v1","pilot_id":"pilot-1","generated_at":"2026-04-25T00:00:00+00:00","mode":"copy_to_archive_only","status":"success","source_kind":"compile_events","source_bytes":123,"archive_bytes":123,"checksum_match":true,"source_retained":true,"read_path_unchanged":true}',
+        encoding="utf-8",
+    )
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    pilot = payload.get("archive_pilot") or {}
+    assert pilot["status"] == "present"
+    assert pilot["pilot_id"] == "pilot-1"
+    assert pilot["source_kind"] == "compile_events"
+    assert pilot["source_bytes"] == 123
+    assert pilot["archive_bytes"] == 123
+    assert pilot["checksum_match"] is True
+    assert pilot["source_retained"] is True
+    assert pilot["read_path_unchanged"] is True
