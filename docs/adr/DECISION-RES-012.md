@@ -9,7 +9,7 @@ effective_date: 2026-04-25
 depends_on:
   - ADR-RES-011
 supersedes: []
-last_verified_commit: ""
+last_verified_commit: "5ec31f4"
 ---
 
 # ADR-RES-012: Legacy Meter Backup Export Dry-Run Preview

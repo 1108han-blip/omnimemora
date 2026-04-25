@@ -9,7 +9,7 @@ effective_date: 2026-04-25
 depends_on:
   - ADR-RES-012
 supersedes: []
-last_verified_commit: ""
+last_verified_commit: "5ec31f4"
 ---
 
 # SPEC-LEGACY-METER-BACKUP-EXPORT-DRY-RUN-012
