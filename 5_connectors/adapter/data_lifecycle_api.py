@@ -25,6 +25,7 @@ _archive_quarantine_mod = importlib.import_module("5_connectors.adapter.data_lif
 _archive_quarantine_exec_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_quarantine")
 _archive_restore_pilot_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_restore_pilot")
 _archive_non_active_candidates_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_non_active_candidates")
+_archive_non_active_quarantine_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_non_active_quarantine_readiness")
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -492,4 +493,39 @@ async def post_data_lifecycle_archive_non_active_candidates_report_rebuild():
         "schema_version": _archive_non_active_candidates_mod.NON_ACTIVE_CANDIDATE_REBUILD_SCHEMA_VERSION,
         "record": record,
         "report": report,
+    }
+
+
+@router.get("/data-lifecycle/archive/non-active-quarantine/readiness")
+async def get_data_lifecycle_archive_non_active_quarantine_readiness():
+    policy = _policy_mod.load_policy()
+    plan = _archive_non_active_quarantine_mod.read_plan(policy=policy)
+    if plan is None:
+        return {
+            "schema_version": _archive_non_active_quarantine_mod.NON_ACTIVE_QUARANTINE_READINESS_SCHEMA_VERSION,
+            "status": "missing",
+        }
+    return plan
+
+
+@router.post("/data-lifecycle/archive/non-active-quarantine/readiness/rebuild")
+async def post_data_lifecycle_archive_non_active_quarantine_readiness_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, plan = _archive_non_active_quarantine_mod.rebuild_plan(policy=policy)
+    except Exception as exc:
+        latest = _archive_non_active_quarantine_mod.read_plan(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _archive_non_active_quarantine_mod.NON_ACTIVE_QUARANTINE_READINESS_REBUILD_SCHEMA_VERSION,
+                "message": "archive non-active quarantine readiness rebuild failed",
+                "error": str(exc),
+                "plan": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _archive_non_active_quarantine_mod.NON_ACTIVE_QUARANTINE_READINESS_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "plan": plan,
     }

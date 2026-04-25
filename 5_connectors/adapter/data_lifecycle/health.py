@@ -23,6 +23,7 @@ from . import (
     archive_quarantine,
     archive_restore_pilot,
     archive_non_active_candidates,
+    archive_non_active_quarantine_readiness,
 )
 from .policy import DataLifecyclePolicy, load_policy
 
@@ -509,6 +510,38 @@ def build_health_payload(
             "warnings_count": 0,
             "source_move_delete_compress_executed": False,
         }
+    non_active_quarantine = archive_non_active_quarantine_readiness.read_plan(policy=current_policy)
+    if isinstance(non_active_quarantine, dict):
+        non_active_quarantine_summary = non_active_quarantine.get("summary") or {}
+        selected_candidate = non_active_quarantine.get("selected_candidate") or {}
+        archive_non_active_quarantine_view = {
+            "status": str(non_active_quarantine.get("status") or "present"),
+            "mode": non_active_quarantine.get("mode"),
+            "selected_candidate_present": bool(non_active_quarantine_summary.get("selected_candidate_present", False)),
+            "selected_candidate_kind": selected_candidate.get("candidate_kind"),
+            "selected_candidate_path": selected_candidate.get("candidate_path"),
+            "planned_quarantine_path": selected_candidate.get("planned_quarantine_path")
+            or (non_active_quarantine.get("transaction_preview") or {}).get("planned_quarantine_path"),
+            "blocking_count": int(non_active_quarantine_summary.get("blocking_count", 0) or 0),
+            "source_move_executed": bool(non_active_quarantine_summary.get("source_move_executed", False)),
+            "non_active_copy_move_executed": bool(
+                non_active_quarantine_summary.get("non_active_copy_move_executed", False)
+            ),
+            "delete_compress_executed": bool(non_active_quarantine_summary.get("delete_compress_executed", False)),
+        }
+    else:
+        archive_non_active_quarantine_view = {
+            "status": "missing",
+            "mode": None,
+            "selected_candidate_present": False,
+            "selected_candidate_kind": None,
+            "selected_candidate_path": None,
+            "planned_quarantine_path": None,
+            "blocking_count": 0,
+            "source_move_executed": False,
+            "non_active_copy_move_executed": False,
+            "delete_compress_executed": False,
+        }
     status, recommended_action = _derive_status(
         summary_freshness=summary_freshness,
         last_maintenance=last_maintenance,
@@ -561,4 +594,5 @@ def build_health_payload(
         "archive_quarantine": archive_quarantine_view,
         "archive_restore_pilot": archive_restore_pilot_view,
         "archive_non_active_candidates": archive_non_active_view,
+        "archive_non_active_quarantine_readiness": archive_non_active_quarantine_view,
     }
