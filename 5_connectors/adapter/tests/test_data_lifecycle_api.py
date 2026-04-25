@@ -31,6 +31,9 @@ def _build_policy(tmp_path, *, ttl_seconds=10.0, stale_max_age_seconds=300.0):
         archive_fallback_simulation_file=str(tmp_path / "archive_fallback_simulation_report.json"),
         archive_quarantine_root=str(tmp_path / "quarantine" / "source"),
         archive_quarantine_readiness_file=str(tmp_path / "archive_quarantine_readiness_plan.json"),
+        archive_quarantine_record_file=str(tmp_path / "archive_quarantine_record.json"),
+        archive_restore_pilot_record_file=str(tmp_path / "archive_restore_pilot_record.json"),
+        archive_restore_staging_root=str(tmp_path / "restore" / "staging"),
     )
 
 
@@ -687,6 +690,10 @@ def test_data_lifecycle_api_has_no_archive_batch_or_cleanup_endpoint():
     assert client.post("/data-lifecycle/archive/fallback/execute").status_code == 404
     assert client.post("/data-lifecycle/archive/quarantine/execute").status_code == 404
     assert client.post("/data-lifecycle/archive/quarantine/move-source").status_code == 404
+    assert client.post("/data-lifecycle/archive/quarantine/delete-source").status_code == 404
+    assert client.post("/data-lifecycle/archive/quarantine/compress").status_code == 404
+    assert client.post("/data-lifecycle/archive/quarantine/batch-move").status_code == 404
+    assert client.post("/data-lifecycle/archive/restore/pilot/production-overwrite").status_code == 404
 
 
 def test_dlp_health_exposes_archive_pilot_summary(tmp_path):
@@ -891,3 +898,127 @@ def test_dlp_health_exposes_archive_quarantine_readiness_summary(tmp_path):
     assert quarantine["source_retained"] is True
     assert quarantine["production_read_path_unchanged"] is True
     assert quarantine["planned_action"] == "quarantine_source_preview_only"
+
+
+def test_data_lifecycle_archive_quarantine_latest_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._archive_quarantine_exec_mod, "read_record", lambda policy=None: None)
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/archive/quarantine/latest")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-source-quarantine-record-v1"
+    assert payload["status"] == "missing"
+
+
+def test_data_lifecycle_archive_quarantine_move_one_endpoint_returns_record(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-quarantine-move-1",
+        "trigger": "archive_source_quarantine_execute_one",
+        "status": "blocked",
+        "error": "candidate_is_active_hot_source",
+    }
+    expected_quarantine = {
+        "schema_version": "dlp-source-quarantine-record-v1",
+        "record_id": "qr1",
+        "mode": "single_artifact_quarantine_only",
+        "status": "blocked",
+        "blocking_reasons": ["candidate_is_active_hot_source"],
+        "source_move_executed": False,
+        "source_retained": True,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._archive_quarantine_exec_mod,
+        "execute_single_artifact_quarantine",
+        lambda policy=None: (expected_record, expected_quarantine),
+    )
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/archive/quarantine/move-one")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-source-quarantine-record-v1"
+    assert payload["record"]["trigger"] == "archive_source_quarantine_execute_one"
+    assert payload["quarantine"]["status"] == "blocked"
+    assert payload["quarantine"]["source_move_executed"] is False
+
+
+def test_dlp_health_exposes_archive_quarantine_record_summary(tmp_path):
+    policy = _build_policy(tmp_path)
+    quarantine_path = tmp_path / "archive_quarantine_record.json"
+    quarantine_path.write_text(
+        '{"schema_version":"dlp-source-quarantine-record-v1","record_id":"qr1","generated_at":"2026-04-25T00:00:00+00:00","mode":"single_artifact_quarantine_only","status":"blocked","blocking_reasons":["candidate_is_active_hot_source"],"source_kind":"compile_events","source_move_executed":false,"source_retained":true,"checksum_match":false,"quarantine_path":"/tmp/q","summary":{"blocking_count":1}}',
+        encoding="utf-8",
+    )
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    quarantine = payload.get("archive_quarantine") or {}
+    assert quarantine["status"] == "blocked"
+    assert quarantine["mode"] == "single_artifact_quarantine_only"
+    assert quarantine["source_kind"] == "compile_events"
+    assert quarantine["source_move_executed"] is False
+    assert quarantine["source_retained"] is True
+    assert quarantine["blocking_count"] == 1
+    assert quarantine["quarantine_path"] == "/tmp/q"
+
+
+def test_data_lifecycle_archive_restore_pilot_latest_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._archive_restore_pilot_mod, "read_latest_restore_pilot_record", lambda policy=None: None)
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/archive/restore/pilot/latest")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-archive-restore-pilot-record-v1"
+    assert payload["status"] == "missing"
+
+
+def test_data_lifecycle_archive_restore_pilot_run_endpoint_returns_blocked_record(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-restore-1",
+        "trigger": "archive_restore_pilot_execute",
+        "status": "blocked",
+        "error": "blocked_no_successful_quarantine",
+    }
+    expected_restore = {
+        "schema_version": "dlp-archive-restore-pilot-record-v1",
+        "restore_id": "restore-1",
+        "mode": "conditional_restore_to_staging",
+        "status": "blocked_no_successful_quarantine",
+        "restore_target_scope": "staging",
+        "production_source_overwrite": False,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._archive_restore_pilot_mod,
+        "execute_restore_pilot",
+        lambda policy=None: (expected_record, expected_restore),
+    )
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/archive/restore/pilot/run")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-archive-restore-pilot-record-v1"
+    assert payload["record"]["trigger"] == "archive_restore_pilot_execute"
+    assert payload["restore"]["status"] == "blocked_no_successful_quarantine"
+    assert payload["restore"]["production_source_overwrite"] is False
+
+
+def test_dlp_health_exposes_archive_restore_pilot_summary(tmp_path):
+    policy = _build_policy(tmp_path)
+    restore_path = tmp_path / "archive_restore_pilot_record.json"
+    restore_path.write_text(
+        '{"schema_version":"dlp-archive-restore-pilot-record-v1","restore_id":"restore-1","generated_at":"2026-04-25T00:00:00+00:00","mode":"conditional_restore_to_staging","status":"blocked_no_successful_quarantine","restore_target_scope":"staging","restore_target_path":null,"checksum_match":false,"production_source_overwrite":false,"archive_copy_retained":true,"quarantine_copy_retained":true}',
+        encoding="utf-8",
+    )
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    restore = payload.get("archive_restore_pilot") or {}
+    assert restore["status"] == "blocked_no_successful_quarantine"
+    assert restore["mode"] == "conditional_restore_to_staging"
+    assert restore["restore_target_scope"] == "staging"
+    assert restore["production_source_overwrite"] is False
+    assert restore["archive_copy_retained"] is True
+    assert restore["quarantine_copy_retained"] is True

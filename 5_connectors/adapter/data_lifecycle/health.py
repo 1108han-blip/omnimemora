@@ -20,6 +20,8 @@ from . import (
     archive_readthrough,
     archive_fallback_contract,
     archive_quarantine_readiness,
+    archive_quarantine,
+    archive_restore_pilot,
 )
 from .policy import DataLifecyclePolicy, load_policy
 
@@ -404,7 +406,7 @@ def build_health_payload(
     quarantine_readiness = archive_quarantine_readiness.read_plan(policy=current_policy)
     if isinstance(quarantine_readiness, dict):
         quarantine_summary = quarantine_readiness.get("summary") or {}
-        archive_quarantine_view = {
+        archive_quarantine_readiness_view = {
             "status": str(quarantine_readiness.get("status") or "present"),
             "mode": quarantine_readiness.get("mode"),
             "candidate_present": bool(quarantine_summary.get("candidate_present", False)),
@@ -417,7 +419,7 @@ def build_health_payload(
             "planned_action": (quarantine_readiness.get("transaction_preview") or {}).get("planned_action"),
         }
     else:
-        archive_quarantine_view = {
+        archive_quarantine_readiness_view = {
             "status": "missing",
             "mode": None,
             "candidate_present": False,
@@ -426,6 +428,59 @@ def build_health_payload(
             "source_retained": False,
             "production_read_path_unchanged": True,
             "planned_action": None,
+        }
+    quarantine_record = archive_quarantine.read_record(policy=current_policy)
+    if isinstance(quarantine_record, dict):
+        quarantine_summary = quarantine_record.get("summary") or {}
+        archive_quarantine_view = {
+            "status": str(quarantine_record.get("status") or "present"),
+            "mode": quarantine_record.get("mode"),
+            "source_kind": quarantine_record.get("source_kind"),
+            "source_move_executed": bool(quarantine_record.get("source_move_executed", False)),
+            "source_retained": bool(quarantine_record.get("source_retained", False)),
+            "checksum_match": bool(quarantine_record.get("checksum_match", False)),
+            "blocking_count": int(
+                quarantine_summary.get(
+                    "blocking_count",
+                    len(quarantine_record.get("blocking_reasons") or []),
+                )
+                or 0
+            ),
+            "quarantine_path": quarantine_record.get("quarantine_path"),
+        }
+    else:
+        archive_quarantine_view = {
+            "status": "missing",
+            "mode": None,
+            "source_kind": None,
+            "source_move_executed": False,
+            "source_retained": False,
+            "checksum_match": False,
+            "blocking_count": 0,
+            "quarantine_path": None,
+        }
+    restore_pilot = archive_restore_pilot.read_latest_restore_pilot_record(policy=current_policy)
+    if isinstance(restore_pilot, dict):
+        archive_restore_pilot_view = {
+            "status": str(restore_pilot.get("status") or "present"),
+            "mode": restore_pilot.get("mode"),
+            "restore_target_scope": restore_pilot.get("restore_target_scope"),
+            "restore_target_path": restore_pilot.get("restore_target_path"),
+            "checksum_match": bool(restore_pilot.get("checksum_match", False)),
+            "production_source_overwrite": bool(restore_pilot.get("production_source_overwrite", False)),
+            "archive_copy_retained": bool(restore_pilot.get("archive_copy_retained", True)),
+            "quarantine_copy_retained": bool(restore_pilot.get("quarantine_copy_retained", True)),
+        }
+    else:
+        archive_restore_pilot_view = {
+            "status": "missing",
+            "mode": None,
+            "restore_target_scope": None,
+            "restore_target_path": None,
+            "checksum_match": False,
+            "production_source_overwrite": False,
+            "archive_copy_retained": True,
+            "quarantine_copy_retained": True,
         }
     status, recommended_action = _derive_status(
         summary_freshness=summary_freshness,
@@ -475,5 +530,7 @@ def build_health_payload(
         "archive_pilot": archive_pilot_view,
         "archive_readthrough": archive_readthrough_view,
         "archive_fallback_simulation": archive_fallback_view,
-        "archive_quarantine_readiness": archive_quarantine_view,
+        "archive_quarantine_readiness": archive_quarantine_readiness_view,
+        "archive_quarantine": archive_quarantine_view,
+        "archive_restore_pilot": archive_restore_pilot_view,
     }

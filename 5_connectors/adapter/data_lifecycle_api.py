@@ -22,6 +22,8 @@ _archive_pilot_mod = importlib.import_module("5_connectors.adapter.data_lifecycl
 _archive_readthrough_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_readthrough")
 _archive_fallback_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_fallback_contract")
 _archive_quarantine_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_quarantine_readiness")
+_archive_quarantine_exec_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_quarantine")
+_archive_restore_pilot_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_restore_pilot")
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -384,4 +386,74 @@ async def post_data_lifecycle_archive_quarantine_readiness_rebuild():
         "schema_version": _archive_quarantine_mod.ARCHIVE_QUARANTINE_READINESS_REBUILD_SCHEMA_VERSION,
         "record": record,
         "plan": plan,
+    }
+
+
+@router.get("/data-lifecycle/archive/quarantine/latest")
+async def get_data_lifecycle_archive_quarantine_latest():
+    policy = _policy_mod.load_policy()
+    latest = _archive_quarantine_exec_mod.read_record(policy=policy)
+    if latest is None:
+        return {
+            "schema_version": _archive_quarantine_exec_mod.ARCHIVE_SOURCE_QUARANTINE_RECORD_SCHEMA_VERSION,
+            "status": "missing",
+        }
+    return latest
+
+
+@router.post("/data-lifecycle/archive/quarantine/move-one")
+async def post_data_lifecycle_archive_quarantine_move_one():
+    policy = _policy_mod.load_policy()
+    try:
+        record, quarantine = _archive_quarantine_exec_mod.execute_single_artifact_quarantine(policy=policy)
+    except Exception as exc:
+        latest = _archive_quarantine_exec_mod.read_record(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _archive_quarantine_exec_mod.ARCHIVE_SOURCE_QUARANTINE_RECORD_SCHEMA_VERSION,
+                "message": "archive quarantine move-one failed",
+                "error": str(exc),
+                "quarantine": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _archive_quarantine_exec_mod.ARCHIVE_SOURCE_QUARANTINE_RECORD_SCHEMA_VERSION,
+        "record": record,
+        "quarantine": quarantine,
+    }
+
+
+@router.get("/data-lifecycle/archive/restore/pilot/latest")
+async def get_data_lifecycle_archive_restore_pilot_latest():
+    policy = _policy_mod.load_policy()
+    latest = _archive_restore_pilot_mod.read_latest_restore_pilot_record(policy=policy)
+    if latest is None:
+        return {
+            "schema_version": _archive_restore_pilot_mod.ARCHIVE_RESTORE_PILOT_SCHEMA_VERSION,
+            "status": "missing",
+        }
+    return latest
+
+
+@router.post("/data-lifecycle/archive/restore/pilot/run")
+async def post_data_lifecycle_archive_restore_pilot_run():
+    policy = _policy_mod.load_policy()
+    try:
+        record, restore = _archive_restore_pilot_mod.execute_restore_pilot(policy=policy)
+    except Exception as exc:
+        latest = _archive_restore_pilot_mod.read_latest_restore_pilot_record(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _archive_restore_pilot_mod.ARCHIVE_RESTORE_PILOT_SCHEMA_VERSION,
+                "message": "archive restore pilot failed",
+                "error": str(exc),
+                "restore": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _archive_restore_pilot_mod.ARCHIVE_RESTORE_PILOT_SCHEMA_VERSION,
+        "record": record,
+        "restore": restore,
     }
