@@ -163,6 +163,14 @@ def get_status_payload() -> dict[str, Any]:
             "5_connectors.adapter.data_lifecycle.meter_backup_export_approval_template"
         )
         approval_template = approval_template_mod.read_approval_template()
+        execution_gate_mod = importlib.import_module(
+            "5_connectors.adapter.data_lifecycle.meter_backup_export_execution_gate"
+        )
+        execution_gate = execution_gate_mod.read_gate()
+        operator_approval_mod = importlib.import_module(
+            "5_connectors.adapter.data_lifecycle.meter_backup_export_operator_approval"
+        )
+        operator_approval = operator_approval_mod.read_operator_approval()
         if isinstance(readiness, dict):
             summary = readiness.get("summary") or {}
             blocking_reasons = readiness.get("blocking_reasons") or []
@@ -203,6 +211,12 @@ def get_status_payload() -> dict[str, Any]:
                 manifest_summary.get("total_bytes", (package_manifest or {}).get("total_bytes", 0))
                 or 0
             )
+            gate_summary = (execution_gate or {}).get("summary") or {}
+            gate_blocking_count = int(gate_summary.get("blocking_count", 0) or 0)
+            approval_status = str(
+                ((execution_gate or {}).get("approval") or {}).get("status")
+                or ("present" if isinstance(operator_approval, dict) else "missing")
+            )
             backup_export_view = {
                 "status": str(readiness.get("status") or "blocked"),
                 "mode": str(readiness.get("mode") or backup_mod.METER_BACKUP_EXPORT_READINESS_MODE),
@@ -211,7 +225,7 @@ def get_status_payload() -> dict[str, Any]:
                 "execution_allowed": False,
                 "candidate_file_count": candidate_count,
                 "estimated_export_bytes": estimated_export_bytes,
-                "blocking_reasons_count": blocking_count,
+                "blocking_reasons_count": gate_blocking_count if isinstance(execution_gate, dict) else blocking_count,
                 "plan_status": str((plan or {}).get("status") or "missing"),
                 "dry_run_mode": str((plan or {}).get("mode") or "dry_run_preview_only"),
                 "destination_status": plan_dest,
@@ -219,6 +233,11 @@ def get_status_payload() -> dict[str, Any]:
                 "package_manifest_file_count": manifest_file_count,
                 "package_manifest_total_bytes": manifest_total_bytes,
                 "approval_template_status": str((approval_template or {}).get("status") or "missing"),
+                "execution_gate_status": str((execution_gate or {}).get("status") or "missing"),
+                "execution_gate_allowed": bool((execution_gate or {}).get("allowed") is True),
+                "approval_status": approval_status,
+                "backup_export_execution_started": False,
+                "cleanup_execution_started": False,
             }
         else:
             backup_export_view = {
@@ -245,6 +264,11 @@ def get_status_payload() -> dict[str, Any]:
                 "package_manifest_file_count": 0,
                 "package_manifest_total_bytes": 0,
                 "approval_template_status": "missing",
+                "execution_gate_status": "missing",
+                "execution_gate_allowed": False,
+                "approval_status": "missing",
+                "backup_export_execution_started": False,
+                "cleanup_execution_started": False,
             }
     except Exception:
         backup_export_view = {
@@ -271,6 +295,11 @@ def get_status_payload() -> dict[str, Any]:
             "package_manifest_file_count": 0,
             "package_manifest_total_bytes": 0,
             "approval_template_status": "missing",
+            "execution_gate_status": "missing",
+            "execution_gate_allowed": False,
+            "approval_status": "missing",
+            "backup_export_execution_started": False,
+            "cleanup_execution_started": False,
         }
 
     return {

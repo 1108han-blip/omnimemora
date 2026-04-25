@@ -703,6 +703,11 @@ def build_health_payload(
                 "package_manifest_file_count": 0,
                 "package_manifest_total_bytes": 0,
                 "approval_template_status": "missing",
+                "execution_gate_status": "missing",
+                "execution_gate_allowed": False,
+                "approval_status": "missing",
+                "backup_export_execution_started": False,
+                "cleanup_execution_started": False,
             },
         }
 

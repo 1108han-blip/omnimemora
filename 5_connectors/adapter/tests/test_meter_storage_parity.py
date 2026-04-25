@@ -131,3 +131,8 @@ def test_rebuild_and_status_payload_keep_legacy_authoritative(tmp_path, monkeypa
     assert status["backup_export"]["package_manifest_file_count"] == 0
     assert status["backup_export"]["package_manifest_total_bytes"] == 0
     assert status["backup_export"]["approval_template_status"] == "missing"
+    assert status["backup_export"]["execution_gate_status"] == "missing"
+    assert status["backup_export"]["execution_gate_allowed"] is False
+    assert status["backup_export"]["approval_status"] == "missing"
+    assert status["backup_export"]["backup_export_execution_started"] is False
+    assert status["backup_export"]["cleanup_execution_started"] is False

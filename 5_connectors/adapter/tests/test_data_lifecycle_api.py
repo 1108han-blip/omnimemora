@@ -1757,7 +1757,75 @@ def test_meter_backup_export_approval_and_manifest_do_not_expose_execute_copy_ar
         "/data-lifecycle/meter-storage/backup-export/package-manifest/move",
         "/data-lifecycle/meter-storage/backup-export/package-manifest/compress",
         "/data-lifecycle/meter-storage/backup-export/package-manifest/truncate",
+        "/data-lifecycle/meter-storage/backup-export/execution/gate/execute",
+        "/data-lifecycle/meter-storage/backup-export/operator-approval/create",
+        "/data-lifecycle/meter-storage/backup-export/operator-approval/approve",
     ]
     for path in forbidden_paths:
         response = client.post(path)
         assert response.status_code == 404
+
+
+def test_data_lifecycle_meter_backup_export_execution_gate_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._meter_backup_export_execution_gate_mod, "read_gate", lambda policy=None: None)
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/backup-export/execution/gate")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-backup-export-execution-gate-v1"
+    assert payload["status"] == "missing"
+    assert payload["mode"] == "execution_gate_only"
+    assert payload["allowed"] is False
+    assert payload["backup_export_execution_started"] is False
+    assert payload["cleanup_execution_started"] is False
+
+
+def test_data_lifecycle_meter_backup_export_execution_gate_rebuild_endpoint_returns_record_and_gate(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-backup-execution-gate",
+        "trigger": "meter_backup_export_execution_gate_rebuild",
+        "status": "success",
+    }
+    expected_gate = {
+        "schema_version": "res-legacy-meter-backup-export-execution-gate-v1",
+        "mode": "execution_gate_only",
+        "status": "blocked",
+        "allowed": False,
+        "backup_export_execution_started": False,
+        "cleanup_execution_started": False,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_backup_export_execution_gate_mod,
+        "rebuild_gate",
+        lambda policy=None: (expected_record, expected_gate),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/meter-storage/backup-export/execution/gate/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-backup-export-execution-gate-rebuild-v1"
+    assert payload["record"]["trigger"] == "meter_backup_export_execution_gate_rebuild"
+    assert payload["execution_gate"]["mode"] == "execution_gate_only"
+    assert payload["execution_gate"]["allowed"] is False
+
+
+def test_data_lifecycle_meter_backup_export_operator_approval_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_backup_export_operator_approval_mod,
+        "read_operator_approval",
+        lambda policy=None: None,
+    )
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/backup-export/operator-approval")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-backup-export-operator-approval-v1"
+    assert payload["status"] == "missing"
