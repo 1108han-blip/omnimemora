@@ -32,6 +32,11 @@ class DataLifecyclePolicy:
     archive_non_active_candidate_report_file: str = ""
     archive_non_active_quarantine_readiness_file: str = ""
     archive_non_active_execution_gate_file: str = ""
+    raw_evidence_segments_manifest_file: str = ""
+    raw_evidence_segments_root: str = ""
+    raw_evidence_segments_mode: str = "dual_write_observe_only"
+    raw_evidence_segment_max_bytes: int = 32 * 1024 * 1024
+    raw_evidence_segment_max_age_seconds: int = 6 * 60 * 60
     maintenance_enabled: bool = True
     maintenance_startup_delay_seconds: float = 5.0
     maintenance_interval_seconds: float = 60.0
@@ -130,6 +135,30 @@ def load_policy() -> DataLifecyclePolicy:
         "OMNIMEMORA_DLP_ARCHIVE_NON_ACTIVE_EXECUTION_GATE_FILE",
         str(base_dir / "archive_non_active_execution_gate.json"),
     )
+    raw_evidence_segments_manifest_file = os.getenv(
+        "OMNIMEMORA_DLP_RAW_EVIDENCE_SEGMENTS_MANIFEST_FILE",
+        str(base_dir / "raw_evidence_segments_manifest.json"),
+    )
+    raw_evidence_segments_root = os.getenv(
+        "OMNIMEMORA_DLP_RAW_EVIDENCE_SEGMENTS_ROOT",
+        str(base_dir / "raw_evidence_segments"),
+    )
+    raw_evidence_segments_mode = os.getenv(
+        "OMNIMEMORA_DLP_RAW_EVIDENCE_SEGMENTS_MODE",
+        "dual_write_observe_only",
+    ).strip()
+    raw_evidence_segment_max_bytes = int(
+        os.getenv(
+            "OMNIMEMORA_DLP_RAW_EVIDENCE_SEGMENT_MAX_BYTES",
+            str(32 * 1024 * 1024),
+        )
+    )
+    raw_evidence_segment_max_age_seconds = int(
+        os.getenv(
+            "OMNIMEMORA_DLP_RAW_EVIDENCE_SEGMENT_MAX_AGE_SECONDS",
+            str(6 * 60 * 60),
+        )
+    )
     ttl_seconds = float(os.getenv("OMNIMEMORA_DLP_SUMMARY_TTL_SECONDS", "30"))
     stale_max_age_seconds = float(
         os.getenv("OMNIMEMORA_DLP_SUMMARY_STALE_MAX_AGE_SECONDS", "3600")
@@ -170,6 +199,11 @@ def load_policy() -> DataLifecyclePolicy:
         archive_non_active_candidate_report_file=archive_non_active_candidate_report_file,
         archive_non_active_quarantine_readiness_file=archive_non_active_quarantine_readiness_file,
         archive_non_active_execution_gate_file=archive_non_active_execution_gate_file,
+        raw_evidence_segments_manifest_file=raw_evidence_segments_manifest_file,
+        raw_evidence_segments_root=raw_evidence_segments_root,
+        raw_evidence_segments_mode=raw_evidence_segments_mode or "dual_write_observe_only",
+        raw_evidence_segment_max_bytes=max(1, raw_evidence_segment_max_bytes),
+        raw_evidence_segment_max_age_seconds=max(60, raw_evidence_segment_max_age_seconds),
         maintenance_enabled=maintenance_enabled,
         maintenance_startup_delay_seconds=max(0.0, maintenance_startup_delay_seconds),
         maintenance_interval_seconds=max(1.0, maintenance_interval_seconds),

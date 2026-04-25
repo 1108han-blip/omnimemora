@@ -45,6 +45,16 @@ def append_event(event: dict) -> None:
     with open(EVENTS_PATH, "a", encoding="utf-8") as f:
         f.write(line)
 
+    # Observe-only mirror path; failures must not affect legacy source writes.
+    try:
+        segments = __import__(
+            "5_connectors.adapter.data_lifecycle.raw_evidence_segments",
+            fromlist=["append_event_dual_write_observe_only"],
+        )
+        segments.append_event_dual_write_observe_only(kind="proxy_events", event=event)
+    except Exception:
+        pass
+
 
 def read_recent_events(limit: int = 500) -> list[dict]:
     """讀取最近 N 條代理事件。"""

@@ -46,6 +46,16 @@ def append_trace_event(event: Dict[str, Any]) -> None:
     with open(path, "a", encoding="utf-8") as handle:
         handle.write(json.dumps(event, ensure_ascii=False) + "\n")
 
+    # Observe-only mirror path; failures must not affect legacy source writes.
+    try:
+        segments = __import__(
+            "5_connectors.adapter.data_lifecycle.raw_evidence_segments",
+            fromlist=["append_event_dual_write_observe_only"],
+        )
+        segments.append_event_dual_write_observe_only(kind="trace_events", event=event)
+    except Exception:
+        pass
+
 
 def read_recent_trace_events(limit: int = 200, trace_id: Optional[str] = None) -> List[Dict[str, Any]]:
     path = Path(TRACE_EVENTS_PATH)

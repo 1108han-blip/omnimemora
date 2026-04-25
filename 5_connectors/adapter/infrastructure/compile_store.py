@@ -69,6 +69,17 @@ def append_compile_event(event: Dict[str, Any]) -> None:
             f.write(json.dumps(event, ensure_ascii=False) + "\n")
     except Exception as e:
         loguru.logger.warning(f"[COMPILE_STORE] append failed: {e}")
+        return
+
+    # Observe-only mirror path; failures must not affect legacy source writes.
+    try:
+        segments = __import__(
+            "5_connectors.adapter.data_lifecycle.raw_evidence_segments",
+            fromlist=["append_event_dual_write_observe_only"],
+        )
+        segments.append_event_dual_write_observe_only(kind="compile_events", event=event)
+    except Exception as e:
+        loguru.logger.warning(f"[COMPILE_STORE] segment mirror failed (non-fatal): {e}")
 
 
 # ============================================================================
