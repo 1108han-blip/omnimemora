@@ -17,6 +17,7 @@ from . import (
     archive_restore_contract,
     archive_execution_gate,
     archive_pilot,
+    archive_readthrough,
 )
 from .policy import DataLifecyclePolicy, load_policy
 
@@ -351,6 +352,25 @@ def build_health_payload(
             "source_retained": False,
             "read_path_unchanged": True,
         }
+    latest_readthrough = archive_readthrough.read_report(policy=current_policy)
+    if isinstance(latest_readthrough, dict):
+        archive_readthrough_view = {
+            "status": str(latest_readthrough.get("status") or "present"),
+            "source_retained": bool(latest_readthrough.get("source_retained", False)),
+            "archive_copy_readable": bool(latest_readthrough.get("archive_copy_readable", False)),
+            "checksum_match": bool(latest_readthrough.get("checksum_match", False)),
+            "read_path_unchanged": bool(latest_readthrough.get("read_path_unchanged", True)),
+            "validated_at": latest_readthrough.get("generated_at"),
+        }
+    else:
+        archive_readthrough_view = {
+            "status": "missing",
+            "source_retained": False,
+            "archive_copy_readable": False,
+            "checksum_match": False,
+            "read_path_unchanged": True,
+            "validated_at": None,
+        }
     status, recommended_action = _derive_status(
         summary_freshness=summary_freshness,
         last_maintenance=last_maintenance,
@@ -397,4 +417,5 @@ def build_health_payload(
         "archive_restore_readiness": archive_restore_view,
         "archive_execution_gate": archive_gate_view,
         "archive_pilot": archive_pilot_view,
+        "archive_readthrough": archive_readthrough_view,
     }

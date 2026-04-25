@@ -27,6 +27,7 @@ def _build_policy(tmp_path, *, ttl_seconds=10.0, stale_max_age_seconds=300.0):
         archive_operator_approval_file=str(tmp_path / "archive_operator_approval.json"),
         archive_pilot_root=str(tmp_path / "archive" / "pilot"),
         archive_pilot_record_file=str(tmp_path / "archive_pilot_record.json"),
+        archive_readthrough_report_file=str(tmp_path / "archive_readthrough_report.json"),
     )
 
 
@@ -678,6 +679,7 @@ def test_data_lifecycle_api_has_no_archive_batch_or_cleanup_endpoint():
     assert client.post("/data-lifecycle/archive/pilot/batch-copy").status_code == 404
     assert client.post("/data-lifecycle/archive/pilot/delete-source").status_code == 404
     assert client.post("/data-lifecycle/archive/pilot/compress").status_code == 404
+    assert client.post("/data-lifecycle/archive/read-path/switch").status_code == 404
 
 
 def test_dlp_health_exposes_archive_pilot_summary(tmp_path):
@@ -697,3 +699,65 @@ def test_dlp_health_exposes_archive_pilot_summary(tmp_path):
     assert pilot["checksum_match"] is True
     assert pilot["source_retained"] is True
     assert pilot["read_path_unchanged"] is True
+
+
+def test_data_lifecycle_archive_readthrough_report_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._archive_readthrough_mod, "read_report", lambda policy=None: None)
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/archive/readthrough/report")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-archive-readthrough-report-v1"
+    assert payload["status"] == "missing"
+
+
+def test_data_lifecycle_archive_readthrough_report_rebuild_endpoint_returns_record_and_report(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-readthrough-1",
+        "trigger": "archive_readthrough_report_rebuild",
+        "status": "success",
+        "error": None,
+    }
+    expected_report = {
+        "schema_version": "dlp-archive-readthrough-report-v1",
+        "report_id": "rt-1",
+        "mode": "shadow_validation_only",
+        "status": "passed",
+        "source_retained": True,
+        "archive_copy_readable": True,
+        "checksum_match": True,
+        "read_path_unchanged": True,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._archive_readthrough_mod,
+        "rebuild_report",
+        lambda policy=None: (expected_record, expected_report),
+    )
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/archive/readthrough/report/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-archive-readthrough-report-rebuild-v1"
+    assert payload["record"]["trigger"] == "archive_readthrough_report_rebuild"
+    assert payload["report"]["schema_version"] == "dlp-archive-readthrough-report-v1"
+
+
+def test_dlp_health_exposes_archive_readthrough_summary(tmp_path):
+    policy = _build_policy(tmp_path)
+    report_path = tmp_path / "archive_readthrough_report.json"
+    report_path.write_text(
+        '{"schema_version":"dlp-archive-readthrough-report-v1","report_id":"rt-1","generated_at":"2026-04-25T00:00:00+00:00","mode":"shadow_validation_only","status":"passed","source_retained":true,"archive_copy_readable":true,"checksum_match":true,"read_path_unchanged":true}',
+        encoding="utf-8",
+    )
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    readthrough = payload.get("archive_readthrough") or {}
+    assert readthrough["status"] == "passed"
+    assert readthrough["source_retained"] is True
+    assert readthrough["archive_copy_readable"] is True
+    assert readthrough["checksum_match"] is True
+    assert readthrough["read_path_unchanged"] is True
+    assert readthrough["validated_at"] == "2026-04-25T00:00:00+00:00"

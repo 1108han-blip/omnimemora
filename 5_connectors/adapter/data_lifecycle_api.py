@@ -19,6 +19,7 @@ _archive_restore_mod = importlib.import_module("5_connectors.adapter.data_lifecy
 _archive_gate_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_execution_gate")
 _archive_approval_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_approval")
 _archive_pilot_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_pilot")
+_archive_readthrough_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_readthrough")
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -277,3 +278,38 @@ async def get_data_lifecycle_archive_pilot_latest():
     if latest is None:
         return {"schema_version": _archive_pilot_mod.ARCHIVE_PILOT_RECORD_SCHEMA_VERSION, "status": "missing"}
     return latest
+
+
+@router.get("/data-lifecycle/archive/readthrough/report")
+async def get_data_lifecycle_archive_readthrough_report():
+    policy = _policy_mod.load_policy()
+    report = _archive_readthrough_mod.read_report(policy=policy)
+    if report is None:
+        return {
+            "schema_version": _archive_readthrough_mod.ARCHIVE_READTHROUGH_REPORT_SCHEMA_VERSION,
+            "status": "missing",
+        }
+    return report
+
+
+@router.post("/data-lifecycle/archive/readthrough/report/rebuild")
+async def post_data_lifecycle_archive_readthrough_report_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, report = _archive_readthrough_mod.rebuild_report(policy=policy)
+    except Exception as exc:
+        latest = _archive_readthrough_mod.read_report(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _archive_readthrough_mod.ARCHIVE_READTHROUGH_REPORT_REBUILD_SCHEMA_VERSION,
+                "message": "archive readthrough report rebuild failed",
+                "error": str(exc),
+                "report": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _archive_readthrough_mod.ARCHIVE_READTHROUGH_REPORT_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "report": report,
+    }
