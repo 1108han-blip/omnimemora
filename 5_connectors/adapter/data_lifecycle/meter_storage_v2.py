@@ -14,6 +14,9 @@ from . import state_store
 _legacy_meter_store = importlib.import_module("5_connectors.adapter.infrastructure.meter_store")
 _meter_v2 = importlib.import_module("5_connectors.adapter.infrastructure.meter_store_v2")
 _read_resolver = importlib.import_module("5_connectors.adapter.application.request_meter_read_resolver")
+_request_evidence_read_resolver = importlib.import_module(
+    "5_connectors.adapter.application.request_evidence_meter_read_resolver"
+)
 _metrics_read_resolver = importlib.import_module("5_connectors.adapter.application.metrics_meter_read_resolver")
 _status_read_resolver = importlib.import_module("5_connectors.adapter.application.status_read_model_meter_read_resolver")
 
@@ -87,6 +90,20 @@ def get_status_payload() -> dict[str, Any]:
     if read_mode not in {_read_resolver.MODE_SQLITE_FIRST, _read_resolver.MODE_LEGACY_ONLY}:
         read_mode = _read_resolver.MODE_SQLITE_FIRST
     request_meter_switch_enabled = read_mode == _read_resolver.MODE_SQLITE_FIRST
+    request_evidence_mode = str(
+        os.getenv(
+            _request_evidence_read_resolver.READ_PATH_ENV,
+            _request_evidence_read_resolver.MODE_SQLITE_FIRST,
+        )
+    ).strip().lower()
+    if request_evidence_mode not in {
+        _request_evidence_read_resolver.MODE_SQLITE_FIRST,
+        _request_evidence_read_resolver.MODE_LEGACY_ONLY,
+    }:
+        request_evidence_mode = _request_evidence_read_resolver.MODE_SQLITE_FIRST
+    request_evidence_switch_enabled = (
+        request_evidence_mode == _request_evidence_read_resolver.MODE_SQLITE_FIRST
+    )
     metrics_mode = str(
         os.getenv(_metrics_read_resolver.READ_PATH_ENV, _metrics_read_resolver.MODE_SQLITE_FIRST)
     ).strip().lower()
@@ -107,15 +124,20 @@ def get_status_payload() -> dict[str, Any]:
         "read_path": {
             "legacy_authoritative": True,
             "request_meter_switch_enabled": request_meter_switch_enabled,
-            "request_evidence_switch_enabled": False,
+            "request_evidence_switch_enabled": request_evidence_switch_enabled,
             "metrics_switch_enabled": metrics_switch_enabled,
             "status_read_model_switch_enabled": status_switch_enabled,
             "legacy_fallback_enabled": (
-                request_meter_switch_enabled or metrics_switch_enabled or status_switch_enabled
+                request_meter_switch_enabled
+                or request_evidence_switch_enabled
+                or metrics_switch_enabled
+                or status_switch_enabled
             ),
             "request_meter_read_mode": read_mode,
+            "request_evidence_read_mode": request_evidence_mode,
             "metrics_read_mode": metrics_mode,
             "status_read_model_read_mode": status_mode,
+            "cleanup_eligibility": "readiness_only",
         },
         "storage": {
             "sqlite_path": str(_meter_v2.resolve_sqlite_path()),

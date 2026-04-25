@@ -660,8 +660,10 @@ def build_health_payload(
                 "status_read_model_switch_enabled": False,
                 "legacy_fallback_enabled": False,
                 "request_meter_read_mode": "legacy_only",
+                "request_evidence_read_mode": "legacy_only",
                 "metrics_read_mode": "legacy_only",
                 "status_read_model_read_mode": "legacy_only",
+                "cleanup_eligibility": "not_started",
             },
             "storage": {
                 "sqlite_path": None,
