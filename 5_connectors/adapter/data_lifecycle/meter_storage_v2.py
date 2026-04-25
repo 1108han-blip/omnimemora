@@ -175,6 +175,10 @@ def get_status_payload() -> dict[str, Any]:
             "5_connectors.adapter.data_lifecycle.meter_backup_export_execution_proposal"
         )
         execution_proposal = execution_proposal_mod.read_execution_proposal()
+        copy_pilot_mod = importlib.import_module(
+            "5_connectors.adapter.data_lifecycle.meter_backup_export_copy_pilot"
+        )
+        copy_pilot = copy_pilot_mod.read_latest_copy_pilot()
         if isinstance(readiness, dict):
             summary = readiness.get("summary") or {}
             blocking_reasons = readiness.get("blocking_reasons") or []
@@ -246,6 +250,19 @@ def get_status_payload() -> dict[str, Any]:
                     if isinstance(execution_proposal, dict)
                     else True
                 ),
+                "copy_pilot_status": str((copy_pilot or {}).get("status") or "missing"),
+                "copy_pilot_source_retained": bool(
+                    (copy_pilot or {}).get("source_retained")
+                    if isinstance(copy_pilot, dict)
+                    else True
+                ),
+                "copy_pilot_checksum_match": bool(
+                    (copy_pilot or {}).get("checksum_match")
+                    if isinstance(copy_pilot, dict)
+                    else False
+                ),
+                "copy_pilot_cleanup_started": False,
+                "copy_pilot_read_path_unchanged": True,
                 "backup_export_execution_started": False,
                 "cleanup_execution_started": False,
             }
@@ -279,6 +296,11 @@ def get_status_payload() -> dict[str, Any]:
                 "approval_status": "missing",
                 "execution_proposal_status": "missing",
                 "operator_decision_required": True,
+                "copy_pilot_status": "missing",
+                "copy_pilot_source_retained": True,
+                "copy_pilot_checksum_match": False,
+                "copy_pilot_cleanup_started": False,
+                "copy_pilot_read_path_unchanged": True,
                 "backup_export_execution_started": False,
                 "cleanup_execution_started": False,
             }
@@ -312,6 +334,11 @@ def get_status_payload() -> dict[str, Any]:
             "approval_status": "missing",
             "execution_proposal_status": "missing",
             "operator_decision_required": True,
+            "copy_pilot_status": "missing",
+            "copy_pilot_source_retained": True,
+            "copy_pilot_checksum_match": False,
+            "copy_pilot_cleanup_started": False,
+            "copy_pilot_read_path_unchanged": True,
             "backup_export_execution_started": False,
             "cleanup_execution_started": False,
         }

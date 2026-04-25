@@ -1904,3 +1904,78 @@ def test_meter_backup_export_execution_proposal_does_not_expose_execute_run_copy
     for path in forbidden_paths:
         response = client.post(path)
         assert response.status_code == 404
+
+
+def test_data_lifecycle_meter_backup_export_copy_pilot_latest_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_backup_export_copy_pilot_mod,
+        "read_latest_copy_pilot",
+        lambda policy=None: None,
+    )
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/backup-export/copy-pilot/latest")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-backup-export-copy-pilot-v1"
+    assert payload["status"] == "missing"
+    assert payload["mode"] == "single_copy_pilot_only"
+    assert payload["source_retained"] is True
+    assert payload["checksum_match"] is False
+    assert payload["cleanup_started"] is False
+    assert payload["read_path_unchanged"] is True
+
+
+def test_data_lifecycle_meter_backup_export_copy_pilot_run_one_endpoint_returns_record_and_pilot(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-backup-copy-pilot",
+        "trigger": "meter_backup_export_copy_pilot_run_one",
+        "status": "success",
+    }
+    expected_pilot = {
+        "schema_version": "res-legacy-meter-backup-export-copy-pilot-v1",
+        "mode": "single_copy_pilot_only",
+        "status": "success",
+        "source_retained": True,
+        "checksum_match": True,
+        "cleanup_started": False,
+        "read_path_unchanged": True,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_backup_export_copy_pilot_mod,
+        "run_one_copy_pilot",
+        lambda policy=None: (expected_record, expected_pilot),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/meter-storage/backup-export/copy-pilot/run-one")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-backup-export-copy-pilot-v1"
+    assert payload["record"]["trigger"] == "meter_backup_export_copy_pilot_run_one"
+    assert payload["copy_pilot"]["mode"] == "single_copy_pilot_only"
+    assert payload["copy_pilot"]["source_retained"] is True
+    assert payload["copy_pilot"]["checksum_match"] is True
+    assert payload["copy_pilot"]["cleanup_started"] is False
+
+
+def test_meter_backup_export_copy_pilot_does_not_expose_execute_full_export_cleanup_delete_move_compress_truncate():
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    client = TestClient(app)
+    forbidden_paths = [
+        "/data-lifecycle/meter-storage/backup-export/copy-pilot/execute",
+        "/data-lifecycle/meter-storage/backup-export/copy-pilot/full-export",
+        "/data-lifecycle/meter-storage/backup-export/copy-pilot/cleanup",
+        "/data-lifecycle/meter-storage/backup-export/copy-pilot/delete",
+        "/data-lifecycle/meter-storage/backup-export/copy-pilot/move",
+        "/data-lifecycle/meter-storage/backup-export/copy-pilot/compress",
+        "/data-lifecycle/meter-storage/backup-export/copy-pilot/truncate",
+    ]
+    for path in forbidden_paths:
+        response = client.post(path)
+        assert response.status_code == 404

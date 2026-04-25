@@ -54,6 +54,9 @@ _meter_backup_export_operator_approval_mod = importlib.import_module(
 _meter_backup_export_execution_proposal_mod = importlib.import_module(
     "5_connectors.adapter.data_lifecycle.meter_backup_export_execution_proposal"
 )
+_meter_backup_export_copy_pilot_mod = importlib.import_module(
+    "5_connectors.adapter.data_lifecycle.meter_backup_export_copy_pilot"
+)
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -413,6 +416,46 @@ async def post_data_lifecycle_meter_storage_backup_export_execution_proposal_reb
         "record": record,
         "execution_proposal": proposal,
     }
+
+
+@router.post("/data-lifecycle/meter-storage/backup-export/copy-pilot/run-one")
+async def post_data_lifecycle_meter_storage_backup_export_copy_pilot_run_one():
+    policy = _policy_mod.load_policy()
+    try:
+        record, pilot = _meter_backup_export_copy_pilot_mod.run_one_copy_pilot(policy=policy)
+    except Exception as exc:
+        latest = _meter_backup_export_copy_pilot_mod.read_latest_copy_pilot(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _meter_backup_export_copy_pilot_mod.METER_BACKUP_EXPORT_COPY_PILOT_SCHEMA_VERSION,
+                "message": "meter backup export copy pilot run-one failed",
+                "error": str(exc),
+                "copy_pilot": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _meter_backup_export_copy_pilot_mod.METER_BACKUP_EXPORT_COPY_PILOT_SCHEMA_VERSION,
+        "record": record,
+        "copy_pilot": pilot,
+    }
+
+
+@router.get("/data-lifecycle/meter-storage/backup-export/copy-pilot/latest")
+async def get_data_lifecycle_meter_storage_backup_export_copy_pilot_latest():
+    policy = _policy_mod.load_policy()
+    pilot = _meter_backup_export_copy_pilot_mod.read_latest_copy_pilot(policy=policy)
+    if pilot is None:
+        return {
+            "schema_version": _meter_backup_export_copy_pilot_mod.METER_BACKUP_EXPORT_COPY_PILOT_SCHEMA_VERSION,
+            "status": "missing",
+            "mode": _meter_backup_export_copy_pilot_mod.METER_BACKUP_EXPORT_COPY_PILOT_MODE,
+            "source_retained": True,
+            "checksum_match": False,
+            "cleanup_started": False,
+            "read_path_unchanged": True,
+        }
+    return pilot
 
 
 @router.get("/data-lifecycle/retention/manifest")

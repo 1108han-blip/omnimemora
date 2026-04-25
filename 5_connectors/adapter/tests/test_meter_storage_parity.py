@@ -136,5 +136,10 @@ def test_rebuild_and_status_payload_keep_legacy_authoritative(tmp_path, monkeypa
     assert status["backup_export"]["approval_status"] == "missing"
     assert status["backup_export"]["execution_proposal_status"] == "missing"
     assert status["backup_export"]["operator_decision_required"] is True
+    assert status["backup_export"]["copy_pilot_status"] == "missing"
+    assert status["backup_export"]["copy_pilot_source_retained"] is True
+    assert status["backup_export"]["copy_pilot_checksum_match"] is False
+    assert status["backup_export"]["copy_pilot_cleanup_started"] is False
+    assert status["backup_export"]["copy_pilot_read_path_unchanged"] is True
     assert status["backup_export"]["backup_export_execution_started"] is False
     assert status["backup_export"]["cleanup_execution_started"] is False

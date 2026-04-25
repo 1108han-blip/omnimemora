@@ -40,6 +40,9 @@ class DataLifecyclePolicy:
     meter_backup_export_execution_gate_file: str = ""
     meter_backup_export_operator_approval_file: str = ""
     meter_backup_export_execution_proposal_file: str = ""
+    meter_backup_export_copy_pilot_root: str = ""
+    meter_backup_export_copy_pilot_record_file: str = ""
+    meter_backup_export_copy_pilot_allow_override: bool = True
     meter_backup_export_destination: str = ""
     raw_evidence_segments_manifest_file: str = ""
     raw_evidence_segments_root: str = ""
@@ -176,6 +179,18 @@ def load_policy() -> DataLifecyclePolicy:
         "OMNIMEMORA_DLP_METER_BACKUP_EXPORT_EXECUTION_PROPOSAL_FILE",
         str(base_dir / "meter_backup_export_execution_proposal.json"),
     )
+    meter_backup_export_copy_pilot_root = os.getenv(
+        "OMNIMEMORA_DLP_METER_BACKUP_EXPORT_COPY_PILOT_ROOT",
+        str(base_dir / "backup_export" / "pilot"),
+    )
+    meter_backup_export_copy_pilot_record_file = os.getenv(
+        "OMNIMEMORA_DLP_METER_BACKUP_EXPORT_COPY_PILOT_RECORD_FILE",
+        str(base_dir / "meter_backup_export_copy_pilot_record.json"),
+    )
+    meter_backup_export_copy_pilot_allow_override = os.getenv(
+        "OMNIMEMORA_DLP_METER_BACKUP_EXPORT_COPY_PILOT_ALLOW_OVERRIDE",
+        "true",
+    ).strip().lower() in {"1", "true", "yes", "on"}
     meter_backup_export_destination = os.getenv(
         "OMNIMEMORA_DLP_METER_BACKUP_EXPORT_DESTINATION",
         "",
@@ -252,6 +267,9 @@ def load_policy() -> DataLifecyclePolicy:
         meter_backup_export_execution_gate_file=meter_backup_export_execution_gate_file,
         meter_backup_export_operator_approval_file=meter_backup_export_operator_approval_file,
         meter_backup_export_execution_proposal_file=meter_backup_export_execution_proposal_file,
+        meter_backup_export_copy_pilot_root=meter_backup_export_copy_pilot_root,
+        meter_backup_export_copy_pilot_record_file=meter_backup_export_copy_pilot_record_file,
+        meter_backup_export_copy_pilot_allow_override=meter_backup_export_copy_pilot_allow_override,
         meter_backup_export_destination=meter_backup_export_destination,
         raw_evidence_segments_manifest_file=raw_evidence_segments_manifest_file,
         raw_evidence_segments_root=raw_evidence_segments_root,
