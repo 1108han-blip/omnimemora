@@ -88,5 +88,7 @@ def test_rebuild_and_status_payload_keep_legacy_authoritative(tmp_path, monkeypa
     assert record["legacy_scanned_count"] == 2
     assert parity["critical_mismatch_count"] == 0
     assert status["read_path"]["legacy_authoritative"] is True
-    assert status["read_path"]["request_meter_switch_enabled"] is False
+    assert status["read_path"]["request_meter_switch_enabled"] is True
     assert status["read_path"]["request_evidence_switch_enabled"] is False
+    assert status["read_path"]["metrics_switch_enabled"] is False
+    assert status["read_path"]["legacy_fallback_enabled"] is True
