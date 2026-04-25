@@ -1633,3 +1633,131 @@ def test_meter_backup_export_plan_does_not_expose_execute_copy_archive_delete_mo
     for path in forbidden_paths:
         response = client.post(path)
         assert response.status_code == 404
+
+
+def test_data_lifecycle_meter_backup_export_package_manifest_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_backup_export_package_manifest_mod,
+        "read_package_manifest",
+        lambda policy=None: None,
+    )
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/backup-export/package-manifest")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-backup-export-package-manifest-v1"
+    assert payload["status"] == "missing"
+    assert payload["mode"] == "package_manifest_preview_only"
+    assert payload["backup_export_allowed"] is False
+    assert payload["cleanup_allowed"] is False
+    assert payload["execution_allowed"] is False
+
+
+def test_data_lifecycle_meter_backup_export_package_manifest_rebuild_endpoint_returns_record_and_manifest(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-backup-package-manifest",
+        "trigger": "meter_backup_export_package_manifest_rebuild",
+        "status": "success",
+    }
+    expected_manifest = {
+        "schema_version": "res-legacy-meter-backup-export-package-manifest-v1",
+        "mode": "package_manifest_preview_only",
+        "status": "blocked",
+        "backup_export_allowed": False,
+        "cleanup_allowed": False,
+        "execution_allowed": False,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_backup_export_package_manifest_mod,
+        "rebuild_package_manifest",
+        lambda policy=None: (expected_record, expected_manifest),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/meter-storage/backup-export/package-manifest/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-backup-export-package-manifest-rebuild-v1"
+    assert payload["record"]["trigger"] == "meter_backup_export_package_manifest_rebuild"
+    assert payload["package_manifest"]["mode"] == "package_manifest_preview_only"
+    assert payload["package_manifest"]["execution_allowed"] is False
+
+
+def test_data_lifecycle_meter_backup_export_approval_template_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_backup_export_approval_template_mod,
+        "read_approval_template",
+        lambda policy=None: None,
+    )
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/backup-export/approval-template")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-backup-export-approval-template-v1"
+    assert payload["status"] == "missing"
+    assert payload["mode"] == "approval_template_only"
+    assert payload["approval_valid"] is False
+    assert payload["backup_export_allowed"] is False
+    assert payload["cleanup_allowed"] is False
+    assert payload["execution_allowed"] is False
+
+
+def test_data_lifecycle_meter_backup_export_approval_template_rebuild_endpoint_returns_record_and_template(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-backup-approval-template",
+        "trigger": "meter_backup_export_approval_template_rebuild",
+        "status": "success",
+    }
+    expected_template = {
+        "schema_version": "res-legacy-meter-backup-export-approval-template-v1",
+        "mode": "approval_template_only",
+        "status": "blocked",
+        "approval_valid": False,
+        "backup_export_allowed": False,
+        "cleanup_allowed": False,
+        "execution_allowed": False,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_backup_export_approval_template_mod,
+        "rebuild_approval_template",
+        lambda policy=None: (expected_record, expected_template),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/meter-storage/backup-export/approval-template/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-backup-export-approval-template-rebuild-v1"
+    assert payload["record"]["trigger"] == "meter_backup_export_approval_template_rebuild"
+    assert payload["approval_template"]["mode"] == "approval_template_only"
+    assert payload["approval_template"]["approval_valid"] is False
+
+
+def test_meter_backup_export_approval_and_manifest_do_not_expose_execute_copy_archive_delete_move_compress_truncate():
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    client = TestClient(app)
+    forbidden_paths = [
+        "/data-lifecycle/meter-storage/backup-export/approval-template/execute",
+        "/data-lifecycle/meter-storage/backup-export/approval-template/approve",
+        "/data-lifecycle/meter-storage/backup-export/package-manifest/execute",
+        "/data-lifecycle/meter-storage/backup-export/package-manifest/copy",
+        "/data-lifecycle/meter-storage/backup-export/package-manifest/archive",
+        "/data-lifecycle/meter-storage/backup-export/package-manifest/delete",
+        "/data-lifecycle/meter-storage/backup-export/package-manifest/move",
+        "/data-lifecycle/meter-storage/backup-export/package-manifest/compress",
+        "/data-lifecycle/meter-storage/backup-export/package-manifest/truncate",
+    ]
+    for path in forbidden_paths:
+        response = client.post(path)
+        assert response.status_code == 404

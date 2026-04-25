@@ -35,6 +35,8 @@ class DataLifecyclePolicy:
     meter_cleanup_preview_file: str = ""
     meter_backup_export_readiness_file: str = ""
     meter_backup_export_plan_file: str = ""
+    meter_backup_export_package_manifest_file: str = ""
+    meter_backup_export_approval_template_file: str = ""
     meter_backup_export_destination: str = ""
     raw_evidence_segments_manifest_file: str = ""
     raw_evidence_segments_root: str = ""
@@ -151,6 +153,14 @@ def load_policy() -> DataLifecyclePolicy:
         "OMNIMEMORA_DLP_METER_BACKUP_EXPORT_PLAN_FILE",
         str(base_dir / "meter_backup_export_plan.json"),
     )
+    meter_backup_export_package_manifest_file = os.getenv(
+        "OMNIMEMORA_DLP_METER_BACKUP_EXPORT_PACKAGE_MANIFEST_FILE",
+        str(base_dir / "meter_backup_export_package_manifest.json"),
+    )
+    meter_backup_export_approval_template_file = os.getenv(
+        "OMNIMEMORA_DLP_METER_BACKUP_EXPORT_APPROVAL_TEMPLATE_FILE",
+        str(base_dir / "meter_backup_export_approval_template.json"),
+    )
     meter_backup_export_destination = os.getenv(
         "OMNIMEMORA_DLP_METER_BACKUP_EXPORT_DESTINATION",
         "",
@@ -222,6 +232,8 @@ def load_policy() -> DataLifecyclePolicy:
         meter_cleanup_preview_file=meter_cleanup_preview_file,
         meter_backup_export_readiness_file=meter_backup_export_readiness_file,
         meter_backup_export_plan_file=meter_backup_export_plan_file,
+        meter_backup_export_package_manifest_file=meter_backup_export_package_manifest_file,
+        meter_backup_export_approval_template_file=meter_backup_export_approval_template_file,
         meter_backup_export_destination=meter_backup_export_destination,
         raw_evidence_segments_manifest_file=raw_evidence_segments_manifest_file,
         raw_evidence_segments_root=raw_evidence_segments_root,

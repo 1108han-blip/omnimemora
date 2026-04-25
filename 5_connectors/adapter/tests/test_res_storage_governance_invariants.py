@@ -85,6 +85,8 @@ def test_no_meter_legacy_cleanup_delete_truncate_compress_endpoints_exist():
         "/data-lifecycle/meter-storage/backup-export/compress",
         "/data-lifecycle/meter-storage/backup-export/truncate",
         "/data-lifecycle/meter-storage/backup-export/plan/execute",
+        "/data-lifecycle/meter-storage/backup-export/package-manifest/execute",
+        "/data-lifecycle/meter-storage/backup-export/approval-template/execute",
         "/data-lifecycle/meter-storage/cleanup/execute",
         "/data-lifecycle/meter-storage/cleanup/delete",
         "/data-lifecycle/meter-storage/cleanup/move",

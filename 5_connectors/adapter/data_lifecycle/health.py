@@ -684,6 +684,7 @@ def build_health_payload(
                 "mode": "backup_export_readiness_only",
                 "backup_export_allowed": False,
                 "cleanup_allowed": False,
+                "execution_allowed": False,
                 "candidate_file_count": 0,
                 "estimated_export_bytes": 0,
                 "blocking_reasons_count": 0,
@@ -698,6 +699,10 @@ def build_health_payload(
                     "required_free_bytes": None,
                     "policy_ok": False,
                 },
+                "package_manifest_status": "missing",
+                "package_manifest_file_count": 0,
+                "package_manifest_total_bytes": 0,
+                "approval_template_status": "missing",
             },
         }
 

@@ -155,6 +155,14 @@ def get_status_payload() -> dict[str, Any]:
         readiness = backup_mod.read_readiness()
         plan_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_backup_export_plan")
         plan = plan_mod.read_plan()
+        package_manifest_mod = importlib.import_module(
+            "5_connectors.adapter.data_lifecycle.meter_backup_export_package_manifest"
+        )
+        package_manifest = package_manifest_mod.read_package_manifest()
+        approval_template_mod = importlib.import_module(
+            "5_connectors.adapter.data_lifecycle.meter_backup_export_approval_template"
+        )
+        approval_template = approval_template_mod.read_approval_template()
         if isinstance(readiness, dict):
             summary = readiness.get("summary") or {}
             blocking_reasons = readiness.get("blocking_reasons") or []
@@ -181,17 +189,36 @@ def get_status_payload() -> dict[str, Any]:
                 plan_summary.get("blocking_reasons_count", len(plan_blocking) if isinstance(plan_blocking, list) else 0)
                 or len(blocking_reasons)
             )
+            manifest_summary = (package_manifest or {}).get("summary") or {}
+            manifest_file_count = int(
+                manifest_summary.get(
+                    "file_count",
+                    len((package_manifest or {}).get("would_export_files") or [])
+                    if isinstance((package_manifest or {}).get("would_export_files"), list)
+                    else 0,
+                )
+                or 0
+            )
+            manifest_total_bytes = int(
+                manifest_summary.get("total_bytes", (package_manifest or {}).get("total_bytes", 0))
+                or 0
+            )
             backup_export_view = {
                 "status": str(readiness.get("status") or "blocked"),
                 "mode": str(readiness.get("mode") or backup_mod.METER_BACKUP_EXPORT_READINESS_MODE),
                 "backup_export_allowed": bool(readiness.get("backup_export_allowed")),
-                "cleanup_allowed": bool(readiness.get("cleanup_allowed")),
+                "cleanup_allowed": False,
+                "execution_allowed": False,
                 "candidate_file_count": candidate_count,
                 "estimated_export_bytes": estimated_export_bytes,
                 "blocking_reasons_count": blocking_count,
                 "plan_status": str((plan or {}).get("status") or "missing"),
                 "dry_run_mode": str((plan or {}).get("mode") or "dry_run_preview_only"),
                 "destination_status": plan_dest,
+                "package_manifest_status": str((package_manifest or {}).get("status") or "missing"),
+                "package_manifest_file_count": manifest_file_count,
+                "package_manifest_total_bytes": manifest_total_bytes,
+                "approval_template_status": str((approval_template or {}).get("status") or "missing"),
             }
         else:
             backup_export_view = {
@@ -199,6 +226,7 @@ def get_status_payload() -> dict[str, Any]:
                 "mode": "backup_export_readiness_only",
                 "backup_export_allowed": False,
                 "cleanup_allowed": False,
+                "execution_allowed": False,
                 "candidate_file_count": 0,
                 "estimated_export_bytes": 0,
                 "blocking_reasons_count": 0,
@@ -213,6 +241,10 @@ def get_status_payload() -> dict[str, Any]:
                     "required_free_bytes": None,
                     "policy_ok": False,
                 },
+                "package_manifest_status": "missing",
+                "package_manifest_file_count": 0,
+                "package_manifest_total_bytes": 0,
+                "approval_template_status": "missing",
             }
     except Exception:
         backup_export_view = {
@@ -220,6 +252,7 @@ def get_status_payload() -> dict[str, Any]:
             "mode": "backup_export_readiness_only",
             "backup_export_allowed": False,
             "cleanup_allowed": False,
+            "execution_allowed": False,
             "candidate_file_count": 0,
             "estimated_export_bytes": 0,
             "blocking_reasons_count": 0,
@@ -234,6 +267,10 @@ def get_status_payload() -> dict[str, Any]:
                 "required_free_bytes": None,
                 "policy_ok": False,
             },
+            "package_manifest_status": "missing",
+            "package_manifest_file_count": 0,
+            "package_manifest_total_bytes": 0,
+            "approval_template_status": "missing",
         }
 
     return {

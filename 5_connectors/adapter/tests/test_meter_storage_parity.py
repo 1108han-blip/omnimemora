@@ -123,6 +123,11 @@ def test_rebuild_and_status_payload_keep_legacy_authoritative(tmp_path, monkeypa
     assert status["backup_export"]["mode"] == "backup_export_readiness_only"
     assert status["backup_export"]["backup_export_allowed"] is False
     assert status["backup_export"]["cleanup_allowed"] is False
+    assert status["backup_export"]["execution_allowed"] is False
     assert status["backup_export"]["plan_status"] == "missing"
     assert status["backup_export"]["dry_run_mode"] == "dry_run_preview_only"
     assert status["backup_export"]["destination_status"]["status"] == "unknown"
+    assert status["backup_export"]["package_manifest_status"] == "missing"
+    assert status["backup_export"]["package_manifest_file_count"] == 0
+    assert status["backup_export"]["package_manifest_total_bytes"] == 0
+    assert status["backup_export"]["approval_template_status"] == "missing"

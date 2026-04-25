@@ -39,6 +39,12 @@ _meter_backup_export_readiness_mod = importlib.import_module(
 _meter_backup_export_plan_mod = importlib.import_module(
     "5_connectors.adapter.data_lifecycle.meter_backup_export_plan"
 )
+_meter_backup_export_package_manifest_mod = importlib.import_module(
+    "5_connectors.adapter.data_lifecycle.meter_backup_export_package_manifest"
+)
+_meter_backup_export_approval_template_mod = importlib.import_module(
+    "5_connectors.adapter.data_lifecycle.meter_backup_export_approval_template"
+)
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -227,6 +233,85 @@ async def post_data_lifecycle_meter_storage_backup_export_plan_rebuild():
         "schema_version": _meter_backup_export_plan_mod.METER_BACKUP_EXPORT_PLAN_REBUILD_SCHEMA_VERSION,
         "record": record,
         "plan": plan,
+    }
+
+
+@router.get("/data-lifecycle/meter-storage/backup-export/package-manifest")
+async def get_data_lifecycle_meter_storage_backup_export_package_manifest():
+    policy = _policy_mod.load_policy()
+    manifest = _meter_backup_export_package_manifest_mod.read_package_manifest(policy=policy)
+    if manifest is None:
+        return {
+            "schema_version": _meter_backup_export_package_manifest_mod.METER_BACKUP_EXPORT_PACKAGE_MANIFEST_SCHEMA_VERSION,
+            "status": "missing",
+            "mode": _meter_backup_export_package_manifest_mod.METER_BACKUP_EXPORT_PACKAGE_MANIFEST_MODE,
+            "backup_export_allowed": False,
+            "cleanup_allowed": False,
+            "execution_allowed": False,
+        }
+    return manifest
+
+
+@router.post("/data-lifecycle/meter-storage/backup-export/package-manifest/rebuild")
+async def post_data_lifecycle_meter_storage_backup_export_package_manifest_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, manifest = _meter_backup_export_package_manifest_mod.rebuild_package_manifest(policy=policy)
+    except Exception as exc:
+        latest = _meter_backup_export_package_manifest_mod.read_package_manifest(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _meter_backup_export_package_manifest_mod.METER_BACKUP_EXPORT_PACKAGE_MANIFEST_REBUILD_SCHEMA_VERSION,
+                "message": "meter backup export package manifest rebuild failed",
+                "error": str(exc),
+                "package_manifest": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _meter_backup_export_package_manifest_mod.METER_BACKUP_EXPORT_PACKAGE_MANIFEST_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "package_manifest": manifest,
+    }
+
+
+@router.get("/data-lifecycle/meter-storage/backup-export/approval-template")
+async def get_data_lifecycle_meter_storage_backup_export_approval_template():
+    policy = _policy_mod.load_policy()
+    template = _meter_backup_export_approval_template_mod.read_approval_template(policy=policy)
+    if template is None:
+        return {
+            "schema_version": _meter_backup_export_approval_template_mod.METER_BACKUP_EXPORT_APPROVAL_TEMPLATE_SCHEMA_VERSION,
+            "status": "missing",
+            "mode": _meter_backup_export_approval_template_mod.METER_BACKUP_EXPORT_APPROVAL_TEMPLATE_MODE,
+            "approval_valid": False,
+            "backup_export_allowed": False,
+            "cleanup_allowed": False,
+            "execution_allowed": False,
+        }
+    return template
+
+
+@router.post("/data-lifecycle/meter-storage/backup-export/approval-template/rebuild")
+async def post_data_lifecycle_meter_storage_backup_export_approval_template_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, template = _meter_backup_export_approval_template_mod.rebuild_approval_template(policy=policy)
+    except Exception as exc:
+        latest = _meter_backup_export_approval_template_mod.read_approval_template(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _meter_backup_export_approval_template_mod.METER_BACKUP_EXPORT_APPROVAL_TEMPLATE_REBUILD_SCHEMA_VERSION,
+                "message": "meter backup export approval template rebuild failed",
+                "error": str(exc),
+                "approval_template": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _meter_backup_export_approval_template_mod.METER_BACKUP_EXPORT_APPROVAL_TEMPLATE_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "approval_template": template,
     }
 
 
