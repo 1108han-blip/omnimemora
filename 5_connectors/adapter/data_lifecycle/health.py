@@ -7,7 +7,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from . import state_store, summary_store, retention, traceability, archive_plan
+from . import (
+    state_store,
+    summary_store,
+    retention,
+    traceability,
+    archive_plan,
+    archive_transaction,
+    archive_restore_contract,
+)
 from .policy import DataLifecyclePolicy, load_policy
 
 HEALTH_SCHEMA_VERSION = "dlp-lifecycle-health-v1"
@@ -251,6 +259,52 @@ def build_health_payload(
             "total_candidate_bytes": 0,
             "warnings_count": 0,
         }
+    archive_txn_preview = archive_transaction.read_preview(policy=current_policy)
+    if isinstance(archive_txn_preview, dict):
+        txn_summary = archive_txn_preview.get("summary") or {}
+        archive_txn_view = {
+            "status": "present",
+            "mode": archive_txn_preview.get("mode"),
+            "eligible_input_count": int(txn_summary.get("eligible_input_count", 0) or 0),
+            "preview_item_count": int(txn_summary.get("preview_item_count", 0) or 0),
+            "excluded_blocked_count": int(txn_summary.get("excluded_blocked_count", 0) or 0),
+            "excluded_review_required_count": int(txn_summary.get("excluded_review_required_count", 0) or 0),
+            "blocked_precondition_count": int(txn_summary.get("blocked_precondition_count", 0) or 0),
+            "total_preview_bytes": int(txn_summary.get("total_preview_bytes", 0) or 0),
+            "warnings_count": int(txn_summary.get("warnings_count", 0) or 0),
+        }
+    else:
+        archive_txn_view = {
+            "status": "missing",
+            "mode": None,
+            "eligible_input_count": 0,
+            "preview_item_count": 0,
+            "excluded_blocked_count": 0,
+            "excluded_review_required_count": 0,
+            "blocked_precondition_count": 0,
+            "total_preview_bytes": 0,
+            "warnings_count": 0,
+        }
+    archive_restore_readiness = archive_restore_contract.read_readiness_report(policy=current_policy)
+    if isinstance(archive_restore_readiness, dict):
+        readiness_summary = archive_restore_readiness.get("summary") or {}
+        archive_restore_view = {
+            "status": "present",
+            "mode": archive_restore_readiness.get("mode"),
+            "sample_count": int(readiness_summary.get("sample_count", 0) or 0),
+            "mapped_request_count": int(readiness_summary.get("mapped_request_count", 0) or 0),
+            "unmapped_request_count": int(readiness_summary.get("unmapped_request_count", 0) or 0),
+            "warnings_count": int(readiness_summary.get("warnings_count", 0) or 0),
+        }
+    else:
+        archive_restore_view = {
+            "status": "missing",
+            "mode": None,
+            "sample_count": 0,
+            "mapped_request_count": 0,
+            "unmapped_request_count": 0,
+            "warnings_count": 0,
+        }
     status, recommended_action = _derive_status(
         summary_freshness=summary_freshness,
         last_maintenance=last_maintenance,
@@ -293,4 +347,6 @@ def build_health_payload(
         "retention_manifest": retention_manifest_view,
         "traceability_report": traceability_report_view,
         "archive_plan": archive_plan_view,
+        "archive_transaction_preview": archive_txn_view,
+        "archive_restore_readiness": archive_restore_view,
     }

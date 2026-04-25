@@ -14,6 +14,8 @@ _maintenance_manager_mod = importlib.import_module("5_connectors.adapter.data_li
 _retention_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.retention")
 _traceability_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.traceability")
 _archive_plan_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_plan")
+_archive_txn_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_transaction")
+_archive_restore_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_restore_contract")
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -134,4 +136,68 @@ async def post_data_lifecycle_archive_plan_rebuild():
         "schema_version": _archive_plan_mod.ARCHIVE_CANDIDATE_PLAN_REBUILD_SCHEMA_VERSION,
         "record": record,
         "plan": plan,
+    }
+
+
+@router.get("/data-lifecycle/archive/transaction/preview")
+async def get_data_lifecycle_archive_transaction_preview():
+    policy = _policy_mod.load_policy()
+    preview = _archive_txn_mod.read_preview(policy=policy)
+    if preview is None:
+        return {"schema_version": _archive_txn_mod.ARCHIVE_TRANSACTION_PREVIEW_SCHEMA_VERSION, "status": "missing"}
+    return preview
+
+
+@router.post("/data-lifecycle/archive/transaction/preview/rebuild")
+async def post_data_lifecycle_archive_transaction_preview_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, preview = _archive_txn_mod.rebuild_preview(policy=policy)
+    except Exception as exc:
+        latest_preview = _archive_txn_mod.read_preview(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _archive_txn_mod.ARCHIVE_TRANSACTION_PREVIEW_REBUILD_SCHEMA_VERSION,
+                "message": "archive transaction preview rebuild failed",
+                "error": str(exc),
+                "preview": latest_preview,
+            },
+        ) from exc
+    return {
+        "schema_version": _archive_txn_mod.ARCHIVE_TRANSACTION_PREVIEW_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "preview": preview,
+    }
+
+
+@router.get("/data-lifecycle/archive/restore/readiness")
+async def get_data_lifecycle_archive_restore_readiness():
+    policy = _policy_mod.load_policy()
+    readiness = _archive_restore_mod.read_readiness_report(policy=policy)
+    if readiness is None:
+        return {"schema_version": _archive_restore_mod.ARCHIVE_RESTORE_READINESS_SCHEMA_VERSION, "status": "missing"}
+    return readiness
+
+
+@router.post("/data-lifecycle/archive/restore/readiness/rebuild")
+async def post_data_lifecycle_archive_restore_readiness_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, readiness = _archive_restore_mod.rebuild_readiness_report(policy=policy)
+    except Exception as exc:
+        latest_readiness = _archive_restore_mod.read_readiness_report(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _archive_restore_mod.ARCHIVE_RESTORE_READINESS_REBUILD_SCHEMA_VERSION,
+                "message": "archive restore readiness rebuild failed",
+                "error": str(exc),
+                "readiness": latest_readiness,
+            },
+        ) from exc
+    return {
+        "schema_version": _archive_restore_mod.ARCHIVE_RESTORE_READINESS_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "readiness": readiness,
     }

@@ -21,6 +21,8 @@ def _build_policy(tmp_path, *, ttl_seconds=10.0, stale_max_age_seconds=300.0):
         retention_manifest_file=str(tmp_path / "retention_manifest.json"),
         traceability_report_file=str(tmp_path / "traceability_report.json"),
         archive_plan_file=str(tmp_path / "archive_candidate_plan.json"),
+        archive_transaction_preview_file=str(tmp_path / "archive_transaction_preview.json"),
+        archive_restore_readiness_file=str(tmp_path / "archive_restore_readiness_report.json"),
     )
 
 
@@ -327,6 +329,103 @@ def test_data_lifecycle_archive_plan_rebuild_endpoint_returns_record_and_plan(mo
     assert payload["plan"]["schema_version"] == "dlp-archive-candidate-plan-v1"
 
 
+def test_data_lifecycle_archive_transaction_preview_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._archive_txn_mod, "read_preview", lambda policy=None: None)
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/archive/transaction/preview")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-archive-transaction-preview-v1"
+    assert payload["status"] == "missing"
+
+
+def test_data_lifecycle_archive_transaction_preview_rebuild_endpoint_returns_record_and_preview(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-preview-1",
+        "trigger": "archive_transaction_preview_rebuild",
+        "status": "success",
+        "error": None,
+    }
+    expected_preview = {
+        "schema_version": "dlp-archive-transaction-preview-v1",
+        "preview_id": "preview-1",
+        "mode": "preview_only",
+        "plan_ref": {"status": "present"},
+        "items": [],
+        "summary": {"preview_item_count": 0, "warnings_count": 0},
+        "warnings": [],
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._archive_txn_mod,
+        "rebuild_preview",
+        lambda policy=None: (expected_record, expected_preview),
+    )
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/archive/transaction/preview/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-archive-transaction-preview-rebuild-v1"
+    assert payload["record"]["trigger"] == "archive_transaction_preview_rebuild"
+    assert payload["preview"]["schema_version"] == "dlp-archive-transaction-preview-v1"
+
+
+def test_data_lifecycle_archive_restore_readiness_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._archive_restore_mod, "read_readiness_report", lambda policy=None: None)
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/archive/restore/readiness")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-archive-restore-readiness-v1"
+    assert payload["status"] == "missing"
+
+
+def test_data_lifecycle_archive_restore_readiness_rebuild_endpoint_returns_record_and_report(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-readiness-1",
+        "trigger": "archive_restore_readiness_rebuild",
+        "status": "success",
+        "error": None,
+    }
+    expected_report = {
+        "schema_version": "dlp-archive-restore-readiness-v1",
+        "readiness_id": "readiness-1",
+        "mode": "readiness_only",
+        "request_mappings": [],
+        "summary": {"sample_count": 0, "mapped_request_count": 0, "unmapped_request_count": 0, "warnings_count": 0},
+        "warnings": [],
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._archive_restore_mod,
+        "rebuild_readiness_report",
+        lambda policy=None: (expected_record, expected_report),
+    )
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/archive/restore/readiness/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-archive-restore-readiness-rebuild-v1"
+    assert payload["record"]["trigger"] == "archive_restore_readiness_rebuild"
+    assert payload["readiness"]["schema_version"] == "dlp-archive-restore-readiness-v1"
+
+
+def test_data_lifecycle_api_has_no_archive_execute_endpoint():
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/archive/execute")
+    assert response.status_code == 404
+
+
 def test_dlp_health_exposes_storage_pressure_without_cleanup(tmp_path, monkeypatch):
     policy = _build_policy(tmp_path)
     summary_store.write_summary_atomic(
@@ -415,3 +514,40 @@ def test_dlp_health_exposes_archive_plan_summary(tmp_path):
     assert archive_plan["review_required_count"] == 1
     assert archive_plan["total_candidate_bytes"] == 98765
     assert archive_plan["warnings_count"] == 4
+
+
+def test_dlp_health_exposes_archive_transaction_preview_summary(tmp_path):
+    policy = _build_policy(tmp_path)
+    preview_path = tmp_path / "archive_transaction_preview.json"
+    preview_path.write_text(
+        '{"schema_version":"dlp-archive-transaction-preview-v1","preview_id":"tx1","generated_at":"2026-04-25T00:00:00+00:00","mode":"preview_only","plan_ref":{"status":"present"},"items":[],"summary":{"eligible_input_count":3,"preview_item_count":2,"excluded_blocked_count":4,"excluded_review_required_count":1,"blocked_precondition_count":0,"total_preview_bytes":3456,"warnings_count":2},"warnings":[]}',
+        encoding="utf-8",
+    )
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    txn = payload.get("archive_transaction_preview") or {}
+    assert txn["status"] == "present"
+    assert txn["mode"] == "preview_only"
+    assert txn["eligible_input_count"] == 3
+    assert txn["preview_item_count"] == 2
+    assert txn["excluded_blocked_count"] == 4
+    assert txn["excluded_review_required_count"] == 1
+    assert txn["blocked_precondition_count"] == 0
+    assert txn["total_preview_bytes"] == 3456
+    assert txn["warnings_count"] == 2
+
+
+def test_dlp_health_exposes_archive_restore_readiness_summary(tmp_path):
+    policy = _build_policy(tmp_path)
+    readiness_path = tmp_path / "archive_restore_readiness_report.json"
+    readiness_path.write_text(
+        '{"schema_version":"dlp-archive-restore-readiness-v1","readiness_id":"r1","generated_at":"2026-04-25T00:00:00+00:00","mode":"readiness_only","transaction_preview_ref":{"status":"present"},"traceability_ref":{"status":"present"},"request_mappings":[],"summary":{"sample_count":6,"mapped_request_count":5,"unmapped_request_count":1,"warnings_count":1},"warnings":[]}',
+        encoding="utf-8",
+    )
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    readiness = payload.get("archive_restore_readiness") or {}
+    assert readiness["status"] == "present"
+    assert readiness["mode"] == "readiness_only"
+    assert readiness["sample_count"] == 6
+    assert readiness["mapped_request_count"] == 5
+    assert readiness["unmapped_request_count"] == 1
+    assert readiness["warnings_count"] == 1
