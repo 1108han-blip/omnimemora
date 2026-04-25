@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from . import state_store, summary_store
+from . import state_store, summary_store, retention
 from .policy import DataLifecyclePolicy, load_policy
 
 HEALTH_SCHEMA_VERSION = "dlp-lifecycle-health-v1"
@@ -189,6 +189,24 @@ def build_health_payload(
         int(storage_inventory.get("total_bytes", 0)),
         recent_maintenance,
     )
+    retention_manifest = retention.read_manifest(policy=current_policy)
+    if isinstance(retention_manifest, dict):
+        retention_summary = retention_manifest.get("summary") or {}
+        retention_manifest_view = {
+            "status": "present",
+            "generated_at": retention_manifest.get("generated_at"),
+            "artifact_count": int(retention_summary.get("artifact_count", 0) or 0),
+            "total_bytes": int(retention_summary.get("total_bytes", 0) or 0),
+            "warnings_count": int(retention_summary.get("warnings_count", 0) or 0),
+        }
+    else:
+        retention_manifest_view = {
+            "status": "missing",
+            "generated_at": None,
+            "artifact_count": 0,
+            "total_bytes": 0,
+            "warnings_count": 0,
+        }
     status, recommended_action = _derive_status(
         summary_freshness=summary_freshness,
         last_maintenance=last_maintenance,
@@ -228,4 +246,5 @@ def build_health_payload(
                 default=0,
             ),
         },
+        "retention_manifest": retention_manifest_view,
     }

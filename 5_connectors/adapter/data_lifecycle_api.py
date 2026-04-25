@@ -11,6 +11,7 @@ router = APIRouter(tags=["data-lifecycle"])
 _health = importlib.import_module("5_connectors.adapter.data_lifecycle.health")
 _policy_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.policy")
 _maintenance_manager_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.maintenance_manager")
+_retention_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.retention")
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -36,3 +37,35 @@ async def post_data_lifecycle_manual_refresh():
             "record": record,
         },
     )
+
+
+@router.get("/data-lifecycle/retention/manifest")
+async def get_data_lifecycle_retention_manifest():
+    policy = _policy_mod.load_policy()
+    manifest = _retention_mod.read_manifest(policy=policy)
+    if manifest is None:
+        return {"schema_version": _retention_mod.RETENTION_MANIFEST_SCHEMA_VERSION, "status": "missing"}
+    return manifest
+
+
+@router.post("/data-lifecycle/retention/manifest/rebuild")
+async def post_data_lifecycle_retention_manifest_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, manifest = _retention_mod.rebuild_manifest(policy=policy)
+    except Exception as exc:
+        latest_manifest = _retention_mod.read_manifest(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _retention_mod.RETENTION_REBUILD_SCHEMA_VERSION,
+                "message": "retention manifest rebuild failed",
+                "error": str(exc),
+                "manifest": latest_manifest,
+            },
+        ) from exc
+    return {
+        "schema_version": _retention_mod.RETENTION_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "manifest": manifest,
+    }
