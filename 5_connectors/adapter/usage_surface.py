@@ -1,9 +1,10 @@
 from datetime import datetime
 from typing import Any, Callable, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Response
 
 from .access import get_tenant_registry_entry
+from .application import request_meter_read_resolver as _request_meter_resolver
 
 router = APIRouter()
 
@@ -72,8 +73,13 @@ async def get_token_savings_trend(tenant: str, agent: Optional[str] = None, days
 
 
 @router.get("/requests/{request_id}/meter")
-async def get_request_meter(request_id: str):
-    meter = _get_meter_fn(request_id)
-    if not meter:
+async def get_request_meter(request_id: str, response: Response):
+    resolved = _request_meter_resolver.resolve_request_meter(
+        request_id,
+        legacy_get_meter_fn=_get_meter_fn,
+    )
+    response.headers["x-omnimemora-meter-read-mode"] = resolved.mode
+    response.headers["x-omnimemora-meter-read-source"] = resolved.source
+    if not resolved.meter:
         raise HTTPException(status_code=404, detail=f"Meter not found for request_id={request_id}")
-    return meter.to_dict()
+    return resolved.meter.to_dict()
