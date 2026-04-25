@@ -9,7 +9,7 @@ effective_date: 2026-04-25
 depends_on:
   - ADR-RES-012
 supersedes: []
-last_verified_commit: ""
+last_verified_commit: "2a25512"
 ---
 
 # ADR-RES-013: Legacy Meter Backup Export Approval Template and Package Manifest Preview

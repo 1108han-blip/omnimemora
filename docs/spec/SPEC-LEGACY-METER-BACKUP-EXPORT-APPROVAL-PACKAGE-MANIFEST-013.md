@@ -9,7 +9,7 @@ effective_date: 2026-04-25
 depends_on:
   - ADR-RES-013
 supersedes: []
-last_verified_commit: ""
+last_verified_commit: "2a25512"
 ---
 
 # SPEC-LEGACY-METER-BACKUP-EXPORT-APPROVAL-PACKAGE-MANIFEST-013
