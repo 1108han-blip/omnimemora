@@ -105,6 +105,7 @@
 | **DLP Batch 62 - Running Baseline Revalidation** | **已收口 ✓（18011 running diagnostics verified; source_move_executed=false; non_active_copy_move_executed=true; readthrough.status=passed; lineage_checksum_match=true）** | — |
 | **DLP Batch 63 - Active Docs Sync and Next-Line Freeze** | **已收口 ✓（README updated; next-line placeholder: archive-at-scale readiness design only）** | — |
 | **RES-001 Raw Evidence Segmentation Mainline** | **已收口 ✓（observe-only running validation passed; legacy source retained; archive-at-scale execution still not started）** | [OmniMemora_RES001_Batch4_5_Running_Validation_Closeout_2026-04-25.md](./OmniMemora_RES001_Batch4_5_Running_Validation_Closeout_2026-04-25.md) |
+| **RES-002 Meter Storage Governance Mainline** | **进行中（meter storage v2 mirror introduced; legacy authoritative retained; read-path switch deferred until parity proven）** | [OmniMemora_RES002_Batch1_Meter_Source_Map_Audit_2026-04-25.md](./OmniMemora_RES002_Batch1_Meter_Source_Map_Audit_2026-04-25.md) |
 | Controlled Beta Next Step Engineering Plan | **进行中（historical controlled-beta execution line preserved; active architecture mainline has moved to Data Lifecycle Plane）** | [OmniMemora_Controlled_Beta_Next_Step_Engineering_Plan_2026-04-23.md](./OmniMemora_Controlled_Beta_Next_Step_Engineering_Plan_2026-04-23.md) |
 
 > Cloud Reset `Batch 6.1` is classified as **optional cleanup only** (legacy project physical retire), not a mainline closeout prerequisite.
