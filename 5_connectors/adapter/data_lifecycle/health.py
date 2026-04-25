@@ -19,6 +19,7 @@ from . import (
     archive_pilot,
     archive_readthrough,
     archive_fallback_contract,
+    archive_quarantine_readiness,
 )
 from .policy import DataLifecyclePolicy, load_policy
 
@@ -400,6 +401,32 @@ def build_health_payload(
             "request_evidence_fallback_status": None,
             "validated_at": None,
         }
+    quarantine_readiness = archive_quarantine_readiness.read_plan(policy=current_policy)
+    if isinstance(quarantine_readiness, dict):
+        quarantine_summary = quarantine_readiness.get("summary") or {}
+        archive_quarantine_view = {
+            "status": str(quarantine_readiness.get("status") or "present"),
+            "mode": quarantine_readiness.get("mode"),
+            "candidate_present": bool(quarantine_summary.get("candidate_present", False)),
+            "blocking_count": int(quarantine_summary.get("blocking_count", 0) or 0),
+            "source_move_executed": bool(quarantine_readiness.get("source_move_executed", False)),
+            "source_retained": bool(quarantine_readiness.get("source_retained", False)),
+            "production_read_path_unchanged": bool(
+                quarantine_readiness.get("production_read_path_unchanged", True)
+            ),
+            "planned_action": (quarantine_readiness.get("transaction_preview") or {}).get("planned_action"),
+        }
+    else:
+        archive_quarantine_view = {
+            "status": "missing",
+            "mode": None,
+            "candidate_present": False,
+            "blocking_count": 0,
+            "source_move_executed": False,
+            "source_retained": False,
+            "production_read_path_unchanged": True,
+            "planned_action": None,
+        }
     status, recommended_action = _derive_status(
         summary_freshness=summary_freshness,
         last_maintenance=last_maintenance,
@@ -448,4 +475,5 @@ def build_health_payload(
         "archive_pilot": archive_pilot_view,
         "archive_readthrough": archive_readthrough_view,
         "archive_fallback_simulation": archive_fallback_view,
+        "archive_quarantine_readiness": archive_quarantine_view,
     }

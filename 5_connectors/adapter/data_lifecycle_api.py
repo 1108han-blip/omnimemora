@@ -21,6 +21,7 @@ _archive_approval_mod = importlib.import_module("5_connectors.adapter.data_lifec
 _archive_pilot_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_pilot")
 _archive_readthrough_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_readthrough")
 _archive_fallback_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_fallback_contract")
+_archive_quarantine_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_quarantine_readiness")
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -348,4 +349,39 @@ async def post_data_lifecycle_archive_fallback_simulation_rebuild():
         "schema_version": _archive_fallback_mod.ARCHIVE_FALLBACK_SIMULATION_REBUILD_SCHEMA_VERSION,
         "record": record,
         "report": report,
+    }
+
+
+@router.get("/data-lifecycle/archive/quarantine/readiness")
+async def get_data_lifecycle_archive_quarantine_readiness():
+    policy = _policy_mod.load_policy()
+    plan = _archive_quarantine_mod.read_plan(policy=policy)
+    if plan is None:
+        return {
+            "schema_version": _archive_quarantine_mod.ARCHIVE_QUARANTINE_READINESS_SCHEMA_VERSION,
+            "status": "missing",
+        }
+    return plan
+
+
+@router.post("/data-lifecycle/archive/quarantine/readiness/rebuild")
+async def post_data_lifecycle_archive_quarantine_readiness_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, plan = _archive_quarantine_mod.rebuild_plan(policy=policy)
+    except Exception as exc:
+        latest = _archive_quarantine_mod.read_plan(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _archive_quarantine_mod.ARCHIVE_QUARANTINE_READINESS_REBUILD_SCHEMA_VERSION,
+                "message": "archive quarantine readiness rebuild failed",
+                "error": str(exc),
+                "plan": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _archive_quarantine_mod.ARCHIVE_QUARANTINE_READINESS_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "plan": plan,
     }
