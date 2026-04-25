@@ -679,6 +679,15 @@ def build_health_payload(
                 "estimated_reclaim_bytes": 0,
                 "blocking_reasons_count": 0,
             },
+            "backup_export": {
+                "status": "missing",
+                "mode": "backup_export_readiness_only",
+                "backup_export_allowed": False,
+                "cleanup_allowed": False,
+                "candidate_file_count": 0,
+                "estimated_export_bytes": 0,
+                "blocking_reasons_count": 0,
+            },
         }
 
     return {

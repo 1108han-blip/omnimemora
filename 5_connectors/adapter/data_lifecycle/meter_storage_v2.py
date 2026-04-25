@@ -149,6 +149,42 @@ def get_status_payload() -> dict[str, Any]:
             "estimated_reclaim_bytes": 0,
             "blocking_reasons_count": 0,
         }
+    backup_export_view: dict[str, Any]
+    try:
+        backup_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_backup_export_readiness")
+        readiness = backup_mod.read_readiness()
+        if isinstance(readiness, dict):
+            summary = readiness.get("summary") or {}
+            blocking_reasons = readiness.get("blocking_reasons") or []
+            backup_export_view = {
+                "status": str(readiness.get("status") or "blocked"),
+                "mode": str(readiness.get("mode") or backup_mod.METER_BACKUP_EXPORT_READINESS_MODE),
+                "backup_export_allowed": bool(readiness.get("backup_export_allowed")),
+                "cleanup_allowed": bool(readiness.get("cleanup_allowed")),
+                "candidate_file_count": int(summary.get("candidate_file_count", 0) or 0),
+                "estimated_export_bytes": int(readiness.get("estimated_export_bytes", 0) or 0),
+                "blocking_reasons_count": int(len(blocking_reasons)),
+            }
+        else:
+            backup_export_view = {
+                "status": "missing",
+                "mode": "backup_export_readiness_only",
+                "backup_export_allowed": False,
+                "cleanup_allowed": False,
+                "candidate_file_count": 0,
+                "estimated_export_bytes": 0,
+                "blocking_reasons_count": 0,
+            }
+    except Exception:
+        backup_export_view = {
+            "status": "missing",
+            "mode": "backup_export_readiness_only",
+            "backup_export_allowed": False,
+            "cleanup_allowed": False,
+            "candidate_file_count": 0,
+            "estimated_export_bytes": 0,
+            "blocking_reasons_count": 0,
+        }
 
     return {
         "schema_version": METER_STORAGE_STATUS_SCHEMA_VERSION,
@@ -182,6 +218,7 @@ def get_status_payload() -> dict[str, Any]:
             "latest": latest_error,
         },
         "cleanup": cleanup_view,
+        "backup_export": backup_export_view,
     }
 
 

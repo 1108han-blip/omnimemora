@@ -33,6 +33,9 @@ _archive_non_active_quarantine_exec_mod = importlib.import_module(
 _raw_evidence_segments_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.raw_evidence_segments")
 _meter_storage_v2_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_storage_v2")
 _meter_cleanup_preview_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_cleanup_preview")
+_meter_backup_export_readiness_mod = importlib.import_module(
+    "5_connectors.adapter.data_lifecycle.meter_backup_export_readiness"
+)
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -144,6 +147,44 @@ async def post_data_lifecycle_meter_storage_cleanup_preview_rebuild():
         "schema_version": _meter_cleanup_preview_mod.METER_CLEANUP_PREVIEW_REBUILD_SCHEMA_VERSION,
         "record": record,
         "preview": preview,
+    }
+
+
+@router.get("/data-lifecycle/meter-storage/backup-export/readiness")
+async def get_data_lifecycle_meter_storage_backup_export_readiness():
+    policy = _policy_mod.load_policy()
+    readiness = _meter_backup_export_readiness_mod.read_readiness(policy=policy)
+    if readiness is None:
+        return {
+            "schema_version": _meter_backup_export_readiness_mod.METER_BACKUP_EXPORT_READINESS_SCHEMA_VERSION,
+            "status": "missing",
+            "mode": _meter_backup_export_readiness_mod.METER_BACKUP_EXPORT_READINESS_MODE,
+            "backup_export_allowed": False,
+            "cleanup_allowed": False,
+        }
+    return readiness
+
+
+@router.post("/data-lifecycle/meter-storage/backup-export/readiness/rebuild")
+async def post_data_lifecycle_meter_storage_backup_export_readiness_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, readiness = _meter_backup_export_readiness_mod.rebuild_readiness(policy=policy)
+    except Exception as exc:
+        latest = _meter_backup_export_readiness_mod.read_readiness(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _meter_backup_export_readiness_mod.METER_BACKUP_EXPORT_READINESS_REBUILD_SCHEMA_VERSION,
+                "message": "meter backup export readiness rebuild failed",
+                "error": str(exc),
+                "readiness": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _meter_backup_export_readiness_mod.METER_BACKUP_EXPORT_READINESS_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "readiness": readiness,
     }
 
 
