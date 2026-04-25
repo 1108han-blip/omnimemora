@@ -19,6 +19,8 @@ def _build_policy(tmp_path):
         retention_manifest_file=str(tmp_path / "retention_manifest.json"),
         traceability_report_file=str(tmp_path / "traceability_report.json"),
         archive_plan_file=str(tmp_path / "archive_candidate_plan.json"),
+        archive_transaction_preview_file=str(tmp_path / "archive_transaction_preview.json"),
+        archive_restore_readiness_file=str(tmp_path / "archive_restore_readiness_report.json"),
     )
 
 
