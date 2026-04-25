@@ -158,15 +158,27 @@ def get_status_payload() -> dict[str, Any]:
         if isinstance(readiness, dict):
             summary = readiness.get("summary") or {}
             blocking_reasons = readiness.get("blocking_reasons") or []
+            plan_summary = (plan or {}).get("summary") or {}
+            plan_blocking = (plan or {}).get("blocking_reasons") or []
             plan_dest_status = ((plan or {}).get("destination_status") or {}).get("status")
+            candidate_count = int(
+                plan_summary.get("candidate_file_count", summary.get("candidate_file_count", 0)) or 0
+            )
+            estimated_export_bytes = int(
+                plan_summary.get("estimated_export_bytes", readiness.get("estimated_export_bytes", 0)) or 0
+            )
+            blocking_count = int(
+                plan_summary.get("blocking_reasons_count", len(plan_blocking) if isinstance(plan_blocking, list) else 0)
+                or len(blocking_reasons)
+            )
             backup_export_view = {
                 "status": str(readiness.get("status") or "blocked"),
                 "mode": str(readiness.get("mode") or backup_mod.METER_BACKUP_EXPORT_READINESS_MODE),
                 "backup_export_allowed": bool(readiness.get("backup_export_allowed")),
                 "cleanup_allowed": bool(readiness.get("cleanup_allowed")),
-                "candidate_file_count": int(summary.get("candidate_file_count", 0) or 0),
-                "estimated_export_bytes": int(readiness.get("estimated_export_bytes", 0) or 0),
-                "blocking_reasons_count": int(len(blocking_reasons)),
+                "candidate_file_count": candidate_count,
+                "estimated_export_bytes": estimated_export_bytes,
+                "blocking_reasons_count": blocking_count,
                 "plan_status": str((plan or {}).get("status") or "missing"),
                 "dry_run_mode": str((plan or {}).get("mode") or "dry_run_preview_only"),
                 "destination_status": str(plan_dest_status or "unknown"),
