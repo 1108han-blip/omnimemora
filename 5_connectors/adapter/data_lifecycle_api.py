@@ -13,6 +13,7 @@ _policy_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.polic
 _maintenance_manager_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.maintenance_manager")
 _retention_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.retention")
 _traceability_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.traceability")
+_archive_plan_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_plan")
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -101,4 +102,36 @@ async def post_data_lifecycle_traceability_report_rebuild():
         "schema_version": _traceability_mod.TRACEABILITY_REBUILD_SCHEMA_VERSION,
         "record": record,
         "report": report,
+    }
+
+
+@router.get("/data-lifecycle/archive/plan")
+async def get_data_lifecycle_archive_plan():
+    policy = _policy_mod.load_policy()
+    plan = _archive_plan_mod.read_plan(policy=policy)
+    if plan is None:
+        return {"schema_version": _archive_plan_mod.ARCHIVE_CANDIDATE_PLAN_SCHEMA_VERSION, "status": "missing"}
+    return plan
+
+
+@router.post("/data-lifecycle/archive/plan/rebuild")
+async def post_data_lifecycle_archive_plan_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, plan = _archive_plan_mod.rebuild_plan(policy=policy)
+    except Exception as exc:
+        latest_plan = _archive_plan_mod.read_plan(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _archive_plan_mod.ARCHIVE_CANDIDATE_PLAN_REBUILD_SCHEMA_VERSION,
+                "message": "archive candidate plan rebuild failed",
+                "error": str(exc),
+                "plan": latest_plan,
+            },
+        ) from exc
+    return {
+        "schema_version": _archive_plan_mod.ARCHIVE_CANDIDATE_PLAN_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "plan": plan,
     }

@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from . import state_store, summary_store, retention, traceability
+from . import state_store, summary_store, retention, traceability, archive_plan
 from .policy import DataLifecyclePolicy, load_policy
 
 HEALTH_SCHEMA_VERSION = "dlp-lifecycle-health-v1"
@@ -229,6 +229,28 @@ def build_health_payload(
             "unexplained_partial_count": 0,
             "current_epoch_pass_rate": None,
         }
+    archive_candidate_plan = archive_plan.read_plan(policy=current_policy)
+    if isinstance(archive_candidate_plan, dict):
+        archive_summary = archive_candidate_plan.get("summary") or {}
+        archive_plan_view = {
+            "status": "present",
+            "mode": archive_candidate_plan.get("mode"),
+            "eligible_count": int(archive_summary.get("eligible_count", 0) or 0),
+            "blocked_count": int(archive_summary.get("blocked_count", 0) or 0),
+            "review_required_count": int(archive_summary.get("review_required_count", 0) or 0),
+            "total_candidate_bytes": int(archive_summary.get("total_candidate_bytes", 0) or 0),
+            "warnings_count": int(archive_summary.get("warnings_count", 0) or 0),
+        }
+    else:
+        archive_plan_view = {
+            "status": "missing",
+            "mode": None,
+            "eligible_count": 0,
+            "blocked_count": 0,
+            "review_required_count": 0,
+            "total_candidate_bytes": 0,
+            "warnings_count": 0,
+        }
     status, recommended_action = _derive_status(
         summary_freshness=summary_freshness,
         last_maintenance=last_maintenance,
@@ -270,4 +292,5 @@ def build_health_payload(
         },
         "retention_manifest": retention_manifest_view,
         "traceability_report": traceability_report_view,
+        "archive_plan": archive_plan_view,
     }

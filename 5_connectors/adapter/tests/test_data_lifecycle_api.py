@@ -20,6 +20,7 @@ def _build_policy(tmp_path, *, ttl_seconds=10.0, stale_max_age_seconds=300.0):
         maintenance_state_file=str(tmp_path / "maintenance_state.jsonl"),
         retention_manifest_file=str(tmp_path / "retention_manifest.json"),
         traceability_report_file=str(tmp_path / "traceability_report.json"),
+        archive_plan_file=str(tmp_path / "archive_candidate_plan.json"),
     )
 
 
@@ -272,6 +273,60 @@ def test_data_lifecycle_traceability_report_rebuild_endpoint_returns_record_and_
     assert payload["report"]["schema_version"] == "dlp-traceability-report-v1"
 
 
+def test_data_lifecycle_archive_plan_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._archive_plan_mod, "read_plan", lambda policy=None: None)
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/archive/plan")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-archive-candidate-plan-v1"
+    assert payload["status"] == "missing"
+
+
+def test_data_lifecycle_archive_plan_rebuild_endpoint_returns_record_and_plan(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+
+    expected_record = {
+        "cycle_id": "cycle-archive-1",
+        "trigger": "archive_candidate_plan_rebuild",
+        "status": "success",
+        "error": None,
+    }
+    expected_plan = {
+        "schema_version": "dlp-archive-candidate-plan-v1",
+        "plan_id": "plan-1",
+        "mode": "dry_run_only",
+        "manifest_ref": {"status": "present"},
+        "traceability_ref": {"status": "present"},
+        "candidates": [],
+        "summary": {
+            "eligible_count": 0,
+            "blocked_count": 0,
+            "review_required_count": 0,
+            "total_candidate_bytes": 0,
+            "warnings_count": 0,
+        },
+        "warnings": [],
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._archive_plan_mod,
+        "rebuild_plan",
+        lambda policy=None: (expected_record, expected_plan),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/archive/plan/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-archive-candidate-plan-rebuild-v1"
+    assert payload["record"]["trigger"] == "archive_candidate_plan_rebuild"
+    assert payload["plan"]["schema_version"] == "dlp-archive-candidate-plan-v1"
+
+
 def test_dlp_health_exposes_storage_pressure_without_cleanup(tmp_path, monkeypatch):
     policy = _build_policy(tmp_path)
     summary_store.write_summary_atomic(
@@ -341,3 +396,22 @@ def test_dlp_health_exposes_traceability_report_summary(tmp_path):
     assert traceability_report["warnings_count"] == 3
     assert traceability_report["unexplained_partial_count"] == 0
     assert traceability_report["current_epoch_pass_rate"] is None
+
+
+def test_dlp_health_exposes_archive_plan_summary(tmp_path):
+    policy = _build_policy(tmp_path)
+    archive_path = tmp_path / "archive_candidate_plan.json"
+    archive_path.write_text(
+        '{"schema_version":"dlp-archive-candidate-plan-v1","plan_id":"p1","generated_at":"2026-04-25T00:00:00+00:00","mode":"dry_run_only","manifest_ref":{"status":"present"},"traceability_ref":{"status":"present"},"candidates":[],"summary":{"eligible_count":3,"blocked_count":2,"review_required_count":1,"total_candidate_bytes":98765,"warnings_count":4},"warnings":[]}',
+        encoding="utf-8",
+    )
+
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    archive_plan = payload.get("archive_plan") or {}
+    assert archive_plan["status"] == "present"
+    assert archive_plan["mode"] == "dry_run_only"
+    assert archive_plan["eligible_count"] == 3
+    assert archive_plan["blocked_count"] == 2
+    assert archive_plan["review_required_count"] == 1
+    assert archive_plan["total_candidate_bytes"] == 98765
+    assert archive_plan["warnings_count"] == 4
