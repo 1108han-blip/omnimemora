@@ -203,6 +203,16 @@ def build_readthrough_report(
         "read_path_unchanged": read_path_unchanged,
         "request_id_cross_check": request_id_cross_check,
         "request_evidence_shadow": request_evidence_shadow,
+        "summary": {
+            "status": status,
+            "request_id_cross_check_status": request_evidence_shadow.get("status"),
+            "source_retained": source_retained,
+            "archive_copy_readable": archive_copy_readable,
+            "checksum_match": checksum_match,
+            "read_path_unchanged": read_path_unchanged,
+            "validated_at": now.isoformat(),
+            "warnings_count": len(warnings),
+        },
         "warnings": warnings,
     }
 

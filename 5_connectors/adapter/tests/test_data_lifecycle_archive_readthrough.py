@@ -87,6 +87,9 @@ def test_readthrough_pass_when_archive_readable_and_checksum_match(tmp_path):
     assert report["archive_copy_readable"] is True
     assert report["checksum_match"] is True
     assert (report.get("request_evidence_shadow") or {}).get("read_path_unchanged") is True
+    summary = report.get("summary") or {}
+    assert summary["status"] == "passed"
+    assert summary["request_id_cross_check_status"] in {"mapped", "not_applicable"}
 
 
 def test_readthrough_missing_pilot_record_returns_missing_status(tmp_path):
@@ -153,6 +156,7 @@ def test_readthrough_request_cross_check_mapped(tmp_path):
     shadow = report.get("request_evidence_shadow") or {}
     assert shadow["status"] == "mapped"
     assert shadow["request_id"] == "req-shadow-1"
+    assert (report.get("summary") or {}).get("request_id_cross_check_status") == "mapped"
 
 
 def test_readthrough_request_cross_check_not_applicable_when_no_mapping(tmp_path):
@@ -169,3 +173,4 @@ def test_readthrough_request_cross_check_not_applicable_when_no_mapping(tmp_path
     assert cross["status"] == "not_applicable"
     shadow = report.get("request_evidence_shadow") or {}
     assert shadow["status"] == "not_applicable"
+    assert (report.get("summary") or {}).get("request_id_cross_check_status") == "not_applicable"
