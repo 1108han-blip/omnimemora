@@ -121,6 +121,7 @@ def test_dlp_health_status_uninitialized(tmp_path):
     policy = _build_policy(tmp_path)
     payload = health_mod.build_health_payload(policy=policy, now_ts=100.0)
     assert payload["status"] == "uninitialized"
+    assert payload["raw_evidence_segments"]["status"] == "missing"
 
 
 def test_dlp_health_status_degraded_for_invalid_summary(tmp_path):
@@ -242,6 +243,52 @@ def test_data_lifecycle_retention_manifest_rebuild_endpoint_returns_record_and_m
     assert payload["schema_version"] == "dlp-retention-manifest-rebuild-v1"
     assert payload["record"]["trigger"] == "retention_manifest_rebuild"
     assert payload["manifest"]["schema_version"] == "dlp-retention-manifest-v1"
+
+
+def test_data_lifecycle_raw_evidence_segments_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._raw_evidence_segments_mod, "read_manifest", lambda policy=None: None)
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/raw-evidence/segments")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-raw-evidence-segments-manifest-v1"
+    assert payload["status"] == "missing"
+
+
+def test_data_lifecycle_raw_evidence_segments_rebuild_endpoint_returns_record_and_manifest(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+
+    expected_record = {
+        "cycle_id": "cycle-segments-1",
+        "trigger": "raw_evidence_segments_manifest_rebuild",
+        "status": "success",
+        "error": None,
+    }
+    expected_manifest = {
+        "schema_version": "dlp-raw-evidence-segments-manifest-v1",
+        "manifest_id": "raw-segments-1",
+        "mode": "dual_write_observe_only",
+        "segments": [],
+        "summary": {"total_segments": 0, "active_segments": 0, "sealed_segments": 0, "total_bytes": 0, "warnings_count": 0},
+        "warnings": [],
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._raw_evidence_segments_mod,
+        "rebuild_manifest",
+        lambda policy=None: (expected_record, expected_manifest),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/raw-evidence/segments/manifest/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-raw-evidence-segments-rebuild-v1"
+    assert payload["record"]["trigger"] == "raw_evidence_segments_manifest_rebuild"
+    assert payload["manifest"]["schema_version"] == "dlp-raw-evidence-segments-manifest-v1"
 
 
 def test_data_lifecycle_traceability_report_endpoint_returns_missing_when_absent(monkeypatch):

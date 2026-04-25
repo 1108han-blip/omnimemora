@@ -26,6 +26,7 @@ from . import (
     archive_non_active_quarantine_readiness,
     archive_non_active_execution_gate,
     archive_non_active_quarantine,
+    raw_evidence_segments,
 )
 from .policy import DataLifecyclePolicy, load_policy
 
@@ -223,6 +224,30 @@ def build_health_payload(
             "status": "missing",
             "generated_at": None,
             "artifact_count": 0,
+            "total_bytes": 0,
+            "warnings_count": 0,
+        }
+    raw_segments_manifest = raw_evidence_segments.read_manifest(policy=current_policy)
+    if isinstance(raw_segments_manifest, dict):
+        raw_summary = raw_segments_manifest.get("summary") or {}
+        raw_evidence_segments_view = {
+            "status": "present",
+            "mode": raw_segments_manifest.get("mode"),
+            "generated_at": raw_segments_manifest.get("generated_at"),
+            "total_segments": int(raw_summary.get("total_segments", 0) or 0),
+            "active_segments": int(raw_summary.get("active_segments", 0) or 0),
+            "sealed_segments": int(raw_summary.get("sealed_segments", 0) or 0),
+            "total_bytes": int(raw_summary.get("total_bytes", 0) or 0),
+            "warnings_count": int(raw_summary.get("warnings_count", 0) or 0),
+        }
+    else:
+        raw_evidence_segments_view = {
+            "status": "missing",
+            "mode": None,
+            "generated_at": None,
+            "total_segments": 0,
+            "active_segments": 0,
+            "sealed_segments": 0,
             "total_bytes": 0,
             "warnings_count": 0,
         }
@@ -653,6 +678,7 @@ def build_health_payload(
                 default=0,
             ),
         },
+        "raw_evidence_segments": raw_evidence_segments_view,
         "retention_manifest": retention_manifest_view,
         "traceability_report": traceability_report_view,
         "archive_plan": archive_plan_view,

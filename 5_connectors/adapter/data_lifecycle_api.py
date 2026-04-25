@@ -30,6 +30,7 @@ _archive_non_active_gate_mod = importlib.import_module("5_connectors.adapter.dat
 _archive_non_active_quarantine_exec_mod = importlib.import_module(
     "5_connectors.adapter.data_lifecycle.archive_non_active_quarantine"
 )
+_raw_evidence_segments_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.raw_evidence_segments")
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -84,6 +85,41 @@ async def post_data_lifecycle_retention_manifest_rebuild():
         ) from exc
     return {
         "schema_version": _retention_mod.RETENTION_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "manifest": manifest,
+    }
+
+
+@router.get("/data-lifecycle/raw-evidence/segments")
+async def get_data_lifecycle_raw_evidence_segments():
+    policy = _policy_mod.load_policy()
+    manifest = _raw_evidence_segments_mod.read_manifest(policy=policy)
+    if manifest is None:
+        return {
+            "schema_version": _raw_evidence_segments_mod.RAW_EVIDENCE_SEGMENTS_MANIFEST_SCHEMA_VERSION,
+            "status": "missing",
+        }
+    return manifest
+
+
+@router.post("/data-lifecycle/raw-evidence/segments/manifest/rebuild")
+async def post_data_lifecycle_raw_evidence_segments_manifest_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, manifest = _raw_evidence_segments_mod.rebuild_manifest(policy=policy)
+    except Exception as exc:
+        latest_manifest = _raw_evidence_segments_mod.read_manifest(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _raw_evidence_segments_mod.RAW_EVIDENCE_SEGMENTS_REBUILD_SCHEMA_VERSION,
+                "message": "raw evidence segments manifest rebuild failed",
+                "error": str(exc),
+                "manifest": latest_manifest,
+            },
+        ) from exc
+    return {
+        "schema_version": _raw_evidence_segments_mod.RAW_EVIDENCE_SEGMENTS_REBUILD_SCHEMA_VERSION,
         "record": record,
         "manifest": manifest,
     }
