@@ -171,6 +171,10 @@ def get_status_payload() -> dict[str, Any]:
             "5_connectors.adapter.data_lifecycle.meter_backup_export_operator_approval"
         )
         operator_approval = operator_approval_mod.read_operator_approval()
+        execution_proposal_mod = importlib.import_module(
+            "5_connectors.adapter.data_lifecycle.meter_backup_export_execution_proposal"
+        )
+        execution_proposal = execution_proposal_mod.read_execution_proposal()
         if isinstance(readiness, dict):
             summary = readiness.get("summary") or {}
             blocking_reasons = readiness.get("blocking_reasons") or []
@@ -236,6 +240,12 @@ def get_status_payload() -> dict[str, Any]:
                 "execution_gate_status": str((execution_gate or {}).get("status") or "missing"),
                 "execution_gate_allowed": bool((execution_gate or {}).get("allowed") is True),
                 "approval_status": approval_status,
+                "execution_proposal_status": str((execution_proposal or {}).get("proposal_status") or "missing"),
+                "operator_decision_required": bool(
+                    (execution_proposal or {}).get("operator_decision_required")
+                    if isinstance(execution_proposal, dict)
+                    else True
+                ),
                 "backup_export_execution_started": False,
                 "cleanup_execution_started": False,
             }
@@ -267,6 +277,8 @@ def get_status_payload() -> dict[str, Any]:
                 "execution_gate_status": "missing",
                 "execution_gate_allowed": False,
                 "approval_status": "missing",
+                "execution_proposal_status": "missing",
+                "operator_decision_required": True,
                 "backup_export_execution_started": False,
                 "cleanup_execution_started": False,
             }
@@ -298,6 +310,8 @@ def get_status_payload() -> dict[str, Any]:
             "execution_gate_status": "missing",
             "execution_gate_allowed": False,
             "approval_status": "missing",
+            "execution_proposal_status": "missing",
+            "operator_decision_required": True,
             "backup_export_execution_started": False,
             "cleanup_execution_started": False,
         }

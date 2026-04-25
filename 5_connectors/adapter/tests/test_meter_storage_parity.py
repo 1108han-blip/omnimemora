@@ -134,5 +134,7 @@ def test_rebuild_and_status_payload_keep_legacy_authoritative(tmp_path, monkeypa
     assert status["backup_export"]["execution_gate_status"] == "missing"
     assert status["backup_export"]["execution_gate_allowed"] is False
     assert status["backup_export"]["approval_status"] == "missing"
+    assert status["backup_export"]["execution_proposal_status"] == "missing"
+    assert status["backup_export"]["operator_decision_required"] is True
     assert status["backup_export"]["backup_export_execution_started"] is False
     assert status["backup_export"]["cleanup_execution_started"] is False

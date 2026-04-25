@@ -51,6 +51,9 @@ _meter_backup_export_execution_gate_mod = importlib.import_module(
 _meter_backup_export_operator_approval_mod = importlib.import_module(
     "5_connectors.adapter.data_lifecycle.meter_backup_export_operator_approval"
 )
+_meter_backup_export_execution_proposal_mod = importlib.import_module(
+    "5_connectors.adapter.data_lifecycle.meter_backup_export_execution_proposal"
+)
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -370,6 +373,46 @@ async def get_data_lifecycle_meter_storage_backup_export_operator_approval():
             "status": "missing",
         }
     return approval
+
+
+@router.get("/data-lifecycle/meter-storage/backup-export/execution/proposal")
+async def get_data_lifecycle_meter_storage_backup_export_execution_proposal():
+    policy = _policy_mod.load_policy()
+    proposal = _meter_backup_export_execution_proposal_mod.read_execution_proposal(policy=policy)
+    if proposal is None:
+        return {
+            "schema_version": _meter_backup_export_execution_proposal_mod.METER_BACKUP_EXPORT_EXECUTION_PROPOSAL_SCHEMA_VERSION,
+            "status": "missing",
+            "mode": _meter_backup_export_execution_proposal_mod.METER_BACKUP_EXPORT_EXECUTION_PROPOSAL_MODE,
+            "proposal_status": "blocked",
+            "execution_started": False,
+            "cleanup_started": False,
+            "operator_decision_required": True,
+        }
+    return proposal
+
+
+@router.post("/data-lifecycle/meter-storage/backup-export/execution/proposal/rebuild")
+async def post_data_lifecycle_meter_storage_backup_export_execution_proposal_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, proposal = _meter_backup_export_execution_proposal_mod.rebuild_execution_proposal(policy=policy)
+    except Exception as exc:
+        latest = _meter_backup_export_execution_proposal_mod.read_execution_proposal(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _meter_backup_export_execution_proposal_mod.METER_BACKUP_EXPORT_EXECUTION_PROPOSAL_REBUILD_SCHEMA_VERSION,
+                "message": "meter backup export execution proposal rebuild failed",
+                "error": str(exc),
+                "execution_proposal": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _meter_backup_export_execution_proposal_mod.METER_BACKUP_EXPORT_EXECUTION_PROPOSAL_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "execution_proposal": proposal,
+    }
 
 
 @router.get("/data-lifecycle/retention/manifest")

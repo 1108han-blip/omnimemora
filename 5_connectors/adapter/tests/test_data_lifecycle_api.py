@@ -1829,3 +1829,78 @@ def test_data_lifecycle_meter_backup_export_operator_approval_endpoint_returns_m
     payload = response.json()
     assert payload["schema_version"] == "res-legacy-meter-backup-export-operator-approval-v1"
     assert payload["status"] == "missing"
+
+
+def test_data_lifecycle_meter_backup_export_execution_proposal_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_backup_export_execution_proposal_mod,
+        "read_execution_proposal",
+        lambda policy=None: None,
+    )
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/backup-export/execution/proposal")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-backup-export-execution-proposal-v1"
+    assert payload["status"] == "missing"
+    assert payload["mode"] == "proposal_only"
+    assert payload["proposal_status"] == "blocked"
+    assert payload["execution_started"] is False
+    assert payload["cleanup_started"] is False
+    assert payload["operator_decision_required"] is True
+
+
+def test_data_lifecycle_meter_backup_export_execution_proposal_rebuild_endpoint_returns_record_and_proposal(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-backup-execution-proposal",
+        "trigger": "meter_backup_export_execution_proposal_rebuild",
+        "status": "success",
+    }
+    expected_proposal = {
+        "schema_version": "res-legacy-meter-backup-export-execution-proposal-v1",
+        "mode": "proposal_only",
+        "proposal_status": "ready_for_operator_decision",
+        "execution_started": False,
+        "cleanup_started": False,
+        "operator_decision_required": True,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_backup_export_execution_proposal_mod,
+        "rebuild_execution_proposal",
+        lambda policy=None: (expected_record, expected_proposal),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/meter-storage/backup-export/execution/proposal/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-backup-export-execution-proposal-rebuild-v1"
+    assert payload["record"]["trigger"] == "meter_backup_export_execution_proposal_rebuild"
+    assert payload["execution_proposal"]["mode"] == "proposal_only"
+    assert payload["execution_proposal"]["execution_started"] is False
+    assert payload["execution_proposal"]["cleanup_started"] is False
+
+
+def test_meter_backup_export_execution_proposal_does_not_expose_execute_run_copy_archive_cleanup_delete_move_compress_truncate():
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    client = TestClient(app)
+    forbidden_paths = [
+        "/data-lifecycle/meter-storage/backup-export/execution/proposal/execute",
+        "/data-lifecycle/meter-storage/backup-export/execution/proposal/run",
+        "/data-lifecycle/meter-storage/backup-export/execution/proposal/copy",
+        "/data-lifecycle/meter-storage/backup-export/execution/proposal/archive",
+        "/data-lifecycle/meter-storage/backup-export/execution/proposal/cleanup",
+        "/data-lifecycle/meter-storage/backup-export/execution/proposal/delete",
+        "/data-lifecycle/meter-storage/backup-export/execution/proposal/move",
+        "/data-lifecycle/meter-storage/backup-export/execution/proposal/compress",
+        "/data-lifecycle/meter-storage/backup-export/execution/proposal/truncate",
+    ]
+    for path in forbidden_paths:
+        response = client.post(path)
+        assert response.status_code == 404
