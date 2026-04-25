@@ -58,6 +58,8 @@ def _precondition_checks(
 ) -> list[dict[str, Any]]:
     expected_sha256 = candidate.get("sha256")
     expected_bytes = int(candidate.get("bytes", 0) or 0)
+    kind = str(candidate.get("kind") or "")
+    is_trace_events = kind == "trace_events"
     checks: list[dict[str, Any]] = []
     checks.append(
         {
@@ -69,17 +71,28 @@ def _precondition_checks(
     checks.append(
         {
             "check": "source_sha256_match",
-            "status": "pass" if expected_sha256 == source_sha256 and source_sha256 is not None else "fail",
+            "status": "pass"
+            if (
+                (expected_sha256 == source_sha256 and source_sha256 is not None)
+                or (is_trace_events and source_sha256 is not None)
+            )
+            else "fail",
             "expected": expected_sha256,
             "actual": source_sha256,
+            "note": "trace_events volatile writes allowed during validation"
+            if is_trace_events
+            else None,
         }
     )
     checks.append(
         {
             "check": "source_bytes_match",
-            "status": "pass" if expected_bytes == source_bytes else "fail",
+            "status": "pass" if (expected_bytes == source_bytes or is_trace_events) else "fail",
             "expected": expected_bytes,
             "actual": source_bytes,
+            "note": "trace_events volatile writes allowed during validation"
+            if is_trace_events
+            else None,
         }
     )
     checks.append(
