@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
 
-from . import archive_pilot, archive_restore_contract, state_store
+from . import archive_non_active_quarantine, archive_pilot, archive_restore_contract, state_store
 from .policy import DataLifecyclePolicy, load_policy
 
 ARCHIVE_READTHROUGH_REPORT_SCHEMA_VERSION = "dlp-archive-readthrough-report-v1"
@@ -85,6 +85,28 @@ def _request_cross_check(
     }
 
 
+def _quarantined_copy_for_restore_key(
+    *,
+    policy: DataLifecyclePolicy,
+    restore_key: Optional[str],
+) -> Optional[Path]:
+    record = archive_non_active_quarantine.read_record(policy=policy)
+    if not isinstance(record, dict):
+        return None
+    if str(record.get("status") or "") not in {"success", "already_quarantined"}:
+        return None
+    if restore_key and str(record.get("restore_key") or "") != restore_key:
+        return None
+    for key in ("quarantine_copy_path", "quarantine_path"):
+        value = str(record.get(key) or "").strip()
+        if not value:
+            continue
+        path = Path(value).expanduser()
+        if path.exists() and path.is_file():
+            return path
+    return None
+
+
 def build_readthrough_report(
     *,
     policy: Optional[DataLifecyclePolicy] = None,
@@ -139,6 +161,12 @@ def build_readthrough_report(
     target_source_path = (source_path or str(pilot.get("source_path") or "")).strip()
     source = Path(target_source_path).expanduser()
     archive = Path(str(pilot.get("archive_path") or "")).expanduser()
+    archive_resolution_source = "pilot_archive_path"
+    if not (archive.exists() and archive.is_file()):
+        quarantined_copy = _quarantined_copy_for_restore_key(policy=current_policy, restore_key=target_restore_key)
+        if quarantined_copy is not None:
+            archive = quarantined_copy
+            archive_resolution_source = "non_active_quarantine"
 
     source_exists = source.exists() and source.is_file()
     archive_exists = archive.exists() and archive.is_file()
@@ -194,6 +222,7 @@ def build_readthrough_report(
         "source_bytes": int(source.stat().st_size) if source_exists else 0,
         "source_sha256": source_sha,
         "archive_path": str(archive),
+        "archive_resolution_source": archive_resolution_source,
         "archive_bytes": int(archive.stat().st_size) if archive_exists else 0,
         "archive_sha256": archive_sha,
         "restore_key": target_restore_key,
@@ -210,6 +239,7 @@ def build_readthrough_report(
             "archive_copy_readable": archive_copy_readable,
             "checksum_match": checksum_match,
             "read_path_unchanged": read_path_unchanged,
+            "archive_resolution_source": archive_resolution_source,
             "validated_at": now.isoformat(),
             "warnings_count": len(warnings),
         },

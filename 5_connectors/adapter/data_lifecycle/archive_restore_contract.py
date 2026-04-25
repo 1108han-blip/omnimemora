@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
 
-from . import archive_transaction, traceability, state_store, archive_pilot
+from . import archive_non_active_quarantine, archive_transaction, traceability, state_store, archive_pilot
 from .policy import DataLifecyclePolicy, load_policy
 
 ARCHIVE_RESTORE_READINESS_SCHEMA_VERSION = "dlp-archive-restore-readiness-v1"
@@ -78,6 +78,24 @@ def _build_pilot_copy_verification(*, policy: DataLifecyclePolicy) -> dict[str, 
         }
     source_path = Path(str(pilot.get("source_path") or "")).expanduser()
     archive_path = Path(str(pilot.get("archive_path") or "")).expanduser()
+    archive_resolution_source = "pilot_archive_path"
+    if not (archive_path.exists() and archive_path.is_file()):
+        quarantine = archive_non_active_quarantine.read_record(policy=policy)
+        restore_key = str(pilot.get("restore_key") or "")
+        if (
+            isinstance(quarantine, dict)
+            and str(quarantine.get("status") or "") in {"success", "already_quarantined"}
+            and str(quarantine.get("restore_key") or "") == restore_key
+        ):
+            for key in ("quarantine_copy_path", "quarantine_path"):
+                value = str(quarantine.get(key) or "").strip()
+                if not value:
+                    continue
+                candidate = Path(value).expanduser()
+                if candidate.exists() and candidate.is_file():
+                    archive_path = candidate
+                    archive_resolution_source = "non_active_quarantine"
+                    break
     source_sha = _sha256_file(source_path)
     archive_sha = _sha256_file(archive_path)
     checksum_match = bool(source_sha and archive_sha and source_sha == archive_sha)
@@ -88,6 +106,7 @@ def _build_pilot_copy_verification(*, policy: DataLifecyclePolicy) -> dict[str, 
         "pilot_id": pilot.get("pilot_id"),
         "source_path": str(source_path),
         "archive_path": str(archive_path),
+        "archive_resolution_source": archive_resolution_source,
         "checksum_match": checksum_match,
         "source_sha256": source_sha,
         "archive_sha256": archive_sha,

@@ -23,6 +23,8 @@ def _build_policy(tmp_path):
         archive_pilot_root=str(tmp_path / "archive" / "pilot"),
         archive_pilot_record_file=str(tmp_path / "archive_pilot_record.json"),
         archive_readthrough_report_file=str(tmp_path / "archive_readthrough_report.json"),
+        archive_quarantine_record_file=str(tmp_path / "archive_quarantine_record.json"),
+        archive_restore_staging_root=str(tmp_path / "restore" / "staging"),
     )
 
 
@@ -174,3 +176,38 @@ def test_readthrough_request_cross_check_not_applicable_when_no_mapping(tmp_path
     shadow = report.get("request_evidence_shadow") or {}
     assert shadow["status"] == "not_applicable"
     assert (report.get("summary") or {}).get("request_id_cross_check_status") == "not_applicable"
+
+
+def test_readthrough_resolves_quarantined_non_active_copy_when_pilot_archive_moved(tmp_path):
+    policy = _build_policy(tmp_path)
+    source = tmp_path / "compile_events.jsonl"
+    archive = tmp_path / "archive" / "pilot" / "p1" / "compile_events.jsonl.copy"
+    quarantine = tmp_path / "quarantine" / "source" / "non_active" / "compile_events.jsonl.copy.quarantine"
+    source.write_text("same", encoding="utf-8")
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    archive.write_text("same", encoding="utf-8")
+    quarantine.parent.mkdir(parents=True, exist_ok=True)
+    archive.rename(quarantine)
+    _write_pilot(policy, source_path=source, archive_path=archive, restore_key="restore:compile:quarantined")
+    _write_readiness(policy, restore_key="restore:compile:quarantined", request_id="req-shadow-q")
+    Path(policy.archive_quarantine_record_file).write_text(
+        json.dumps(
+            {
+                "schema_version": "dlp-non-active-copy-quarantine-record-v1",
+                "status": "success",
+                "restore_key": "restore:compile:quarantined",
+                "quarantine_copy_path": str(quarantine),
+                "quarantine_sha256": archive_readthrough_mod._sha256_file(quarantine),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = archive_readthrough_mod.build_readthrough_report(policy=policy)
+
+    assert report["status"] == "passed"
+    assert report["archive_path"] == str(quarantine)
+    assert report["archive_resolution_source"] == "non_active_quarantine"
+    assert report["checksum_match"] is True
+    assert report["source_retained"] is True
+    assert report["read_path_unchanged"] is True
