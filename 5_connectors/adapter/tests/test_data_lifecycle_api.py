@@ -339,3 +339,5 @@ def test_dlp_health_exposes_traceability_report_summary(tmp_path):
     assert traceability_report["sample_count"] == 12
     assert traceability_report["fail_count"] == 1
     assert traceability_report["warnings_count"] == 3
+    assert traceability_report["unexplained_partial_count"] == 0
+    assert traceability_report["current_epoch_pass_rate"] is None

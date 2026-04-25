@@ -216,6 +216,8 @@ def build_health_payload(
             "sample_count": int(trace_summary.get("sample_count", 0) or 0),
             "fail_count": int(trace_summary.get("fail_count", 0) or 0),
             "warnings_count": int(trace_summary.get("warnings_count", 0) or 0),
+            "unexplained_partial_count": int(trace_summary.get("unexplained_partial_count", 0) or 0),
+            "current_epoch_pass_rate": trace_summary.get("current_epoch_pass_rate"),
         }
     else:
         traceability_report_view = {
@@ -224,6 +226,8 @@ def build_health_payload(
             "sample_count": 0,
             "fail_count": 0,
             "warnings_count": 0,
+            "unexplained_partial_count": 0,
+            "current_epoch_pass_rate": None,
         }
     status, recommended_action = _derive_status(
         summary_freshness=summary_freshness,

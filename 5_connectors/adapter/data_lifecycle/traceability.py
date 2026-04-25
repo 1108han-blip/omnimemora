@@ -17,6 +17,11 @@ from . import state_store, retention
 TRACEABILITY_REPORT_SCHEMA_VERSION = "dlp-traceability-report-v1"
 TRACEABILITY_REBUILD_SCHEMA_VERSION = "dlp-traceability-report-rebuild-v1"
 MAX_DEFAULT_SAMPLES = 50
+ACCEPTABLE_PARTIAL_REASONS = {
+    "legacy_before_trace_events",
+    "protocol_without_proxy_event",
+    "sampling_policy_mismatch",
+}
 
 
 def _report_path(policy: Optional[DataLifecyclePolicy] = None) -> Path:
@@ -181,10 +186,13 @@ def _sample_status(
     proxy_found: bool,
     trace_found: bool,
     request_evidence_buildable: bool,
+    evidence_epoch: str,
 ) -> str:
     if not meter_found or not request_evidence_buildable:
         return "fail"
-    if compile_found and proxy_found and trace_found:
+    # Proxy event is protocol-dependent and optional in current contract.
+    require_trace = evidence_epoch != "legacy"
+    if compile_found and (trace_found or not require_trace):
         return "pass"
     return "partial"
 
@@ -215,6 +223,8 @@ def _partial_reason_and_recommendation(
         return "request_evidence_unbuildable", "repair_request_evidence_builder_for_current_epoch"
     if not meter_found:
         return "sampling_policy_mismatch", "verify_sampling_policy_and_meter_index_alignment"
+    if compile_found and trace_found and not proxy_found:
+        return "protocol_without_proxy_event", "none"
     if evidence_epoch == "legacy" and not trace_found:
         return "legacy_before_trace_events", "legacy_epoch_trace_optional_no_backfill"
     if not compile_found and trace_found:
@@ -330,6 +340,7 @@ def build_report(
             proxy_found=proxy_found,
             trace_found=trace_found,
             request_evidence_buildable=buildable,
+            evidence_epoch=evidence_epoch,
         )
         partial_reason, recommendation = _partial_reason_and_recommendation(
             status=status,
@@ -363,6 +374,27 @@ def build_report(
             }
         )
 
+    acceptable_partial_count = int(
+        sum(
+            1
+            for sample in samples
+            if sample.get("status") == "partial" and sample.get("partial_reason") in ACCEPTABLE_PARTIAL_REASONS
+        )
+    )
+    unexplained_partial_count = int(partial_count - acceptable_partial_count)
+    current_epoch_samples = [sample for sample in samples if sample.get("evidence_epoch") == "current"]
+    current_epoch_sample_count = len(current_epoch_samples)
+    current_epoch_pass_count = int(sum(1 for sample in current_epoch_samples if sample.get("status") == "pass"))
+    current_epoch_pass_rate = (
+        round(current_epoch_pass_count / current_epoch_sample_count, 4) if current_epoch_sample_count > 0 else None
+    )
+    partial_reason_distribution: dict[str, int] = {}
+    for sample in samples:
+        if sample.get("status") != "partial":
+            continue
+        reason = str(sample.get("partial_reason") or "unspecified")
+        partial_reason_distribution[reason] = partial_reason_distribution.get(reason, 0) + 1
+
     return {
         "schema_version": TRACEABILITY_REPORT_SCHEMA_VERSION,
         "report_id": uuid4().hex[:16],
@@ -380,6 +412,12 @@ def build_report(
             "fail_count": fail_count,
             "missing_manifest": False,
             "warnings_count": len(warnings),
+            "acceptable_partial_count": acceptable_partial_count,
+            "unexplained_partial_count": unexplained_partial_count,
+            "current_epoch_sample_count": current_epoch_sample_count,
+            "current_epoch_pass_count": current_epoch_pass_count,
+            "current_epoch_pass_rate": current_epoch_pass_rate,
+            "partial_reason_distribution": partial_reason_distribution,
         },
         "warnings": warnings,
     }

@@ -95,6 +95,7 @@ def test_traceability_report_sample_partial_when_meter_only(tmp_path):
     assert "trace" in sample["missing_sources"]
     assert sample["partial_reason"] == "sampling_policy_mismatch"
     assert "proxy" in sample["optional_sources"]
+    assert report["summary"]["unexplained_partial_count"] == 0
 
 
 def test_traceability_report_sample_fail_when_meter_missing_or_unbuildable(tmp_path):
