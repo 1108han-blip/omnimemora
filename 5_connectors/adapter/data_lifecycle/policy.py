@@ -31,6 +31,7 @@ class DataLifecyclePolicy:
     archive_restore_staging_root: str = ""
     archive_non_active_candidate_report_file: str = ""
     archive_non_active_quarantine_readiness_file: str = ""
+    archive_non_active_execution_gate_file: str = ""
     maintenance_enabled: bool = True
     maintenance_startup_delay_seconds: float = 5.0
     maintenance_interval_seconds: float = 60.0
@@ -125,6 +126,10 @@ def load_policy() -> DataLifecyclePolicy:
         "OMNIMEMORA_DLP_ARCHIVE_NON_ACTIVE_QUARANTINE_READINESS_FILE",
         str(base_dir / "archive_non_active_quarantine_readiness_plan.json"),
     )
+    archive_non_active_execution_gate_file = os.getenv(
+        "OMNIMEMORA_DLP_ARCHIVE_NON_ACTIVE_EXECUTION_GATE_FILE",
+        str(base_dir / "archive_non_active_execution_gate.json"),
+    )
     ttl_seconds = float(os.getenv("OMNIMEMORA_DLP_SUMMARY_TTL_SECONDS", "30"))
     stale_max_age_seconds = float(
         os.getenv("OMNIMEMORA_DLP_SUMMARY_STALE_MAX_AGE_SECONDS", "3600")
@@ -164,6 +169,7 @@ def load_policy() -> DataLifecyclePolicy:
         archive_restore_staging_root=archive_restore_staging_root,
         archive_non_active_candidate_report_file=archive_non_active_candidate_report_file,
         archive_non_active_quarantine_readiness_file=archive_non_active_quarantine_readiness_file,
+        archive_non_active_execution_gate_file=archive_non_active_execution_gate_file,
         maintenance_enabled=maintenance_enabled,
         maintenance_startup_delay_seconds=max(0.0, maintenance_startup_delay_seconds),
         maintenance_interval_seconds=max(1.0, maintenance_interval_seconds),
