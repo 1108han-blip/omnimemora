@@ -20,6 +20,8 @@ class DataLifecyclePolicy:
     archive_restore_readiness_file: str = ""
     archive_execution_gate_file: str = ""
     archive_operator_approval_file: str = ""
+    archive_pilot_root: str = ""
+    archive_pilot_record_file: str = ""
     maintenance_enabled: bool = True
     maintenance_startup_delay_seconds: float = 5.0
     maintenance_interval_seconds: float = 60.0
@@ -70,6 +72,14 @@ def load_policy() -> DataLifecyclePolicy:
         "OMNIMEMORA_DLP_ARCHIVE_OPERATOR_APPROVAL_FILE",
         str(base_dir / "archive_operator_approval.json"),
     )
+    archive_pilot_root = os.getenv(
+        "OMNIMEMORA_DLP_ARCHIVE_PILOT_ROOT",
+        str(base_dir / "archive" / "pilot"),
+    )
+    archive_pilot_record_file = os.getenv(
+        "OMNIMEMORA_DLP_ARCHIVE_PILOT_RECORD_FILE",
+        str(base_dir / "archive_pilot_record.json"),
+    )
     ttl_seconds = float(os.getenv("OMNIMEMORA_DLP_SUMMARY_TTL_SECONDS", "30"))
     stale_max_age_seconds = float(
         os.getenv("OMNIMEMORA_DLP_SUMMARY_STALE_MAX_AGE_SECONDS", "3600")
@@ -98,6 +108,8 @@ def load_policy() -> DataLifecyclePolicy:
         archive_restore_readiness_file=archive_restore_readiness_file,
         archive_execution_gate_file=archive_execution_gate_file,
         archive_operator_approval_file=archive_operator_approval_file,
+        archive_pilot_root=archive_pilot_root,
+        archive_pilot_record_file=archive_pilot_record_file,
         maintenance_enabled=maintenance_enabled,
         maintenance_startup_delay_seconds=max(0.0, maintenance_startup_delay_seconds),
         maintenance_interval_seconds=max(1.0, maintenance_interval_seconds),
