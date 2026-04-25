@@ -34,6 +34,7 @@ class MaintenanceManager:
         proxy_rows_30m_fn: Optional[Callable[[], list[dict[str, Any]]]] = None,
         is_default_overview_request_fn: Optional[Callable[[Any], bool]] = None,
         is_value_qualified_fn: Optional[Callable[[Any], bool]] = None,
+        is_task_non_value_fn: Optional[Callable[[Any], bool]] = None,
         collapse_retry_bursts_fn: Optional[Callable[[list[Any]], list[Any]]] = None,
         bytes_scanned_fn: Optional[Callable[[], int]] = None,
     ) -> None:
@@ -44,6 +45,7 @@ class MaintenanceManager:
         self._proxy_rows_30m_fn = proxy_rows_30m_fn
         self._is_default_overview_request_fn = is_default_overview_request_fn
         self._is_value_qualified_fn = is_value_qualified_fn
+        self._is_task_non_value_fn = is_task_non_value_fn
         self._collapse_retry_bursts_fn = collapse_retry_bursts_fn
         self._bytes_scanned_fn = bytes_scanned_fn
         self._run_lock = threading.Lock()
@@ -63,6 +65,7 @@ class MaintenanceManager:
         self._proxy_rows_30m_fn = lambda: proxy_store.read_recent_events(limit=2000)
         self._is_default_overview_request_fn = request_classifier.is_default_overview_request
         self._is_value_qualified_fn = request_classifier.is_value_qualified
+        self._is_task_non_value_fn = request_classifier.is_task_non_value
         self._collapse_retry_bursts_fn = request_classifier.collapse_retry_bursts
 
         if self._bytes_scanned_fn is None:
@@ -105,6 +108,7 @@ class MaintenanceManager:
                 proxy_rows_30m=proxy_rows_30m,
                 is_default_overview_request=self._is_default_overview_request_fn,
                 is_value_qualified=self._is_value_qualified_fn,
+                is_task_non_value=self._is_task_non_value_fn,
                 collapse_retry_bursts=self._collapse_retry_bursts_fn,
             )
             elapsed = time.monotonic() - started_monotonic

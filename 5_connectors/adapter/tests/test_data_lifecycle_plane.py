@@ -507,6 +507,9 @@ def test_summary_builder_contract_metadata_fields():
     assert isinstance(payload["source_counts"], dict)
     assert payload["source_counts"]["meters"] == 0
     assert payload["source_counts"]["compile_rows_30m"] == 0
+    assert isinstance(payload["metrics_summary_all"], dict)
+    assert isinstance(payload["metrics_summary_24h"], dict)
+    assert isinstance(payload["core_capabilities_24h"], dict)
     assert isinstance(payload["families"], dict)
     assert "degraded_reason" not in payload
 
