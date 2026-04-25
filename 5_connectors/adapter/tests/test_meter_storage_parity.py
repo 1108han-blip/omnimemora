@@ -91,6 +91,7 @@ def test_rebuild_and_status_payload_keep_legacy_authoritative(tmp_path, monkeypa
     assert status["read_path"]["request_meter_switch_enabled"] is True
     assert status["read_path"]["request_evidence_switch_enabled"] is False
     assert status["read_path"]["metrics_switch_enabled"] is True
-    assert status["read_path"]["status_read_model_switch_enabled"] is False
+    assert status["read_path"]["status_read_model_switch_enabled"] is True
     assert status["read_path"]["legacy_fallback_enabled"] is True
     assert status["read_path"]["metrics_read_mode"] == "sqlite_first_legacy_fallback"
+    assert status["read_path"]["status_read_model_read_mode"] == "sqlite_first_legacy_fallback"

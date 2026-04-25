@@ -54,6 +54,9 @@ _diag_support_schema_version = ""
 _diag_support_error_catalog: Dict[str, Dict[str, Any]] = {}
 _diag_last_degraded_record_ts = 0.0
 _diag_degraded_record_lock = threading.Lock()
+_status_meter_read_resolver = importlib.import_module(
+    "5_connectors.adapter.application.status_read_model_meter_read_resolver"
+)
 
 
 def configure_diagnostics_read_model(
@@ -273,6 +276,11 @@ def _normalize_agent_to_family(agent: str) -> str:
     return normalized
 
 
+def _is_meter_family_match(meter: Any, family_id: str) -> bool:
+    agent = getattr(meter, "agent", "") or ""
+    return _normalize_agent_to_family(agent) == family_id
+
+
 # ============================================================================
 # Truth Surface Derivation (read-only projection, not action)
 # ============================================================================
@@ -295,21 +303,14 @@ def derive_route_truth(routing_enabled: bool, health_state: str) -> str:
     return "intent_on"
 
 
-def _collect_observed_family_meters(family_id: str, window_minutes: int = 30) -> List[Any]:
-    """
-    Collect family-scoped observed task meters for control/read-model truth.
-
-    Inclusion criteria (fixed contract):
-    - family_id matches after normalization
-    - timestamp falls within window
-    - request_classifier.is_default_overview_request(m) is True
-    - baseline_tokens_estimate >= 50
-    """
+def _filter_observed_family_candidates(
+    candidates: List[Any],
+    *,
+    family_id: str,
+    window_minutes: int,
+) -> List[Any]:
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
-    cutoff_epoch = cutoff.timestamp()
-    meter_store = _get_meter_store()
     request_classifier = _get_request_classifier()
-    meter_store._ensure_persistence_loaded()
 
     observed: List[Any] = []
     seen_request_ids: set[str] = set()
@@ -332,9 +333,7 @@ def _collect_observed_family_meters(family_id: str, window_minutes: int = 30) ->
         except Exception:
             return
 
-        agent = getattr(m, "agent", "") or ""
-        normalized = _normalize_agent_to_family(agent)
-        if normalized != family_id:
+        if not _is_meter_family_match(m, family_id):
             return
 
         if not request_classifier.is_default_overview_request(m):
@@ -351,11 +350,26 @@ def _collect_observed_family_meters(family_id: str, window_minutes: int = 30) ->
         observed.append(m)
         if request_id:
             seen_request_ids.add(request_id)
+    for m in candidates:
+        _maybe_add_meter(m)
+    return request_classifier.collapse_retry_bursts(observed)
+
+
+def _collect_observed_family_meters_legacy(family_id: str, window_minutes: int = 30) -> List[Any]:
+    """
+    Legacy family-scoped observed task meter collection.
+    Kept as fallback implementation for sqlite-first resolver.
+    """
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+    cutoff_epoch = cutoff.timestamp()
+    meter_store = _get_meter_store()
+    meter_store._ensure_persistence_loaded()
+
+    candidates: List[Any] = []
 
     # Primary source: in-memory tenant aggregates
     for meters in meter_store._usage_aggregates.values():
-        for m in meters:
-            _maybe_add_meter(m)
+        candidates.extend(meters)
 
     # Secondary fallback: recent proxy request IDs resolved through in-memory meter index.
     # Keep this path memory-only to avoid per-request disk replay under load.
@@ -379,14 +393,14 @@ def _collect_observed_family_meters(family_id: str, window_minutes: int = 30) ->
                     if _normalize_agent_to_family(agent_id) != family_id:
                         continue
                     request_id = str(event.get("request_id") or "")
-                    if not request_id or request_id in seen_request_ids:
+                    if not request_id:
                         continue
                     meter_obj = meter_memory_index.get(request_id) if isinstance(meter_memory_index, dict) else None
                     if meter_obj is None and callable(meter_getter) and not isinstance(meter_memory_index, dict):
                         meter_obj = meter_getter(request_id)
                     if meter_obj is None:
                         continue
-                    _maybe_add_meter(meter_obj)
+                    candidates.append(meter_obj)
                 except Exception:
                     continue
         else:
@@ -394,15 +408,58 @@ def _collect_observed_family_meters(family_id: str, window_minutes: int = 30) ->
             # Each value must be a dict with request_id + baseline_tokens_estimate >= 50.
             if isinstance(meter_memory_index, dict):
                 for request_id, meter_dict in meter_memory_index.items():
-                    if request_id in seen_request_ids:
-                        continue
                     if not isinstance(meter_dict, dict):
                         continue
                     # Construct a lightweight object that _maybe_add_meter can inspect
                     meter_obj = type("Meter", (), meter_dict)()
-                    _maybe_add_meter(meter_obj)
+                    candidates.append(meter_obj)
 
-    return request_classifier.collapse_retry_bursts(observed)
+    return _filter_observed_family_candidates(
+        candidates,
+        family_id=family_id,
+        window_minutes=window_minutes,
+    )
+
+
+def _collect_observed_family_meters(family_id: str, window_minutes: int = 30) -> List[Any]:
+    """
+    Collect family-scoped observed task meters for control/read-model truth.
+
+    Inclusion criteria (fixed contract):
+    - family_id matches after normalization
+    - timestamp falls within window
+    - request_classifier.is_default_overview_request(m) is True
+    - baseline_tokens_estimate >= 50
+    """
+    resolution = _status_meter_read_resolver.resolve_status_read_model_meters(
+        family_id=family_id,
+        window_minutes=window_minutes,
+        legacy_collect_fn=_collect_observed_family_meters_legacy,
+        family_match_fn=_is_meter_family_match,
+    )
+    if resolution.degraded and resolution.degraded_reason:
+        _record_degraded_path(resolution.degraded_reason)
+    return _filter_observed_family_candidates(
+        resolution.meters,
+        family_id=family_id,
+        window_minutes=window_minutes,
+    )
+
+
+def _collect_family_window_meters_legacy(family_id: str, window_minutes: int) -> List[Any]:
+    meter_store = _get_meter_store()
+    meter_store._ensure_persistence_loaded()
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=window_minutes)
+    output: List[Any] = []
+    for tenant_meters in meter_store._usage_aggregates.values():
+        for m in tenant_meters:
+            try:
+                m_time = datetime.fromisoformat(m.timestamp.replace("Z", "+00:00")).astimezone(timezone.utc)
+            except Exception:
+                continue
+            if m_time >= cutoff and _is_meter_family_match(m, family_id):
+                output.append(m)
+    return output
 
 
 def _summarize_family_compile_events(
@@ -515,27 +572,24 @@ def compute_family_24h_metrics(
     computed from value_qualified requests only. observed_requests_24h captures
     all task requests including task_non_value for diagnostics.
     """
-    meter_store = _get_meter_store()
     request_classifier = _get_request_classifier()
-
-    meter_store._ensure_persistence_loaded()
     if observed_family_meters is None:
         observed_family_meters = _collect_observed_family_meters(family_id, window_minutes=24 * 60)
 
-    all_meters: List[Any] = []
-    for tenant_meters in meter_store._usage_aggregates.values():
-        all_meters.extend(tenant_meters)
+    all_meters_resolution = _status_meter_read_resolver.resolve_status_read_model_meters(
+        family_id=family_id,
+        window_minutes=24 * 60,
+        legacy_collect_fn=_collect_family_window_meters_legacy,
+        family_match_fn=_is_meter_family_match,
+    )
+    if all_meters_resolution.degraded and all_meters_resolution.degraded_reason:
+        _record_degraded_path(all_meters_resolution.degraded_reason)
+    all_meters = all_meters_resolution.meters
 
-    cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
     qualified_family_meters = []
     for m in all_meters:
-        try:
-            m_time = datetime.fromisoformat(m.timestamp.replace("Z", "+00:00")).astimezone(timezone.utc)
-        except Exception:
-            continue
-        if m_time >= cutoff and _normalize_agent_to_family(m.agent) == family_id:
-            if request_classifier.is_value_qualified(m):
-                qualified_family_meters.append(m)
+        if request_classifier.is_value_qualified(m):
+            qualified_family_meters.append(m)
 
     qualified_family_meters = request_classifier.collapse_retry_bursts(qualified_family_meters)
 

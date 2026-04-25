@@ -89,7 +89,16 @@ def _run_derive_traffic_truth_test(family_id, compile_summary, meters, compile_e
     srm._get_meter_store = lambda: mock_ms
     srm._get_request_classifier = lambda: mock_rc
 
-    return srm.derive_traffic_truth(family_id, window_minutes=window_minutes)
+    env_key = "OMNIMEMORA_STATUS_READ_MODEL_METER_READ_PATH"
+    prev = os.environ.get(env_key)
+    os.environ[env_key] = "legacy_only"
+    try:
+        return srm.derive_traffic_truth(family_id, window_minutes=window_minutes)
+    finally:
+        if prev is None:
+            os.environ.pop(env_key, None)
+        else:
+            os.environ[env_key] = prev
 
 
 def test_derive_traffic_truth_codex_cli_with_real_meter():
@@ -242,7 +251,16 @@ def test_compute_family_24h_metrics_observed_last_request_at_priority_and_zero_k
     srm._get_request_classifier = lambda: mock_rc
     srm._get_compile_store = lambda: mock_cs
 
-    metrics = srm.compute_family_24h_metrics("openclaw")
+    env_key = "OMNIMEMORA_STATUS_READ_MODEL_METER_READ_PATH"
+    prev = os.environ.get(env_key)
+    os.environ[env_key] = "legacy_only"
+    try:
+        metrics = srm.compute_family_24h_metrics("openclaw")
+    finally:
+        if prev is None:
+            os.environ.pop(env_key, None)
+        else:
+            os.environ[env_key] = prev
     assert metrics["requests_24h"] == 0
     assert metrics["saved_tokens_24h"] == 0
     assert metrics["savings_ratio_24h"] == 0.0
@@ -276,7 +294,16 @@ def test_derive_traffic_truth_uses_persisted_meter_fallback_when_aggregate_missi
     srm._get_request_classifier = lambda: mock_rc
     srm._get_compile_store = lambda: mock_cs
 
-    truth = srm.derive_traffic_truth("openclaw", window_minutes=30)
+    env_key = "OMNIMEMORA_STATUS_READ_MODEL_METER_READ_PATH"
+    prev = os.environ.get(env_key)
+    os.environ[env_key] = "legacy_only"
+    try:
+        truth = srm.derive_traffic_truth("openclaw", window_minutes=30)
+    finally:
+        if prev is None:
+            os.environ.pop(env_key, None)
+        else:
+            os.environ[env_key] = prev
     assert truth == "real_request_observed"
 
 

@@ -47,6 +47,7 @@ class AgentControlApiTests(unittest.TestCase):
         self.assertEqual(payload["count"], 1)
         self.assertEqual(payload["agents"][0]["family_id"], "openclaw")
         self.assertEqual(payload["system_status"]["status"], "healthy")
+        self.assertEqual(set(payload.keys()), {"agents", "count", "system_status"})
 
     def test_enable_disable_persists_routing_state(self) -> None:
         with tempfile.TemporaryDirectory(prefix="omnimemora-agent-control-") as tmpdir:

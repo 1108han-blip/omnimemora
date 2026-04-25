@@ -15,6 +15,7 @@ _legacy_meter_store = importlib.import_module("5_connectors.adapter.infrastructu
 _meter_v2 = importlib.import_module("5_connectors.adapter.infrastructure.meter_store_v2")
 _read_resolver = importlib.import_module("5_connectors.adapter.application.request_meter_read_resolver")
 _metrics_read_resolver = importlib.import_module("5_connectors.adapter.application.metrics_meter_read_resolver")
+_status_read_resolver = importlib.import_module("5_connectors.adapter.application.status_read_model_meter_read_resolver")
 
 METER_STORAGE_STATUS_SCHEMA_VERSION = "dlp-meter-storage-v2-status-v1"
 METER_STORAGE_REBUILD_SCHEMA_VERSION = "dlp-meter-storage-v2-rebuild-v1"
@@ -92,6 +93,12 @@ def get_status_payload() -> dict[str, Any]:
     if metrics_mode not in {_metrics_read_resolver.MODE_SQLITE_FIRST, _metrics_read_resolver.MODE_LEGACY_ONLY}:
         metrics_mode = _metrics_read_resolver.MODE_SQLITE_FIRST
     metrics_switch_enabled = metrics_mode == _metrics_read_resolver.MODE_SQLITE_FIRST
+    status_mode = str(
+        os.getenv(_status_read_resolver.READ_PATH_ENV, _status_read_resolver.MODE_SQLITE_FIRST)
+    ).strip().lower()
+    if status_mode not in {_status_read_resolver.MODE_SQLITE_FIRST, _status_read_resolver.MODE_LEGACY_ONLY}:
+        status_mode = _status_read_resolver.MODE_SQLITE_FIRST
+    status_switch_enabled = status_mode == _status_read_resolver.MODE_SQLITE_FIRST
 
     return {
         "schema_version": METER_STORAGE_STATUS_SCHEMA_VERSION,
@@ -102,10 +109,13 @@ def get_status_payload() -> dict[str, Any]:
             "request_meter_switch_enabled": request_meter_switch_enabled,
             "request_evidence_switch_enabled": False,
             "metrics_switch_enabled": metrics_switch_enabled,
-            "status_read_model_switch_enabled": False,
-            "legacy_fallback_enabled": (request_meter_switch_enabled or metrics_switch_enabled),
+            "status_read_model_switch_enabled": status_switch_enabled,
+            "legacy_fallback_enabled": (
+                request_meter_switch_enabled or metrics_switch_enabled or status_switch_enabled
+            ),
             "request_meter_read_mode": read_mode,
             "metrics_read_mode": metrics_mode,
+            "status_read_model_read_mode": status_mode,
         },
         "storage": {
             "sqlite_path": str(_meter_v2.resolve_sqlite_path()),
