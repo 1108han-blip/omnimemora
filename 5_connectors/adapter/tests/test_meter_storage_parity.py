@@ -33,9 +33,13 @@ def test_parity_report_passes_when_legacy_and_sqlite_match(tmp_path, monkeypatch
     data_dir = tmp_path / "data"
     sqlite_path = tmp_path / "meter_store.sqlite3"
     preview_path = tmp_path / "dlp" / "meter_cleanup_preview.json"
+    readiness_path = tmp_path / "dlp" / "meter_backup_export_readiness.json"
+    plan_path = tmp_path / "dlp" / "meter_backup_export_plan.json"
     monkeypatch.setenv("OMNIMEMORA_METER_DATA_DIR", str(data_dir))
     monkeypatch.setenv("OMNIMEMORA_METER_STORE_V2_FILE", str(sqlite_path))
     monkeypatch.setenv("OMNIMEMORA_DLP_METER_CLEANUP_PREVIEW_FILE", str(preview_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_BACKUP_EXPORT_READINESS_FILE", str(readiness_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_BACKUP_EXPORT_PLAN_FILE", str(plan_path))
 
     payload = _payload("req-match")
     _write_legacy_index(data_dir, {"req-match": payload})
@@ -51,9 +55,13 @@ def test_parity_report_detects_missing_and_hash_mismatch(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     sqlite_path = tmp_path / "meter_store.sqlite3"
     preview_path = tmp_path / "dlp" / "meter_cleanup_preview.json"
+    readiness_path = tmp_path / "dlp" / "meter_backup_export_readiness.json"
+    plan_path = tmp_path / "dlp" / "meter_backup_export_plan.json"
     monkeypatch.setenv("OMNIMEMORA_METER_DATA_DIR", str(data_dir))
     monkeypatch.setenv("OMNIMEMORA_METER_STORE_V2_FILE", str(sqlite_path))
     monkeypatch.setenv("OMNIMEMORA_DLP_METER_CLEANUP_PREVIEW_FILE", str(preview_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_BACKUP_EXPORT_READINESS_FILE", str(readiness_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_BACKUP_EXPORT_PLAN_FILE", str(plan_path))
 
     legacy_a = _payload("req-a", saved_tokens=100)
     legacy_b = _payload("req-b", saved_tokens=200)
@@ -76,9 +84,13 @@ def test_rebuild_and_status_payload_keep_legacy_authoritative(tmp_path, monkeypa
     data_dir = tmp_path / "data"
     sqlite_path = tmp_path / "meter_store.sqlite3"
     preview_path = tmp_path / "dlp" / "meter_cleanup_preview.json"
+    readiness_path = tmp_path / "dlp" / "meter_backup_export_readiness.json"
+    plan_path = tmp_path / "dlp" / "meter_backup_export_plan.json"
     monkeypatch.setenv("OMNIMEMORA_METER_DATA_DIR", str(data_dir))
     monkeypatch.setenv("OMNIMEMORA_METER_STORE_V2_FILE", str(sqlite_path))
     monkeypatch.setenv("OMNIMEMORA_DLP_METER_CLEANUP_PREVIEW_FILE", str(preview_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_BACKUP_EXPORT_READINESS_FILE", str(readiness_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_BACKUP_EXPORT_PLAN_FILE", str(plan_path))
 
     _write_legacy_index(
         data_dir,
@@ -111,3 +123,6 @@ def test_rebuild_and_status_payload_keep_legacy_authoritative(tmp_path, monkeypa
     assert status["backup_export"]["mode"] == "backup_export_readiness_only"
     assert status["backup_export"]["backup_export_allowed"] is False
     assert status["backup_export"]["cleanup_allowed"] is False
+    assert status["backup_export"]["plan_status"] == "missing"
+    assert status["backup_export"]["dry_run_mode"] == "dry_run_preview_only"
+    assert status["backup_export"]["destination_status"] == "unknown"

@@ -687,6 +687,9 @@ def build_health_payload(
                 "candidate_file_count": 0,
                 "estimated_export_bytes": 0,
                 "blocking_reasons_count": 0,
+                "plan_status": "missing",
+                "dry_run_mode": "dry_run_preview_only",
+                "destination_status": "unknown",
             },
         }
 

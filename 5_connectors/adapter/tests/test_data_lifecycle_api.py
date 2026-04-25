@@ -1563,3 +1563,73 @@ def test_meter_backup_export_readiness_does_not_expose_execute_copy_archive_or_c
     for path in forbidden_paths:
         response = client.post(path)
         assert response.status_code == 404
+
+
+def test_data_lifecycle_meter_backup_export_plan_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._meter_backup_export_plan_mod, "read_plan", lambda policy=None: None)
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/backup-export/plan")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-backup-export-plan-v1"
+    assert payload["status"] == "missing"
+    assert payload["mode"] == "dry_run_preview_only"
+    assert payload["backup_export_allowed"] is False
+    assert payload["cleanup_allowed"] is False
+    assert payload["execution_allowed"] is False
+
+
+def test_data_lifecycle_meter_backup_export_plan_rebuild_endpoint_returns_record_and_plan(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-backup-plan",
+        "trigger": "meter_backup_export_plan_rebuild",
+        "status": "success",
+    }
+    expected_plan = {
+        "schema_version": "res-legacy-meter-backup-export-plan-v1",
+        "mode": "dry_run_preview_only",
+        "status": "blocked",
+        "backup_export_allowed": False,
+        "cleanup_allowed": False,
+        "execution_allowed": False,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_backup_export_plan_mod,
+        "rebuild_plan",
+        lambda policy=None: (expected_record, expected_plan),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/meter-storage/backup-export/plan/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-backup-export-plan-rebuild-v1"
+    assert payload["record"]["trigger"] == "meter_backup_export_plan_rebuild"
+    assert payload["plan"]["mode"] == "dry_run_preview_only"
+    assert payload["plan"]["execution_allowed"] is False
+
+
+def test_meter_backup_export_plan_does_not_expose_execute_copy_archive_delete_move_compress_truncate():
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    client = TestClient(app)
+    forbidden_paths = [
+        "/data-lifecycle/meter-storage/backup-export/execute",
+        "/data-lifecycle/meter-storage/backup-export/copy",
+        "/data-lifecycle/meter-storage/backup-export/archive",
+        "/data-lifecycle/meter-storage/backup-export/delete",
+        "/data-lifecycle/meter-storage/backup-export/move",
+        "/data-lifecycle/meter-storage/backup-export/compress",
+        "/data-lifecycle/meter-storage/backup-export/truncate",
+        "/data-lifecycle/meter-storage/backup-export/plan/execute",
+        "/data-lifecycle/meter-storage/cleanup/execute",
+        "/data-lifecycle/meter-storage/cleanup/delete",
+    ]
+    for path in forbidden_paths:
+        response = client.post(path)
+        assert response.status_code == 404

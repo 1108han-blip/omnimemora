@@ -153,9 +153,12 @@ def get_status_payload() -> dict[str, Any]:
     try:
         backup_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_backup_export_readiness")
         readiness = backup_mod.read_readiness()
+        plan_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_backup_export_plan")
+        plan = plan_mod.read_plan()
         if isinstance(readiness, dict):
             summary = readiness.get("summary") or {}
             blocking_reasons = readiness.get("blocking_reasons") or []
+            plan_dest_status = ((plan or {}).get("destination_status") or {}).get("status")
             backup_export_view = {
                 "status": str(readiness.get("status") or "blocked"),
                 "mode": str(readiness.get("mode") or backup_mod.METER_BACKUP_EXPORT_READINESS_MODE),
@@ -164,6 +167,9 @@ def get_status_payload() -> dict[str, Any]:
                 "candidate_file_count": int(summary.get("candidate_file_count", 0) or 0),
                 "estimated_export_bytes": int(readiness.get("estimated_export_bytes", 0) or 0),
                 "blocking_reasons_count": int(len(blocking_reasons)),
+                "plan_status": str((plan or {}).get("status") or "missing"),
+                "dry_run_mode": str((plan or {}).get("mode") or "dry_run_preview_only"),
+                "destination_status": str(plan_dest_status or "unknown"),
             }
         else:
             backup_export_view = {
@@ -174,6 +180,9 @@ def get_status_payload() -> dict[str, Any]:
                 "candidate_file_count": 0,
                 "estimated_export_bytes": 0,
                 "blocking_reasons_count": 0,
+                "plan_status": "missing",
+                "dry_run_mode": "dry_run_preview_only",
+                "destination_status": "unknown",
             }
     except Exception:
         backup_export_view = {
@@ -184,6 +193,9 @@ def get_status_payload() -> dict[str, Any]:
             "candidate_file_count": 0,
             "estimated_export_bytes": 0,
             "blocking_reasons_count": 0,
+            "plan_status": "missing",
+            "dry_run_mode": "dry_run_preview_only",
+            "destination_status": "unknown",
         }
 
     return {

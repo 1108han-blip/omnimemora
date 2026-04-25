@@ -36,6 +36,9 @@ _meter_cleanup_preview_mod = importlib.import_module("5_connectors.adapter.data_
 _meter_backup_export_readiness_mod = importlib.import_module(
     "5_connectors.adapter.data_lifecycle.meter_backup_export_readiness"
 )
+_meter_backup_export_plan_mod = importlib.import_module(
+    "5_connectors.adapter.data_lifecycle.meter_backup_export_plan"
+)
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -185,6 +188,45 @@ async def post_data_lifecycle_meter_storage_backup_export_readiness_rebuild():
         "schema_version": _meter_backup_export_readiness_mod.METER_BACKUP_EXPORT_READINESS_REBUILD_SCHEMA_VERSION,
         "record": record,
         "readiness": readiness,
+    }
+
+
+@router.get("/data-lifecycle/meter-storage/backup-export/plan")
+async def get_data_lifecycle_meter_storage_backup_export_plan():
+    policy = _policy_mod.load_policy()
+    plan = _meter_backup_export_plan_mod.read_plan(policy=policy)
+    if plan is None:
+        return {
+            "schema_version": _meter_backup_export_plan_mod.METER_BACKUP_EXPORT_PLAN_SCHEMA_VERSION,
+            "status": "missing",
+            "mode": _meter_backup_export_plan_mod.METER_BACKUP_EXPORT_PLAN_MODE,
+            "backup_export_allowed": False,
+            "cleanup_allowed": False,
+            "execution_allowed": False,
+        }
+    return plan
+
+
+@router.post("/data-lifecycle/meter-storage/backup-export/plan/rebuild")
+async def post_data_lifecycle_meter_storage_backup_export_plan_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, plan = _meter_backup_export_plan_mod.rebuild_plan(policy=policy)
+    except Exception as exc:
+        latest = _meter_backup_export_plan_mod.read_plan(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _meter_backup_export_plan_mod.METER_BACKUP_EXPORT_PLAN_REBUILD_SCHEMA_VERSION,
+                "message": "meter backup export plan rebuild failed",
+                "error": str(exc),
+                "plan": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _meter_backup_export_plan_mod.METER_BACKUP_EXPORT_PLAN_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "plan": plan,
     }
 
 
