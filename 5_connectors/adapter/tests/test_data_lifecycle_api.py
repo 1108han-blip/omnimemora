@@ -177,3 +177,40 @@ def test_data_lifecycle_manual_refresh_endpoint_returns_cycle_record(monkeypatch
     assert payload["record"]["trigger"] == "manual_refresh"
     assert payload["record"]["status"] == "success"
     assert invalidated["count"] == 1
+
+
+def test_dlp_health_exposes_storage_pressure_without_cleanup(tmp_path, monkeypatch):
+    policy = _build_policy(tmp_path)
+    summary_store.write_summary_atomic(
+        {
+            "schema_version": "dlp-family-window-summary-v1",
+            "generated_at": 100.0,
+            "source_counts": {},
+            "builder_version": "test-builder",
+            "families": {},
+            "metrics_summary_all": {"token_saving_ratio": 0.0, "tokens_saved": 0, "request_count": 0, "avg_context_reduction": 0.0},
+            "metrics_summary_24h": {"token_saving_ratio": 0.0, "tokens_saved": 0, "request_count": 0, "avg_context_reduction": 0.0, "period": "24h"},
+            "core_capabilities_24h": {
+                "period": "24h",
+                "observed_request_count": 0,
+                "non_value_count": 0,
+                "cards": {
+                    "real_requests": {"count": 0, "ratio": 0.0},
+                    "context_compression": {"ratio": 0.0, "baseline_tokens": 0, "actual_tokens": 0},
+                    "memory_enhancement": {"rate": 0.0, "memory_count": 0},
+                    "token_savings": {"ratio": 0.0, "saved_tokens": 0},
+                },
+            },
+        },
+        policy=policy,
+    )
+    summary_path = tmp_path / "family_window_summary.json"
+    assert summary_path.exists()
+
+    monkeypatch.setattr(health_mod, "STORAGE_PRESSURE_WARNING_BYTES", 1)
+    monkeypatch.setattr(health_mod, "STORAGE_PRESSURE_CRITICAL_BYTES", 10**12)
+
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    assert payload["storage_pressure"] == "warning"
+    assert payload["storage"]["total_bytes"] >= 1
+    assert summary_path.exists()

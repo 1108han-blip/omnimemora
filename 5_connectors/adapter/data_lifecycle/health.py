@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 from . import state_store, summary_store
@@ -12,6 +13,8 @@ from .policy import DataLifecyclePolicy, load_policy
 HEALTH_SCHEMA_VERSION = "dlp-lifecycle-health-v1"
 MAINTENANCE_TRIGGERS = {"startup_warm", "interval_refresh", "manual_refresh"}
 DEGRADED_WINDOW_SECONDS = 15 * 60
+STORAGE_PRESSURE_WARNING_BYTES = 512 * 1024 * 1024
+STORAGE_PRESSURE_CRITICAL_BYTES = 2 * 1024 * 1024 * 1024
 
 
 def _parse_iso_utc(value: Any) -> Optional[datetime]:
@@ -98,6 +101,67 @@ def _derive_status(
     return "degraded", "trigger_manual_refresh"
 
 
+def _safe_file_size(path_value: Any) -> int:
+    try:
+        path = Path(str(path_value)).expanduser()
+        if path.exists() and path.is_file():
+            return int(path.stat().st_size)
+    except Exception:
+        return 0
+    return 0
+
+
+def _collect_storage_inventory(policy: DataLifecyclePolicy) -> dict[str, Any]:
+    tracked: list[dict[str, Any]] = []
+
+    summary_path = Path(policy.summary_file).expanduser()
+    ledger_path = Path(policy.maintenance_state_file).expanduser()
+    compile_path = Path.home() / ".omnimemora" / "adapter" / "compile_events.jsonl"
+    proxy_path = Path.home() / ".omnimemora" / "adapter" / "proxy_events.jsonl"
+    meter_data_dir = Path.home() / ".omnimemora" / "adapter" / "data"
+
+    for label, path in [
+        ("dlp_summary", summary_path),
+        ("dlp_ledger", ledger_path),
+        ("compile_events", compile_path),
+        ("proxy_events", proxy_path),
+    ]:
+        size = _safe_file_size(path)
+        tracked.append({"name": label, "path": str(path), "bytes": size})
+
+    if meter_data_dir.exists() and meter_data_dir.is_dir():
+        meter_files = sorted(meter_data_dir.glob("meters*.json"))
+        meter_total = 0
+        for file_path in meter_files:
+            meter_total += _safe_file_size(file_path)
+        tracked.append(
+            {
+                "name": "meter_data_dir",
+                "path": str(meter_data_dir),
+                "bytes": int(meter_total),
+                "file_count": len(meter_files),
+            }
+        )
+
+    total_bytes = int(sum(int(item.get("bytes", 0) or 0) for item in tracked))
+    return {
+        "total_bytes": total_bytes,
+        "tracked_files": sorted(tracked, key=lambda item: int(item.get("bytes", 0) or 0), reverse=True),
+    }
+
+
+def _derive_storage_pressure(total_bytes: int, recent_maintenance: list[dict[str, Any]]) -> tuple[str, str]:
+    max_bytes_scanned = max((int(record.get("bytes_scanned", 0) or 0) for record in recent_maintenance), default=0)
+    if total_bytes >= STORAGE_PRESSURE_CRITICAL_BYTES:
+        return "critical", "prepare_non_destructive_archive_manifest_high_priority"
+    if total_bytes >= STORAGE_PRESSURE_WARNING_BYTES:
+        return "warning", "prepare_non_destructive_archive_manifest"
+    # Maintenance pressure guardrail: heavy repeated scanning hints future pressure.
+    if max_bytes_scanned >= int(STORAGE_PRESSURE_WARNING_BYTES * 0.75):
+        return "warning", "review_maintenance_scan_pressure_and_prepare_manifest"
+    return "normal", "none"
+
+
 def build_health_payload(
     *,
     policy: Optional[DataLifecyclePolicy] = None,
@@ -119,6 +183,12 @@ def build_health_payload(
 
     last_maintenance = state_store.latest_record(trigger=MAINTENANCE_TRIGGERS, policy=current_policy)
     recent_degraded = _recent_degraded_records(policy=current_policy, now_ts=current_now)
+    recent_maintenance = state_store.read_recent_records(limit=20, trigger=MAINTENANCE_TRIGGERS, policy=current_policy)
+    storage_inventory = _collect_storage_inventory(current_policy)
+    storage_pressure, storage_recommendation = _derive_storage_pressure(
+        int(storage_inventory.get("total_bytes", 0)),
+        recent_maintenance,
+    )
     status, recommended_action = _derive_status(
         summary_freshness=summary_freshness,
         last_maintenance=last_maintenance,
@@ -147,5 +217,15 @@ def build_health_payload(
             "window_seconds": int(DEGRADED_WINDOW_SECONDS),
             "count": len(recent_degraded),
             "latest_record": recent_degraded[0] if recent_degraded else None,
+        },
+        "storage_pressure": storage_pressure,
+        "storage": {
+            "total_bytes": int(storage_inventory.get("total_bytes", 0)),
+            "recommendation": storage_recommendation,
+            "tracked_files": storage_inventory.get("tracked_files", []),
+            "recent_maintenance_scanned_bytes_max": max(
+                (int(record.get("bytes_scanned", 0) or 0) for record in recent_maintenance),
+                default=0,
+            ),
         },
     }
