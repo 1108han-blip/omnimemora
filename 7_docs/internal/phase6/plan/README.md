@@ -104,6 +104,7 @@
 | **DLP Batch 61 - Safety Invariants Repo-Test Hardening** | **已收口 ✓（23 safety invariant tests added; no product behaviour change; one minimal None-guard fix in archive_restore_pilot）** | [test_data_lifecycle_safety_invariants.py](../../../../5_connectors/adapter/tests/test_data_lifecycle_safety_invariants.py) |
 | **DLP Batch 62 - Running Baseline Revalidation** | **已收口 ✓（18011 running diagnostics verified; source_move_executed=false; non_active_copy_move_executed=true; readthrough.status=passed; lineage_checksum_match=true）** | — |
 | **DLP Batch 63 - Active Docs Sync and Next-Line Freeze** | **已收口 ✓（README updated; next-line placeholder: archive-at-scale readiness design only）** | — |
+| **RES-001 Raw Evidence Segmentation Mainline** | **进行中（observe-only dual-write introduced in repo; legacy source retained; running validation pending）** | [OmniMemora_RES001_Batch1_Source_Map_Audit_2026-04-25.md](./OmniMemora_RES001_Batch1_Source_Map_Audit_2026-04-25.md) |
 | Controlled Beta Next Step Engineering Plan | **进行中（historical controlled-beta execution line preserved; active architecture mainline has moved to Data Lifecycle Plane）** | [OmniMemora_Controlled_Beta_Next_Step_Engineering_Plan_2026-04-23.md](./OmniMemora_Controlled_Beta_Next_Step_Engineering_Plan_2026-04-23.md) |
 
 > Cloud Reset `Batch 6.1` is classified as **optional cleanup only** (legacy project physical retire), not a mainline closeout prerequisite.
