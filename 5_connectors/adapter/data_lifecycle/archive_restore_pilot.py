@@ -99,7 +99,9 @@ def read_latest_restore_pilot_record(*, policy: Optional[DataLifecyclePolicy] = 
     return _read_json_dict(_restore_record_path(current_policy))
 
 
-def _extract_quarantine_copy_path(quarantine_record: dict[str, Any]) -> Optional[Path]:
+def _extract_quarantine_copy_path(quarantine_record: Optional[dict[str, Any]]) -> Optional[Path]:
+    if not isinstance(quarantine_record, dict):
+        return None
     for key in ("quarantine_copy_path", "quarantine_path", "path"):
         value = str(quarantine_record.get(key) or "").strip()
         if value:
