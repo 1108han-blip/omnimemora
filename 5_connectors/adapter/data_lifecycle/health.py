@@ -671,6 +671,14 @@ def build_health_payload(
                 "legacy_count": 0,
             },
             "write_errors": {"count": 0, "latest": None},
+            "cleanup": {
+                "status": "missing",
+                "mode": "preview_only",
+                "cleanup_allowed": False,
+                "candidate_file_count": 0,
+                "estimated_reclaim_bytes": 0,
+                "blocking_reasons_count": 0,
+            },
         }
 
     return {

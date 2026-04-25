@@ -32,8 +32,10 @@ def _write_legacy_index(data_dir, rows: dict[str, dict]):
 def test_parity_report_passes_when_legacy_and_sqlite_match(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     sqlite_path = tmp_path / "meter_store.sqlite3"
+    preview_path = tmp_path / "dlp" / "meter_cleanup_preview.json"
     monkeypatch.setenv("OMNIMEMORA_METER_DATA_DIR", str(data_dir))
     monkeypatch.setenv("OMNIMEMORA_METER_STORE_V2_FILE", str(sqlite_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_CLEANUP_PREVIEW_FILE", str(preview_path))
 
     payload = _payload("req-match")
     _write_legacy_index(data_dir, {"req-match": payload})
@@ -48,8 +50,10 @@ def test_parity_report_passes_when_legacy_and_sqlite_match(tmp_path, monkeypatch
 def test_parity_report_detects_missing_and_hash_mismatch(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     sqlite_path = tmp_path / "meter_store.sqlite3"
+    preview_path = tmp_path / "dlp" / "meter_cleanup_preview.json"
     monkeypatch.setenv("OMNIMEMORA_METER_DATA_DIR", str(data_dir))
     monkeypatch.setenv("OMNIMEMORA_METER_STORE_V2_FILE", str(sqlite_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_CLEANUP_PREVIEW_FILE", str(preview_path))
 
     legacy_a = _payload("req-a", saved_tokens=100)
     legacy_b = _payload("req-b", saved_tokens=200)
@@ -71,8 +75,10 @@ def test_parity_report_detects_missing_and_hash_mismatch(tmp_path, monkeypatch):
 def test_rebuild_and_status_payload_keep_legacy_authoritative(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     sqlite_path = tmp_path / "meter_store.sqlite3"
+    preview_path = tmp_path / "dlp" / "meter_cleanup_preview.json"
     monkeypatch.setenv("OMNIMEMORA_METER_DATA_DIR", str(data_dir))
     monkeypatch.setenv("OMNIMEMORA_METER_STORE_V2_FILE", str(sqlite_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_CLEANUP_PREVIEW_FILE", str(preview_path))
 
     _write_legacy_index(
         data_dir,
@@ -98,3 +104,6 @@ def test_rebuild_and_status_payload_keep_legacy_authoritative(tmp_path, monkeypa
     assert status["read_path"]["metrics_read_mode"] == "sqlite_first_legacy_fallback"
     assert status["read_path"]["status_read_model_read_mode"] == "sqlite_first_legacy_fallback"
     assert status["read_path"]["cleanup_eligibility"] == "readiness_only"
+    assert status["cleanup"]["status"] == "missing"
+    assert status["cleanup"]["mode"] == "preview_only"
+    assert status["cleanup"]["cleanup_allowed"] is False

@@ -1437,3 +1437,65 @@ def test_data_lifecycle_meter_storage_parity_rebuild_endpoint(monkeypatch):
     response = client.post("/data-lifecycle/meter-storage/parity/rebuild")
     assert response.status_code == 200
     assert response.json()["schema_version"] == "dlp-meter-storage-v2-parity-rebuild-v1"
+
+
+def test_data_lifecycle_meter_cleanup_preview_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._meter_cleanup_preview_mod, "read_preview", lambda policy=None: None)
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/cleanup/preview")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-cleanup-preview-v1"
+    assert payload["status"] == "missing"
+    assert payload["mode"] == "preview_only"
+    assert payload["cleanup_allowed"] is False
+
+
+def test_data_lifecycle_meter_cleanup_preview_rebuild_endpoint_returns_record_and_preview(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-cleanup-preview",
+        "trigger": "meter_cleanup_preview_rebuild",
+        "status": "success",
+    }
+    expected_preview = {
+        "schema_version": "res-legacy-meter-cleanup-preview-v1",
+        "mode": "preview_only",
+        "status": "blocked",
+        "cleanup_allowed": False,
+        "estimated_reclaim_bytes": 123,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_cleanup_preview_mod,
+        "rebuild_preview",
+        lambda policy=None: (expected_record, expected_preview),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/meter-storage/cleanup/preview/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-cleanup-preview-rebuild-v1"
+    assert payload["record"]["trigger"] == "meter_cleanup_preview_rebuild"
+    assert payload["preview"]["mode"] == "preview_only"
+    assert payload["preview"]["cleanup_allowed"] is False
+
+
+def test_meter_cleanup_preview_does_not_expose_execute_or_destructive_endpoints():
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    client = TestClient(app)
+    forbidden_paths = [
+        "/data-lifecycle/meter-storage/cleanup/execute",
+        "/data-lifecycle/meter-storage/cleanup/delete",
+        "/data-lifecycle/meter-storage/cleanup/move",
+        "/data-lifecycle/meter-storage/cleanup/compress",
+        "/data-lifecycle/meter-storage/cleanup/truncate",
+    ]
+    for path in forbidden_paths:
+        response = client.post(path)
+        assert response.status_code == 404

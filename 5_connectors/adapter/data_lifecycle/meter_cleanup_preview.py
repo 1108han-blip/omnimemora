@@ -272,8 +272,4 @@ def rebuild_preview(*, policy: Optional[DataLifecyclePolicy] = None) -> tuple[di
     )
     state_store.append_state_record(record, policy=current_policy)
 
-    return {
-        "schema_version": METER_CLEANUP_PREVIEW_REBUILD_SCHEMA_VERSION,
-        "record": record,
-        "preview": preview,
-    }, preview
+    return record, preview

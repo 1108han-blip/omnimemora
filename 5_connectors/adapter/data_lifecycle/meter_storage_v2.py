@@ -116,6 +116,39 @@ def get_status_payload() -> dict[str, Any]:
     if status_mode not in {_status_read_resolver.MODE_SQLITE_FIRST, _status_read_resolver.MODE_LEGACY_ONLY}:
         status_mode = _status_read_resolver.MODE_SQLITE_FIRST
     status_switch_enabled = status_mode == _status_read_resolver.MODE_SQLITE_FIRST
+    cleanup_view: dict[str, Any]
+    try:
+        cleanup_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_cleanup_preview")
+        preview = cleanup_mod.read_preview()
+        if isinstance(preview, dict):
+            blocking_reasons = preview.get("blocking_reasons") or []
+            summary = preview.get("summary") or {}
+            cleanup_view = {
+                "status": str(preview.get("status") or "blocked"),
+                "mode": str(preview.get("mode") or cleanup_mod.METER_CLEANUP_PREVIEW_MODE),
+                "cleanup_allowed": bool(preview.get("cleanup_allowed")),
+                "candidate_file_count": int(summary.get("candidate_file_count", 0) or 0),
+                "estimated_reclaim_bytes": int(preview.get("estimated_reclaim_bytes", 0) or 0),
+                "blocking_reasons_count": int(len(blocking_reasons)),
+            }
+        else:
+            cleanup_view = {
+                "status": "missing",
+                "mode": "preview_only",
+                "cleanup_allowed": False,
+                "candidate_file_count": 0,
+                "estimated_reclaim_bytes": 0,
+                "blocking_reasons_count": 0,
+            }
+    except Exception:
+        cleanup_view = {
+            "status": "missing",
+            "mode": "preview_only",
+            "cleanup_allowed": False,
+            "candidate_file_count": 0,
+            "estimated_reclaim_bytes": 0,
+            "blocking_reasons_count": 0,
+        }
 
     return {
         "schema_version": METER_STORAGE_STATUS_SCHEMA_VERSION,
@@ -148,6 +181,7 @@ def get_status_payload() -> dict[str, Any]:
             "count": write_error_count,
             "latest": latest_error,
         },
+        "cleanup": cleanup_view,
     }
 
 

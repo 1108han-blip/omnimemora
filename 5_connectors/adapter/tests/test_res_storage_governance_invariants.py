@@ -34,8 +34,10 @@ def _write_legacy_index(data_dir, rows: dict[str, dict]):
 def test_res_switch_flags_are_visible_and_sqlite_first_by_default(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     sqlite_path = tmp_path / "meter_store.sqlite3"
+    preview_path = tmp_path / "dlp" / "meter_cleanup_preview.json"
     monkeypatch.setenv("OMNIMEMORA_METER_DATA_DIR", str(data_dir))
     monkeypatch.setenv("OMNIMEMORA_METER_STORE_V2_FILE", str(sqlite_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_CLEANUP_PREVIEW_FILE", str(preview_path))
 
     _write_legacy_index(data_dir, {"req-1": _payload("req-1")})
     status = meter_storage_v2.get_status_payload()
@@ -57,8 +59,10 @@ def test_res_switch_flags_are_visible_and_sqlite_first_by_default(tmp_path, monk
 def test_meter_storage_parity_exposes_critical_mismatch_count(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     sqlite_path = tmp_path / "meter_store.sqlite3"
+    preview_path = tmp_path / "dlp" / "meter_cleanup_preview.json"
     monkeypatch.setenv("OMNIMEMORA_METER_DATA_DIR", str(data_dir))
     monkeypatch.setenv("OMNIMEMORA_METER_STORE_V2_FILE", str(sqlite_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_CLEANUP_PREVIEW_FILE", str(preview_path))
     _write_legacy_index(data_dir, {"req-1": _payload("req-1")})
 
     parity = meter_storage_v2.build_parity_report()
@@ -73,7 +77,11 @@ def test_no_meter_legacy_cleanup_delete_truncate_compress_endpoints_exist():
         "/data-lifecycle/meter-storage/move",
         "/data-lifecycle/meter-storage/truncate",
         "/data-lifecycle/meter-storage/compress",
-        "/data-lifecycle/meter-storage/cleanup",
+        "/data-lifecycle/meter-storage/cleanup/execute",
+        "/data-lifecycle/meter-storage/cleanup/delete",
+        "/data-lifecycle/meter-storage/cleanup/move",
+        "/data-lifecycle/meter-storage/cleanup/compress",
+        "/data-lifecycle/meter-storage/cleanup/truncate",
     ]
     all_paths = {getattr(route, "path", "") for route in router.routes}
     found = [path for path in forbidden if path in all_paths]

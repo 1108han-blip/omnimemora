@@ -32,6 +32,7 @@ _archive_non_active_quarantine_exec_mod = importlib.import_module(
 )
 _raw_evidence_segments_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.raw_evidence_segments")
 _meter_storage_v2_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_storage_v2")
+_meter_cleanup_preview_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_cleanup_preview")
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -107,6 +108,43 @@ async def post_data_lifecycle_meter_storage_parity_rebuild():
             },
         ) from exc
     return payload
+
+
+@router.get("/data-lifecycle/meter-storage/cleanup/preview")
+async def get_data_lifecycle_meter_storage_cleanup_preview():
+    policy = _policy_mod.load_policy()
+    preview = _meter_cleanup_preview_mod.read_preview(policy=policy)
+    if preview is None:
+        return {
+            "schema_version": _meter_cleanup_preview_mod.METER_CLEANUP_PREVIEW_SCHEMA_VERSION,
+            "status": "missing",
+            "mode": _meter_cleanup_preview_mod.METER_CLEANUP_PREVIEW_MODE,
+            "cleanup_allowed": False,
+        }
+    return preview
+
+
+@router.post("/data-lifecycle/meter-storage/cleanup/preview/rebuild")
+async def post_data_lifecycle_meter_storage_cleanup_preview_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, preview = _meter_cleanup_preview_mod.rebuild_preview(policy=policy)
+    except Exception as exc:
+        latest_preview = _meter_cleanup_preview_mod.read_preview(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _meter_cleanup_preview_mod.METER_CLEANUP_PREVIEW_REBUILD_SCHEMA_VERSION,
+                "message": "meter cleanup preview rebuild failed",
+                "error": str(exc),
+                "preview": latest_preview,
+            },
+        ) from exc
+    return {
+        "schema_version": _meter_cleanup_preview_mod.METER_CLEANUP_PREVIEW_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "preview": preview,
+    }
 
 
 @router.get("/data-lifecycle/retention/manifest")
