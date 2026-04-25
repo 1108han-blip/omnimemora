@@ -25,6 +25,7 @@ from . import (
     archive_non_active_candidates,
     archive_non_active_quarantine_readiness,
     archive_non_active_execution_gate,
+    archive_non_active_quarantine,
 )
 from .policy import DataLifecyclePolicy, load_policy
 
@@ -570,6 +571,49 @@ def build_health_payload(
             "delete_allowed": False,
             "compress_allowed": False,
         }
+    non_active_quarantine_record = archive_non_active_quarantine.read_record(policy=current_policy)
+    if isinstance(non_active_quarantine_record, dict):
+        non_active_quarantine_record_summary = non_active_quarantine_record.get("summary") or {}
+        archive_non_active_quarantine_record_view = {
+            "status": str(non_active_quarantine_record.get("status") or "present"),
+            "mode": non_active_quarantine_record.get("mode"),
+            "candidate_kind": non_active_quarantine_record.get("candidate_kind"),
+            "candidate_path": non_active_quarantine_record.get("candidate_path"),
+            "quarantine_path": non_active_quarantine_record.get("quarantine_path"),
+            "checksum_match": bool(non_active_quarantine_record.get("checksum_match", False)),
+            "source_move_executed": bool(non_active_quarantine_record.get("source_move_executed", False)),
+            "non_active_copy_move_executed": bool(
+                non_active_quarantine_record.get(
+                    "non_active_copy_move_executed",
+                    non_active_quarantine_record_summary.get("non_active_copy_move_executed", False),
+                )
+            ),
+            "delete_compress_executed": bool(non_active_quarantine_record.get("delete_compress_executed", False)),
+            "production_read_path_unchanged": bool(
+                non_active_quarantine_record.get("production_read_path_unchanged", True)
+            ),
+            "blocking_count": int(
+                non_active_quarantine_record_summary.get(
+                    "blocking_count",
+                    len(non_active_quarantine_record.get("blocking_reasons") or []),
+                )
+                or 0
+            ),
+        }
+    else:
+        archive_non_active_quarantine_record_view = {
+            "status": "missing",
+            "mode": None,
+            "candidate_kind": None,
+            "candidate_path": None,
+            "quarantine_path": None,
+            "checksum_match": False,
+            "source_move_executed": False,
+            "non_active_copy_move_executed": False,
+            "delete_compress_executed": False,
+            "production_read_path_unchanged": True,
+            "blocking_count": 0,
+        }
     status, recommended_action = _derive_status(
         summary_freshness=summary_freshness,
         last_maintenance=last_maintenance,
@@ -624,4 +668,5 @@ def build_health_payload(
         "archive_non_active_candidates": archive_non_active_view,
         "archive_non_active_quarantine_readiness": archive_non_active_quarantine_view,
         "archive_non_active_execution_gate": archive_non_active_gate_view,
+        "archive_non_active_quarantine": archive_non_active_quarantine_record_view,
     }

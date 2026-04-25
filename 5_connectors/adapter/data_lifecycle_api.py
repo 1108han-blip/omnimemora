@@ -27,6 +27,9 @@ _archive_restore_pilot_mod = importlib.import_module("5_connectors.adapter.data_
 _archive_non_active_candidates_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_non_active_candidates")
 _archive_non_active_quarantine_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_non_active_quarantine_readiness")
 _archive_non_active_gate_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_non_active_execution_gate")
+_archive_non_active_quarantine_exec_mod = importlib.import_module(
+    "5_connectors.adapter.data_lifecycle.archive_non_active_quarantine"
+)
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -564,4 +567,41 @@ async def post_data_lifecycle_archive_non_active_quarantine_execution_gate_rebui
         "schema_version": _archive_non_active_gate_mod.NON_ACTIVE_EXECUTION_GATE_REBUILD_SCHEMA_VERSION,
         "record": record,
         "gate": gate,
+    }
+
+
+@router.get("/data-lifecycle/archive/non-active-quarantine/latest")
+async def get_data_lifecycle_archive_non_active_quarantine_latest():
+    policy = _policy_mod.load_policy()
+    latest = _archive_non_active_quarantine_exec_mod.read_record(policy=policy)
+    if latest is None:
+        return {
+            "schema_version": _archive_non_active_quarantine_exec_mod.NON_ACTIVE_QUARANTINE_RECORD_SCHEMA_VERSION,
+            "status": "missing",
+        }
+    return latest
+
+
+@router.post("/data-lifecycle/archive/non-active-quarantine/move-one")
+async def post_data_lifecycle_archive_non_active_quarantine_move_one():
+    policy = _policy_mod.load_policy()
+    try:
+        record, quarantine = _archive_non_active_quarantine_exec_mod.execute_single_non_active_copy_quarantine(
+            policy=policy
+        )
+    except Exception as exc:
+        latest = _archive_non_active_quarantine_exec_mod.read_record(policy=policy)
+        raise HTTPException(
+            status_code=500,
+            detail={
+                "schema_version": _archive_non_active_quarantine_exec_mod.NON_ACTIVE_QUARANTINE_RECORD_SCHEMA_VERSION,
+                "message": "archive non-active quarantine move-one failed",
+                "error": str(exc),
+                "quarantine": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _archive_non_active_quarantine_exec_mod.NON_ACTIVE_QUARANTINE_RECORD_SCHEMA_VERSION,
+        "record": record,
+        "quarantine": quarantine,
     }

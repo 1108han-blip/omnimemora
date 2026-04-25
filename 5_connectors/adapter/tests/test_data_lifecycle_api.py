@@ -700,7 +700,7 @@ def test_data_lifecycle_api_has_no_archive_batch_or_cleanup_endpoint():
     assert client.post("/data-lifecycle/archive/non-active-candidates/execute").status_code == 404
     assert client.post("/data-lifecycle/archive/non-active-candidates/move-one").status_code == 404
     assert client.post("/data-lifecycle/archive/non-active-quarantine/execute").status_code == 404
-    assert client.post("/data-lifecycle/archive/non-active-quarantine/move-one").status_code == 404
+    assert client.post("/data-lifecycle/archive/non-active-quarantine/move-source").status_code == 404
     assert client.post("/data-lifecycle/archive/non-active-quarantine/delete").status_code == 404
     assert client.post("/data-lifecycle/archive/non-active-quarantine/compress").status_code == 404
     assert client.post("/data-lifecycle/archive/non-active-quarantine/execution/execute").status_code == 404
@@ -1231,3 +1231,84 @@ def test_dlp_health_exposes_archive_non_active_execution_gate_summary(tmp_path):
     assert gate["source_move_allowed"] is False
     assert gate["delete_allowed"] is False
     assert gate["compress_allowed"] is False
+
+
+def test_data_lifecycle_archive_non_active_quarantine_latest_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._archive_non_active_quarantine_exec_mod, "read_record", lambda policy=None: None)
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/archive/non-active-quarantine/latest")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-non-active-copy-quarantine-record-v1"
+    assert payload["status"] == "missing"
+
+
+def test_data_lifecycle_archive_non_active_quarantine_move_one_endpoint_returns_record(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-non-active-move-1",
+        "trigger": "archive_non_active_copy_quarantine_execute_one",
+        "status": "success",
+        "error": None,
+    }
+    expected_quarantine = {
+        "schema_version": "dlp-non-active-copy-quarantine-record-v1",
+        "quarantine_id": "naq1",
+        "mode": "single_non_active_copy_quarantine_only",
+        "status": "success",
+        "source_move_executed": False,
+        "non_active_copy_move_executed": True,
+        "delete_compress_executed": False,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._archive_non_active_quarantine_exec_mod,
+        "execute_single_non_active_copy_quarantine",
+        lambda policy=None: (expected_record, expected_quarantine),
+    )
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/archive/non-active-quarantine/move-one")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-non-active-copy-quarantine-record-v1"
+    assert payload["record"]["trigger"] == "archive_non_active_copy_quarantine_execute_one"
+    assert payload["quarantine"]["status"] == "success"
+    assert payload["quarantine"]["source_move_executed"] is False
+    assert payload["quarantine"]["non_active_copy_move_executed"] is True
+
+
+def test_data_lifecycle_archive_non_active_quarantine_does_not_expose_delete_compress_or_batch_cleanup():
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    client = TestClient(app)
+    forbidden_paths = [
+        "/data-lifecycle/archive/non-active-quarantine/delete",
+        "/data-lifecycle/archive/non-active-quarantine/compress",
+        "/data-lifecycle/archive/non-active-quarantine/cleanup",
+        "/data-lifecycle/archive/non-active-quarantine/batch",
+        "/data-lifecycle/archive/non-active-quarantine/execution/execute",
+    ]
+    for path in forbidden_paths:
+        response = client.post(path)
+        assert response.status_code == 404
+
+
+def test_dlp_health_exposes_archive_non_active_quarantine_record_summary(tmp_path):
+    policy = _build_policy(tmp_path)
+    quarantine_path = tmp_path / "archive_quarantine_record.json"
+    quarantine_path.write_text(
+        '{"schema_version":"dlp-non-active-copy-quarantine-record-v1","quarantine_id":"naq1","generated_at":"2026-04-25T00:00:00+00:00","mode":"single_non_active_copy_quarantine_only","status":"success","candidate_kind":"archive_pilot_copy","candidate_path":"/tmp/archive.copy","quarantine_path":"/tmp/archive.copy.quarantine","checksum_match":true,"source_move_executed":false,"non_active_copy_move_executed":true,"delete_compress_executed":false,"production_read_path_unchanged":true,"summary":{"blocking_count":0}}',
+        encoding="utf-8",
+    )
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    quarantine = payload.get("archive_non_active_quarantine") or {}
+    assert quarantine["status"] == "success"
+    assert quarantine["mode"] == "single_non_active_copy_quarantine_only"
+    assert quarantine["candidate_kind"] == "archive_pilot_copy"
+    assert quarantine["checksum_match"] is True
+    assert quarantine["source_move_executed"] is False
+    assert quarantine["non_active_copy_move_executed"] is True
+    assert quarantine["delete_compress_executed"] is False
+    assert quarantine["production_read_path_unchanged"] is True
