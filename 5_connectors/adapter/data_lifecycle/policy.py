@@ -13,6 +13,7 @@ class DataLifecyclePolicy:
     summary_stale_max_age_seconds: float = 3600.0
     summary_file: str = ""
     maintenance_state_file: str = ""
+    retention_manifest_file: str = ""
     maintenance_enabled: bool = True
     maintenance_startup_delay_seconds: float = 5.0
     maintenance_interval_seconds: float = 60.0
@@ -35,6 +36,10 @@ def load_policy() -> DataLifecyclePolicy:
         "OMNIMEMORA_DLP_MAINTENANCE_STATE_FILE",
         str(base_dir / "maintenance_state.jsonl"),
     )
+    retention_manifest_file = os.getenv(
+        "OMNIMEMORA_DLP_RETENTION_MANIFEST_FILE",
+        str(base_dir / "retention_manifest.json"),
+    )
     ttl_seconds = float(os.getenv("OMNIMEMORA_DLP_SUMMARY_TTL_SECONDS", "30"))
     stale_max_age_seconds = float(
         os.getenv("OMNIMEMORA_DLP_SUMMARY_STALE_MAX_AGE_SECONDS", "3600")
@@ -56,6 +61,7 @@ def load_policy() -> DataLifecyclePolicy:
         summary_stale_max_age_seconds=max(1.0, stale_max_age_seconds),
         summary_file=summary_file,
         maintenance_state_file=maintenance_state_file,
+        retention_manifest_file=retention_manifest_file,
         maintenance_enabled=maintenance_enabled,
         maintenance_startup_delay_seconds=max(0.0, maintenance_startup_delay_seconds),
         maintenance_interval_seconds=max(1.0, maintenance_interval_seconds),
