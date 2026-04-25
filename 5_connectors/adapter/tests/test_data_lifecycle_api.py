@@ -34,6 +34,7 @@ def _build_policy(tmp_path, *, ttl_seconds=10.0, stale_max_age_seconds=300.0):
         archive_quarantine_record_file=str(tmp_path / "archive_quarantine_record.json"),
         archive_restore_pilot_record_file=str(tmp_path / "archive_restore_pilot_record.json"),
         archive_restore_staging_root=str(tmp_path / "restore" / "staging"),
+        archive_non_active_candidate_report_file=str(tmp_path / "archive_non_active_candidate_report.json"),
     )
 
 
@@ -694,6 +695,8 @@ def test_data_lifecycle_api_has_no_archive_batch_or_cleanup_endpoint():
     assert client.post("/data-lifecycle/archive/quarantine/compress").status_code == 404
     assert client.post("/data-lifecycle/archive/quarantine/batch-move").status_code == 404
     assert client.post("/data-lifecycle/archive/restore/pilot/production-overwrite").status_code == 404
+    assert client.post("/data-lifecycle/archive/non-active-candidates/execute").status_code == 404
+    assert client.post("/data-lifecycle/archive/non-active-candidates/move-one").status_code == 404
 
 
 def test_dlp_health_exposes_archive_pilot_summary(tmp_path):
@@ -1022,3 +1025,69 @@ def test_dlp_health_exposes_archive_restore_pilot_summary(tmp_path):
     assert restore["production_source_overwrite"] is False
     assert restore["archive_copy_retained"] is True
     assert restore["quarantine_copy_retained"] is True
+
+
+def test_data_lifecycle_archive_non_active_candidates_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._archive_non_active_candidates_mod, "read_report", lambda policy=None: None)
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/archive/non-active-candidates/report")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-non-active-candidate-report-v1"
+    assert payload["status"] == "missing"
+
+
+def test_data_lifecycle_archive_non_active_candidates_rebuild_endpoint_returns_report(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-non-active-1",
+        "trigger": "archive_non_active_candidate_report_rebuild",
+        "status": "success",
+        "error": None,
+    }
+    expected_report = {
+        "schema_version": "dlp-non-active-candidate-report-v1",
+        "report_id": "non-active-1",
+        "mode": "non_active_selection_report_only",
+        "candidates": [],
+        "summary": {
+            "total_scanned": 0,
+            "forbidden_count": 0,
+            "plausible_non_active_count": 0,
+            "review_required_count": 0,
+            "source_move_delete_compress_executed": False,
+            "warnings_count": 0,
+        },
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._archive_non_active_candidates_mod,
+        "rebuild_report",
+        lambda policy=None: (expected_record, expected_report),
+    )
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/archive/non-active-candidates/report/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-non-active-candidate-report-rebuild-v1"
+    assert payload["record"]["trigger"] == "archive_non_active_candidate_report_rebuild"
+    assert payload["report"]["schema_version"] == "dlp-non-active-candidate-report-v1"
+
+
+def test_dlp_health_exposes_archive_non_active_candidate_summary(tmp_path):
+    policy = _build_policy(tmp_path)
+    report_path = tmp_path / "archive_non_active_candidate_report.json"
+    report_path.write_text(
+        '{"schema_version":"dlp-non-active-candidate-report-v1","report_id":"n1","generated_at":"2026-04-25T00:00:00+00:00","mode":"non_active_selection_report_only","candidates":[],"summary":{"total_scanned":3,"forbidden_count":2,"plausible_non_active_count":1,"review_required_count":0,"source_move_delete_compress_executed":false,"warnings_count":0},"warnings":[]}',
+        encoding="utf-8",
+    )
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    non_active = payload.get("archive_non_active_candidates") or {}
+    assert non_active["status"] == "present"
+    assert non_active["mode"] == "non_active_selection_report_only"
+    assert non_active["total_scanned"] == 3
+    assert non_active["plausible_non_active_count"] == 1
+    assert non_active["forbidden_count"] == 2
+    assert non_active["source_move_delete_compress_executed"] is False

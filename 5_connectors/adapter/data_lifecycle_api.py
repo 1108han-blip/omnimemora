@@ -24,6 +24,7 @@ _archive_fallback_mod = importlib.import_module("5_connectors.adapter.data_lifec
 _archive_quarantine_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_quarantine_readiness")
 _archive_quarantine_exec_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_quarantine")
 _archive_restore_pilot_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_restore_pilot")
+_archive_non_active_candidates_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_non_active_candidates")
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -456,4 +457,39 @@ async def post_data_lifecycle_archive_restore_pilot_run():
         "schema_version": _archive_restore_pilot_mod.ARCHIVE_RESTORE_PILOT_SCHEMA_VERSION,
         "record": record,
         "restore": restore,
+    }
+
+
+@router.get("/data-lifecycle/archive/non-active-candidates/report")
+async def get_data_lifecycle_archive_non_active_candidates_report():
+    policy = _policy_mod.load_policy()
+    report = _archive_non_active_candidates_mod.read_report(policy=policy)
+    if report is None:
+        return {
+            "schema_version": _archive_non_active_candidates_mod.NON_ACTIVE_CANDIDATE_REPORT_SCHEMA_VERSION,
+            "status": "missing",
+        }
+    return report
+
+
+@router.post("/data-lifecycle/archive/non-active-candidates/report/rebuild")
+async def post_data_lifecycle_archive_non_active_candidates_report_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, report = _archive_non_active_candidates_mod.rebuild_report(policy=policy)
+    except Exception as exc:
+        latest = _archive_non_active_candidates_mod.read_report(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _archive_non_active_candidates_mod.NON_ACTIVE_CANDIDATE_REBUILD_SCHEMA_VERSION,
+                "message": "archive non-active candidate report rebuild failed",
+                "error": str(exc),
+                "report": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _archive_non_active_candidates_mod.NON_ACTIVE_CANDIDATE_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "report": report,
     }

@@ -22,6 +22,7 @@ from . import (
     archive_quarantine_readiness,
     archive_quarantine,
     archive_restore_pilot,
+    archive_non_active_candidates,
 )
 from .policy import DataLifecyclePolicy, load_policy
 
@@ -482,6 +483,32 @@ def build_health_payload(
             "archive_copy_retained": True,
             "quarantine_copy_retained": True,
         }
+    non_active_report = archive_non_active_candidates.read_report(policy=current_policy)
+    if isinstance(non_active_report, dict):
+        non_active_summary = non_active_report.get("summary") or {}
+        archive_non_active_view = {
+            "status": "present",
+            "mode": non_active_report.get("mode"),
+            "total_scanned": int(non_active_summary.get("total_scanned", 0) or 0),
+            "plausible_non_active_count": int(non_active_summary.get("plausible_non_active_count", 0) or 0),
+            "forbidden_count": int(non_active_summary.get("forbidden_count", 0) or 0),
+            "review_required_count": int(non_active_summary.get("review_required_count", 0) or 0),
+            "warnings_count": int(non_active_summary.get("warnings_count", 0) or 0),
+            "source_move_delete_compress_executed": bool(
+                non_active_summary.get("source_move_delete_compress_executed", False)
+            ),
+        }
+    else:
+        archive_non_active_view = {
+            "status": "missing",
+            "mode": None,
+            "total_scanned": 0,
+            "plausible_non_active_count": 0,
+            "forbidden_count": 0,
+            "review_required_count": 0,
+            "warnings_count": 0,
+            "source_move_delete_compress_executed": False,
+        }
     status, recommended_action = _derive_status(
         summary_freshness=summary_freshness,
         last_maintenance=last_maintenance,
@@ -533,4 +560,5 @@ def build_health_payload(
         "archive_quarantine_readiness": archive_quarantine_readiness_view,
         "archive_quarantine": archive_quarantine_view,
         "archive_restore_pilot": archive_restore_pilot_view,
+        "archive_non_active_candidates": archive_non_active_view,
     }
