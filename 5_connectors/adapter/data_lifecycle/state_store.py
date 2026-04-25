@@ -6,7 +6,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 from .policy import DataLifecyclePolicy, load_policy
 
@@ -21,6 +21,76 @@ def append_state_record(record: dict[str, Any], policy: Optional[DataLifecyclePo
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+
+def _normalize_filter_values(value: Optional[str | Iterable[str]]) -> Optional[set[str]]:
+    if value is None:
+        return None
+    if isinstance(value, str):
+        normalized = value.strip()
+        return {normalized} if normalized else None
+    result = {str(item).strip() for item in value if str(item).strip()}
+    return result or None
+
+
+def _read_records_raw(policy: Optional[DataLifecyclePolicy] = None) -> list[dict[str, Any]]:
+    path = _state_path(policy)
+    if not path.exists():
+        return []
+    records: list[dict[str, Any]] = []
+    try:
+        with path.open("r", encoding="utf-8") as fh:
+            for line in fh:
+                text = line.strip()
+                if not text:
+                    continue
+                try:
+                    payload = json.loads(text)
+                except Exception:
+                    continue
+                if isinstance(payload, dict):
+                    records.append(payload)
+    except Exception:
+        return []
+    return records
+
+
+def read_recent_records(
+    limit: int = 20,
+    *,
+    trigger: Optional[str | Iterable[str]] = None,
+    status: Optional[str | Iterable[str]] = None,
+    policy: Optional[DataLifecyclePolicy] = None,
+) -> list[dict[str, Any]]:
+    trigger_filter = _normalize_filter_values(trigger)
+    status_filter = _normalize_filter_values(status)
+    records = _read_records_raw(policy)
+    output: list[dict[str, Any]] = []
+    for record in reversed(records):
+        if trigger_filter is not None:
+            trigger_value = str(record.get("trigger") or "").strip()
+            if trigger_value not in trigger_filter:
+                continue
+        if status_filter is not None:
+            status_value = str(record.get("status") or "").strip()
+            if status_value not in status_filter:
+                continue
+        output.append(record)
+        if len(output) >= max(1, int(limit)):
+            break
+    return output
+
+
+def latest_record(
+    *,
+    trigger: Optional[str | Iterable[str]] = None,
+    status: Optional[str | Iterable[str]] = None,
+    policy: Optional[DataLifecyclePolicy] = None,
+) -> Optional[dict[str, Any]]:
+    records = read_recent_records(limit=1, trigger=trigger, status=status, policy=policy)
+    if not records:
+        return None
+    return records[0]
 
 
 def new_cycle_id() -> str:

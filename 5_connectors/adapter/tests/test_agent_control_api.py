@@ -8,6 +8,8 @@ from unittest import mock
 
 agent_control_api = importlib.import_module("5_connectors.adapter.agent_control_api")
 agent_routing_state = importlib.import_module("5_connectors.adapter.agent_routing_state")
+control_snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
+data_lifecycle_api = importlib.import_module("5_connectors.adapter.data_lifecycle_api")
 
 
 class AgentControlApiTests(unittest.TestCase):
@@ -186,7 +188,7 @@ class AgentControlApiTests(unittest.TestCase):
         with mock.patch.object(agent_control_api._srm, "build_control_cards", side_effect=fake_build_cards):
             with mock.patch.object(agent_control_api._srm, "build_system_status", side_effect=fake_build_system_status):
                 first = asyncio.run(agent_control_api.get_agents_control())
-                agent_control_api._agents_control_snapshot_expires_at = 0.0
+                control_snapshot_cache.force_expire_agents_control_snapshot_for_test()
                 second = asyncio.run(agent_control_api.get_agents_control())
 
         self.assertNotEqual(first["agents"][0]["message"], second["agents"][0]["message"])
@@ -366,6 +368,81 @@ class AgentControlApiTests(unittest.TestCase):
 
                 self.assertEqual(after_calls["cards"], 1)
                 self.assertEqual(after_calls["status"], 1)
+
+    def test_manual_refresh_success_invalidates_snapshot_cache(self) -> None:
+        warm_calls = {"cards": 0, "status": 0}
+
+        async def warm_build_cards():
+            warm_calls["cards"] += 1
+            return [
+                {
+                    "family_id": "openclaw",
+                    "display_name": "OpenClaw",
+                    "installed": True,
+                    "routing_enabled": False,
+                    "detected": True,
+                    "active": False,
+                    "health_state": "healthy",
+                    "message": "",
+                }
+            ]
+
+        async def warm_status():
+            warm_calls["status"] += 1
+            return {"status": "healthy"}
+
+        with mock.patch.object(agent_control_api._srm, "build_control_cards", side_effect=warm_build_cards):
+            with mock.patch.object(agent_control_api._srm, "build_system_status", side_effect=warm_status):
+                _ = asyncio.run(agent_control_api.get_agents_control())
+                _ = asyncio.run(agent_control_api.get_agents_control())
+
+        self.assertEqual(warm_calls["cards"], 1)
+        self.assertEqual(warm_calls["status"], 1)
+
+        class FakeManager:
+            def __init__(self, *, policy):
+                self.policy = policy
+
+            def run_once(self, trigger: str):
+                return {
+                    "cycle_id": "cycle-manual-refresh",
+                    "trigger": trigger,
+                    "status": "success",
+                    "error": None,
+                }
+
+        with mock.patch.object(
+            data_lifecycle_api._maintenance_manager_mod, "MaintenanceManager", side_effect=FakeManager
+        ):
+            _ = asyncio.run(data_lifecycle_api.post_data_lifecycle_manual_refresh())
+
+        after_calls = {"cards": 0, "status": 0}
+
+        async def after_build_cards():
+            after_calls["cards"] += 1
+            return [
+                {
+                    "family_id": "openclaw",
+                    "display_name": "OpenClaw",
+                    "installed": True,
+                    "routing_enabled": False,
+                    "detected": True,
+                    "active": False,
+                    "health_state": "healthy",
+                    "message": "",
+                }
+            ]
+
+        async def after_status():
+            after_calls["status"] += 1
+            return {"status": "healthy"}
+
+        with mock.patch.object(agent_control_api._srm, "build_control_cards", side_effect=after_build_cards):
+            with mock.patch.object(agent_control_api._srm, "build_system_status", side_effect=after_status):
+                _ = asyncio.run(agent_control_api.get_agents_control())
+
+        self.assertEqual(after_calls["cards"], 1)
+        self.assertEqual(after_calls["status"], 1)
 
 
 if __name__ == "__main__":

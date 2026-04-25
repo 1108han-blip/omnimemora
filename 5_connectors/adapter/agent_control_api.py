@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import copy
 import importlib
-import time
 from typing import Optional
 
 import httpx
@@ -28,12 +27,11 @@ from . import agent_routing_state as _route_state
 from .config import config
 
 _srm = importlib.import_module("5_connectors.adapter.application.status_read_model")
+_snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 router = APIRouter()
 
-_AGENTS_CONTROL_CACHE_TTL_SECONDS = 10.0
-_agents_control_snapshot_payload: Optional[dict] = None
-_agents_control_snapshot_expires_at: float = 0.0
+_AGENTS_CONTROL_CACHE_TTL_SECONDS = float(_snapshot_cache.DEFAULT_TTL_SECONDS)
 
 _DISPLAY_NAMES = {
     "codex_cli": "Codex",
@@ -63,28 +61,16 @@ def _find_card(cards, family_id):
     return None
 
 
-def _cache_now() -> float:
-    return time.monotonic()
-
-
 def _invalidate_agents_control_snapshot() -> None:
-    global _agents_control_snapshot_payload, _agents_control_snapshot_expires_at
-    _agents_control_snapshot_payload = None
-    _agents_control_snapshot_expires_at = 0.0
+    _snapshot_cache.invalidate_agents_control_snapshot()
 
 
 def _load_cached_agents_control_snapshot() -> Optional[dict]:
-    if _agents_control_snapshot_payload is None:
-        return None
-    if _cache_now() >= _agents_control_snapshot_expires_at:
-        return None
-    return copy.deepcopy(_agents_control_snapshot_payload)
+    return _snapshot_cache.load_cached_agents_control_snapshot()
 
 
 def _store_agents_control_snapshot(payload: dict, ttl_seconds: float = _AGENTS_CONTROL_CACHE_TTL_SECONDS) -> None:
-    global _agents_control_snapshot_payload, _agents_control_snapshot_expires_at
-    _agents_control_snapshot_payload = copy.deepcopy(payload)
-    _agents_control_snapshot_expires_at = _cache_now() + max(0.0, ttl_seconds)
+    _snapshot_cache.store_agents_control_snapshot(payload, ttl_seconds=ttl_seconds)
 
 
 async def _build_agents_control_payload() -> dict:

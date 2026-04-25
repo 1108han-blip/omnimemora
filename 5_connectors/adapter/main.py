@@ -171,12 +171,14 @@ def _register_control_plane(app: FastAPI) -> None:
 def _register_read_model_and_diagnostics(app: FastAPI) -> None:
     """Register read-model / diagnostics surfaces."""
     _status_api_mod = importlib.import_module("5_connectors.adapter.status_api")
+    _data_lifecycle_api_mod = importlib.import_module("5_connectors.adapter.data_lifecycle_api")
     _diagnostics_surface_mod = importlib.import_module("5_connectors.adapter.diagnostics_surface")
     _usage_surface_mod = importlib.import_module("5_connectors.adapter.usage_surface")
     _scope_surface_mod = importlib.import_module("5_connectors.adapter.scope_surface")
     _billing_surface_mod = importlib.import_module("5_connectors.adapter.billing_surface")
     _cloud_surface_mod = importlib.import_module("5_connectors.adapter.cloud_surface")
     app.include_router(_status_api_mod.router, prefix="")
+    app.include_router(_data_lifecycle_api_mod.router, prefix="")
     app.include_router(_diagnostics_surface_mod.router, prefix="")
     app.include_router(_usage_surface_mod.router, prefix="")
     app.include_router(_scope_surface_mod.router, prefix="")
