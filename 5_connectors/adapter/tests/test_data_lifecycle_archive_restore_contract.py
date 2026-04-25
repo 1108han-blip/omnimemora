@@ -20,6 +20,8 @@ def _build_policy(tmp_path):
         archive_plan_file=str(tmp_path / "archive_candidate_plan.json"),
         archive_transaction_preview_file=str(tmp_path / "archive_transaction_preview.json"),
         archive_restore_readiness_file=str(tmp_path / "archive_restore_readiness_report.json"),
+        archive_pilot_root=str(tmp_path / "archive" / "pilot"),
+        archive_pilot_record_file=str(tmp_path / "archive_pilot_record.json"),
     )
 
 
@@ -183,3 +185,63 @@ def test_archive_restore_readiness_rebuild_writes_ledger_trigger(tmp_path):
     assert record["trigger"] == "archive_restore_readiness_rebuild"
     assert record["status"] == "success"
     assert report["summary"]["sample_count"] == 1
+
+
+def test_archive_restore_readiness_verifies_pilot_copy_checksum(tmp_path):
+    policy = _build_policy(tmp_path)
+    source = tmp_path / "compile_events.jsonl"
+    source.write_text("pilot", encoding="utf-8")
+    archive = tmp_path / "archive" / "pilot" / "pid" / "compile_events.jsonl.copy"
+    archive.parent.mkdir(parents=True, exist_ok=True)
+    archive.write_text("pilot", encoding="utf-8")
+    _write_archive_plan(
+        policy,
+        [
+            {
+                "artifact_name": "compile_events",
+                "kind": "compile_events",
+                "path": str(source),
+                "bytes": source.stat().st_size,
+                "sha256": archive_transaction_mod._sha256_file(source),
+                "eligibility": "eligible",
+            }
+        ],
+    )
+    archive_transaction_mod.rebuild_preview(policy=policy)
+    _write_traceability_report(
+        policy,
+        samples=[
+            {
+                "request_id": "req-pilot",
+                "sources_found": ["compile"],
+                "missing_sources": [],
+                "request_evidence_buildable": True,
+                "trace_id_found": None,
+                "status": "pass",
+            }
+        ],
+    )
+    pilot_record = {
+        "schema_version": "dlp-archive-pilot-record-v1",
+        "pilot_id": "pid",
+        "generated_at": "2026-04-25T00:00:00+00:00",
+        "mode": "copy_to_archive_only",
+        "status": "success",
+        "source_path": str(source),
+        "source_kind": "compile_events",
+        "source_bytes": source.stat().st_size,
+        "source_sha256": archive_transaction_mod._sha256_file(source),
+        "archive_path": str(archive),
+        "archive_bytes": archive.stat().st_size,
+        "archive_sha256": archive_transaction_mod._sha256_file(archive),
+        "checksum_match": True,
+        "source_retained": True,
+        "read_path_unchanged": True,
+        "restore_key": "restore:compile:abc",
+    }
+    Path(policy.archive_pilot_record_file).write_text(json.dumps(pilot_record), encoding="utf-8")
+    report = archive_restore_mod.build_restore_readiness_report(policy=policy)
+    pilot = report.get("pilot_copy_verification") or {}
+    assert pilot["status"] == "verified"
+    assert pilot["checksum_match"] is True
+    assert report["summary"]["pilot_copy_status"] == "verified"

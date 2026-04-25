@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
 
-from . import archive_transaction, traceability, state_store
+from . import archive_transaction, traceability, state_store, archive_pilot
 from .policy import DataLifecyclePolicy, load_policy
 
 ARCHIVE_RESTORE_READINESS_SCHEMA_VERSION = "dlp-archive-restore-readiness-v1"
@@ -46,6 +46,56 @@ def _build_restore_lookup(preview: dict[str, Any]) -> dict[str, list[dict[str, A
             continue
         by_kind.setdefault(kind, []).append(item)
     return by_kind
+
+
+def _sha256_file(path: Path) -> Optional[str]:
+    if not path.exists() or not path.is_file():
+        return None
+    import hashlib
+
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        while True:
+            chunk = fh.read(1024 * 1024)
+            if not chunk:
+                break
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def _build_pilot_copy_verification(*, policy: DataLifecyclePolicy) -> dict[str, Any]:
+    pilot = archive_pilot.read_latest_pilot_record(policy=policy)
+    if not isinstance(pilot, dict):
+        return {
+            "status": "missing",
+            "pilot_id": None,
+            "source_path": None,
+            "archive_path": None,
+            "checksum_match": False,
+            "restore_key_match": False,
+            "source_retained": False,
+            "read_path_unchanged": True,
+        }
+    source_path = Path(str(pilot.get("source_path") or "")).expanduser()
+    archive_path = Path(str(pilot.get("archive_path") or "")).expanduser()
+    source_sha = _sha256_file(source_path)
+    archive_sha = _sha256_file(archive_path)
+    checksum_match = bool(source_sha and archive_sha and source_sha == archive_sha)
+    restore_key = str(pilot.get("restore_key") or "")
+    restore_key_match = bool(restore_key and archive_path.exists() and archive_path.is_file())
+    return {
+        "status": "verified" if checksum_match else "failed",
+        "pilot_id": pilot.get("pilot_id"),
+        "source_path": str(source_path),
+        "archive_path": str(archive_path),
+        "checksum_match": checksum_match,
+        "source_sha256": source_sha,
+        "archive_sha256": archive_sha,
+        "restore_key": restore_key or None,
+        "restore_key_match": restore_key_match,
+        "source_retained": source_path.exists() and source_path.is_file(),
+        "read_path_unchanged": bool(pilot.get("read_path_unchanged", True)),
+    }
 
 
 def build_restore_readiness_report(*, policy: Optional[DataLifecyclePolicy] = None) -> dict[str, Any]:
@@ -155,6 +205,9 @@ def build_restore_readiness_report(*, policy: Optional[DataLifecyclePolicy] = No
                 "evidence_chain": evidence_chain,
             }
         )
+    pilot_copy_verification = _build_pilot_copy_verification(policy=current_policy)
+    if pilot_copy_verification.get("status") == "failed":
+        warnings.append({"code": "pilot_copy_checksum_mismatch", "pilot_id": pilot_copy_verification.get("pilot_id")})
 
     return {
         "schema_version": ARCHIVE_RESTORE_READINESS_SCHEMA_VERSION,
@@ -174,11 +227,13 @@ def build_restore_readiness_report(*, policy: Optional[DataLifecyclePolicy] = No
             "path": str(Path(current_policy.traceability_report_file).expanduser()),
         },
         "request_mappings": request_mappings,
+        "pilot_copy_verification": pilot_copy_verification,
         "summary": {
             "status": "present",
             "sample_count": len(request_mappings),
             "mapped_request_count": mapped_count,
             "unmapped_request_count": unmapped_count,
+            "pilot_copy_status": pilot_copy_verification.get("status"),
             "warnings_count": len(warnings),
         },
         "warnings": warnings,
