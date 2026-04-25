@@ -304,6 +304,7 @@ def test_archive_restore_readiness_verifies_quarantined_non_active_copy(tmp_path
         "restore_key": "restore:compile:abc",
     }
     Path(policy.archive_pilot_record_file).write_text(json.dumps(pilot_record), encoding="utf-8")
+    source.write_text("pilot\nnew-event", encoding="utf-8")
     Path(policy.archive_quarantine_record_file).write_text(
         json.dumps(
             {
@@ -321,5 +322,7 @@ def test_archive_restore_readiness_verifies_quarantined_non_active_copy(tmp_path
     pilot = report.get("pilot_copy_verification") or {}
     assert pilot["status"] == "verified"
     assert pilot["checksum_match"] is True
+    assert pilot["lineage_checksum_match"] is True
+    assert pilot["current_source_checksum_match"] is False
     assert pilot["archive_path"] == str(quarantine)
     assert pilot["archive_resolution_source"] == "non_active_quarantine"

@@ -79,6 +79,7 @@ def _build_pilot_copy_verification(*, policy: DataLifecyclePolicy) -> dict[str, 
     source_path = Path(str(pilot.get("source_path") or "")).expanduser()
     archive_path = Path(str(pilot.get("archive_path") or "")).expanduser()
     archive_resolution_source = "pilot_archive_path"
+    quarantine_record = None
     if not (archive_path.exists() and archive_path.is_file()):
         quarantine = archive_non_active_quarantine.read_record(policy=policy)
         restore_key = str(pilot.get("restore_key") or "")
@@ -87,6 +88,7 @@ def _build_pilot_copy_verification(*, policy: DataLifecyclePolicy) -> dict[str, 
             and str(quarantine.get("status") or "") in {"success", "already_quarantined"}
             and str(quarantine.get("restore_key") or "") == restore_key
         ):
+            quarantine_record = quarantine
             for key in ("quarantine_copy_path", "quarantine_path"):
                 value = str(quarantine.get(key) or "").strip()
                 if not value:
@@ -98,7 +100,20 @@ def _build_pilot_copy_verification(*, policy: DataLifecyclePolicy) -> dict[str, 
                     break
     source_sha = _sha256_file(source_path)
     archive_sha = _sha256_file(archive_path)
-    checksum_match = bool(source_sha and archive_sha and source_sha == archive_sha)
+    lineage_sha = None
+    if isinstance(quarantine_record, dict):
+        lineage_sha = (
+            quarantine_record.get("quarantine_sha256")
+            or quarantine_record.get("candidate_sha256")
+            or quarantine_record.get("origin_source_sha256")
+        )
+    current_source_checksum_match = bool(source_sha and archive_sha and source_sha == archive_sha)
+    lineage_checksum_match = bool(lineage_sha and archive_sha and str(lineage_sha) == archive_sha)
+    checksum_match = (
+        lineage_checksum_match
+        if archive_resolution_source == "non_active_quarantine"
+        else current_source_checksum_match
+    )
     restore_key = str(pilot.get("restore_key") or "")
     restore_key_match = bool(restore_key and archive_path.exists() and archive_path.is_file())
     return {
@@ -110,10 +125,13 @@ def _build_pilot_copy_verification(*, policy: DataLifecyclePolicy) -> dict[str, 
         "checksum_match": checksum_match,
         "source_sha256": source_sha,
         "archive_sha256": archive_sha,
+        "lineage_sha256": lineage_sha,
         "restore_key": restore_key or None,
         "restore_key_match": restore_key_match,
         "source_retained": source_path.exists() and source_path.is_file(),
         "read_path_unchanged": bool(pilot.get("read_path_unchanged", True)),
+        "current_source_checksum_match": current_source_checksum_match,
+        "lineage_checksum_match": lineage_checksum_match,
     }
 
 

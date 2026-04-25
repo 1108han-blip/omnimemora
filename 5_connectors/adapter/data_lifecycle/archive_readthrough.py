@@ -89,22 +89,22 @@ def _quarantined_copy_for_restore_key(
     *,
     policy: DataLifecyclePolicy,
     restore_key: Optional[str],
-) -> Optional[Path]:
+) -> tuple[Optional[Path], Optional[dict[str, Any]]]:
     record = archive_non_active_quarantine.read_record(policy=policy)
     if not isinstance(record, dict):
-        return None
+        return None, None
     if str(record.get("status") or "") not in {"success", "already_quarantined"}:
-        return None
+        return None, record
     if restore_key and str(record.get("restore_key") or "") != restore_key:
-        return None
+        return None, record
     for key in ("quarantine_copy_path", "quarantine_path"):
         value = str(record.get(key) or "").strip()
         if not value:
             continue
         path = Path(value).expanduser()
         if path.exists() and path.is_file():
-            return path
-    return None
+            return path, record
+    return None, record
 
 
 def build_readthrough_report(
@@ -162,8 +162,12 @@ def build_readthrough_report(
     source = Path(target_source_path).expanduser()
     archive = Path(str(pilot.get("archive_path") or "")).expanduser()
     archive_resolution_source = "pilot_archive_path"
+    quarantine_record = None
     if not (archive.exists() and archive.is_file()):
-        quarantined_copy = _quarantined_copy_for_restore_key(policy=current_policy, restore_key=target_restore_key)
+        quarantined_copy, quarantine_record = _quarantined_copy_for_restore_key(
+            policy=current_policy,
+            restore_key=target_restore_key,
+        )
         if quarantined_copy is not None:
             archive = quarantined_copy
             archive_resolution_source = "non_active_quarantine"
@@ -172,7 +176,20 @@ def build_readthrough_report(
     archive_exists = archive.exists() and archive.is_file()
     source_sha = _sha256_file(source) if source_exists else None
     archive_sha = _sha256_file(archive) if archive_exists else None
-    checksum_match = bool(source_sha and archive_sha and source_sha == archive_sha)
+    lineage_sha = None
+    if isinstance(quarantine_record, dict):
+        lineage_sha = (
+            quarantine_record.get("quarantine_sha256")
+            or quarantine_record.get("candidate_sha256")
+            or quarantine_record.get("origin_source_sha256")
+        )
+    current_source_checksum_match = bool(source_sha and archive_sha and source_sha == archive_sha)
+    lineage_checksum_match = bool(lineage_sha and archive_sha and str(lineage_sha) == archive_sha)
+    checksum_match = (
+        lineage_checksum_match
+        if archive_resolution_source == "non_active_quarantine"
+        else current_source_checksum_match
+    )
     source_retained = source_exists
     archive_copy_readable = archive_exists and archive_sha is not None
     read_path_unchanged = bool(pilot.get("read_path_unchanged", True))
@@ -225,10 +242,13 @@ def build_readthrough_report(
         "archive_resolution_source": archive_resolution_source,
         "archive_bytes": int(archive.stat().st_size) if archive_exists else 0,
         "archive_sha256": archive_sha,
+        "lineage_sha256": lineage_sha,
         "restore_key": target_restore_key,
         "source_retained": source_retained,
         "archive_copy_readable": archive_copy_readable,
         "checksum_match": checksum_match,
+        "current_source_checksum_match": current_source_checksum_match,
+        "lineage_checksum_match": lineage_checksum_match,
         "read_path_unchanged": read_path_unchanged,
         "request_id_cross_check": request_id_cross_check,
         "request_evidence_shadow": request_evidence_shadow,
@@ -238,6 +258,8 @@ def build_readthrough_report(
             "source_retained": source_retained,
             "archive_copy_readable": archive_copy_readable,
             "checksum_match": checksum_match,
+            "current_source_checksum_match": current_source_checksum_match,
+            "lineage_checksum_match": lineage_checksum_match,
             "read_path_unchanged": read_path_unchanged,
             "archive_resolution_source": archive_resolution_source,
             "validated_at": now.isoformat(),

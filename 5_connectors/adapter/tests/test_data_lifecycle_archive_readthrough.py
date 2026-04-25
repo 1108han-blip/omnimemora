@@ -190,6 +190,7 @@ def test_readthrough_resolves_quarantined_non_active_copy_when_pilot_archive_mov
     archive.rename(quarantine)
     _write_pilot(policy, source_path=source, archive_path=archive, restore_key="restore:compile:quarantined")
     _write_readiness(policy, restore_key="restore:compile:quarantined", request_id="req-shadow-q")
+    source.write_text("same\nnew-event", encoding="utf-8")
     Path(policy.archive_quarantine_record_file).write_text(
         json.dumps(
             {
@@ -209,5 +210,7 @@ def test_readthrough_resolves_quarantined_non_active_copy_when_pilot_archive_mov
     assert report["archive_path"] == str(quarantine)
     assert report["archive_resolution_source"] == "non_active_quarantine"
     assert report["checksum_match"] is True
+    assert report["lineage_checksum_match"] is True
+    assert report["current_source_checksum_match"] is False
     assert report["source_retained"] is True
     assert report["read_path_unchanged"] is True
