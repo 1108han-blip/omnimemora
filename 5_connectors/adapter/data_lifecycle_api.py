@@ -16,6 +16,8 @@ _traceability_mod = importlib.import_module("5_connectors.adapter.data_lifecycle
 _archive_plan_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_plan")
 _archive_txn_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_transaction")
 _archive_restore_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_restore_contract")
+_archive_gate_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_execution_gate")
+_archive_approval_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_approval")
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -201,3 +203,44 @@ async def post_data_lifecycle_archive_restore_readiness_rebuild():
         "record": record,
         "readiness": readiness,
     }
+
+
+@router.get("/data-lifecycle/archive/execution/gate")
+async def get_data_lifecycle_archive_execution_gate():
+    policy = _policy_mod.load_policy()
+    gate = _archive_gate_mod.read_gate(policy=policy)
+    if gate is None:
+        return {"schema_version": _archive_gate_mod.ARCHIVE_EXECUTION_GATE_SCHEMA_VERSION, "status": "missing"}
+    return gate
+
+
+@router.post("/data-lifecycle/archive/execution/gate/rebuild")
+async def post_data_lifecycle_archive_execution_gate_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, gate = _archive_gate_mod.rebuild_gate(policy=policy)
+    except Exception as exc:
+        latest_gate = _archive_gate_mod.read_gate(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _archive_gate_mod.ARCHIVE_EXECUTION_GATE_REBUILD_SCHEMA_VERSION,
+                "message": "archive execution gate rebuild failed",
+                "error": str(exc),
+                "gate": latest_gate,
+            },
+        ) from exc
+    return {
+        "schema_version": _archive_gate_mod.ARCHIVE_EXECUTION_GATE_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "gate": gate,
+    }
+
+
+@router.get("/data-lifecycle/archive/approval")
+async def get_data_lifecycle_archive_approval():
+    policy = _policy_mod.load_policy()
+    approval = _archive_approval_mod.read_approval(policy=policy)
+    if approval is None:
+        return {"schema_version": _archive_approval_mod.ARCHIVE_OPERATOR_APPROVAL_SCHEMA_VERSION, "status": "missing"}
+    return approval

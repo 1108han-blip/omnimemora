@@ -23,6 +23,8 @@ def _build_policy(tmp_path, *, ttl_seconds=10.0, stale_max_age_seconds=300.0):
         archive_plan_file=str(tmp_path / "archive_candidate_plan.json"),
         archive_transaction_preview_file=str(tmp_path / "archive_transaction_preview.json"),
         archive_restore_readiness_file=str(tmp_path / "archive_restore_readiness_report.json"),
+        archive_execution_gate_file=str(tmp_path / "archive_execution_gate.json"),
+        archive_operator_approval_file=str(tmp_path / "archive_operator_approval.json"),
     )
 
 
@@ -551,3 +553,75 @@ def test_dlp_health_exposes_archive_restore_readiness_summary(tmp_path):
     assert readiness["mapped_request_count"] == 5
     assert readiness["unmapped_request_count"] == 1
     assert readiness["warnings_count"] == 1
+
+
+def test_data_lifecycle_archive_execution_gate_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._archive_gate_mod, "read_gate", lambda policy=None: None)
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/archive/execution/gate")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-archive-execution-gate-v1"
+    assert payload["status"] == "missing"
+
+
+def test_data_lifecycle_archive_execution_gate_rebuild_endpoint_returns_record_and_gate(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-gate-1",
+        "trigger": "archive_execution_gate_rebuild",
+        "status": "success",
+        "error": None,
+    }
+    expected_gate = {
+        "schema_version": "dlp-archive-execution-gate-v1",
+        "gate_id": "g1",
+        "mode": "gate_only",
+        "allowed": False,
+        "status": "blocked",
+        "blocking_reasons": ["missing_operator_approval"],
+        "summary": {"blocking_count": 1, "approval_status": "missing"},
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._archive_gate_mod,
+        "rebuild_gate",
+        lambda policy=None: (expected_record, expected_gate),
+    )
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/archive/execution/gate/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-archive-execution-gate-rebuild-v1"
+    assert payload["record"]["trigger"] == "archive_execution_gate_rebuild"
+    assert payload["gate"]["schema_version"] == "dlp-archive-execution-gate-v1"
+
+
+def test_data_lifecycle_archive_approval_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._archive_approval_mod, "read_approval", lambda policy=None: None)
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/archive/approval")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-archive-operator-approval-v1"
+    assert payload["status"] == "missing"
+
+
+def test_dlp_health_exposes_archive_execution_gate_summary(tmp_path):
+    policy = _build_policy(tmp_path)
+    gate_path = tmp_path / "archive_execution_gate.json"
+    gate_path.write_text(
+        '{"schema_version":"dlp-archive-execution-gate-v1","gate_id":"g1","generated_at":"2026-04-25T00:00:00+00:00","mode":"gate_only","allowed":false,"status":"blocked","blocking_reasons":["missing_operator_approval"],"approval":{"status":"missing","operator_id":null,"expires_at":null},"summary":{"allowed":false,"status":"blocked","blocking_count":1,"approval_status":"missing","expires_at":null,"warnings_count":0},"warnings":[]}',
+        encoding="utf-8",
+    )
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    gate = payload.get("archive_execution_gate") or {}
+    assert gate["status"] == "present"
+    assert gate["allowed"] is False
+    assert gate["gate_status"] == "blocked"
+    assert gate["blocking_count"] == 1
+    assert gate["approval_status"] == "missing"

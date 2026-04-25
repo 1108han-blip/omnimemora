@@ -15,6 +15,7 @@ from . import (
     archive_plan,
     archive_transaction,
     archive_restore_contract,
+    archive_execution_gate,
 )
 from .policy import DataLifecyclePolicy, load_policy
 
@@ -305,6 +306,27 @@ def build_health_payload(
             "unmapped_request_count": 0,
             "warnings_count": 0,
         }
+    archive_exec_gate = archive_execution_gate.read_gate(policy=current_policy)
+    if isinstance(archive_exec_gate, dict):
+        gate_summary = archive_exec_gate.get("summary") or {}
+        gate_approval = archive_exec_gate.get("approval") or {}
+        archive_gate_view = {
+            "status": "present",
+            "allowed": bool(archive_exec_gate.get("allowed")),
+            "gate_status": archive_exec_gate.get("status"),
+            "blocking_count": int(gate_summary.get("blocking_count", len(archive_exec_gate.get("blocking_reasons") or [])) or 0),
+            "approval_status": gate_approval.get("status", gate_summary.get("approval_status")),
+            "expires_at": gate_approval.get("expires_at", gate_summary.get("expires_at")),
+        }
+    else:
+        archive_gate_view = {
+            "status": "missing",
+            "allowed": False,
+            "gate_status": "missing",
+            "blocking_count": 0,
+            "approval_status": "missing",
+            "expires_at": None,
+        }
     status, recommended_action = _derive_status(
         summary_freshness=summary_freshness,
         last_maintenance=last_maintenance,
@@ -349,4 +371,5 @@ def build_health_payload(
         "archive_plan": archive_plan_view,
         "archive_transaction_preview": archive_txn_view,
         "archive_restore_readiness": archive_restore_view,
+        "archive_execution_gate": archive_gate_view,
     }
