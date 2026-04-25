@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from . import state_store, summary_store, retention
+from . import state_store, summary_store, retention, traceability
 from .policy import DataLifecyclePolicy, load_policy
 
 HEALTH_SCHEMA_VERSION = "dlp-lifecycle-health-v1"
@@ -207,6 +207,24 @@ def build_health_payload(
             "total_bytes": 0,
             "warnings_count": 0,
         }
+    traceability_report = traceability.read_report(policy=current_policy)
+    if isinstance(traceability_report, dict):
+        trace_summary = traceability_report.get("summary") or {}
+        traceability_report_view = {
+            "status": "present",
+            "generated_at": traceability_report.get("generated_at"),
+            "sample_count": int(trace_summary.get("sample_count", 0) or 0),
+            "fail_count": int(trace_summary.get("fail_count", 0) or 0),
+            "warnings_count": int(trace_summary.get("warnings_count", 0) or 0),
+        }
+    else:
+        traceability_report_view = {
+            "status": "missing",
+            "generated_at": None,
+            "sample_count": 0,
+            "fail_count": 0,
+            "warnings_count": 0,
+        }
     status, recommended_action = _derive_status(
         summary_freshness=summary_freshness,
         last_maintenance=last_maintenance,
@@ -247,4 +265,5 @@ def build_health_payload(
             ),
         },
         "retention_manifest": retention_manifest_view,
+        "traceability_report": traceability_report_view,
     }

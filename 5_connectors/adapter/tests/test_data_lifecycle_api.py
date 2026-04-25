@@ -19,6 +19,7 @@ def _build_policy(tmp_path, *, ttl_seconds=10.0, stale_max_age_seconds=300.0):
         summary_file=str(tmp_path / "family_window_summary.json"),
         maintenance_state_file=str(tmp_path / "maintenance_state.jsonl"),
         retention_manifest_file=str(tmp_path / "retention_manifest.json"),
+        traceability_report_file=str(tmp_path / "traceability_report.json"),
     )
 
 
@@ -226,6 +227,51 @@ def test_data_lifecycle_retention_manifest_rebuild_endpoint_returns_record_and_m
     assert payload["manifest"]["schema_version"] == "dlp-retention-manifest-v1"
 
 
+def test_data_lifecycle_traceability_report_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._traceability_mod, "read_report", lambda policy=None: None)
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/traceability/report")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-traceability-report-v1"
+    assert payload["status"] == "missing"
+
+
+def test_data_lifecycle_traceability_report_rebuild_endpoint_returns_record_and_report(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+
+    expected_record = {
+        "cycle_id": "cycle-traceability-1",
+        "trigger": "traceability_report_rebuild",
+        "status": "success",
+        "error": None,
+    }
+    expected_report = {
+        "schema_version": "dlp-traceability-report-v1",
+        "report_id": "report-1",
+        "samples": [],
+        "summary": {"sample_count": 0, "pass_count": 0, "partial_count": 0, "fail_count": 0, "missing_manifest": True, "warnings_count": 0},
+        "warnings": [],
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._traceability_mod,
+        "rebuild_report",
+        lambda policy=None: (expected_record, expected_report),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/traceability/report/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "dlp-traceability-report-rebuild-v1"
+    assert payload["record"]["trigger"] == "traceability_report_rebuild"
+    assert payload["report"]["schema_version"] == "dlp-traceability-report-v1"
+
+
 def test_dlp_health_exposes_storage_pressure_without_cleanup(tmp_path, monkeypatch):
     policy = _build_policy(tmp_path)
     summary_store.write_summary_atomic(
@@ -277,3 +323,19 @@ def test_dlp_health_exposes_retention_manifest_summary(tmp_path):
     assert retention_manifest["artifact_count"] == 3
     assert retention_manifest["total_bytes"] == 1234
     assert retention_manifest["warnings_count"] == 1
+
+
+def test_dlp_health_exposes_traceability_report_summary(tmp_path):
+    policy = _build_policy(tmp_path)
+    traceability_path = tmp_path / "traceability_report.json"
+    traceability_path.write_text(
+        '{"schema_version":"dlp-traceability-report-v1","report_id":"r1","generated_at":"2026-04-25T00:00:00+00:00","manifest_ref":{"status":"present","manifest_id":"m1","generated_at":"2026-04-25T00:00:00+00:00"},"samples":[],"summary":{"sample_count":12,"pass_count":9,"partial_count":2,"fail_count":1,"missing_manifest":false,"warnings_count":3},"warnings":[{"code":"x"}]}',
+        encoding="utf-8",
+    )
+
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    traceability_report = payload.get("traceability_report") or {}
+    assert traceability_report["status"] == "present"
+    assert traceability_report["sample_count"] == 12
+    assert traceability_report["fail_count"] == 1
+    assert traceability_report["warnings_count"] == 3

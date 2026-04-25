@@ -12,6 +12,7 @@ _health = importlib.import_module("5_connectors.adapter.data_lifecycle.health")
 _policy_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.policy")
 _maintenance_manager_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.maintenance_manager")
 _retention_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.retention")
+_traceability_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.traceability")
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -68,4 +69,36 @@ async def post_data_lifecycle_retention_manifest_rebuild():
         "schema_version": _retention_mod.RETENTION_REBUILD_SCHEMA_VERSION,
         "record": record,
         "manifest": manifest,
+    }
+
+
+@router.get("/data-lifecycle/traceability/report")
+async def get_data_lifecycle_traceability_report():
+    policy = _policy_mod.load_policy()
+    report = _traceability_mod.read_report(policy=policy)
+    if report is None:
+        return {"schema_version": _traceability_mod.TRACEABILITY_REPORT_SCHEMA_VERSION, "status": "missing"}
+    return report
+
+
+@router.post("/data-lifecycle/traceability/report/rebuild")
+async def post_data_lifecycle_traceability_report_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, report = _traceability_mod.rebuild_report(policy=policy)
+    except Exception as exc:
+        latest_report = _traceability_mod.read_report(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _traceability_mod.TRACEABILITY_REBUILD_SCHEMA_VERSION,
+                "message": "traceability report rebuild failed",
+                "error": str(exc),
+                "report": latest_report,
+            },
+        ) from exc
+    return {
+        "schema_version": _traceability_mod.TRACEABILITY_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "report": report,
     }
