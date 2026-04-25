@@ -689,7 +689,15 @@ def build_health_payload(
                 "blocking_reasons_count": 0,
                 "plan_status": "missing",
                 "dry_run_mode": "dry_run_preview_only",
-                "destination_status": "unknown",
+                "destination_status": {
+                    "status": "unknown",
+                    "path": None,
+                    "exists": False,
+                    "is_directory": False,
+                    "free_bytes": None,
+                    "required_free_bytes": None,
+                    "policy_ok": False,
+                },
             },
         }
 

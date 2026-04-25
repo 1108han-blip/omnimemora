@@ -160,7 +160,17 @@ def get_status_payload() -> dict[str, Any]:
             blocking_reasons = readiness.get("blocking_reasons") or []
             plan_summary = (plan or {}).get("summary") or {}
             plan_blocking = (plan or {}).get("blocking_reasons") or []
-            plan_dest_status = ((plan or {}).get("destination_status") or {}).get("status")
+            plan_dest = (plan or {}).get("destination_status")
+            if not isinstance(plan_dest, dict):
+                plan_dest = {
+                    "status": "unknown",
+                    "path": None,
+                    "exists": False,
+                    "is_directory": False,
+                    "free_bytes": None,
+                    "required_free_bytes": None,
+                    "policy_ok": False,
+                }
             candidate_count = int(
                 plan_summary.get("candidate_file_count", summary.get("candidate_file_count", 0)) or 0
             )
@@ -181,7 +191,7 @@ def get_status_payload() -> dict[str, Any]:
                 "blocking_reasons_count": blocking_count,
                 "plan_status": str((plan or {}).get("status") or "missing"),
                 "dry_run_mode": str((plan or {}).get("mode") or "dry_run_preview_only"),
-                "destination_status": str(plan_dest_status or "unknown"),
+                "destination_status": plan_dest,
             }
         else:
             backup_export_view = {
@@ -194,7 +204,15 @@ def get_status_payload() -> dict[str, Any]:
                 "blocking_reasons_count": 0,
                 "plan_status": "missing",
                 "dry_run_mode": "dry_run_preview_only",
-                "destination_status": "unknown",
+                "destination_status": {
+                    "status": "unknown",
+                    "path": None,
+                    "exists": False,
+                    "is_directory": False,
+                    "free_bytes": None,
+                    "required_free_bytes": None,
+                    "policy_ok": False,
+                },
             }
     except Exception:
         backup_export_view = {
@@ -207,7 +225,15 @@ def get_status_payload() -> dict[str, Any]:
             "blocking_reasons_count": 0,
             "plan_status": "missing",
             "dry_run_mode": "dry_run_preview_only",
-            "destination_status": "unknown",
+            "destination_status": {
+                "status": "unknown",
+                "path": None,
+                "exists": False,
+                "is_directory": False,
+                "free_bytes": None,
+                "required_free_bytes": None,
+                "policy_ok": False,
+            },
         }
 
     return {
