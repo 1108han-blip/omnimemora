@@ -26,6 +26,9 @@ class DataLifecyclePolicy:
     archive_fallback_simulation_file: str = ""
     archive_quarantine_root: str = ""
     archive_quarantine_readiness_file: str = ""
+    archive_quarantine_record_file: str = ""
+    archive_restore_pilot_record_file: str = ""
+    archive_restore_staging_root: str = ""
     maintenance_enabled: bool = True
     maintenance_startup_delay_seconds: float = 5.0
     maintenance_interval_seconds: float = 60.0
@@ -100,6 +103,18 @@ def load_policy() -> DataLifecyclePolicy:
         "OMNIMEMORA_DLP_ARCHIVE_QUARANTINE_READINESS_FILE",
         str(base_dir / "archive_quarantine_readiness_plan.json"),
     )
+    archive_quarantine_record_file = os.getenv(
+        "OMNIMEMORA_DLP_ARCHIVE_QUARANTINE_RECORD_FILE",
+        str(base_dir / "archive_quarantine_record.json"),
+    )
+    archive_restore_pilot_record_file = os.getenv(
+        "OMNIMEMORA_DLP_ARCHIVE_RESTORE_PILOT_RECORD_FILE",
+        str(base_dir / "archive_restore_pilot_record.json"),
+    )
+    archive_restore_staging_root = os.getenv(
+        "OMNIMEMORA_DLP_ARCHIVE_RESTORE_STAGING_ROOT",
+        str(base_dir / "restore" / "staging"),
+    )
     ttl_seconds = float(os.getenv("OMNIMEMORA_DLP_SUMMARY_TTL_SECONDS", "30"))
     stale_max_age_seconds = float(
         os.getenv("OMNIMEMORA_DLP_SUMMARY_STALE_MAX_AGE_SECONDS", "3600")
@@ -134,6 +149,9 @@ def load_policy() -> DataLifecyclePolicy:
         archive_fallback_simulation_file=archive_fallback_simulation_file,
         archive_quarantine_root=archive_quarantine_root,
         archive_quarantine_readiness_file=archive_quarantine_readiness_file,
+        archive_quarantine_record_file=archive_quarantine_record_file,
+        archive_restore_pilot_record_file=archive_restore_pilot_record_file,
+        archive_restore_staging_root=archive_restore_staging_root,
         maintenance_enabled=maintenance_enabled,
         maintenance_startup_delay_seconds=max(0.0, maintenance_startup_delay_seconds),
         maintenance_interval_seconds=max(1.0, maintenance_interval_seconds),
