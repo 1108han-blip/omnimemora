@@ -1,9 +1,11 @@
 import importlib
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
 archive_execution_gate_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_execution_gate")
+archive_approval_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.archive_approval")
 policy_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.policy")
 
 
@@ -74,6 +76,63 @@ def test_gate_missing_approval_is_blocked(tmp_path):
     gate = archive_execution_gate_mod.build_execution_gate(policy=policy)
     assert gate["allowed"] is False
     assert "missing_operator_approval" in gate["blocking_reasons"]
+
+
+def test_gate_allows_when_approval_hashes_match(tmp_path):
+    policy = _build_policy(tmp_path)
+    _write_upstream_valid(policy)
+    gate_before = archive_execution_gate_mod.build_execution_gate(policy=policy)
+    artifact_hashes = gate_before["artifact_hashes"]
+    approval = archive_approval_mod.build_approval_artifact(
+        operator_id="op-test",
+        approved_artifact_hashes=artifact_hashes,
+        scope="stage8-test",
+        reason="validate gate allow path",
+        created_at=datetime.now(timezone.utc),
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    archive_approval_mod.write_approval_atomic(approval, policy=policy)
+
+    gate = archive_execution_gate_mod.build_execution_gate(policy=policy)
+    assert gate["allowed"] is True
+    assert gate["approval"]["status"] == "valid"
+    assert gate["approved_plan_hash"] == artifact_hashes["candidate_plan_hash"]
+
+
+def test_gate_blocks_expired_approval_and_hash_mismatch(tmp_path):
+    policy = _build_policy(tmp_path)
+    _write_upstream_valid(policy)
+    gate_before = archive_execution_gate_mod.build_execution_gate(policy=policy)
+    artifact_hashes = gate_before["artifact_hashes"]
+
+    expired = archive_approval_mod.build_approval_artifact(
+        operator_id="op-test",
+        approved_artifact_hashes=artifact_hashes,
+        scope="stage8-test",
+        reason="expired",
+        created_at=datetime.now(timezone.utc) - timedelta(hours=2),
+        expires_at=datetime.now(timezone.utc) - timedelta(hours=1),
+    )
+    archive_approval_mod.write_approval_atomic(expired, policy=policy)
+    gate_expired = archive_execution_gate_mod.build_execution_gate(policy=policy)
+    assert gate_expired["allowed"] is False
+    assert "approval_expired" in gate_expired["blocking_reasons"]
+
+    valid = archive_approval_mod.build_approval_artifact(
+        operator_id="op-test",
+        approved_artifact_hashes=artifact_hashes,
+        scope="stage8-test",
+        reason="mismatch-check",
+        created_at=datetime.now(timezone.utc),
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    archive_approval_mod.write_approval_atomic(valid, policy=policy)
+    plan = json.loads(Path(policy.archive_plan_file).read_text(encoding="utf-8"))
+    plan["plan_id"] = "plan2"
+    _write_json(Path(policy.archive_plan_file), plan)
+    gate_mismatch = archive_execution_gate_mod.build_execution_gate(policy=policy)
+    assert gate_mismatch["allowed"] is False
+    assert "approval_artifact_hash_mismatch" in gate_mismatch["blocking_reasons"]
 
 
 def test_gate_blocks_on_missing_or_invalid_upstream(tmp_path):

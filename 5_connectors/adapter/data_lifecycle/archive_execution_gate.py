@@ -11,12 +11,11 @@ from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
 
-from . import archive_plan, archive_transaction, archive_restore_contract, state_store, health
+from . import archive_plan, archive_transaction, archive_restore_contract, state_store, health, archive_approval
 from .policy import DataLifecyclePolicy, load_policy
 
 ARCHIVE_EXECUTION_GATE_SCHEMA_VERSION = "dlp-archive-execution-gate-v1"
 ARCHIVE_EXECUTION_GATE_REBUILD_SCHEMA_VERSION = "dlp-archive-execution-gate-rebuild-v1"
-ARCHIVE_OPERATOR_APPROVAL_SCHEMA_VERSION = "dlp-archive-operator-approval-v1"
 _GATE_MODE = "gate_only"
 
 
@@ -37,24 +36,6 @@ def _parse_iso_utc(value: Any) -> Optional[datetime]:
         return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
     except Exception:
         return None
-
-
-def _approval_path(policy: Optional[DataLifecyclePolicy] = None) -> Path:
-    current = policy or load_policy()
-    return Path(current.archive_operator_approval_file).expanduser()
-
-
-def _read_approval_raw(*, policy: Optional[DataLifecyclePolicy] = None) -> Optional[dict[str, Any]]:
-    path = _approval_path(policy)
-    if not path.exists():
-        return None
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-        if isinstance(payload, dict):
-            return payload
-    except Exception:
-        return None
-    return None
 
 
 def _artifact_hashes(
@@ -84,7 +65,7 @@ def _validate_approval(
         blocking_reasons.append("missing_operator_approval")
         return "missing", None, None, None
 
-    if str(approval.get("schema_version") or "") != ARCHIVE_OPERATOR_APPROVAL_SCHEMA_VERSION:
+    if str(approval.get("schema_version") or "") != archive_approval.ARCHIVE_OPERATOR_APPROVAL_SCHEMA_VERSION:
         blocking_reasons.append("approval_schema_mismatch")
         return "invalid_schema", str(approval.get("operator_id") or ""), approval.get("expires_at"), None
 
@@ -128,7 +109,7 @@ def build_execution_gate(*, policy: Optional[DataLifecyclePolicy] = None) -> dic
     preview = archive_transaction.read_preview(policy=current_policy)
     readiness = archive_restore_contract.read_readiness_report(policy=current_policy)
     lifecycle = health.build_health_payload(policy=current_policy)
-    approval = _read_approval_raw(policy=current_policy)
+    approval = archive_approval.read_approval(policy=current_policy)
 
     if not isinstance(plan, dict):
         blocking_reasons.append("missing_candidate_plan")
