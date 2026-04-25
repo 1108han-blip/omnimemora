@@ -9,7 +9,7 @@ effective_date: 2026-04-25
 depends_on:
   - ADR-RES-014
 supersedes: []
-last_verified_commit: ""
+last_verified_commit: "9a2ace6"
 ---
 
 # SPEC-LEGACY-METER-BACKUP-EXPORT-EXECUTION-GATE-014
