@@ -33,6 +33,7 @@ class DataLifecyclePolicy:
     archive_non_active_quarantine_readiness_file: str = ""
     archive_non_active_execution_gate_file: str = ""
     meter_cleanup_preview_file: str = ""
+    meter_backup_export_readiness_file: str = ""
     raw_evidence_segments_manifest_file: str = ""
     raw_evidence_segments_root: str = ""
     raw_evidence_segments_mode: str = "dual_write_observe_only"
@@ -140,6 +141,10 @@ def load_policy() -> DataLifecyclePolicy:
         "OMNIMEMORA_DLP_METER_CLEANUP_PREVIEW_FILE",
         str(base_dir / "meter_cleanup_preview.json"),
     )
+    meter_backup_export_readiness_file = os.getenv(
+        "OMNIMEMORA_DLP_METER_BACKUP_EXPORT_READINESS_FILE",
+        str(base_dir / "meter_backup_export_readiness.json"),
+    )
     raw_evidence_segments_manifest_file = os.getenv(
         "OMNIMEMORA_DLP_RAW_EVIDENCE_SEGMENTS_MANIFEST_FILE",
         str(base_dir / "raw_evidence_segments_manifest.json"),
@@ -205,6 +210,7 @@ def load_policy() -> DataLifecyclePolicy:
         archive_non_active_quarantine_readiness_file=archive_non_active_quarantine_readiness_file,
         archive_non_active_execution_gate_file=archive_non_active_execution_gate_file,
         meter_cleanup_preview_file=meter_cleanup_preview_file,
+        meter_backup_export_readiness_file=meter_backup_export_readiness_file,
         raw_evidence_segments_manifest_file=raw_evidence_segments_manifest_file,
         raw_evidence_segments_root=raw_evidence_segments_root,
         raw_evidence_segments_mode=raw_evidence_segments_mode or "dual_write_observe_only",
