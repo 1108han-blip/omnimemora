@@ -20,6 +20,7 @@ from typing import Any, Dict, Iterable, List, Optional
 
 _5_meter = importlib.import_module("5_connectors.adapter.meter_store")
 _5_rc = importlib.import_module("5_connectors.adapter.request_classifier")
+_metrics_read_resolver = importlib.import_module("5_connectors.adapter.application.metrics_meter_read_resolver")
 
 _diag_metrics_degraded_lock = threading.Lock()
 _diag_last_metrics_degraded_record_ts = 0.0
@@ -46,16 +47,38 @@ def _get_data_lifecycle_state_store():
     return importlib.import_module("5_connectors.adapter.data_lifecycle.state_store")
 
 
-def _collect_meters(tenant: str):
+def _collect_meters_legacy(tenant: str):
     _5_meter._ensure_persistence_loaded()
     if tenant == "all":
         return [m for tenant_meters in _5_meter._usage_aggregates.values() for m in tenant_meters]
     return _5_meter._usage_aggregates.get(tenant, [])
 
 
+def _legacy_list_tenants() -> List[str]:
+    _5_meter._ensure_persistence_loaded()
+    return sorted([tenant for tenant, meters in _5_meter._usage_aggregates.items() if meters])
+
+
+def _collect_meters(
+    tenant: str,
+    *,
+    since_utc: Optional[datetime] = None,
+    limit: int = 100000,
+):
+    result = _metrics_read_resolver.resolve_metrics_meters(
+        tenant=tenant,
+        since_utc=since_utc,
+        limit=limit,
+        legacy_collect_fn=_collect_meters_legacy,
+    )
+    if result.degraded and result.degraded_reason:
+        _record_metrics_degraded_path(result.degraded_reason)
+    return result.meters
+
+
 def _collect_meters_24h(tenant: str):
-    meters = _collect_meters(tenant)
     cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+    meters = _collect_meters(tenant, since_utc=cutoff)
     filtered = []
     for m in meters:
         try:
@@ -268,8 +291,12 @@ def get_recent_requests(
 
 
 def list_tenants() -> List[str]:
-    _5_meter._ensure_persistence_loaded()
-    return sorted([tenant for tenant, meters in _5_meter._usage_aggregates.items() if meters])
+    result = _metrics_read_resolver.resolve_metrics_tenants(
+        legacy_list_tenants_fn=_legacy_list_tenants,
+    )
+    if result.degraded and result.degraded_reason:
+        _record_metrics_degraded_path(result.degraded_reason)
+    return result.tenants
 
 
 def _compute_metrics_summary_24h_legacy(tenant: str) -> Dict[str, Any]:
@@ -373,10 +400,14 @@ def compute_core_capabilities(tenant: str) -> Dict[str, Any]:
 
 
 def compute_core_capabilities_trend(tenant: str, days: int = 7) -> Dict[str, Any]:
-    meters = _default_overview_meters(_collect_meters(tenant), include_internal=True, include_task_non_value=True)
-
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(days=days)
+    meters = _default_overview_meters(
+        _collect_meters(tenant, since_utc=cutoff),
+        include_internal=True,
+        include_task_non_value=True,
+    )
+
     buckets: Dict[str, List[Any]] = {}
     for m in meters:
         try:

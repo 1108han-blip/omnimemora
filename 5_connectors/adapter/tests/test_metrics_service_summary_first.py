@@ -91,6 +91,21 @@ def test_metrics_summary_first_uses_dlp_summary_without_legacy(monkeypatch):
     assert metrics_service.compute_core_capabilities("all") == expected_core
 
 
+def test_metrics_summary_first_does_not_trigger_metrics_meter_resolver(monkeypatch):
+    monkeypatch.setattr(
+        metrics_service._metrics_read_resolver,
+        "resolve_metrics_meters",
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("resolver should not be called on summary hit")),
+    )
+    monkeypatch.setattr(
+        metrics_service,
+        "_extract_summary_kpi_block",
+        lambda tenant, key: {"request_count": 1} if tenant == "all" and key == "metrics_summary_all" else None,
+    )
+    payload = metrics_service.compute_metrics_summary("all")
+    assert payload["request_count"] == 1
+
+
 def test_metrics_summary_fallback_records_metrics_read_degraded(monkeypatch):
     degraded_reasons = []
     monkeypatch.setattr(metrics_service, "_read_dlp_kpi_summary_payload", lambda: (None, "none", "summary_expired"))
@@ -192,3 +207,36 @@ def test_summary_and_legacy_paths_match_key_kpi_fields(monkeypatch):
     assert summary_all == legacy_all
     assert summary_24h == legacy_24h
     assert summary_core == legacy_core
+
+
+def test_summary_fallback_path_uses_resolver_meters(monkeypatch):
+    now = datetime.now(timezone.utc)
+    meter = Meter(
+        request_id="req-fallback",
+        timestamp=now.isoformat(),
+        query="Implement endpoint",
+        baseline_tokens_estimate=100,
+        actual_tokens_estimate=70,
+        saved_tokens_estimate=30,
+        packed_memory_count=1,
+        local_cards_used=1,
+        remote_used_count=0,
+        savings_ratio=0.3,
+    )
+
+    class Result:
+        meters = [meter]
+        mode = "sqlite_first_legacy_fallback"
+        source = "sqlite"
+        degraded = False
+        degraded_reason = None
+
+    monkeypatch.setattr(metrics_service, "_extract_summary_kpi_block", lambda _tenant, _key: None)
+    monkeypatch.setattr(
+        metrics_service._metrics_read_resolver,
+        "resolve_metrics_meters",
+        lambda **_kwargs: Result(),
+    )
+    payload = metrics_service.compute_metrics_summary("all")
+    assert payload["request_count"] == 1
+    assert payload["tokens_saved"] == 30

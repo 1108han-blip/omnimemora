@@ -657,8 +657,10 @@ def build_health_payload(
                 "request_meter_switch_enabled": False,
                 "request_evidence_switch_enabled": False,
                 "metrics_switch_enabled": False,
+                "status_read_model_switch_enabled": False,
                 "legacy_fallback_enabled": False,
                 "request_meter_read_mode": "legacy_only",
+                "metrics_read_mode": "legacy_only",
             },
             "storage": {
                 "sqlite_path": None,
