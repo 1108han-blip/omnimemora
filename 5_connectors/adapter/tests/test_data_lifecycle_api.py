@@ -1979,3 +1979,114 @@ def test_meter_backup_export_copy_pilot_does_not_expose_execute_full_export_clea
     for path in forbidden_paths:
         response = client.post(path)
         assert response.status_code == 404
+
+
+def test_data_lifecycle_meter_backup_export_restore_readback_report_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_backup_export_restore_readback_mod,
+        "read_restore_readback_report",
+        lambda policy=None: None,
+    )
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/backup-export/restore-readback")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-backup-export-restore-readback-v1"
+    assert payload["status"] == "missing"
+    assert payload["mode"] == "restore_readback_validation_only"
+    assert payload["source_retained"] is True
+    assert payload["checksum_match"] is False
+    assert payload["production_restore_started"] is False
+    assert payload["cleanup_started"] is False
+
+
+def test_data_lifecycle_meter_backup_export_restore_readback_report_read_endpoint_returns_report(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_report = {
+        "schema_version": "res-legacy-meter-backup-export-restore-readback-v1",
+        "mode": "restore_readback_validation_only",
+        "status": "passed",
+        "source_retained": True,
+        "checksum_match": True,
+        "production_restore_started": False,
+        "cleanup_started": False,
+        "read_path_unchanged": True,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_backup_export_restore_readback_mod,
+        "read_restore_readback_report",
+        lambda policy=None: expected_report,
+    )
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/backup-export/restore-readback")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-backup-export-restore-readback-v1"
+    assert payload["status"] == "passed"
+    assert payload["source_retained"] is True
+    assert payload["checksum_match"] is True
+    assert payload["production_restore_started"] is False
+    assert payload["cleanup_started"] is False
+    assert payload["read_path_unchanged"] is True
+
+
+def test_data_lifecycle_meter_backup_export_restore_readback_rebuild_endpoint_returns_record_and_report(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-backup-restore-readback",
+        "trigger": "meter_backup_export_restore_readback_rebuild",
+        "status": "success",
+    }
+    expected_report = {
+        "schema_version": "res-legacy-meter-backup-export-restore-readback-v1",
+        "mode": "restore_readback_validation_only",
+        "status": "passed",
+        "source_retained": True,
+        "checksum_match": True,
+        "production_restore_started": False,
+        "cleanup_started": False,
+        "read_path_unchanged": True,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_backup_export_restore_readback_mod,
+        "rebuild_restore_readback_report",
+        lambda policy=None: (expected_record, expected_report),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/meter-storage/backup-export/restore-readback/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-backup-export-restore-readback-rebuild-v1"
+    assert payload["record"]["trigger"] == "meter_backup_export_restore_readback_rebuild"
+    assert payload["restore_readback"]["mode"] == "restore_readback_validation_only"
+    assert payload["restore_readback"]["source_retained"] is True
+    assert payload["restore_readback"]["checksum_match"] is True
+    assert payload["restore_readback"]["production_restore_started"] is False
+    assert payload["restore_readback"]["cleanup_started"] is False
+    assert payload["restore_readback"]["read_path_unchanged"] is True
+
+
+def test_meter_backup_export_restore_readback_does_not_expose_execute_delete_move_compress_truncate_cleanup():
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    client = TestClient(app)
+    forbidden_paths = [
+        "/data-lifecycle/meter-storage/backup-export/restore-readback/execute",
+        "/data-lifecycle/meter-storage/backup-export/restore-readback/restore",
+        "/data-lifecycle/meter-storage/backup-export/restore-readback/production-restore",
+        "/data-lifecycle/meter-storage/backup-export/restore-readback/delete",
+        "/data-lifecycle/meter-storage/backup-export/restore-readback/move",
+        "/data-lifecycle/meter-storage/backup-export/restore-readback/compress",
+        "/data-lifecycle/meter-storage/backup-export/restore-readback/truncate",
+        "/data-lifecycle/meter-storage/backup-export/restore-readback/cleanup",
+    ]
+    for path in forbidden_paths:
+        response = client.post(path)
+        assert response.status_code == 404

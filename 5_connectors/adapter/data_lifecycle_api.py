@@ -57,6 +57,9 @@ _meter_backup_export_execution_proposal_mod = importlib.import_module(
 _meter_backup_export_copy_pilot_mod = importlib.import_module(
     "5_connectors.adapter.data_lifecycle.meter_backup_export_copy_pilot"
 )
+_meter_backup_export_restore_readback_mod = importlib.import_module(
+    "5_connectors.adapter.data_lifecycle.meter_backup_export_restore_readback"
+)
 _snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
 
 
@@ -456,6 +459,47 @@ async def get_data_lifecycle_meter_storage_backup_export_copy_pilot_latest():
             "read_path_unchanged": True,
         }
     return pilot
+
+
+@router.get("/data-lifecycle/meter-storage/backup-export/restore-readback")
+async def get_data_lifecycle_meter_storage_backup_export_restore_readback():
+    policy = _policy_mod.load_policy()
+    report = _meter_backup_export_restore_readback_mod.read_restore_readback_report(policy=policy)
+    if report is None:
+        return {
+            "schema_version": _meter_backup_export_restore_readback_mod.METER_BACKUP_EXPORT_RESTORE_READBACK_SCHEMA_VERSION,
+            "status": "missing",
+            "mode": _meter_backup_export_restore_readback_mod.METER_BACKUP_EXPORT_RESTORE_READBACK_MODE,
+            "source_retained": True,
+            "backup_copy_readable": False,
+            "checksum_match": False,
+            "production_restore_started": False,
+            "cleanup_started": False,
+        }
+    return report
+
+
+@router.post("/data-lifecycle/meter-storage/backup-export/restore-readback/rebuild")
+async def post_data_lifecycle_meter_storage_backup_export_restore_readback_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, report = _meter_backup_export_restore_readback_mod.rebuild_restore_readback_report(policy=policy)
+    except Exception as exc:
+        latest = _meter_backup_export_restore_readback_mod.read_restore_readback_report(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _meter_backup_export_restore_readback_mod.METER_BACKUP_EXPORT_RESTORE_READBACK_REBUILD_SCHEMA_VERSION,
+                "message": "meter backup export restore/readback rebuild failed",
+                "error": str(exc),
+                "restore_readback": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _meter_backup_export_restore_readback_mod.METER_BACKUP_EXPORT_RESTORE_READBACK_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "restore_readback": report,
+    }
 
 
 @router.get("/data-lifecycle/retention/manifest")

@@ -179,6 +179,10 @@ def get_status_payload() -> dict[str, Any]:
             "5_connectors.adapter.data_lifecycle.meter_backup_export_copy_pilot"
         )
         copy_pilot = copy_pilot_mod.read_latest_copy_pilot()
+        restore_readback_mod = importlib.import_module(
+            "5_connectors.adapter.data_lifecycle.meter_backup_export_restore_readback"
+        )
+        restore_readback = restore_readback_mod.read_restore_readback_report()
         if isinstance(readiness, dict):
             summary = readiness.get("summary") or {}
             blocking_reasons = readiness.get("blocking_reasons") or []
@@ -263,6 +267,24 @@ def get_status_payload() -> dict[str, Any]:
                 ),
                 "copy_pilot_cleanup_started": False,
                 "copy_pilot_read_path_unchanged": True,
+                "restore_readback_status": str((restore_readback or {}).get("status") or "missing"),
+                "restore_readback_source_retained": bool(
+                    (restore_readback or {}).get("source_retained")
+                    if isinstance(restore_readback, dict)
+                    else True
+                ),
+                "restore_readback_backup_copy_readable": bool(
+                    (restore_readback or {}).get("backup_copy_readable")
+                    if isinstance(restore_readback, dict)
+                    else False
+                ),
+                "restore_readback_checksum_match": bool(
+                    (restore_readback or {}).get("checksum_match")
+                    if isinstance(restore_readback, dict)
+                    else False
+                ),
+                "restore_readback_production_restore_started": False,
+                "restore_readback_cleanup_started": False,
                 "backup_export_execution_started": False,
                 "cleanup_execution_started": False,
             }
@@ -301,6 +323,12 @@ def get_status_payload() -> dict[str, Any]:
                 "copy_pilot_checksum_match": False,
                 "copy_pilot_cleanup_started": False,
                 "copy_pilot_read_path_unchanged": True,
+                "restore_readback_status": "missing",
+                "restore_readback_source_retained": True,
+                "restore_readback_backup_copy_readable": False,
+                "restore_readback_checksum_match": False,
+                "restore_readback_production_restore_started": False,
+                "restore_readback_cleanup_started": False,
                 "backup_export_execution_started": False,
                 "cleanup_execution_started": False,
             }
@@ -339,6 +367,12 @@ def get_status_payload() -> dict[str, Any]:
             "copy_pilot_checksum_match": False,
             "copy_pilot_cleanup_started": False,
             "copy_pilot_read_path_unchanged": True,
+            "restore_readback_status": "missing",
+            "restore_readback_source_retained": True,
+            "restore_readback_backup_copy_readable": False,
+            "restore_readback_checksum_match": False,
+            "restore_readback_production_restore_started": False,
+            "restore_readback_cleanup_started": False,
             "backup_export_execution_started": False,
             "cleanup_execution_started": False,
         }

@@ -42,6 +42,7 @@ class DataLifecyclePolicy:
     meter_backup_export_execution_proposal_file: str = ""
     meter_backup_export_copy_pilot_root: str = ""
     meter_backup_export_copy_pilot_record_file: str = ""
+    meter_backup_export_restore_readback_file: str = ""
     meter_backup_export_copy_pilot_allow_override: bool = True
     meter_backup_export_destination: str = ""
     raw_evidence_segments_manifest_file: str = ""
@@ -187,6 +188,10 @@ def load_policy() -> DataLifecyclePolicy:
         "OMNIMEMORA_DLP_METER_BACKUP_EXPORT_COPY_PILOT_RECORD_FILE",
         str(base_dir / "meter_backup_export_copy_pilot_record.json"),
     )
+    meter_backup_export_restore_readback_file = os.getenv(
+        "OMNIMEMORA_DLP_METER_BACKUP_EXPORT_RESTORE_READBACK_FILE",
+        str(base_dir / "meter_backup_export_restore_readback.json"),
+    )
     meter_backup_export_copy_pilot_allow_override = os.getenv(
         "OMNIMEMORA_DLP_METER_BACKUP_EXPORT_COPY_PILOT_ALLOW_OVERRIDE",
         "true",
@@ -269,6 +274,7 @@ def load_policy() -> DataLifecyclePolicy:
         meter_backup_export_execution_proposal_file=meter_backup_export_execution_proposal_file,
         meter_backup_export_copy_pilot_root=meter_backup_export_copy_pilot_root,
         meter_backup_export_copy_pilot_record_file=meter_backup_export_copy_pilot_record_file,
+        meter_backup_export_restore_readback_file=meter_backup_export_restore_readback_file,
         meter_backup_export_copy_pilot_allow_override=meter_backup_export_copy_pilot_allow_override,
         meter_backup_export_destination=meter_backup_export_destination,
         raw_evidence_segments_manifest_file=raw_evidence_segments_manifest_file,
