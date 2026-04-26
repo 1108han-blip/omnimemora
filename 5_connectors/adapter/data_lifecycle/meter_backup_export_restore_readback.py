@@ -16,6 +16,7 @@ from . import state_store
 from .policy import DataLifecyclePolicy, load_policy
 
 _copy_pilot = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_backup_export_copy_pilot")
+_cleanup_pilot = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_cleanup_quarantine_pilot")
 
 METER_BACKUP_EXPORT_RESTORE_READBACK_SCHEMA_VERSION = "res-legacy-meter-backup-export-restore-readback-v1"
 METER_BACKUP_EXPORT_RESTORE_READBACK_REBUILD_SCHEMA_VERSION = (
@@ -71,6 +72,7 @@ def build_restore_readback_report(*, policy: Optional[DataLifecyclePolicy] = Non
     current = policy or load_policy()
     now = datetime.now(timezone.utc)
     copy_record = _copy_pilot.read_latest_copy_pilot(policy=current)
+    cleanup_pilot = _cleanup_pilot.read_latest_pilot(policy=current)
     blocking_reasons: list[str] = []
 
     source_path: Optional[Path] = None
@@ -102,7 +104,21 @@ def build_restore_readback_report(*, policy: Optional[DataLifecyclePolicy] = Non
         if bool(copy_record.get("cleanup_started", False)):
             blocking_reasons.append("copy_pilot_cleanup_started")
 
+    original_source_path = source_path
+    source_verification_mode = "original"
     source_readable = bool(source_path and source_path.exists() and source_path.is_file())
+    if (
+        not source_readable
+        and isinstance(cleanup_pilot, dict)
+        and str(cleanup_pilot.get("status") or "") == "success"
+        and bool(cleanup_pilot.get("source_move_executed", False))
+        and str(cleanup_pilot.get("original_path") or "") == str(original_source_path or "")
+    ):
+        quarantine_path = Path(str(cleanup_pilot.get("quarantine_path") or "")).expanduser()
+        if quarantine_path.exists() and quarantine_path.is_file():
+            source_path = quarantine_path
+            source_verification_mode = "quarantine"
+            source_readable = True
     backup_copy_readable = bool(backup_copy_path and backup_copy_path.exists() and backup_copy_path.is_file())
     if isinstance(copy_record, dict) and not source_readable:
         blocking_reasons.append("source_not_readable")
@@ -142,11 +158,13 @@ def build_restore_readback_report(*, policy: Optional[DataLifecyclePolicy] = Non
         "mode": METER_BACKUP_EXPORT_RESTORE_READBACK_MODE,
         "status": status,
         "copy_pilot_ref": _copy_pilot_ref(copy_record),
-        "source_path": str(source_path) if source_path else None,
+        "source_path": str(original_source_path) if original_source_path else None,
+        "source_verification_path": str(source_path) if source_path else None,
+        "source_verification_mode": source_verification_mode,
         "backup_copy_path": str(backup_copy_path) if backup_copy_path else None,
         "source_readable": source_readable,
         "backup_copy_readable": backup_copy_readable,
-        "source_retained": source_readable,
+        "source_retained": bool(original_source_path and original_source_path.exists() and original_source_path.is_file()),
         "read_path_unchanged": True,
         "checksum_match": checksum_match,
         "expected_hash_match": expected_hash_match,

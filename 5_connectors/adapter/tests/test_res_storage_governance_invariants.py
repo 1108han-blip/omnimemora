@@ -119,6 +119,10 @@ def test_no_meter_legacy_cleanup_delete_truncate_compress_endpoints_exist():
         "/data-lifecycle/meter-storage/cleanup/move",
         "/data-lifecycle/meter-storage/cleanup/compress",
         "/data-lifecycle/meter-storage/cleanup/truncate",
+        "/data-lifecycle/meter-storage/cleanup/pilot/delete",
+        "/data-lifecycle/meter-storage/cleanup/pilot/compress",
+        "/data-lifecycle/meter-storage/cleanup/pilot/truncate",
+        "/data-lifecycle/meter-storage/cleanup/pilot/batch",
     ]
     all_paths = {getattr(route, "path", "") for route in router.routes}
     found = [path for path in forbidden if path in all_paths]

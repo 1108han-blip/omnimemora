@@ -42,6 +42,9 @@ _meter_cleanup_transaction_preview_mod = importlib.import_module(
 _meter_cleanup_rollback_drill_mod = importlib.import_module(
     "5_connectors.adapter.data_lifecycle.meter_cleanup_rollback_drill"
 )
+_meter_cleanup_pilot_mod = importlib.import_module(
+    "5_connectors.adapter.data_lifecycle.meter_cleanup_quarantine_pilot"
+)
 _meter_backup_export_readiness_mod = importlib.import_module(
     "5_connectors.adapter.data_lifecycle.meter_backup_export_readiness"
 )
@@ -297,6 +300,47 @@ async def post_data_lifecycle_meter_storage_cleanup_rollback_drill_rebuild():
         "schema_version": _meter_cleanup_rollback_drill_mod.METER_CLEANUP_ROLLBACK_DRILL_REBUILD_SCHEMA_VERSION,
         "record": record,
         "rollback_drill": report,
+    }
+
+
+@router.get("/data-lifecycle/meter-storage/cleanup/pilot/latest")
+async def get_data_lifecycle_meter_storage_cleanup_pilot_latest():
+    policy = _policy_mod.load_policy()
+    pilot = _meter_cleanup_pilot_mod.read_latest_pilot(policy=policy)
+    if pilot is None:
+        return {
+            "schema_version": _meter_cleanup_pilot_mod.METER_CLEANUP_PILOT_SCHEMA_VERSION,
+            "status": "missing",
+            "mode": _meter_cleanup_pilot_mod.METER_CLEANUP_PILOT_MODE,
+            "source_move_executed": False,
+            "delete_executed": False,
+            "compress_executed": False,
+            "truncate_executed": False,
+            "batch_cleanup_executed": False,
+        }
+    return pilot
+
+
+@router.post("/data-lifecycle/meter-storage/cleanup/pilot/quarantine-one")
+async def post_data_lifecycle_meter_storage_cleanup_pilot_quarantine_one():
+    policy = _policy_mod.load_policy()
+    try:
+        record, pilot = _meter_cleanup_pilot_mod.execute_single_file_quarantine(policy=policy)
+    except Exception as exc:
+        latest = _meter_cleanup_pilot_mod.read_latest_pilot(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _meter_cleanup_pilot_mod.METER_CLEANUP_PILOT_SCHEMA_VERSION,
+                "message": "meter cleanup pilot quarantine-one failed",
+                "error": str(exc),
+                "pilot": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _meter_cleanup_pilot_mod.METER_CLEANUP_PILOT_SCHEMA_VERSION,
+        "record": record,
+        "pilot": pilot,
     }
 
 

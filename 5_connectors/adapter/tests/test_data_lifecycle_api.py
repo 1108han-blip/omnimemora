@@ -1495,6 +1495,10 @@ def test_meter_cleanup_preview_does_not_expose_execute_or_destructive_endpoints(
         "/data-lifecycle/meter-storage/cleanup/move",
         "/data-lifecycle/meter-storage/cleanup/compress",
         "/data-lifecycle/meter-storage/cleanup/truncate",
+        "/data-lifecycle/meter-storage/cleanup/pilot/delete",
+        "/data-lifecycle/meter-storage/cleanup/pilot/compress",
+        "/data-lifecycle/meter-storage/cleanup/pilot/truncate",
+        "/data-lifecycle/meter-storage/cleanup/pilot/batch",
     ]
     for path in forbidden_paths:
         response = client.post(path)
@@ -1642,6 +1646,56 @@ def test_data_lifecycle_meter_cleanup_rollback_drill_rebuild_endpoint_returns_re
     assert payload["schema_version"] == "res-legacy-meter-cleanup-rollback-drill-rebuild-v1"
     assert payload["record"]["trigger"] == "meter_cleanup_rollback_drill_rebuild"
     assert payload["rollback_drill"]["checksum_match"] is True
+
+
+def test_data_lifecycle_meter_cleanup_pilot_latest_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._meter_cleanup_pilot_mod, "read_latest_pilot", lambda policy=None: None)
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/cleanup/pilot/latest")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-cleanup-pilot-record-v1"
+    assert payload["status"] == "missing"
+    assert payload["mode"] == "single_reversible_quarantine_only"
+    assert payload["source_move_executed"] is False
+    assert payload["delete_executed"] is False
+
+
+def test_data_lifecycle_meter_cleanup_pilot_quarantine_one_returns_record(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-cleanup-pilot-one",
+        "trigger": "meter_cleanup_quarantine_pilot_quarantine_one",
+        "status": "success",
+    }
+    expected_pilot = {
+        "schema_version": "res-legacy-meter-cleanup-pilot-record-v1",
+        "mode": "single_reversible_quarantine_only",
+        "status": "success",
+        "source_move_executed": True,
+        "delete_executed": False,
+        "compress_executed": False,
+        "truncate_executed": False,
+        "batch_cleanup_executed": False,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_cleanup_pilot_mod,
+        "execute_single_file_quarantine",
+        lambda policy=None: (expected_record, expected_pilot),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/meter-storage/cleanup/pilot/quarantine-one")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-cleanup-pilot-record-v1"
+    assert payload["record"]["trigger"] == "meter_cleanup_quarantine_pilot_quarantine_one"
+    assert payload["pilot"]["status"] == "success"
+    assert payload["pilot"]["source_move_executed"] is True
 
 
 def test_data_lifecycle_meter_backup_export_readiness_endpoint_returns_missing_when_absent(monkeypatch):

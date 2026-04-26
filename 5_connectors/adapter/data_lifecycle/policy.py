@@ -37,6 +37,11 @@ class DataLifecyclePolicy:
     meter_cleanup_transaction_preview_file: str = ""
     meter_cleanup_rollback_drill_file: str = ""
     meter_cleanup_rollback_staging_root: str = ""
+    meter_cleanup_selected_candidate_file: str = ""
+    meter_cleanup_pilot_approval_template_file: str = ""
+    meter_cleanup_pilot_operator_approval_file: str = ""
+    meter_cleanup_quarantine_root: str = ""
+    meter_cleanup_pilot_record_file: str = ""
     meter_backup_export_readiness_file: str = ""
     meter_backup_export_plan_file: str = ""
     meter_backup_export_package_manifest_file: str = ""
@@ -172,6 +177,26 @@ def load_policy() -> DataLifecyclePolicy:
         "OMNIMEMORA_DLP_METER_CLEANUP_ROLLBACK_STAGING_ROOT",
         str(base_dir / "cleanup_rollback" / "staging"),
     )
+    meter_cleanup_selected_candidate_file = os.getenv(
+        "OMNIMEMORA_DLP_METER_CLEANUP_SELECTED_CANDIDATE_FILE",
+        str(base_dir / "meter_cleanup_selected_candidate.json"),
+    )
+    meter_cleanup_pilot_approval_template_file = os.getenv(
+        "OMNIMEMORA_DLP_METER_CLEANUP_PILOT_APPROVAL_TEMPLATE_FILE",
+        str(base_dir / "meter_cleanup_pilot_approval_template.json"),
+    )
+    meter_cleanup_pilot_operator_approval_file = os.getenv(
+        "OMNIMEMORA_DLP_METER_CLEANUP_PILOT_OPERATOR_APPROVAL_FILE",
+        str(base_dir / "meter_cleanup_pilot_operator_approval.json"),
+    )
+    meter_cleanup_quarantine_root = os.getenv(
+        "OMNIMEMORA_DLP_METER_CLEANUP_QUARANTINE_ROOT",
+        str(base_dir / "quarantine" / "meter_cleanup"),
+    )
+    meter_cleanup_pilot_record_file = os.getenv(
+        "OMNIMEMORA_DLP_METER_CLEANUP_PILOT_RECORD_FILE",
+        str(base_dir / "meter_cleanup_pilot_record.json"),
+    )
     meter_backup_export_readiness_file = os.getenv(
         "OMNIMEMORA_DLP_METER_BACKUP_EXPORT_READINESS_FILE",
         str(base_dir / "meter_backup_export_readiness.json"),
@@ -289,6 +314,11 @@ def load_policy() -> DataLifecyclePolicy:
         meter_cleanup_transaction_preview_file=meter_cleanup_transaction_preview_file,
         meter_cleanup_rollback_drill_file=meter_cleanup_rollback_drill_file,
         meter_cleanup_rollback_staging_root=meter_cleanup_rollback_staging_root,
+        meter_cleanup_selected_candidate_file=meter_cleanup_selected_candidate_file,
+        meter_cleanup_pilot_approval_template_file=meter_cleanup_pilot_approval_template_file,
+        meter_cleanup_pilot_operator_approval_file=meter_cleanup_pilot_operator_approval_file,
+        meter_cleanup_quarantine_root=meter_cleanup_quarantine_root,
+        meter_cleanup_pilot_record_file=meter_cleanup_pilot_record_file,
         meter_backup_export_readiness_file=meter_backup_export_readiness_file,
         meter_backup_export_plan_file=meter_backup_export_plan_file,
         meter_backup_export_package_manifest_file=meter_backup_export_package_manifest_file,

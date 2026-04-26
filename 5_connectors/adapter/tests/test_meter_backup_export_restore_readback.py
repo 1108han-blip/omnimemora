@@ -169,3 +169,28 @@ def test_restore_readback_read_latest_returns_written_report(tmp_path, monkeypat
     latest = restore_readback.read_restore_readback_report(policy=policy)
     assert latest is not None
     assert latest["report_id"] == report["report_id"]
+
+
+def test_restore_readback_passes_using_quarantine_source_after_cleanup_pilot_move(tmp_path, monkeypatch):
+    policy, pilot = _seed_copy_pilot(tmp_path, monkeypatch)
+    source = Path(str((pilot["selected_candidate"] or {})["path"]))
+    quarantine = tmp_path / "dlp" / "quarantine" / source.name
+    quarantine.parent.mkdir(parents=True, exist_ok=True)
+    shutil_payload = source.read_text(encoding="utf-8")
+    quarantine.write_text(shutil_payload, encoding="utf-8")
+    source.unlink()
+
+    cleanup_pilot_record = {
+        "status": "success",
+        "source_move_executed": True,
+        "original_path": str(source),
+        "quarantine_path": str(quarantine),
+    }
+    monkeypatch.setattr(restore_readback._cleanup_pilot, "read_latest_pilot", lambda policy=None: cleanup_pilot_record)
+
+    report = restore_readback.build_restore_readback_report(policy=policy)
+    assert report["status"] == "passed"
+    assert report["source_readable"] is True
+    assert report["source_retained"] is False
+    assert report["source_verification_mode"] == "quarantine"
+    assert report["checksum_match"] is True

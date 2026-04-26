@@ -70,3 +70,39 @@ def test_cleanup_rollback_drill_rebuild_writes_report(tmp_path, monkeypatch):
     assert record["trigger"] == "meter_cleanup_rollback_drill_rebuild"
     assert report["schema_version"] == "res-legacy-meter-cleanup-rollback-drill-v1"
     assert (tmp_path / "meter_cleanup_rollback_drill.json").exists()
+
+
+def test_cleanup_rollback_drill_passes_with_quarantine_source_after_pilot_move(tmp_path, monkeypatch):
+    policy = _build_policy(tmp_path)
+    source = tmp_path / "meters_tenant_q.json"
+    backup = tmp_path / "meters_tenant_q.json.abcdef.pilotcopy"
+    quarantine = tmp_path / "quarantine" / "meters_tenant_q.json.abcdef.quarantine"
+    source.write_text('{"ok":true}', encoding="utf-8")
+    backup.write_text('{"ok":true}', encoding="utf-8")
+    quarantine.parent.mkdir(parents=True, exist_ok=True)
+    quarantine.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
+    source.unlink()
+
+    copy_pilot = {
+        "status": "success",
+        "selected_candidate": {"path": str(source)},
+        "target_path": str(backup),
+        "source_retained": True,
+        "checksum_match": True,
+        "cleanup_started": False,
+    }
+    cleanup_pilot = {
+        "status": "success",
+        "source_move_executed": True,
+        "original_path": str(source),
+        "quarantine_path": str(quarantine),
+    }
+    monkeypatch.setattr(rollback_mod._copy_pilot, "read_latest_copy_pilot", lambda policy=None: copy_pilot)
+    monkeypatch.setattr(rollback_mod._cleanup_pilot, "read_latest_pilot", lambda policy=None: cleanup_pilot)
+
+    report = rollback_mod.build_rollback_drill_report(policy=policy)
+    assert report["status"] == "passed"
+    assert report["source_retained"] is False
+    assert report["source_verification_mode"] == "quarantine"
+    assert report["staging_restore_readable"] is True
+    assert report["checksum_match"] is True

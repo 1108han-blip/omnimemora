@@ -17,6 +17,7 @@ from . import state_store
 from .policy import DataLifecyclePolicy, load_policy
 
 _copy_pilot = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_backup_export_copy_pilot")
+_cleanup_pilot = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_cleanup_quarantine_pilot")
 
 METER_CLEANUP_ROLLBACK_DRILL_SCHEMA_VERSION = "res-legacy-meter-cleanup-rollback-drill-v1"
 METER_CLEANUP_ROLLBACK_DRILL_REBUILD_SCHEMA_VERSION = "res-legacy-meter-cleanup-rollback-drill-rebuild-v1"
@@ -55,6 +56,7 @@ def build_rollback_drill_report(*, policy: Optional[DataLifecyclePolicy] = None)
     current = policy or load_policy()
     now = datetime.now(timezone.utc)
     copy_pilot = _copy_pilot.read_latest_copy_pilot(policy=current)
+    cleanup_pilot = _cleanup_pilot.read_latest_pilot(policy=current)
     blocking_reasons: list[str] = []
 
     source_path: Optional[Path] = None
@@ -83,31 +85,45 @@ def build_rollback_drill_report(*, policy: Optional[DataLifecyclePolicy] = None)
         if bool(copy_pilot.get("cleanup_started", False)):
             blocking_reasons.append("cleanup_started")
 
+    original_source_path = source_path
+    source_verification_mode = "original"
     source_retained = bool(source_path and source_path.exists() and source_path.is_file())
+    source_for_checksum = source_path
+    if (
+        not source_retained
+        and isinstance(cleanup_pilot, dict)
+        and str(cleanup_pilot.get("status") or "") == "success"
+        and bool(cleanup_pilot.get("source_move_executed", False))
+        and str(cleanup_pilot.get("original_path") or "") == str(original_source_path or "")
+    ):
+        quarantine_path = Path(str(cleanup_pilot.get("quarantine_path") or "")).expanduser()
+        if quarantine_path.exists() and quarantine_path.is_file():
+            source_verification_mode = "quarantine"
+            source_for_checksum = quarantine_path
     backup_copy_readable = bool(backup_copy_path and backup_copy_path.exists() and backup_copy_path.is_file())
-    if isinstance(copy_pilot, dict) and not source_retained:
+    if isinstance(copy_pilot, dict) and not source_retained and source_verification_mode != "quarantine":
         blocking_reasons.append("source_not_readable")
     if isinstance(copy_pilot, dict) and not backup_copy_readable:
         blocking_reasons.append("backup_copy_not_readable")
 
-    if backup_copy_readable and source_retained and source_path and backup_copy_path:
-        source_sha = _sha256_file(source_path)
+    if backup_copy_readable and source_for_checksum and source_for_checksum.exists() and source_for_checksum.is_file() and backup_copy_path:
+        source_sha = _sha256_file(source_for_checksum)
         backup_copy_sha = _sha256_file(backup_copy_path)
         staging_name = f"{backup_copy_path.name}.{uuid4().hex[:12]}.staging_restore"
         staging_restore_path = _staging_root(current) / staging_name
         _copy_to_staging(backup_copy_path, staging_restore_path)
         staging_restore_sha = _sha256_file(staging_restore_path)
     else:
-        if source_retained and source_path:
-            source_sha = _sha256_file(source_path)
+        if source_for_checksum and source_for_checksum.exists() and source_for_checksum.is_file():
+            source_sha = _sha256_file(source_for_checksum)
         if backup_copy_readable and backup_copy_path:
             backup_copy_sha = _sha256_file(backup_copy_path)
 
     checksum_match = bool(source_sha and staging_restore_sha and source_sha == staging_restore_sha)
     staging_restore_readable = bool(staging_restore_path and staging_restore_path.exists() and staging_restore_path.is_file())
-    if backup_copy_readable and source_retained and not staging_restore_readable:
+    if backup_copy_readable and source_for_checksum and source_for_checksum.exists() and source_for_checksum.is_file() and not staging_restore_readable:
         blocking_reasons.append("staging_restore_not_readable")
-    if backup_copy_readable and source_retained and not checksum_match:
+    if backup_copy_readable and source_for_checksum and source_for_checksum.exists() and source_for_checksum.is_file() and not checksum_match:
         blocking_reasons.append("checksum_mismatch")
 
     blocking_reasons = list(dict.fromkeys(blocking_reasons))
@@ -119,7 +135,9 @@ def build_rollback_drill_report(*, policy: Optional[DataLifecyclePolicy] = None)
         "generated_at": now.isoformat(),
         "mode": METER_CLEANUP_ROLLBACK_DRILL_MODE,
         "status": status,
-        "source_path": str(source_path) if source_path else None,
+        "source_path": str(original_source_path) if original_source_path else None,
+        "source_verification_path": str(source_for_checksum) if source_for_checksum else None,
+        "source_verification_mode": source_verification_mode,
         "backup_copy_path": str(backup_copy_path) if backup_copy_path else None,
         "staging_restore_path": str(staging_restore_path) if staging_restore_path else None,
         "source_retained": source_retained,
@@ -190,4 +208,3 @@ def rebuild_rollback_drill_report(*, policy: Optional[DataLifecyclePolicy] = Non
     )
     state_store.append_state_record(record, policy=current)
     return record, report
-

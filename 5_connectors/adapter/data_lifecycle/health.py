@@ -685,6 +685,13 @@ def build_health_payload(
                 "rollback_drill_status": "missing",
                 "rollback_drill_checksum_match": False,
                 "rollback_required": True,
+                "pilot_status": "missing",
+                "pilot_mode": "single_reversible_quarantine_only",
+                "source_move_executed": False,
+                "delete_executed": False,
+                "compress_executed": False,
+                "truncate_executed": False,
+                "batch_cleanup_executed": False,
             },
             "backup_export": {
                 "status": "missing",
