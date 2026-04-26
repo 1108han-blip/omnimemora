@@ -53,32 +53,50 @@ RES-020 high-priority adjustment:
 
 ## Running Reality (adapter+ui promotion)
 
-Promotion:
+Running alignment repair note:
+
+- prior marker was `repo_revision=b666c1e`, which did not prove that RES-020/021/022 committed HEAD had been promoted
+- this repair batch re-promoted from clean committed HEAD and revalidated all running checks against that aligned marker
+
+Promotion (alignment repair):
 
 - command: `./tools/promotion/promotion.sh adapter+ui`
 - result: `running_reality_promoted`
-- promotion log: `tools/verification/logs/promotion_20260426_122048.log`
-- deployed marker repo revision: `b666c1e`
+- promotion log: `tools/verification/logs/promotion_20260426_123622.log`
+- deployed marker repo revision: `845d9a5` (matches committed HEAD used for this revalidation)
 
 Running validation chain:
 
-1. `POST /data-lifecycle/meter-storage/cleanup/gate/rebuild`
+1. `POST /data-lifecycle/meter-storage/cleanup/preview/rebuild`
+   - `status=blocked`
+   - `cleanup_allowed=false`
+2. `POST /data-lifecycle/meter-storage/backup-export/restore-readback/rebuild`
+   - `status=passed`
+   - `production_restore_started=false`
+   - `cleanup_started=false`
+3. `POST /data-lifecycle/meter-storage/cleanup/gate/rebuild`
    - `cleanup_allowed=false`
    - `rollback_required=true`
-2. `POST /data-lifecycle/meter-storage/cleanup/transaction-preview/rebuild`
+4. `POST /data-lifecycle/meter-storage/cleanup/transaction-preview/rebuild`
    - `status=blocked`
    - `execution_allowed=false`
    - item operations remain within `retain|eligible_for_future_cleanup|blocked`
-3. `POST /data-lifecycle/meter-storage/cleanup/rollback-drill/rebuild`
+5. `POST /data-lifecycle/meter-storage/cleanup/rollback-drill/rebuild`
    - `status=passed`
    - `staging_restore_readable=true`
    - `checksum_match=true`
    - `source_retained=true`
    - `production_restore_started=false`
    - `cleanup_started=false`
-4. `GET /data-lifecycle/meter-storage/parity`
+6. `GET /data-lifecycle/meter-storage/parity`
    - `critical_mismatch_count=0`
-5. smoke (real request id `b25a0530854d`)
+7. `GET /data-lifecycle/status`
+   - `meter_storage_v2.cleanup.execution_gate_allowed=false`
+   - `meter_storage_v2.cleanup.transaction_execution_allowed=false`
+   - `meter_storage_v2.cleanup.rollback_required=true`
+8. forbidden cleanup execution endpoints remain absent
+   - `/data-lifecycle/meter-storage/cleanup/execute|delete|move|compress|truncate` -> `404`
+9. smoke (real request id `b25a0530854d`)
    - `GET /requests/{id}/meter` -> 200
    - `GET /debug/request_evidence?request_id={id}` -> 200
    - `GET /metrics/summary` -> 200
@@ -100,3 +118,7 @@ RES-023 remains frozen.
 
 - Any single-file reversible cleanup pilot still requires explicit operator approval.
 - This batch does not grant approval and does not start cleanup execution.
+
+## Final Running Conclusion
+
+`RES-020/021/022 running reality revalidated against committed HEAD; cleanup execution not started`
