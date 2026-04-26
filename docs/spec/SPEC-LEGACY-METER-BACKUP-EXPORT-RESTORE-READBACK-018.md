@@ -10,7 +10,7 @@ depends_on:
   - ADR-RES-018
   - SPEC-LEGACY-METER-BACKUP-EXPORT-COPY-PILOT-017
 supersedes: []
-last_verified_commit: "2d53fd2"
+last_verified_commit: "98028df"
 ---
 
 # SPEC-LEGACY-METER-BACKUP-EXPORT-RESTORE-READBACK-018

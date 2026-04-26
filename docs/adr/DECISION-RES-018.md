@@ -9,7 +9,7 @@ effective_date: 2026-04-26
 depends_on:
   - ADR-RES-017
 supersedes: []
-last_verified_commit: "2d53fd2"
+last_verified_commit: "98028df"
 ---
 
 # ADR-RES-018: Backup Export Restore/Readback Validation
