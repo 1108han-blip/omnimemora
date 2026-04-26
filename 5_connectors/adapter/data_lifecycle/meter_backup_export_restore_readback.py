@@ -93,6 +93,8 @@ def build_restore_readback_report(*, policy: Optional[DataLifecyclePolicy] = Non
             backup_copy_path = Path(raw_target).expanduser()
         expected_source_sha = str(copy_record.get("source_sha256") or "") or None
         expected_copy_sha = str(copy_record.get("copied_sha256") or "") or None
+        if not expected_source_sha or not expected_copy_sha:
+            blocking_reasons.append("copy_pilot_hash_missing")
         if not bool(copy_record.get("source_retained", False)):
             blocking_reasons.append("copy_pilot_source_not_retained")
         if not bool(copy_record.get("read_path_unchanged", True)):
@@ -116,8 +118,10 @@ def build_restore_readback_report(*, policy: Optional[DataLifecyclePolicy] = Non
     expected_hash_match = bool(
         source_sha
         and backup_copy_sha
-        and (not expected_source_sha or source_sha == expected_source_sha)
-        and (not expected_copy_sha or backup_copy_sha == expected_copy_sha)
+        and expected_source_sha
+        and expected_copy_sha
+        and source_sha == expected_source_sha
+        and backup_copy_sha == expected_copy_sha
     )
     bytes_match = bool(source_readable and backup_copy_readable and source_bytes == backup_copy_bytes)
 

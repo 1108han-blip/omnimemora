@@ -135,6 +135,23 @@ def test_restore_readback_blocks_when_backup_copy_is_corrupted(tmp_path, monkeyp
     assert report["checksum_match"] is False
 
 
+def test_restore_readback_blocks_when_copy_pilot_hashes_are_missing(tmp_path, monkeypatch):
+    policy, pilot = _seed_copy_pilot(tmp_path, monkeypatch)
+    pilot.pop("source_sha256", None)
+    pilot.pop("copied_sha256", None)
+    _write_json(Path(policy.meter_backup_export_copy_pilot_record_file), pilot)
+
+    report = restore_readback.build_restore_readback_report(policy=policy)
+
+    assert report["status"] == "blocked"
+    assert "copy_pilot_hash_missing" in report["blocking_reasons"]
+    assert "copy_pilot_hash_mismatch" in report["blocking_reasons"]
+    assert report["checksum_match"] is True
+    assert report["expected_hash_match"] is False
+    assert report["production_restore_started"] is False
+    assert report["cleanup_started"] is False
+
+
 def test_restore_readback_blocks_when_source_missing(tmp_path, monkeypatch):
     policy, pilot = _seed_copy_pilot(tmp_path, monkeypatch)
     source = Path(str((pilot["selected_candidate"] or {})["path"]))
