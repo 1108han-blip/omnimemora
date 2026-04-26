@@ -49,6 +49,27 @@ _meter_cleanup_pilot_mod = importlib.import_module(
 _meter_cleanup_stability_window_mod = importlib.import_module(
     "5_connectors.adapter.data_lifecycle.meter_cleanup_stability_window"
 )
+try:
+    _meter_cleanup_scaleup_readiness_mod = importlib.import_module(
+        "5_connectors.adapter.data_lifecycle.meter_cleanup_scaleup_readiness"
+    )
+except Exception:
+    class _MissingMeterCleanupScaleupReadinessModule:
+        METER_CLEANUP_SCALEUP_READINESS_SCHEMA_VERSION = "res-legacy-meter-cleanup-scaleup-readiness-v1"
+        METER_CLEANUP_SCALEUP_READINESS_REBUILD_SCHEMA_VERSION = (
+            "res-legacy-meter-cleanup-scaleup-readiness-rebuild-v1"
+        )
+        METER_CLEANUP_SCALEUP_READINESS_MODE = "scaleup_readiness_only"
+
+        @staticmethod
+        def read_readiness_report(policy=None):
+            return None
+
+        @staticmethod
+        def rebuild_readiness_report(policy=None):
+            raise RuntimeError("meter cleanup scaleup readiness module unavailable")
+
+    _meter_cleanup_scaleup_readiness_mod = _MissingMeterCleanupScaleupReadinessModule()
 _meter_backup_export_readiness_mod = importlib.import_module(
     "5_connectors.adapter.data_lifecycle.meter_backup_export_readiness"
 )
@@ -386,6 +407,47 @@ async def post_data_lifecycle_meter_storage_cleanup_stability_window_rebuild():
         "schema_version": _meter_cleanup_stability_window_mod.METER_CLEANUP_STABILITY_WINDOW_REBUILD_SCHEMA_VERSION,
         "record": record,
         "stability_window": report,
+    }
+
+
+@router.get("/data-lifecycle/meter-storage/cleanup/scaleup-readiness")
+async def get_data_lifecycle_meter_storage_cleanup_scaleup_readiness():
+    policy = _policy_mod.load_policy()
+    report = _meter_cleanup_scaleup_readiness_mod.read_readiness_report(policy=policy)
+    if report is None:
+        return {
+            "schema_version": _meter_cleanup_scaleup_readiness_mod.METER_CLEANUP_SCALEUP_READINESS_SCHEMA_VERSION,
+            "status": "missing",
+            "mode": _meter_cleanup_scaleup_readiness_mod.METER_CLEANUP_SCALEUP_READINESS_MODE,
+            "ready_for_scaleup": False,
+            "cleanup_scope_expansion_started": False,
+        }
+    return report
+
+
+@router.post("/data-lifecycle/meter-storage/cleanup/scaleup-readiness/rebuild")
+async def post_data_lifecycle_meter_storage_cleanup_scaleup_readiness_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, report = await asyncio.to_thread(
+            _meter_cleanup_scaleup_readiness_mod.rebuild_readiness_report,
+            policy=policy,
+        )
+    except Exception as exc:
+        latest = _meter_cleanup_scaleup_readiness_mod.read_readiness_report(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _meter_cleanup_scaleup_readiness_mod.METER_CLEANUP_SCALEUP_READINESS_REBUILD_SCHEMA_VERSION,
+                "message": "meter cleanup scaleup-readiness rebuild failed",
+                "error": str(exc),
+                "scaleup_readiness": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _meter_cleanup_scaleup_readiness_mod.METER_CLEANUP_SCALEUP_READINESS_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "scaleup_readiness": report,
     }
 
 

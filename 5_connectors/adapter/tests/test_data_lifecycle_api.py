@@ -1766,6 +1766,75 @@ def test_meter_cleanup_stability_window_does_not_expose_execute_delete_move_comp
         assert response.status_code == 404
 
 
+def test_data_lifecycle_meter_cleanup_scaleup_readiness_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_cleanup_scaleup_readiness_mod,
+        "read_readiness_report",
+        lambda policy=None: None,
+    )
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/cleanup/scaleup-readiness")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-cleanup-scaleup-readiness-v1"
+    assert payload["status"] == "missing"
+    assert payload["mode"] == "scaleup_readiness_only"
+    assert payload["ready_for_scaleup"] is False
+    assert payload["cleanup_scope_expansion_started"] is False
+
+
+def test_data_lifecycle_meter_cleanup_scaleup_readiness_rebuild_endpoint_returns_record_and_report(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-cleanup-scaleup-readiness",
+        "trigger": "meter_cleanup_scaleup_readiness_rebuild",
+        "status": "success",
+    }
+    expected_report = {
+        "schema_version": "res-legacy-meter-cleanup-scaleup-readiness-v1",
+        "mode": "scaleup_readiness_only",
+        "status": "blocked",
+        "ready_for_scaleup": False,
+        "cleanup_scope_expansion_started": False,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_cleanup_scaleup_readiness_mod,
+        "rebuild_readiness_report",
+        lambda policy=None: (expected_record, expected_report),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/meter-storage/cleanup/scaleup-readiness/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-cleanup-scaleup-readiness-rebuild-v1"
+    assert payload["record"]["trigger"] == "meter_cleanup_scaleup_readiness_rebuild"
+    assert payload["scaleup_readiness"]["status"] == "blocked"
+    assert payload["scaleup_readiness"]["ready_for_scaleup"] is False
+    assert payload["scaleup_readiness"]["cleanup_scope_expansion_started"] is False
+
+
+def test_meter_cleanup_scaleup_readiness_does_not_expose_execute_delete_move_compress_truncate_batch():
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    client = TestClient(app)
+    forbidden_paths = [
+        "/data-lifecycle/meter-storage/cleanup/scaleup-readiness/execute",
+        "/data-lifecycle/meter-storage/cleanup/scaleup-readiness/delete",
+        "/data-lifecycle/meter-storage/cleanup/scaleup-readiness/move",
+        "/data-lifecycle/meter-storage/cleanup/scaleup-readiness/compress",
+        "/data-lifecycle/meter-storage/cleanup/scaleup-readiness/truncate",
+        "/data-lifecycle/meter-storage/cleanup/scaleup-readiness/batch",
+    ]
+    for path in forbidden_paths:
+        response = client.post(path)
+        assert response.status_code == 404
+
+
 def test_data_lifecycle_meter_backup_export_readiness_endpoint_returns_missing_when_absent(monkeypatch):
     app = FastAPI()
     app.include_router(data_lifecycle_api.router)

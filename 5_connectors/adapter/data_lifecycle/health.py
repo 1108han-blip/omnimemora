@@ -695,6 +695,9 @@ def build_health_payload(
                 "stability_window_status": "missing",
                 "stability_window_observed_pilot_status": "missing",
                 "stability_window_cleanup_scope_expansion_started": False,
+                "scaleup_readiness_status": "missing",
+                "scaleup_ready": False,
+                "cleanup_scope_expansion_started": False,
             },
             "backup_export": {
                 "status": "missing",

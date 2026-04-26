@@ -126,12 +126,21 @@ def get_status_payload() -> dict[str, Any]:
         cleanup_stability_mod = importlib.import_module(
             "5_connectors.adapter.data_lifecycle.meter_cleanup_stability_window"
         )
+        try:
+            cleanup_scaleup_readiness_mod = importlib.import_module(
+                "5_connectors.adapter.data_lifecycle.meter_cleanup_scaleup_readiness"
+            )
+        except Exception:
+            cleanup_scaleup_readiness_mod = None
         preview = cleanup_mod.read_preview()
         cleanup_gate = cleanup_gate_mod.read_gate()
         cleanup_txn_preview = cleanup_txn_mod.read_preview()
         cleanup_rollback = cleanup_rollback_mod.read_rollback_drill_report()
         cleanup_pilot = cleanup_pilot_mod.read_latest_pilot()
         cleanup_stability = cleanup_stability_mod.read_stability_window_report()
+        cleanup_scaleup_readiness = (
+            cleanup_scaleup_readiness_mod.read_readiness_report() if cleanup_scaleup_readiness_mod is not None else None
+        )
         if isinstance(preview, dict):
             blocking_reasons = preview.get("blocking_reasons") or []
             summary = preview.get("summary") or {}
@@ -163,6 +172,9 @@ def get_status_payload() -> dict[str, Any]:
                 "stability_window_cleanup_scope_expansion_started": bool(
                     (cleanup_stability or {}).get("cleanup_scope_expansion_started", False)
                 ),
+                "scaleup_readiness_status": str((cleanup_scaleup_readiness or {}).get("status") or "missing"),
+                "scaleup_ready": bool((cleanup_scaleup_readiness or {}).get("ready_for_scaleup") is True),
+                "cleanup_scope_expansion_started": False,
             }
         else:
             cleanup_view = {
@@ -189,6 +201,9 @@ def get_status_payload() -> dict[str, Any]:
                 "stability_window_status": "missing",
                 "stability_window_observed_pilot_status": "missing",
                 "stability_window_cleanup_scope_expansion_started": False,
+                "scaleup_readiness_status": "missing",
+                "scaleup_ready": False,
+                "cleanup_scope_expansion_started": False,
             }
     except Exception:
         cleanup_view = {
@@ -215,6 +230,9 @@ def get_status_payload() -> dict[str, Any]:
             "stability_window_status": "missing",
             "stability_window_observed_pilot_status": "missing",
             "stability_window_cleanup_scope_expansion_started": False,
+            "scaleup_readiness_status": "missing",
+            "scaleup_ready": False,
+            "cleanup_scope_expansion_started": False,
         }
     backup_export_view: dict[str, Any]
     try:

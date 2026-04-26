@@ -122,6 +122,9 @@ def test_rebuild_and_status_payload_keep_legacy_authoritative(tmp_path, monkeypa
     assert status["cleanup"]["stability_window_status"] == "missing"
     assert status["cleanup"]["stability_window_observed_pilot_status"] == "missing"
     assert status["cleanup"]["stability_window_cleanup_scope_expansion_started"] is False
+    assert status["cleanup"]["scaleup_readiness_status"] == "missing"
+    assert status["cleanup"]["scaleup_ready"] is False
+    assert status["cleanup"]["cleanup_scope_expansion_started"] is False
     assert status["backup_export"]["status"] == "missing"
     assert status["backup_export"]["mode"] == "backup_export_readiness_only"
     assert status["backup_export"]["backup_export_allowed"] is False
