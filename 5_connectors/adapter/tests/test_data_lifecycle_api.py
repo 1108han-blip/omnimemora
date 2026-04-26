@@ -1835,6 +1835,144 @@ def test_meter_cleanup_scaleup_readiness_does_not_expose_execute_delete_move_com
         assert response.status_code == 404
 
 
+def test_data_lifecycle_meter_cleanup_repeatable_pilot_protocol_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_cleanup_repeatable_pilot_protocol_mod,
+        "read_protocol",
+        lambda policy=None: None,
+    )
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/cleanup/repeatable-pilot-protocol")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-repeatable-cleanup-pilot-protocol-v1"
+    assert payload["status"] == "missing"
+    assert payload["mode"] == "proposal_only"
+    assert payload["second_file_pilot_allowed"] is False
+    assert payload["execution_started"] is False
+    assert payload["cleanup_scope_expansion_started"] is False
+
+
+def test_data_lifecycle_meter_cleanup_repeatable_pilot_protocol_rebuild_endpoint_returns_record_and_report(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-repeatable-protocol",
+        "trigger": "meter_cleanup_repeatable_pilot_protocol_rebuild",
+        "status": "success",
+    }
+    expected_report = {
+        "schema_version": "res-repeatable-cleanup-pilot-protocol-v1",
+        "mode": "proposal_only",
+        "status": "blocked",
+        "second_file_pilot_allowed": False,
+        "execution_started": False,
+        "cleanup_scope_expansion_started": False,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_cleanup_repeatable_pilot_protocol_mod,
+        "rebuild_protocol",
+        lambda policy=None: (expected_record, expected_report),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/meter-storage/cleanup/repeatable-pilot-protocol/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-repeatable-cleanup-pilot-protocol-rebuild-v1"
+    assert payload["record"]["trigger"] == "meter_cleanup_repeatable_pilot_protocol_rebuild"
+    assert payload["repeatable_pilot_protocol"]["status"] == "blocked"
+
+
+def test_meter_cleanup_repeatable_pilot_protocol_does_not_expose_execute_delete_move_compress_truncate_batch():
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    client = TestClient(app)
+    forbidden_paths = [
+        "/data-lifecycle/meter-storage/cleanup/repeatable-pilot-protocol/execute",
+        "/data-lifecycle/meter-storage/cleanup/repeatable-pilot-protocol/delete",
+        "/data-lifecycle/meter-storage/cleanup/repeatable-pilot-protocol/move",
+        "/data-lifecycle/meter-storage/cleanup/repeatable-pilot-protocol/compress",
+        "/data-lifecycle/meter-storage/cleanup/repeatable-pilot-protocol/truncate",
+        "/data-lifecycle/meter-storage/cleanup/repeatable-pilot-protocol/batch",
+    ]
+    for path in forbidden_paths:
+        response = client.post(path)
+        assert response.status_code == 404
+
+
+def test_data_lifecycle_meter_cleanup_second_file_pilot_proposal_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_cleanup_second_file_pilot_proposal_mod,
+        "read_proposal",
+        lambda policy=None: None,
+    )
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/cleanup/second-file-pilot/proposal")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-second-file-cleanup-pilot-proposal-v1"
+    assert payload["status"] == "missing"
+    assert payload["mode"] == "proposal_only"
+    assert payload["second_file_pilot_allowed"] is False
+    assert payload["execution_started"] is False
+    assert payload["cleanup_scope_expansion_started"] is False
+
+
+def test_data_lifecycle_meter_cleanup_second_file_pilot_proposal_rebuild_endpoint_returns_record_and_report(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-second-file-proposal",
+        "trigger": "meter_cleanup_second_file_pilot_proposal_rebuild",
+        "status": "success",
+    }
+    expected_report = {
+        "schema_version": "res-second-file-cleanup-pilot-proposal-v1",
+        "mode": "proposal_only",
+        "status": "blocked",
+        "second_file_pilot_allowed": False,
+        "execution_started": False,
+        "cleanup_scope_expansion_started": False,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_cleanup_second_file_pilot_proposal_mod,
+        "rebuild_proposal",
+        lambda policy=None: (expected_record, expected_report),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/meter-storage/cleanup/second-file-pilot/proposal/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-second-file-cleanup-pilot-proposal-rebuild-v1"
+    assert payload["record"]["trigger"] == "meter_cleanup_second_file_pilot_proposal_rebuild"
+    assert payload["second_file_pilot_proposal"]["status"] == "blocked"
+
+
+def test_meter_cleanup_second_file_pilot_proposal_does_not_expose_execute_delete_move_compress_truncate_batch():
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    client = TestClient(app)
+    forbidden_paths = [
+        "/data-lifecycle/meter-storage/cleanup/second-file-pilot/proposal/execute",
+        "/data-lifecycle/meter-storage/cleanup/second-file-pilot/proposal/delete",
+        "/data-lifecycle/meter-storage/cleanup/second-file-pilot/proposal/move",
+        "/data-lifecycle/meter-storage/cleanup/second-file-pilot/proposal/compress",
+        "/data-lifecycle/meter-storage/cleanup/second-file-pilot/proposal/truncate",
+        "/data-lifecycle/meter-storage/cleanup/second-file-pilot/proposal/batch",
+    ]
+    for path in forbidden_paths:
+        response = client.post(path)
+        assert response.status_code == 404
+
+
 def test_data_lifecycle_meter_backup_export_readiness_endpoint_returns_missing_when_absent(monkeypatch):
     app = FastAPI()
     app.include_router(data_lifecycle_api.router)

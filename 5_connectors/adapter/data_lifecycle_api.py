@@ -70,6 +70,48 @@ except Exception:
             raise RuntimeError("meter cleanup scaleup readiness module unavailable")
 
     _meter_cleanup_scaleup_readiness_mod = _MissingMeterCleanupScaleupReadinessModule()
+try:
+    _meter_cleanup_repeatable_pilot_protocol_mod = importlib.import_module(
+        "5_connectors.adapter.data_lifecycle.meter_cleanup_repeatable_pilot_protocol"
+    )
+except Exception:
+    class _MissingMeterCleanupRepeatablePilotProtocolModule:
+        METER_CLEANUP_REPEATABLE_PILOT_PROTOCOL_SCHEMA_VERSION = "res-repeatable-cleanup-pilot-protocol-v1"
+        METER_CLEANUP_REPEATABLE_PILOT_PROTOCOL_REBUILD_SCHEMA_VERSION = (
+            "res-repeatable-cleanup-pilot-protocol-rebuild-v1"
+        )
+        METER_CLEANUP_REPEATABLE_PILOT_PROTOCOL_MODE = "proposal_only"
+
+        @staticmethod
+        def read_protocol(policy=None):
+            return None
+
+        @staticmethod
+        def rebuild_protocol(policy=None):
+            raise RuntimeError("meter cleanup repeatable pilot protocol module unavailable")
+
+    _meter_cleanup_repeatable_pilot_protocol_mod = _MissingMeterCleanupRepeatablePilotProtocolModule()
+try:
+    _meter_cleanup_second_file_pilot_proposal_mod = importlib.import_module(
+        "5_connectors.adapter.data_lifecycle.meter_cleanup_second_file_pilot_proposal"
+    )
+except Exception:
+    class _MissingMeterCleanupSecondFilePilotProposalModule:
+        METER_CLEANUP_SECOND_FILE_PILOT_PROPOSAL_SCHEMA_VERSION = "res-second-file-cleanup-pilot-proposal-v1"
+        METER_CLEANUP_SECOND_FILE_PILOT_PROPOSAL_REBUILD_SCHEMA_VERSION = (
+            "res-second-file-cleanup-pilot-proposal-rebuild-v1"
+        )
+        METER_CLEANUP_SECOND_FILE_PILOT_PROPOSAL_MODE = "proposal_only"
+
+        @staticmethod
+        def read_proposal(policy=None):
+            return None
+
+        @staticmethod
+        def rebuild_proposal(policy=None):
+            raise RuntimeError("meter cleanup second-file pilot proposal module unavailable")
+
+    _meter_cleanup_second_file_pilot_proposal_mod = _MissingMeterCleanupSecondFilePilotProposalModule()
 _meter_backup_export_readiness_mod = importlib.import_module(
     "5_connectors.adapter.data_lifecycle.meter_backup_export_readiness"
 )
@@ -448,6 +490,90 @@ async def post_data_lifecycle_meter_storage_cleanup_scaleup_readiness_rebuild():
         "schema_version": _meter_cleanup_scaleup_readiness_mod.METER_CLEANUP_SCALEUP_READINESS_REBUILD_SCHEMA_VERSION,
         "record": record,
         "scaleup_readiness": report,
+    }
+
+
+@router.get("/data-lifecycle/meter-storage/cleanup/repeatable-pilot-protocol")
+async def get_data_lifecycle_meter_storage_cleanup_repeatable_pilot_protocol():
+    policy = _policy_mod.load_policy()
+    report = _meter_cleanup_repeatable_pilot_protocol_mod.read_protocol(policy=policy)
+    if report is None:
+        return {
+            "schema_version": _meter_cleanup_repeatable_pilot_protocol_mod.METER_CLEANUP_REPEATABLE_PILOT_PROTOCOL_SCHEMA_VERSION,
+            "status": "missing",
+            "mode": _meter_cleanup_repeatable_pilot_protocol_mod.METER_CLEANUP_REPEATABLE_PILOT_PROTOCOL_MODE,
+            "second_file_pilot_allowed": False,
+            "execution_started": False,
+            "cleanup_scope_expansion_started": False,
+        }
+    return report
+
+
+@router.post("/data-lifecycle/meter-storage/cleanup/repeatable-pilot-protocol/rebuild")
+async def post_data_lifecycle_meter_storage_cleanup_repeatable_pilot_protocol_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, report = await asyncio.to_thread(
+            _meter_cleanup_repeatable_pilot_protocol_mod.rebuild_protocol,
+            policy=policy,
+        )
+    except Exception as exc:
+        latest = _meter_cleanup_repeatable_pilot_protocol_mod.read_protocol(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _meter_cleanup_repeatable_pilot_protocol_mod.METER_CLEANUP_REPEATABLE_PILOT_PROTOCOL_REBUILD_SCHEMA_VERSION,
+                "message": "meter cleanup repeatable pilot protocol rebuild failed",
+                "error": str(exc),
+                "repeatable_pilot_protocol": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _meter_cleanup_repeatable_pilot_protocol_mod.METER_CLEANUP_REPEATABLE_PILOT_PROTOCOL_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "repeatable_pilot_protocol": report,
+    }
+
+
+@router.get("/data-lifecycle/meter-storage/cleanup/second-file-pilot/proposal")
+async def get_data_lifecycle_meter_storage_cleanup_second_file_pilot_proposal():
+    policy = _policy_mod.load_policy()
+    report = _meter_cleanup_second_file_pilot_proposal_mod.read_proposal(policy=policy)
+    if report is None:
+        return {
+            "schema_version": _meter_cleanup_second_file_pilot_proposal_mod.METER_CLEANUP_SECOND_FILE_PILOT_PROPOSAL_SCHEMA_VERSION,
+            "status": "missing",
+            "mode": _meter_cleanup_second_file_pilot_proposal_mod.METER_CLEANUP_SECOND_FILE_PILOT_PROPOSAL_MODE,
+            "second_file_pilot_allowed": False,
+            "execution_started": False,
+            "cleanup_scope_expansion_started": False,
+        }
+    return report
+
+
+@router.post("/data-lifecycle/meter-storage/cleanup/second-file-pilot/proposal/rebuild")
+async def post_data_lifecycle_meter_storage_cleanup_second_file_pilot_proposal_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, report = await asyncio.to_thread(
+            _meter_cleanup_second_file_pilot_proposal_mod.rebuild_proposal,
+            policy=policy,
+        )
+    except Exception as exc:
+        latest = _meter_cleanup_second_file_pilot_proposal_mod.read_proposal(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _meter_cleanup_second_file_pilot_proposal_mod.METER_CLEANUP_SECOND_FILE_PILOT_PROPOSAL_REBUILD_SCHEMA_VERSION,
+                "message": "meter cleanup second-file pilot proposal rebuild failed",
+                "error": str(exc),
+                "second_file_pilot_proposal": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _meter_cleanup_second_file_pilot_proposal_mod.METER_CLEANUP_SECOND_FILE_PILOT_PROPOSAL_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "second_file_pilot_proposal": report,
     }
 
 
