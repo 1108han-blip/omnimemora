@@ -692,6 +692,9 @@ def build_health_payload(
                 "compress_executed": False,
                 "truncate_executed": False,
                 "batch_cleanup_executed": False,
+                "stability_window_status": "missing",
+                "stability_window_observed_pilot_status": "missing",
+                "stability_window_cleanup_scope_expansion_started": False,
             },
             "backup_export": {
                 "status": "missing",

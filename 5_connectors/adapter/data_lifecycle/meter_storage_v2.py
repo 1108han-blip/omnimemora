@@ -123,11 +123,15 @@ def get_status_payload() -> dict[str, Any]:
         cleanup_txn_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_cleanup_transaction_preview")
         cleanup_rollback_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_cleanup_rollback_drill")
         cleanup_pilot_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_cleanup_quarantine_pilot")
+        cleanup_stability_mod = importlib.import_module(
+            "5_connectors.adapter.data_lifecycle.meter_cleanup_stability_window"
+        )
         preview = cleanup_mod.read_preview()
         cleanup_gate = cleanup_gate_mod.read_gate()
         cleanup_txn_preview = cleanup_txn_mod.read_preview()
         cleanup_rollback = cleanup_rollback_mod.read_rollback_drill_report()
         cleanup_pilot = cleanup_pilot_mod.read_latest_pilot()
+        cleanup_stability = cleanup_stability_mod.read_stability_window_report()
         if isinstance(preview, dict):
             blocking_reasons = preview.get("blocking_reasons") or []
             summary = preview.get("summary") or {}
@@ -152,6 +156,13 @@ def get_status_payload() -> dict[str, Any]:
                 "compress_executed": bool((cleanup_pilot or {}).get("compress_executed", False)),
                 "truncate_executed": bool((cleanup_pilot or {}).get("truncate_executed", False)),
                 "batch_cleanup_executed": bool((cleanup_pilot or {}).get("batch_cleanup_executed", False)),
+                "stability_window_status": str((cleanup_stability or {}).get("status") or "missing"),
+                "stability_window_observed_pilot_status": str(
+                    (cleanup_stability or {}).get("observed_pilot_status") or "missing"
+                ),
+                "stability_window_cleanup_scope_expansion_started": bool(
+                    (cleanup_stability or {}).get("cleanup_scope_expansion_started", False)
+                ),
             }
         else:
             cleanup_view = {
@@ -175,6 +186,9 @@ def get_status_payload() -> dict[str, Any]:
                 "compress_executed": False,
                 "truncate_executed": False,
                 "batch_cleanup_executed": False,
+                "stability_window_status": "missing",
+                "stability_window_observed_pilot_status": "missing",
+                "stability_window_cleanup_scope_expansion_started": False,
             }
     except Exception:
         cleanup_view = {
@@ -198,6 +212,9 @@ def get_status_payload() -> dict[str, Any]:
             "compress_executed": False,
             "truncate_executed": False,
             "batch_cleanup_executed": False,
+            "stability_window_status": "missing",
+            "stability_window_observed_pilot_status": "missing",
+            "stability_window_cleanup_scope_expansion_started": False,
         }
     backup_export_view: dict[str, Any]
     try:

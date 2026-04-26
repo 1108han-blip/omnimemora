@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 
 from fastapi import APIRouter, HTTPException
@@ -44,6 +45,9 @@ _meter_cleanup_rollback_drill_mod = importlib.import_module(
 )
 _meter_cleanup_pilot_mod = importlib.import_module(
     "5_connectors.adapter.data_lifecycle.meter_cleanup_quarantine_pilot"
+)
+_meter_cleanup_stability_window_mod = importlib.import_module(
+    "5_connectors.adapter.data_lifecycle.meter_cleanup_stability_window"
 )
 _meter_backup_export_readiness_mod = importlib.import_module(
     "5_connectors.adapter.data_lifecycle.meter_backup_export_readiness"
@@ -341,6 +345,47 @@ async def post_data_lifecycle_meter_storage_cleanup_pilot_quarantine_one():
         "schema_version": _meter_cleanup_pilot_mod.METER_CLEANUP_PILOT_SCHEMA_VERSION,
         "record": record,
         "pilot": pilot,
+    }
+
+
+@router.get("/data-lifecycle/meter-storage/cleanup/stability-window")
+async def get_data_lifecycle_meter_storage_cleanup_stability_window():
+    policy = _policy_mod.load_policy()
+    report = _meter_cleanup_stability_window_mod.read_stability_window_report(policy=policy)
+    if report is None:
+        return {
+            "schema_version": _meter_cleanup_stability_window_mod.METER_CLEANUP_STABILITY_WINDOW_SCHEMA_VERSION,
+            "status": "missing",
+            "mode": _meter_cleanup_stability_window_mod.METER_CLEANUP_STABILITY_WINDOW_MODE,
+            "observed_pilot_status": "missing",
+            "cleanup_scope_expansion_started": False,
+        }
+    return report
+
+
+@router.post("/data-lifecycle/meter-storage/cleanup/stability-window/rebuild")
+async def post_data_lifecycle_meter_storage_cleanup_stability_window_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, report = await asyncio.to_thread(
+            _meter_cleanup_stability_window_mod.rebuild_stability_window_report,
+            policy=policy,
+        )
+    except Exception as exc:
+        latest = _meter_cleanup_stability_window_mod.read_stability_window_report(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _meter_cleanup_stability_window_mod.METER_CLEANUP_STABILITY_WINDOW_REBUILD_SCHEMA_VERSION,
+                "message": "meter cleanup stability-window rebuild failed",
+                "error": str(exc),
+                "stability_window": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _meter_cleanup_stability_window_mod.METER_CLEANUP_STABILITY_WINDOW_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "stability_window": report,
     }
 
 

@@ -42,6 +42,7 @@ class DataLifecyclePolicy:
     meter_cleanup_pilot_operator_approval_file: str = ""
     meter_cleanup_quarantine_root: str = ""
     meter_cleanup_pilot_record_file: str = ""
+    meter_cleanup_stability_window_file: str = ""
     meter_backup_export_readiness_file: str = ""
     meter_backup_export_plan_file: str = ""
     meter_backup_export_package_manifest_file: str = ""
@@ -197,6 +198,10 @@ def load_policy() -> DataLifecyclePolicy:
         "OMNIMEMORA_DLP_METER_CLEANUP_PILOT_RECORD_FILE",
         str(base_dir / "meter_cleanup_pilot_record.json"),
     )
+    meter_cleanup_stability_window_file = os.getenv(
+        "OMNIMEMORA_DLP_METER_CLEANUP_STABILITY_WINDOW_FILE",
+        str(base_dir / "meter_cleanup_stability_window.json"),
+    )
     meter_backup_export_readiness_file = os.getenv(
         "OMNIMEMORA_DLP_METER_BACKUP_EXPORT_READINESS_FILE",
         str(base_dir / "meter_backup_export_readiness.json"),
@@ -319,6 +324,7 @@ def load_policy() -> DataLifecyclePolicy:
         meter_cleanup_pilot_operator_approval_file=meter_cleanup_pilot_operator_approval_file,
         meter_cleanup_quarantine_root=meter_cleanup_quarantine_root,
         meter_cleanup_pilot_record_file=meter_cleanup_pilot_record_file,
+        meter_cleanup_stability_window_file=meter_cleanup_stability_window_file,
         meter_backup_export_readiness_file=meter_backup_export_readiness_file,
         meter_backup_export_plan_file=meter_backup_export_plan_file,
         meter_backup_export_package_manifest_file=meter_backup_export_package_manifest_file,

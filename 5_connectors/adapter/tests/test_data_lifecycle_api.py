@@ -1698,6 +1698,74 @@ def test_data_lifecycle_meter_cleanup_pilot_quarantine_one_returns_record(monkey
     assert payload["pilot"]["source_move_executed"] is True
 
 
+def test_data_lifecycle_meter_cleanup_stability_window_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_cleanup_stability_window_mod,
+        "read_stability_window_report",
+        lambda policy=None: None,
+    )
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/cleanup/stability-window")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-cleanup-stability-window-v1"
+    assert payload["status"] == "missing"
+    assert payload["mode"] == "post_pilot_stability_window_observe_only"
+    assert payload["observed_pilot_status"] == "missing"
+    assert payload["cleanup_scope_expansion_started"] is False
+
+
+def test_data_lifecycle_meter_cleanup_stability_window_rebuild_endpoint_returns_record_and_report(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-cleanup-stability-window",
+        "trigger": "meter_cleanup_stability_window_rebuild",
+        "status": "success",
+    }
+    expected_report = {
+        "schema_version": "res-legacy-meter-cleanup-stability-window-v1",
+        "mode": "post_pilot_stability_window_observe_only",
+        "status": "passed",
+        "observed_pilot_status": "success",
+        "cleanup_scope_expansion_started": False,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_cleanup_stability_window_mod,
+        "rebuild_stability_window_report",
+        lambda policy=None: (expected_record, expected_report),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/meter-storage/cleanup/stability-window/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-cleanup-stability-window-rebuild-v1"
+    assert payload["record"]["trigger"] == "meter_cleanup_stability_window_rebuild"
+    assert payload["stability_window"]["status"] == "passed"
+    assert payload["stability_window"]["cleanup_scope_expansion_started"] is False
+
+
+def test_meter_cleanup_stability_window_does_not_expose_execute_delete_move_compress_truncate_batch():
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    client = TestClient(app)
+    forbidden_paths = [
+        "/data-lifecycle/meter-storage/cleanup/stability-window/execute",
+        "/data-lifecycle/meter-storage/cleanup/stability-window/delete",
+        "/data-lifecycle/meter-storage/cleanup/stability-window/move",
+        "/data-lifecycle/meter-storage/cleanup/stability-window/compress",
+        "/data-lifecycle/meter-storage/cleanup/stability-window/truncate",
+        "/data-lifecycle/meter-storage/cleanup/stability-window/batch",
+    ]
+    for path in forbidden_paths:
+        response = client.post(path)
+        assert response.status_code == 404
+
+
 def test_data_lifecycle_meter_backup_export_readiness_endpoint_returns_missing_when_absent(monkeypatch):
     app = FastAPI()
     app.include_router(data_lifecycle_api.router)
