@@ -1501,6 +1501,149 @@ def test_meter_cleanup_preview_does_not_expose_execute_or_destructive_endpoints(
         assert response.status_code == 404
 
 
+def test_data_lifecycle_meter_cleanup_gate_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._meter_cleanup_execution_gate_mod, "read_gate", lambda policy=None: None)
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/cleanup/gate")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-cleanup-execution-gate-v1"
+    assert payload["status"] == "missing"
+    assert payload["mode"] == "cleanup_gate_only"
+    assert payload["cleanup_allowed"] is False
+    assert payload["rollback_required"] is True
+
+
+def test_data_lifecycle_meter_cleanup_gate_rebuild_endpoint_returns_record_and_gate(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-cleanup-gate",
+        "trigger": "meter_cleanup_execution_gate_rebuild",
+        "status": "success",
+    }
+    expected_gate = {
+        "schema_version": "res-legacy-meter-cleanup-execution-gate-v1",
+        "mode": "cleanup_gate_only",
+        "cleanup_gate_status": "blocked",
+        "cleanup_allowed": False,
+        "rollback_required": True,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_cleanup_execution_gate_mod,
+        "rebuild_gate",
+        lambda policy=None: (expected_record, expected_gate),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/meter-storage/cleanup/gate/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-cleanup-execution-gate-rebuild-v1"
+    assert payload["record"]["trigger"] == "meter_cleanup_execution_gate_rebuild"
+    assert payload["cleanup_gate"]["cleanup_allowed"] is False
+
+
+def test_data_lifecycle_meter_cleanup_transaction_preview_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(data_lifecycle_api._meter_cleanup_transaction_preview_mod, "read_preview", lambda policy=None: None)
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/cleanup/transaction-preview")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-cleanup-transaction-preview-v1"
+    assert payload["status"] == "missing"
+    assert payload["mode"] == "cleanup_transaction_preview_only"
+    assert payload["execution_allowed"] is False
+
+
+def test_data_lifecycle_meter_cleanup_transaction_preview_rebuild_endpoint_returns_record_and_preview(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-cleanup-transaction-preview",
+        "trigger": "meter_cleanup_transaction_preview_rebuild",
+        "status": "success",
+    }
+    expected_preview = {
+        "schema_version": "res-legacy-meter-cleanup-transaction-preview-v1",
+        "mode": "cleanup_transaction_preview_only",
+        "status": "blocked",
+        "execution_allowed": False,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_cleanup_transaction_preview_mod,
+        "rebuild_preview",
+        lambda policy=None: (expected_record, expected_preview),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/meter-storage/cleanup/transaction-preview/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-cleanup-transaction-preview-rebuild-v1"
+    assert payload["record"]["trigger"] == "meter_cleanup_transaction_preview_rebuild"
+    assert payload["transaction_preview"]["execution_allowed"] is False
+
+
+def test_data_lifecycle_meter_cleanup_rollback_drill_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_cleanup_rollback_drill_mod,
+        "read_rollback_drill_report",
+        lambda policy=None: None,
+    )
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/cleanup/rollback-drill")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-cleanup-rollback-drill-v1"
+    assert payload["status"] == "missing"
+    assert payload["mode"] == "rollback_readback_drill_only"
+    assert payload["staging_restore_readable"] is False
+    assert payload["production_restore_started"] is False
+
+
+def test_data_lifecycle_meter_cleanup_rollback_drill_rebuild_endpoint_returns_record_and_report(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-cleanup-rollback-drill",
+        "trigger": "meter_cleanup_rollback_drill_rebuild",
+        "status": "success",
+    }
+    expected_report = {
+        "schema_version": "res-legacy-meter-cleanup-rollback-drill-v1",
+        "mode": "rollback_readback_drill_only",
+        "status": "passed",
+        "staging_restore_readable": True,
+        "checksum_match": True,
+        "source_retained": True,
+        "production_restore_started": False,
+        "cleanup_started": False,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_cleanup_rollback_drill_mod,
+        "rebuild_rollback_drill_report",
+        lambda policy=None: (expected_record, expected_report),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/meter-storage/cleanup/rollback-drill/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-legacy-meter-cleanup-rollback-drill-rebuild-v1"
+    assert payload["record"]["trigger"] == "meter_cleanup_rollback_drill_rebuild"
+    assert payload["rollback_drill"]["checksum_match"] is True
+
+
 def test_data_lifecycle_meter_backup_export_readiness_endpoint_returns_missing_when_absent(monkeypatch):
     app = FastAPI()
     app.include_router(data_lifecycle_api.router)

@@ -119,7 +119,13 @@ def get_status_payload() -> dict[str, Any]:
     cleanup_view: dict[str, Any]
     try:
         cleanup_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_cleanup_preview")
+        cleanup_gate_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_cleanup_execution_gate")
+        cleanup_txn_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_cleanup_transaction_preview")
+        cleanup_rollback_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_cleanup_rollback_drill")
         preview = cleanup_mod.read_preview()
+        cleanup_gate = cleanup_gate_mod.read_gate()
+        cleanup_txn_preview = cleanup_txn_mod.read_preview()
+        cleanup_rollback = cleanup_rollback_mod.read_rollback_drill_report()
         if isinstance(preview, dict):
             blocking_reasons = preview.get("blocking_reasons") or []
             summary = preview.get("summary") or {}
@@ -130,6 +136,13 @@ def get_status_payload() -> dict[str, Any]:
                 "candidate_file_count": int(summary.get("candidate_file_count", 0) or 0),
                 "estimated_reclaim_bytes": int(preview.get("estimated_reclaim_bytes", 0) or 0),
                 "blocking_reasons_count": int(len(blocking_reasons)),
+                "execution_gate_status": str((cleanup_gate or {}).get("cleanup_gate_status") or "missing"),
+                "execution_gate_allowed": bool((cleanup_gate or {}).get("cleanup_allowed") is True),
+                "transaction_preview_status": str((cleanup_txn_preview or {}).get("status") or "missing"),
+                "transaction_execution_allowed": bool((cleanup_txn_preview or {}).get("execution_allowed") is True),
+                "rollback_drill_status": str((cleanup_rollback or {}).get("status") or "missing"),
+                "rollback_drill_checksum_match": bool((cleanup_rollback or {}).get("checksum_match", False)),
+                "rollback_required": bool((cleanup_gate or {}).get("rollback_required", True)),
             }
         else:
             cleanup_view = {
@@ -139,6 +152,13 @@ def get_status_payload() -> dict[str, Any]:
                 "candidate_file_count": 0,
                 "estimated_reclaim_bytes": 0,
                 "blocking_reasons_count": 0,
+                "execution_gate_status": "missing",
+                "execution_gate_allowed": False,
+                "transaction_preview_status": "missing",
+                "transaction_execution_allowed": False,
+                "rollback_drill_status": "missing",
+                "rollback_drill_checksum_match": False,
+                "rollback_required": True,
             }
     except Exception:
         cleanup_view = {
@@ -148,6 +168,13 @@ def get_status_payload() -> dict[str, Any]:
             "candidate_file_count": 0,
             "estimated_reclaim_bytes": 0,
             "blocking_reasons_count": 0,
+            "execution_gate_status": "missing",
+            "execution_gate_allowed": False,
+            "transaction_preview_status": "missing",
+            "transaction_execution_allowed": False,
+            "rollback_drill_status": "missing",
+            "rollback_drill_checksum_match": False,
+            "rollback_required": True,
         }
     backup_export_view: dict[str, Any]
     try:

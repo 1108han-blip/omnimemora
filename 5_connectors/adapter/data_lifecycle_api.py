@@ -33,6 +33,15 @@ _archive_non_active_quarantine_exec_mod = importlib.import_module(
 _raw_evidence_segments_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.raw_evidence_segments")
 _meter_storage_v2_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_storage_v2")
 _meter_cleanup_preview_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_cleanup_preview")
+_meter_cleanup_execution_gate_mod = importlib.import_module(
+    "5_connectors.adapter.data_lifecycle.meter_cleanup_execution_gate"
+)
+_meter_cleanup_transaction_preview_mod = importlib.import_module(
+    "5_connectors.adapter.data_lifecycle.meter_cleanup_transaction_preview"
+)
+_meter_cleanup_rollback_drill_mod = importlib.import_module(
+    "5_connectors.adapter.data_lifecycle.meter_cleanup_rollback_drill"
+)
 _meter_backup_export_readiness_mod = importlib.import_module(
     "5_connectors.adapter.data_lifecycle.meter_backup_export_readiness"
 )
@@ -171,6 +180,123 @@ async def post_data_lifecycle_meter_storage_cleanup_preview_rebuild():
         "schema_version": _meter_cleanup_preview_mod.METER_CLEANUP_PREVIEW_REBUILD_SCHEMA_VERSION,
         "record": record,
         "preview": preview,
+    }
+
+
+@router.get("/data-lifecycle/meter-storage/cleanup/gate")
+async def get_data_lifecycle_meter_storage_cleanup_gate():
+    policy = _policy_mod.load_policy()
+    gate = _meter_cleanup_execution_gate_mod.read_gate(policy=policy)
+    if gate is None:
+        return {
+            "schema_version": _meter_cleanup_execution_gate_mod.METER_CLEANUP_EXECUTION_GATE_SCHEMA_VERSION,
+            "status": "missing",
+            "mode": _meter_cleanup_execution_gate_mod.METER_CLEANUP_EXECUTION_GATE_MODE,
+            "cleanup_gate_status": "blocked",
+            "cleanup_allowed": False,
+            "rollback_required": True,
+        }
+    return gate
+
+
+@router.post("/data-lifecycle/meter-storage/cleanup/gate/rebuild")
+async def post_data_lifecycle_meter_storage_cleanup_gate_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, gate = _meter_cleanup_execution_gate_mod.rebuild_gate(policy=policy)
+    except Exception as exc:
+        latest = _meter_cleanup_execution_gate_mod.read_gate(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _meter_cleanup_execution_gate_mod.METER_CLEANUP_EXECUTION_GATE_REBUILD_SCHEMA_VERSION,
+                "message": "meter cleanup execution gate rebuild failed",
+                "error": str(exc),
+                "cleanup_gate": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _meter_cleanup_execution_gate_mod.METER_CLEANUP_EXECUTION_GATE_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "cleanup_gate": gate,
+    }
+
+
+@router.get("/data-lifecycle/meter-storage/cleanup/transaction-preview")
+async def get_data_lifecycle_meter_storage_cleanup_transaction_preview():
+    policy = _policy_mod.load_policy()
+    preview = _meter_cleanup_transaction_preview_mod.read_preview(policy=policy)
+    if preview is None:
+        return {
+            "schema_version": _meter_cleanup_transaction_preview_mod.METER_CLEANUP_TRANSACTION_PREVIEW_SCHEMA_VERSION,
+            "status": "missing",
+            "mode": _meter_cleanup_transaction_preview_mod.METER_CLEANUP_TRANSACTION_PREVIEW_MODE,
+            "execution_allowed": False,
+        }
+    return preview
+
+
+@router.post("/data-lifecycle/meter-storage/cleanup/transaction-preview/rebuild")
+async def post_data_lifecycle_meter_storage_cleanup_transaction_preview_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, preview = _meter_cleanup_transaction_preview_mod.rebuild_preview(policy=policy)
+    except Exception as exc:
+        latest = _meter_cleanup_transaction_preview_mod.read_preview(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _meter_cleanup_transaction_preview_mod.METER_CLEANUP_TRANSACTION_PREVIEW_REBUILD_SCHEMA_VERSION,
+                "message": "meter cleanup transaction preview rebuild failed",
+                "error": str(exc),
+                "transaction_preview": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _meter_cleanup_transaction_preview_mod.METER_CLEANUP_TRANSACTION_PREVIEW_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "transaction_preview": preview,
+    }
+
+
+@router.get("/data-lifecycle/meter-storage/cleanup/rollback-drill")
+async def get_data_lifecycle_meter_storage_cleanup_rollback_drill():
+    policy = _policy_mod.load_policy()
+    report = _meter_cleanup_rollback_drill_mod.read_rollback_drill_report(policy=policy)
+    if report is None:
+        return {
+            "schema_version": _meter_cleanup_rollback_drill_mod.METER_CLEANUP_ROLLBACK_DRILL_SCHEMA_VERSION,
+            "status": "missing",
+            "mode": _meter_cleanup_rollback_drill_mod.METER_CLEANUP_ROLLBACK_DRILL_MODE,
+            "staging_restore_readable": False,
+            "checksum_match": False,
+            "source_retained": True,
+            "production_restore_started": False,
+            "cleanup_started": False,
+        }
+    return report
+
+
+@router.post("/data-lifecycle/meter-storage/cleanup/rollback-drill/rebuild")
+async def post_data_lifecycle_meter_storage_cleanup_rollback_drill_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, report = _meter_cleanup_rollback_drill_mod.rebuild_rollback_drill_report(policy=policy)
+    except Exception as exc:
+        latest = _meter_cleanup_rollback_drill_mod.read_rollback_drill_report(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _meter_cleanup_rollback_drill_mod.METER_CLEANUP_ROLLBACK_DRILL_REBUILD_SCHEMA_VERSION,
+                "message": "meter cleanup rollback drill rebuild failed",
+                "error": str(exc),
+                "rollback_drill": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _meter_cleanup_rollback_drill_mod.METER_CLEANUP_ROLLBACK_DRILL_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "rollback_drill": report,
     }
 
 

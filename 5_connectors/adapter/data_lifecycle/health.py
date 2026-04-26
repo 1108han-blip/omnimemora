@@ -678,6 +678,13 @@ def build_health_payload(
                 "candidate_file_count": 0,
                 "estimated_reclaim_bytes": 0,
                 "blocking_reasons_count": 0,
+                "execution_gate_status": "missing",
+                "execution_gate_allowed": False,
+                "transaction_preview_status": "missing",
+                "transaction_execution_allowed": False,
+                "rollback_drill_status": "missing",
+                "rollback_drill_checksum_match": False,
+                "rollback_required": True,
             },
             "backup_export": {
                 "status": "missing",

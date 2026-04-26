@@ -33,6 +33,10 @@ class DataLifecyclePolicy:
     archive_non_active_quarantine_readiness_file: str = ""
     archive_non_active_execution_gate_file: str = ""
     meter_cleanup_preview_file: str = ""
+    meter_cleanup_execution_gate_file: str = ""
+    meter_cleanup_transaction_preview_file: str = ""
+    meter_cleanup_rollback_drill_file: str = ""
+    meter_cleanup_rollback_staging_root: str = ""
     meter_backup_export_readiness_file: str = ""
     meter_backup_export_plan_file: str = ""
     meter_backup_export_package_manifest_file: str = ""
@@ -152,6 +156,22 @@ def load_policy() -> DataLifecyclePolicy:
         "OMNIMEMORA_DLP_METER_CLEANUP_PREVIEW_FILE",
         str(base_dir / "meter_cleanup_preview.json"),
     )
+    meter_cleanup_execution_gate_file = os.getenv(
+        "OMNIMEMORA_DLP_METER_CLEANUP_EXECUTION_GATE_FILE",
+        str(base_dir / "meter_cleanup_execution_gate.json"),
+    )
+    meter_cleanup_transaction_preview_file = os.getenv(
+        "OMNIMEMORA_DLP_METER_CLEANUP_TRANSACTION_PREVIEW_FILE",
+        str(base_dir / "meter_cleanup_transaction_preview.json"),
+    )
+    meter_cleanup_rollback_drill_file = os.getenv(
+        "OMNIMEMORA_DLP_METER_CLEANUP_ROLLBACK_DRILL_FILE",
+        str(base_dir / "meter_cleanup_rollback_drill.json"),
+    )
+    meter_cleanup_rollback_staging_root = os.getenv(
+        "OMNIMEMORA_DLP_METER_CLEANUP_ROLLBACK_STAGING_ROOT",
+        str(base_dir / "cleanup_rollback" / "staging"),
+    )
     meter_backup_export_readiness_file = os.getenv(
         "OMNIMEMORA_DLP_METER_BACKUP_EXPORT_READINESS_FILE",
         str(base_dir / "meter_backup_export_readiness.json"),
@@ -265,6 +285,10 @@ def load_policy() -> DataLifecyclePolicy:
         archive_non_active_quarantine_readiness_file=archive_non_active_quarantine_readiness_file,
         archive_non_active_execution_gate_file=archive_non_active_execution_gate_file,
         meter_cleanup_preview_file=meter_cleanup_preview_file,
+        meter_cleanup_execution_gate_file=meter_cleanup_execution_gate_file,
+        meter_cleanup_transaction_preview_file=meter_cleanup_transaction_preview_file,
+        meter_cleanup_rollback_drill_file=meter_cleanup_rollback_drill_file,
+        meter_cleanup_rollback_staging_root=meter_cleanup_rollback_staging_root,
         meter_backup_export_readiness_file=meter_backup_export_readiness_file,
         meter_backup_export_plan_file=meter_backup_export_plan_file,
         meter_backup_export_package_manifest_file=meter_backup_export_package_manifest_file,
