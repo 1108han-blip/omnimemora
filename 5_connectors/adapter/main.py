@@ -2955,5 +2955,6 @@ if __name__ == "__main__":
         app,
         host=config.adapter_host,
         port=config.adapter_port,
-        log_level="info"
+        log_level="info",
+        access_log=False,
     )

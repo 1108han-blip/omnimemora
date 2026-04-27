@@ -33,5 +33,6 @@ if __name__ == "__main__":
         host=config.adapter_host,
         port=port,
         log_level="info",
+        access_log=False,
         reload=False,
     )
