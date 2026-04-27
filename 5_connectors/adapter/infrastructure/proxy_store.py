@@ -12,12 +12,13 @@ from pathlib import Path
 from typing import Optional
 from datetime import datetime, timezone
 
-from ..log_segments import read_segment_lines
+from ..log_segments import enforce_jsonl_retention, read_segment_lines
 
 EVENTS_PATH = Path.home() / ".omnimemora" / "adapter" / "proxy_events.jsonl"
-_MAX_FILE_SIZE_MB = 50
+_MAX_FILE_SIZE_MB = int(os.getenv("OMNIMEMORA_PROXY_EVENTS_MAX_MB", "10"))
 _MAX_EVENTS_IN_MEMORY = 1000
-RETENTION_DAYS = int(os.getenv("OMNIMEMORA_PROXY_EVENTS_RETENTION_DAYS", "30"))
+RETENTION_DAYS = int(os.getenv("OMNIMEMORA_PROXY_EVENTS_RETENTION_DAYS", os.getenv("OMNIMEMORA_INTERNAL_LOG_RETENTION_DAYS", "7")))
+MAX_RECENT_READ_LINES = int(os.getenv("OMNIMEMORA_PROXY_EVENTS_MAX_READ_LINES", "1000"))
 
 
 def _ensure_store():
@@ -30,6 +31,7 @@ def _ensure_store():
 def append_event(event: dict) -> None:
     """寫入一條代理事件到 JSONL。線程安全。"""
     _ensure_store()
+    enforce_jsonl_retention(EVENTS_PATH, retention_days=RETENTION_DAYS, max_active_lines=MAX_RECENT_READ_LINES)
 
     # 滾轉：如果文件太大就先滾轉，再寫入當前文件
     try:
@@ -45,16 +47,6 @@ def append_event(event: dict) -> None:
     with open(EVENTS_PATH, "a", encoding="utf-8") as f:
         f.write(line)
 
-    # Observe-only mirror path; failures must not affect legacy source writes.
-    try:
-        segments = __import__(
-            "5_connectors.adapter.data_lifecycle.raw_evidence_segments",
-            fromlist=["append_event_dual_write_observe_only"],
-        )
-        segments.append_event_dual_write_observe_only(kind="proxy_events", event=event)
-    except Exception:
-        pass
-
 
 def read_recent_events(limit: int = 500) -> list[dict]:
     """讀取最近 N 條代理事件。"""
@@ -62,7 +54,7 @@ def read_recent_events(limit: int = 500) -> list[dict]:
     events = []
     cutoff = time.time() - RETENTION_DAYS * 86400
     try:
-        lines = read_segment_lines(EVENTS_PATH, max_lines=max(limit * 4, limit))
+        lines = read_segment_lines(EVENTS_PATH, max_lines=max(min(MAX_RECENT_READ_LINES, limit * 4), limit))
         for line in reversed(lines):
             line = line.strip()
             if line:

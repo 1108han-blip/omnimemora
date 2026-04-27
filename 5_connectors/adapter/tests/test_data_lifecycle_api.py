@@ -1,4 +1,6 @@
 import importlib
+import json
+import time
 from datetime import datetime, timedelta, timezone
 
 from fastapi import FastAPI
@@ -10,6 +12,9 @@ summary_store = importlib.import_module("5_connectors.adapter.data_lifecycle.sum
 state_store = importlib.import_module("5_connectors.adapter.data_lifecycle.state_store")
 health_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.health")
 data_lifecycle_api = importlib.import_module("5_connectors.adapter.data_lifecycle_api")
+compile_store = importlib.import_module("5_connectors.adapter.infrastructure.compile_store")
+proxy_store = importlib.import_module("5_connectors.adapter.infrastructure.proxy_store")
+trace_events = importlib.import_module("5_connectors.adapter.trace_events")
 
 
 def _build_policy(tmp_path, *, ttl_seconds=10.0, stale_max_age_seconds=300.0):
@@ -75,6 +80,56 @@ def test_state_store_read_recent_and_latest_with_filters(tmp_path):
     latest_failed = state_store.latest_record(trigger="manual_refresh", status="failed", policy=policy)
     assert latest_failed is not None
     assert latest_failed["cycle_id"] == last_manual["cycle_id"]
+
+
+def test_internal_event_logs_are_capped_to_recent_tail(tmp_path, monkeypatch):
+    now = time.time()
+    old = {"request_id": "old", "timestamp": now - 9 * 86400}
+    recent = {"request_id": "recent", "timestamp": now}
+
+    compile_path = tmp_path / "compile_events.jsonl"
+    proxy_path = tmp_path / "proxy_events.jsonl"
+    trace_path = tmp_path / "trace_events.jsonl"
+    for path in (compile_path, proxy_path, trace_path):
+        path.write_text(
+            "".join(json.dumps(old) + "\n" for _ in range(3))
+            + "".join(json.dumps(recent) + "\n" for _ in range(8)),
+            encoding="utf-8",
+        )
+
+    monkeypatch.setattr(compile_store, "COMPILE_EVENTS_PATH", str(compile_path))
+    monkeypatch.setattr(compile_store, "RETENTION_DAYS", 7)
+    monkeypatch.setattr(compile_store, "MAX_RECENT_READ_LINES", 5)
+    monkeypatch.setattr(proxy_store, "EVENTS_PATH", proxy_path)
+    monkeypatch.setattr(proxy_store, "RETENTION_DAYS", 7)
+    monkeypatch.setattr(proxy_store, "MAX_RECENT_READ_LINES", 5)
+    monkeypatch.setattr(trace_events, "TRACE_EVENTS_PATH", str(trace_path))
+    monkeypatch.setattr(trace_events, "RETENTION_DAYS", 7)
+    monkeypatch.setattr(trace_events, "MAX_RECENT_READ_LINES", 5)
+
+    compile_store.append_compile_event({"request_id": "new-compile", "timestamp": now})
+    proxy_store.append_event({"request_id": "new-proxy", "timestamp": now})
+    trace_events.append_trace_event({"request_id": "new-trace", "timestamp": now})
+
+    assert all(json.loads(line)["request_id"] != "old" for line in compile_path.read_text(encoding="utf-8").splitlines())
+    assert all(json.loads(line)["request_id"] != "old" for line in proxy_path.read_text(encoding="utf-8").splitlines())
+    assert all(json.loads(line)["request_id"] != "old" for line in trace_path.read_text(encoding="utf-8").splitlines())
+    assert len(compile_path.read_text(encoding="utf-8").splitlines()) <= 6
+    assert len(proxy_path.read_text(encoding="utf-8").splitlines()) <= 6
+    assert len(trace_path.read_text(encoding="utf-8").splitlines()) <= 6
+
+
+def test_maintenance_state_retention_prunes_old_records(tmp_path, monkeypatch):
+    policy = _build_policy(tmp_path)
+    monkeypatch.setattr(state_store, "RETENTION_DAYS", 7)
+    monkeypatch.setattr(state_store, "MAX_RECENT_READ_LINES", 5)
+
+    now = datetime.now(timezone.utc)
+    _append_record(policy, trigger="old", status="success", completed_at=now - timedelta(days=9))
+    _append_record(policy, trigger="recent", status="success", completed_at=now)
+
+    records = state_store.read_recent_records(limit=10, policy=policy)
+    assert [record["trigger"] for record in records] == ["recent"]
 
 
 def test_dlp_health_status_healthy(tmp_path):

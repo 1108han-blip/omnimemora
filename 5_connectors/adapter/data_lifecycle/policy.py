@@ -61,7 +61,7 @@ class DataLifecyclePolicy:
     meter_backup_export_destination: str = ""
     raw_evidence_segments_manifest_file: str = ""
     raw_evidence_segments_root: str = ""
-    raw_evidence_segments_mode: str = "dual_write_observe_only"
+    raw_evidence_segments_mode: str = "disabled"
     raw_evidence_segment_max_bytes: int = 32 * 1024 * 1024
     raw_evidence_segment_max_age_seconds: int = 6 * 60 * 60
     maintenance_enabled: bool = True
@@ -280,7 +280,7 @@ def load_policy() -> DataLifecyclePolicy:
     )
     raw_evidence_segments_mode = os.getenv(
         "OMNIMEMORA_DLP_RAW_EVIDENCE_SEGMENTS_MODE",
-        "dual_write_observe_only",
+        "disabled",
     ).strip()
     raw_evidence_segment_max_bytes = int(
         os.getenv(
@@ -363,7 +363,7 @@ def load_policy() -> DataLifecyclePolicy:
         meter_backup_export_destination=meter_backup_export_destination,
         raw_evidence_segments_manifest_file=raw_evidence_segments_manifest_file,
         raw_evidence_segments_root=raw_evidence_segments_root,
-        raw_evidence_segments_mode=raw_evidence_segments_mode or "dual_write_observe_only",
+        raw_evidence_segments_mode=raw_evidence_segments_mode or "disabled",
         raw_evidence_segment_max_bytes=max(1, raw_evidence_segment_max_bytes),
         raw_evidence_segment_max_age_seconds=max(60, raw_evidence_segment_max_age_seconds),
         maintenance_enabled=maintenance_enabled,

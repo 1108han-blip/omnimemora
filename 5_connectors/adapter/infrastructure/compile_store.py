@@ -5,7 +5,7 @@ Phase 3 Task D: Persists structured compile telemetry.
 
 Format: JSONL at ~/.omnimemora/adapter/compile_events.jsonl
 File rotates when exceeding 50MB.
-Events older than 30 days are auto-pruned on read.
+Events older than 7 days are auto-pruned; reads use bounded recent tails.
 """
 from __future__ import annotations
 
@@ -18,7 +18,7 @@ from datetime import datetime, timezone
 
 import loguru
 
-from ..log_segments import read_segment_lines
+from ..log_segments import enforce_jsonl_retention, read_segment_lines
 
 
 # ============================================================================
@@ -36,8 +36,9 @@ COMPILE_EVENTS_PATH = os.getenv(
     _default_compile_events_path(),
 )
 
-MAX_FILE_SIZE_MB = int(os.getenv("OMNIMEMORA_COMPILE_EVENTS_MAX_MB", "50"))
-RETENTION_DAYS = int(os.getenv("OMNIMEMORA_COMPILE_EVENTS_RETENTION_DAYS", "30"))
+MAX_FILE_SIZE_MB = int(os.getenv("OMNIMEMORA_COMPILE_EVENTS_MAX_MB", "10"))
+RETENTION_DAYS = int(os.getenv("OMNIMEMORA_COMPILE_EVENTS_RETENTION_DAYS", os.getenv("OMNIMEMORA_INTERNAL_LOG_RETENTION_DAYS", "7")))
+MAX_RECENT_READ_LINES = int(os.getenv("OMNIMEMORA_COMPILE_EVENTS_MAX_READ_LINES", "1000"))
 
 
 # ============================================================================
@@ -51,6 +52,7 @@ def append_compile_event(event: Dict[str, Any]) -> None:
     """
     path = Path(COMPILE_EVENTS_PATH)
     path.parent.mkdir(parents=True, exist_ok=True)
+    enforce_jsonl_retention(path, retention_days=RETENTION_DAYS, max_active_lines=MAX_RECENT_READ_LINES)
 
     # Auto-rotate if file too large
     if path.exists() and path.stat().st_size > MAX_FILE_SIZE_MB * 1024 * 1024:
@@ -70,16 +72,6 @@ def append_compile_event(event: Dict[str, Any]) -> None:
     except Exception as e:
         loguru.logger.warning(f"[COMPILE_STORE] append failed: {e}")
         return
-
-    # Observe-only mirror path; failures must not affect legacy source writes.
-    try:
-        segments = __import__(
-            "5_connectors.adapter.data_lifecycle.raw_evidence_segments",
-            fromlist=["append_event_dual_write_observe_only"],
-        )
-        segments.append_event_dual_write_observe_only(kind="compile_events", event=event)
-    except Exception as e:
-        loguru.logger.warning(f"[COMPILE_STORE] segment mirror failed (non-fatal): {e}")
 
 
 # ============================================================================
@@ -107,7 +99,7 @@ def read_recent_compile_events(
     cutoff_time = cutoff
 
     try:
-        for line in read_segment_lines(path):
+        for line in read_segment_lines(path, max_lines=max(min(MAX_RECENT_READ_LINES, limit * 5), limit)):
             line = line.strip()
             if not line:
                 continue

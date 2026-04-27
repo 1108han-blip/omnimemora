@@ -3,12 +3,18 @@
 from __future__ import annotations
 
 import json
+import os
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterable, Optional
 
+from ..log_segments import enforce_jsonl_retention, read_segment_lines
 from .policy import DataLifecyclePolicy, load_policy
+
+
+RETENTION_DAYS = int(os.getenv("OMNIMEMORA_MAINTENANCE_STATE_RETENTION_DAYS", os.getenv("OMNIMEMORA_INTERNAL_LOG_RETENTION_DAYS", "7")))
+MAX_RECENT_READ_LINES = int(os.getenv("OMNIMEMORA_MAINTENANCE_STATE_MAX_READ_LINES", "1000"))
 
 
 def _state_path(policy: Optional[DataLifecyclePolicy] = None) -> Path:
@@ -19,6 +25,7 @@ def _state_path(policy: Optional[DataLifecyclePolicy] = None) -> Path:
 def append_state_record(record: dict[str, Any], policy: Optional[DataLifecyclePolicy] = None) -> None:
     path = _state_path(policy)
     path.parent.mkdir(parents=True, exist_ok=True)
+    enforce_jsonl_retention(path, retention_days=RETENTION_DAYS, max_active_lines=MAX_RECENT_READ_LINES)
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, ensure_ascii=False) + "\n")
 
@@ -39,17 +46,16 @@ def _read_records_raw(policy: Optional[DataLifecyclePolicy] = None) -> list[dict
         return []
     records: list[dict[str, Any]] = []
     try:
-        with path.open("r", encoding="utf-8") as fh:
-            for line in fh:
-                text = line.strip()
-                if not text:
-                    continue
-                try:
-                    payload = json.loads(text)
-                except Exception:
-                    continue
-                if isinstance(payload, dict):
-                    records.append(payload)
+        for line in read_segment_lines(path, max_lines=MAX_RECENT_READ_LINES):
+            text = line.strip()
+            if not text:
+                continue
+            try:
+                payload = json.loads(text)
+            except Exception:
+                continue
+            if isinstance(payload, dict):
+                records.append(payload)
     except Exception:
         return []
     return records
