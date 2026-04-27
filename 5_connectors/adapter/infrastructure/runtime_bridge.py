@@ -12,9 +12,10 @@ Reuses:
 """
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
 
-from ..backends.base import MemoryBackend, MemorySearchRequest
+from ..backends.base import MemoryBackend, MemorySearchRequest, MemorySearchResult
 from ..backends.factory import create_backend
 from ..config import config
 from ..trace_context import build_trace_event
@@ -29,6 +30,35 @@ def _get_backend() -> MemoryBackend:
     if _initialized_backend is None:
         _initialized_backend = create_backend(config.memory_backend)
     return _initialized_backend
+
+
+def _derive_fallback_search_keywords(query: str) -> List[str]:
+    """
+    Build lightweight fallback keywords for runtime search.
+
+    Primary search still uses the full query. These fallbacks are only used
+    when primary returns no results.
+    """
+    source = str(query or "").strip()
+    if not source:
+        return []
+
+    # High-signal identifiers (request markers, ids, module-like tokens).
+    # Example: sfe007-1777311827-cc, user_12345, module_name_v2
+    identifier_tokens = re.findall(r"[A-Za-z0-9][A-Za-z0-9_-]{5,}", source)
+
+    seen = set()
+    ordered: List[str] = []
+    for token in identifier_tokens:
+        normalized = token.strip()
+        lowered = normalized.lower()
+        if lowered in seen:
+            continue
+        seen.add(lowered)
+        ordered.append(normalized)
+        if len(ordered) >= 3:
+            break
+    return ordered
 
 
 async def execute_runtime_compile(
@@ -221,10 +251,11 @@ async def fetch_memory_candidates(
     import loguru
 
     backend = _get_backend()
-    try:
-        search_result = await backend.search(
+
+    async def _search_once(keyword: str) -> MemorySearchResult:
+        return await backend.search(
             MemorySearchRequest(
-                query=query,
+                query=keyword,
                 limit=limit,
                 scope=scope,
                 scope_ref=agent_id,
@@ -235,6 +266,21 @@ async def fetch_memory_candidates(
             trace_id=trace_id,
             agent_id=agent_id,
         )
+
+    try:
+        search_result = await _search_once(query)
+        used_keyword = query
+
+        if not search_result.memories:
+            for fallback_keyword in _derive_fallback_search_keywords(query):
+                if fallback_keyword == query:
+                    continue
+                fallback_result = await _search_once(fallback_keyword)
+                if fallback_result.memories:
+                    search_result = fallback_result
+                    used_keyword = fallback_keyword
+                    break
+
         runtime_enforcement = (
             search_result.enforcement_trace
             if isinstance(search_result.enforcement_trace, dict)
@@ -265,7 +311,8 @@ async def fetch_memory_candidates(
                 }
             )
         loguru.logger.debug(
-            f"[RUNTIME_BRIDGE] search agent={agent_id} query={query[:50]} results={len(memories)}"
+            f"[RUNTIME_BRIDGE] search agent={agent_id} query={query[:50]} "
+            f"used_keyword={used_keyword[:50]} results={len(memories)}"
         )
         return memories
     except Exception as e:

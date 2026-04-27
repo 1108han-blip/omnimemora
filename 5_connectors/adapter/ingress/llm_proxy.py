@@ -44,6 +44,7 @@ Anthropic 路徑狀態：
 import json
 import importlib
 import os
+import re
 import time as _time
 import httpx
 from pathlib import Path
@@ -74,6 +75,8 @@ from ..config import config
 from ..path_registry import classify_path
 from ..trace_context import build_trace_event, get_request_context
 from ..trace_events import append_trace_event
+from ..backends.base import MemoryWriteRequest, MemoryBackend
+from ..backends.factory import create_backend
 
 def _get_compile_orchestrator():
     return __import__("5_connectors.adapter.application.compile_orchestrator", fromlist=["dummy"])
@@ -81,6 +84,18 @@ def _get_compile_orchestrator():
 router = APIRouter(tags=["llm_proxy"])
 _meter_store = importlib.import_module("5_connectors.adapter.infrastructure.meter_store")
 _v2_compute = importlib.import_module("4_core.logic.v2_compute")
+_memory_backend_singleton: Optional[MemoryBackend] = None
+_internal_memory_write_dedup: dict[str, float] = {}
+_INTERNAL_MEMORY_WRITE_DEDUP_WINDOW_SECONDS = 10 * 60
+_INTERNAL_MEMORY_DEFAULT_TTL_SECONDS = 7 * 24 * 60 * 60
+_INTERNAL_MEMORY_MAX_CHARS = 1000
+
+
+def _get_memory_backend() -> MemoryBackend:
+    global _memory_backend_singleton
+    if _memory_backend_singleton is None:
+        _memory_backend_singleton = create_backend(config.memory_backend)
+    return _memory_backend_singleton
 
 _OMNI_HOP_BY_HOP_HEADERS = {
     "connection",
@@ -1443,6 +1458,10 @@ def _record_compile_event(
             "compile_path": compile_meta.get("compile_path", "unknown"),
             "compile_error": compile_meta.get("compile_error"),
             "compile_reason": compile_meta.get("compile_reason", ""),
+            "candidate_count": int(compile_meta.get("candidate_count") or 0),
+            "internal_memory_status": compile_meta.get("internal_memory_status"),
+            "internal_memory_write_status": compile_meta.get("internal_memory_write_status"),
+            "internal_memory_write_error": compile_meta.get("internal_memory_write_error"),
             "skill_suggestions": compile_meta.get("skill_suggestions", []) or [],
             "skill_policy_name": compile_meta.get("skill_policy_name") or "local_fallback",
             "skill_policy_version": compile_meta.get("skill_policy_version") or "static_catalog_v1",
@@ -1838,6 +1857,206 @@ def _extract_user_query(messages) -> str:
         if content:
             return content
     return ""
+
+
+def _normalize_memory_query(query: str) -> str:
+    text = re.sub(r"\s+", " ", (query or "").strip().lower())
+    return text
+
+
+def _extract_upstream_result_summary(upstream_resp: Optional[httpx.Response]) -> str:
+    if upstream_resp is None:
+        return "streaming_response_delivered"
+
+    try:
+        data = upstream_resp.json()
+    except Exception:
+        raw = (upstream_resp.text or "").strip()
+        return raw[:240] if raw else "response_delivered"
+
+    # Anthropic-compatible
+    content = data.get("content")
+    if isinstance(content, list):
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            text = part.get("text")
+            if isinstance(text, str) and text.strip():
+                return text.strip()[:240]
+            thinking = part.get("thinking")
+            if isinstance(thinking, str) and thinking.strip():
+                return thinking.strip()[:240]
+
+    # OpenAI-compatible
+    choices = data.get("choices")
+    if isinstance(choices, list) and choices:
+        message = choices[0].get("message") if isinstance(choices[0], dict) else None
+        if isinstance(message, dict):
+            text = _extract_chat_output_text(message).strip()
+            if text:
+                return text[:240]
+
+    # Responses-compatible
+    output = data.get("output")
+    if isinstance(output, list):
+        for item in output:
+            if not isinstance(item, dict):
+                continue
+            if item.get("type") == "message":
+                content_items = item.get("content")
+                if isinstance(content_items, list):
+                    for content_part in content_items:
+                        if isinstance(content_part, dict):
+                            text = content_part.get("text")
+                            if isinstance(text, str) and text.strip():
+                                return text.strip()[:240]
+
+    return "response_delivered"
+
+
+def _build_internal_memory_content(
+    *,
+    task_type: str,
+    user_visible_query: str,
+    result_summary: str,
+    source_request_id: str,
+) -> str:
+    payload = {
+        "task_type": task_type or "continuation",
+        "user_visible_query": (user_visible_query or "").strip(),
+        "result_summary": (result_summary or "").strip(),
+        "files_or_modules": None,
+        "constraints": None,
+        "source_request_id": source_request_id,
+    }
+    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    if len(text) <= _INTERNAL_MEMORY_MAX_CHARS:
+        return text
+
+    # Truncate summary first, then query, while preserving required fields.
+    overflow = len(text) - _INTERNAL_MEMORY_MAX_CHARS
+    summary = payload["result_summary"]
+    if summary and overflow > 0:
+        keep = max(0, len(summary) - overflow - 3)
+        payload["result_summary"] = (summary[:keep] + "...") if keep > 0 else ""
+    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    if len(text) <= _INTERNAL_MEMORY_MAX_CHARS:
+        return text
+
+    overflow = len(text) - _INTERNAL_MEMORY_MAX_CHARS
+    query = payload["user_visible_query"]
+    if query and overflow > 0:
+        keep = max(0, len(query) - overflow - 3)
+        payload["user_visible_query"] = (query[:keep] + "...") if keep > 0 else ""
+    text = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+    return text[:_INTERNAL_MEMORY_MAX_CHARS]
+
+
+def _mark_internal_memory_write_status(compile_meta: dict, status: str, error: Optional[str] = None) -> None:
+    if not isinstance(compile_meta, dict):
+        return
+    compile_meta["internal_memory_write_status"] = status
+    if error:
+        compile_meta["internal_memory_write_error"] = str(error)[:200]
+
+
+def _is_internal_write_excluded(route_label: str, query: str) -> bool:
+    route = (route_label or "").lower()
+    if any(token in route for token in ("/health", "/debug", "/internal")):
+        return True
+    q = (query or "").lower()
+    if q.startswith("<system-reminder>") or "session bootstrap context handshake" in q:
+        return True
+    return False
+
+
+async def _auto_write_internal_work_memory(
+    *,
+    request_id: str,
+    route_label: str,
+    agent_id: str,
+    status_code: Optional[int],
+    request_messages,
+    upstream_resp: Optional[httpx.Response],
+    compile_meta: Optional[dict] = None,
+) -> None:
+    if status_code != 200:
+        if isinstance(compile_meta, dict):
+            _mark_internal_memory_write_status(compile_meta, "skipped_non_200")
+        return
+
+    query = _extract_user_query(request_messages)
+    if not query.strip():
+        if isinstance(compile_meta, dict):
+            _mark_internal_memory_write_status(compile_meta, "skipped_no_query")
+        return
+
+    canonical_agent_id = _agent_identity.resolve_canonical_agent_id(agent_id or "unknown")
+    if canonical_agent_id == "unknown":
+        canonical_agent_id = "claude_code"
+
+    if _is_internal_write_excluded(route_label, query):
+        if isinstance(compile_meta, dict):
+            _mark_internal_memory_write_status(compile_meta, "skipped_internal")
+        return
+
+    now = _time.time()
+    dedup_key = f"{canonical_agent_id}|{_normalize_memory_query(query)}"
+    last = _internal_memory_write_dedup.get(dedup_key)
+    if isinstance(last, float) and (now - last) < _INTERNAL_MEMORY_WRITE_DEDUP_WINDOW_SECONDS:
+        if isinstance(compile_meta, dict):
+            _mark_internal_memory_write_status(compile_meta, "skipped_dedup_10m")
+        return
+
+    # Evict stale dedup keys opportunistically.
+    stale_cutoff = now - _INTERNAL_MEMORY_WRITE_DEDUP_WINDOW_SECONDS
+    for key, ts in list(_internal_memory_write_dedup.items()):
+        if ts < stale_cutoff:
+            _internal_memory_write_dedup.pop(key, None)
+
+    result_summary = _extract_upstream_result_summary(upstream_resp)
+    task_type = str((compile_meta or {}).get("task_type") or _classify_task_type(query) or "continuation")
+    content = _build_internal_memory_content(
+        task_type=task_type,
+        user_visible_query=query,
+        result_summary=result_summary,
+        source_request_id=request_id,
+    )
+    expire_at = int(now) + _INTERNAL_MEMORY_DEFAULT_TTL_SECONDS
+
+    write_req = MemoryWriteRequest(
+        content=content,
+        scope="agent",
+        scope_ref=canonical_agent_id,
+        metadata={
+            "agent": canonical_agent_id,
+            "agent_id": canonical_agent_id,
+            "tenant_id": "default",
+            "scope": "agent",
+            "scope_ref": canonical_agent_id,
+            "sharing_mode": "isolated",
+            "memory_type": "work_experience",
+            "memory_level": "short_term",
+            "expire_at": expire_at,
+            "source_request_id": request_id,
+            "task_type": task_type,
+            "write_origin": "llm_proxy_auto_write_v1",
+        },
+        overwrite=False,
+    )
+
+    try:
+        backend = _get_memory_backend()
+        await backend.write(write_req)
+        _internal_memory_write_dedup[dedup_key] = now
+        if isinstance(compile_meta, dict):
+            _mark_internal_memory_write_status(compile_meta, "stored")
+    except Exception as exc:
+        loguru.logger.warning(
+            f"[LLM_PROXY/AUTO_MEMORY_WRITE] request_id={request_id} agent={canonical_agent_id} failed: {exc}"
+        )
+        if isinstance(compile_meta, dict):
+            _mark_internal_memory_write_status(compile_meta, "failed", error=str(exc))
 
 
 def _persist_gateway_meter(
@@ -2880,6 +3099,26 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
             )
 
             if is_streaming:
+                await _auto_write_internal_work_memory(
+                    request_id=request_id,
+                    route_label=route_label,
+                    agent_id=agent_id,
+                    status_code=upstream_resp.status_code,
+                    request_messages=body.get("messages"),
+                    upstream_resp=None,
+                    compile_meta=compile_meta,
+                )
+                _record_compile_event(
+                    request_id=request_id,
+                    agent_id=agent_id,
+                    path=route_label,
+                    model=model,
+                    compile_meta=compile_meta,
+                    proxy_status="success",
+                    proxy_status_code=upstream_resp.status_code,
+                    truth_meta=truth_meta,
+                    trace_id=trace_id,
+                )
                 response = StreamingResponse(
                     _stream_response(upstream_resp),
                     media_type="text/event-stream",
@@ -2894,6 +3133,26 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
                 )
                 return response
             else:
+                await _auto_write_internal_work_memory(
+                    request_id=request_id,
+                    route_label=route_label,
+                    agent_id=agent_id,
+                    status_code=upstream_resp.status_code,
+                    request_messages=body.get("messages"),
+                    upstream_resp=upstream_resp,
+                    compile_meta=compile_meta,
+                )
+                _record_compile_event(
+                    request_id=request_id,
+                    agent_id=agent_id,
+                    path=route_label,
+                    model=model,
+                    compile_meta=compile_meta,
+                    proxy_status="success",
+                    proxy_status_code=upstream_resp.status_code,
+                    truth_meta=truth_meta,
+                    trace_id=trace_id,
+                )
                 return _build_passthrough_response(
                     request_id=request_id,
                     route_label=route_label,
@@ -3131,6 +3390,25 @@ async def proxy_openai_chat(request: Request):
             timeout=httpx.Timeout(upstream["timeout_seconds"], connect=15.0)
         ) as client:
             upstream_resp = await client.post(upstream_url, json=compiled_body, headers=headers)
+            await _auto_write_internal_work_memory(
+                request_id=request_id,
+                route_label="/llm/chat",
+                agent_id=agent_id,
+                status_code=upstream_resp.status_code,
+                request_messages=body.get("messages"),
+                upstream_resp=upstream_resp,
+                compile_meta=compile_meta,
+            )
+            _record_compile_event(
+                request_id=request_id,
+                agent_id=agent_id,
+                path="/llm/chat",
+                model=model,
+                compile_meta=compile_meta,
+                proxy_status="success" if upstream_resp.status_code == 200 else "failed",
+                proxy_status_code=upstream_resp.status_code,
+                trace_id=trace_id,
+            )
             return _passthrough_response(
                 request_id=request_id,
                 route="/llm/chat",
@@ -3232,6 +3510,26 @@ async def proxy_openai_chat(request: Request):
                     truth_meta=truth_meta,
                     trace_id=trace_id,
                 )
+                await _auto_write_internal_work_memory(
+                    request_id=request_id,
+                    route_label="/llm/chat",
+                    agent_id=agent_id,
+                    status_code=upstream_resp.status_code,
+                    request_messages=body.get("messages"),
+                    upstream_resp=upstream_resp,
+                    compile_meta=compile_meta,
+                )
+                _record_compile_event(
+                    request_id=request_id,
+                    agent_id=agent_id,
+                    path="/llm/chat",
+                    model=model,
+                    compile_meta=compile_meta,
+                    proxy_status="success",
+                    proxy_status_code=upstream_resp.status_code,
+                    truth_meta=truth_meta,
+                    trace_id=trace_id,
+                )
                 return _build_passthrough_response(
                     request_id=request_id,
                     route_label="/llm/chat",
@@ -3280,6 +3578,26 @@ async def proxy_openai_chat(request: Request):
         _record_event(
             agent_id, "proxy_response", request_id, "/llm/chat", model,
             "success", upstream_resp.status_code,
+            truth_meta=truth_meta,
+            trace_id=trace_id,
+        )
+        await _auto_write_internal_work_memory(
+            request_id=request_id,
+            route_label="/llm/chat",
+            agent_id=agent_id,
+            status_code=upstream_resp.status_code,
+            request_messages=body.get("messages"),
+            upstream_resp=None,
+            compile_meta=compile_meta,
+        )
+        _record_compile_event(
+            request_id=request_id,
+            agent_id=agent_id,
+            path="/llm/chat",
+            model=model,
+            compile_meta=compile_meta,
+            proxy_status="success",
+            proxy_status_code=upstream_resp.status_code,
             truth_meta=truth_meta,
             trace_id=trace_id,
         )

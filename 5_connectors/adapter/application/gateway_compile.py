@@ -265,11 +265,13 @@ async def run_gateway_compile(
         return _build_original_payload(payload, normalized), _build_meta(
             status="compile_skipped",
             selected_count=0,
+            candidate_count=0,
             original_tokens=normalized["original_token_estimate"],
             compiled_tokens=0,
             path="gateway_normalize",
             error=None,
             reason=f"skip_{normalized['skip_reason']}",
+            internal_memory_status="no_product_memory_found",
         )
 
     # Step 2: Fetch memory candidates
@@ -356,6 +358,7 @@ async def run_gateway_compile(
     compile_meta = _build_meta(
         status=status,
         selected_count=len(compile_result.get("selected_memories", [])),
+        candidate_count=len(candidates),
         original_tokens=compile_result.get("original_token_estimate", 0),
         compiled_tokens=compile_result.get("compiled_token_estimate", 0),
         path="runtime_compile",
@@ -369,6 +372,15 @@ async def run_gateway_compile(
         skill_policy_status=compile_result.get("skill_policy_status", "fallback"),
         task_type=compile_result.get("task_type", compile_context.get("task_type", "continuation")),
         enforcement_trace=enforcement_capture.get("enforcement_trace"),
+        internal_memory_status=(
+            "used"
+            if len(compile_result.get("selected_memories", [])) > 0
+            else (
+                "found_not_selected"
+                if len(candidates) > 0
+                else "no_product_memory_found"
+            )
+        ),
     )
     if config.trace_events_enabled:
         append_trace_event(
@@ -462,6 +474,7 @@ def _build_original_payload(payload: dict, normalized: dict) -> dict:
 def _build_meta(
     status: str,
     selected_count: int,
+    candidate_count: int,
     original_tokens: int,
     compiled_tokens: int,
     path: str,
@@ -475,6 +488,7 @@ def _build_meta(
     skill_policy_status: str = "fallback",
     task_type: str = "continuation",
     enforcement_trace: Optional[dict] = None,
+    internal_memory_status: Optional[str] = None,
 ) -> dict:
     """
     Build standardized compile metadata.
@@ -488,6 +502,7 @@ def _build_meta(
     return {
         "compile_status": status,
         "selected_memory_count": selected_count,
+        "candidate_count": int(candidate_count or 0),
         "original_token_estimate": original_tokens,
         "compiled_token_estimate": compiled_tokens,
         "compression_ratio": ratio,
@@ -500,6 +515,7 @@ def _build_meta(
         "skill_policy_source": skill_policy_source,
         "skill_policy_status": skill_policy_status,
         "task_type": task_type,
+        "internal_memory_status": internal_memory_status,
         "enforcement_trace": enforcement_trace if isinstance(enforcement_trace, dict) else None,
     }
 
