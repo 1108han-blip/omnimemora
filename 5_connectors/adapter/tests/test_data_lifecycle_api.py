@@ -1413,11 +1413,38 @@ def test_data_lifecycle_meter_storage_parity_endpoint(monkeypatch):
         "schema_version": "dlp-meter-storage-v2-parity-v1",
         "status": "passed",
         "critical_mismatch_count": 0,
+        "read_mode": "snapshot_first",
     }
-    monkeypatch.setattr(data_lifecycle_api._meter_storage_v2_mod, "build_parity_report", lambda: expected)
+    monkeypatch.setattr(data_lifecycle_api._meter_storage_v2_mod, "read_parity_snapshot", lambda: expected)
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_storage_v2_mod,
+        "build_parity_report",
+        lambda: (_ for _ in ()).throw(AssertionError("default parity GET must use snapshot")),
+    )
 
     client = TestClient(app)
     response = client.get("/data-lifecycle/meter-storage/parity")
+    assert response.status_code == 200
+    assert response.json() == expected
+
+
+def test_data_lifecycle_meter_storage_parity_fresh_endpoint(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected = {
+        "schema_version": "dlp-meter-storage-v2-parity-v1",
+        "status": "passed",
+        "critical_mismatch_count": 0,
+    }
+    monkeypatch.setattr(data_lifecycle_api._meter_storage_v2_mod, "build_parity_report", lambda: expected)
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_storage_v2_mod,
+        "read_parity_snapshot",
+        lambda: (_ for _ in ()).throw(AssertionError("fresh parity GET must full-scan")),
+    )
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/parity?fresh=true")
     assert response.status_code == 200
     assert response.json() == expected
 
@@ -1430,6 +1457,7 @@ def test_data_lifecycle_meter_storage_parity_rebuild_endpoint(monkeypatch):
         "schema_version": "dlp-meter-storage-v2-parity-rebuild-v1",
         "record": {"trigger": "meter_storage_v2_rebuild"},
         "parity": {"critical_mismatch_count": 0},
+        "snapshot": {"schema_version": "dlp-meter-storage-v2-parity-snapshot-v1"},
     }
     monkeypatch.setattr(data_lifecycle_api._meter_storage_v2_mod, "parity_with_rebuild", lambda: expected)
 

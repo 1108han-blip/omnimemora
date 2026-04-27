@@ -6,7 +6,9 @@ import hashlib
 import importlib
 import json
 import os
+import tempfile
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 from . import state_store
@@ -24,8 +26,10 @@ METER_STORAGE_STATUS_SCHEMA_VERSION = "dlp-meter-storage-v2-status-v1"
 METER_STORAGE_REBUILD_SCHEMA_VERSION = "dlp-meter-storage-v2-rebuild-v1"
 METER_STORAGE_PARITY_SCHEMA_VERSION = "dlp-meter-storage-v2-parity-v1"
 METER_STORAGE_PARITY_REBUILD_SCHEMA_VERSION = "dlp-meter-storage-v2-parity-rebuild-v1"
+METER_STORAGE_PARITY_SNAPSHOT_SCHEMA_VERSION = "dlp-meter-storage-v2-parity-snapshot-v1"
 METER_STORAGE_MODE = "dual_write_observe_only"
 DEFAULT_PARITY_SAMPLE_LIMIT = 200
+PARITY_SNAPSHOT_ENV = "OMNIMEMORA_DLP_METER_PARITY_SNAPSHOT_FILE"
 
 
 def _utc_now() -> datetime:
@@ -110,6 +114,131 @@ def _record_degraded(error: str) -> None:
         error=error,
     )
     state_store.append_state_record(record)
+
+
+def _default_data_lifecycle_dir() -> Path:
+    return Path(os.getenv("OMNIMEMORA_DLP_DIR", str(Path.home() / ".omnimemora" / "adapter" / "data_lifecycle"))).expanduser()
+
+
+def parity_snapshot_path(path: Optional[str | Path] = None) -> Path:
+    if path is not None:
+        return Path(path).expanduser()
+    return Path(
+        os.getenv(
+            PARITY_SNAPSHOT_ENV,
+            str(_default_data_lifecycle_dir() / "meter_parity_snapshot.json"),
+        )
+    ).expanduser()
+
+
+def _parity_hash_summary(parity: dict[str, Any]) -> dict[str, int]:
+    return {
+        "payload_hash_mismatch_count": int(parity.get("payload_hash_mismatch_count") or 0),
+        "semantic_hash_mismatch_count": int(parity.get("semantic_hash_mismatch_count") or 0),
+        "critical_payload_hash_mismatch_count": int(parity.get("critical_payload_hash_mismatch_count") or 0),
+        "critical_mismatch_count": int(parity.get("critical_mismatch_count") or 0),
+        "missing_in_sqlite_count": int(parity.get("missing_in_sqlite_count") or 0),
+        "missing_in_legacy_count": int(parity.get("missing_in_legacy_count") or 0),
+    }
+
+
+def _parity_source_counts(parity: dict[str, Any]) -> dict[str, int]:
+    return {
+        "legacy_count": int(parity.get("legacy_count") or 0),
+        "sqlite_count": int(parity.get("sqlite_count") or 0),
+        "matching_request_id_count": int(parity.get("matching_request_id_count") or 0),
+    }
+
+
+def _write_json_atomic(path: Path, payload: dict[str, Any], *, tmp_prefix: str) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(prefix=tmp_prefix, suffix=".tmp", dir=str(path.parent))
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh, ensure_ascii=False, indent=2, sort_keys=True)
+            fh.write("\n")
+        os.replace(tmp, str(path))
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+    return path
+
+
+def build_parity_snapshot(parity: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "schema_version": METER_STORAGE_PARITY_SNAPSHOT_SCHEMA_VERSION,
+        "generated_at": _to_iso(_utc_now()),
+        "mode": METER_STORAGE_MODE,
+        "source": "meter_storage_v2_parity_rebuild",
+        "source_counts": _parity_source_counts(parity),
+        "hash_summary": _parity_hash_summary(parity),
+        "parity": parity,
+    }
+
+
+def write_parity_snapshot(parity: dict[str, Any], *, path: Optional[str | Path] = None) -> dict[str, Any]:
+    snapshot = build_parity_snapshot(parity)
+    snapshot_path = parity_snapshot_path(path)
+    _write_json_atomic(snapshot_path, snapshot, tmp_prefix="meter_parity_snapshot_")
+    snapshot["snapshot_path"] = str(snapshot_path)
+    return snapshot
+
+
+def read_parity_snapshot(*, path: Optional[str | Path] = None) -> dict[str, Any]:
+    snapshot_path = parity_snapshot_path(path)
+    base = {
+        "schema_version": METER_STORAGE_PARITY_SCHEMA_VERSION,
+        "snapshot_schema_version": METER_STORAGE_PARITY_SNAPSHOT_SCHEMA_VERSION,
+        "snapshot_path": str(snapshot_path),
+        "read_mode": "snapshot_first",
+        "mode": METER_STORAGE_MODE,
+        "legacy_authoritative": True,
+        "read_path_switch_deferred": True,
+    }
+    if not snapshot_path.exists():
+        return {
+            **base,
+            "generated_at": _to_iso(_utc_now()),
+            "status": "missing",
+            "missing_reason": "snapshot_missing",
+            "snapshot_missing": True,
+        }
+    try:
+        payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {
+            **base,
+            "generated_at": _to_iso(_utc_now()),
+            "status": "missing",
+            "missing_reason": "snapshot_read_error",
+            "snapshot_missing": True,
+            "error": str(exc),
+        }
+    if not isinstance(payload, dict) or payload.get("schema_version") != METER_STORAGE_PARITY_SNAPSHOT_SCHEMA_VERSION:
+        return {
+            **base,
+            "generated_at": _to_iso(_utc_now()),
+            "status": "missing",
+            "missing_reason": "snapshot_schema_mismatch",
+            "snapshot_missing": True,
+        }
+    parity = payload.get("parity")
+    if not isinstance(parity, dict):
+        return {
+            **base,
+            "generated_at": _to_iso(_utc_now()),
+            "status": "missing",
+            "missing_reason": "snapshot_payload_missing",
+            "snapshot_missing": True,
+        }
+    return {
+        **parity,
+        "snapshot_schema_version": METER_STORAGE_PARITY_SNAPSHOT_SCHEMA_VERSION,
+        "snapshot_generated_at": payload.get("generated_at"),
+        "snapshot_path": str(snapshot_path),
+        "snapshot_missing": False,
+        "read_mode": "snapshot_first",
+    }
 
 
 def get_status_payload() -> dict[str, Any]:
@@ -698,8 +827,16 @@ def build_parity_report(*, sample_limit: int = DEFAULT_PARITY_SAMPLE_LIMIT) -> d
 
 def parity_with_rebuild(*, sample_limit: int = DEFAULT_PARITY_SAMPLE_LIMIT) -> dict[str, Any]:
     record, parity = rebuild_from_legacy(sample_limit=sample_limit)
+    snapshot = write_parity_snapshot(parity)
     return {
         "schema_version": METER_STORAGE_PARITY_REBUILD_SCHEMA_VERSION,
         "record": record,
         "parity": parity,
+        "snapshot": {
+            "schema_version": snapshot["schema_version"],
+            "generated_at": snapshot["generated_at"],
+            "snapshot_path": snapshot["snapshot_path"],
+            "source_counts": snapshot["source_counts"],
+            "hash_summary": snapshot["hash_summary"],
+        },
     }

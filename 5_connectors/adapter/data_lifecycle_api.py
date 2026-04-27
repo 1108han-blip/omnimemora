@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import importlib
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Query
 
 router = APIRouter(tags=["data-lifecycle"])
 
@@ -194,8 +194,10 @@ async def post_data_lifecycle_meter_storage_rebuild():
 
 
 @router.get("/data-lifecycle/meter-storage/parity")
-async def get_data_lifecycle_meter_storage_parity():
-    return _meter_storage_v2_mod.build_parity_report()
+async def get_data_lifecycle_meter_storage_parity(fresh: bool = Query(False)):
+    if fresh:
+        return _meter_storage_v2_mod.build_parity_report()
+    return _meter_storage_v2_mod.read_parity_snapshot()
 
 
 @router.post("/data-lifecycle/meter-storage/parity/rebuild")
@@ -203,7 +205,7 @@ async def post_data_lifecycle_meter_storage_parity_rebuild():
     try:
         payload = _meter_storage_v2_mod.parity_with_rebuild()
     except Exception as exc:
-        latest_parity = _meter_storage_v2_mod.build_parity_report()
+        latest_parity = _meter_storage_v2_mod.read_parity_snapshot()
         raise HTTPException(
             status_code=503,
             detail={

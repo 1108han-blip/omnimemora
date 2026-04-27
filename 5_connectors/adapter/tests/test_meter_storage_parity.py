@@ -29,6 +29,87 @@ def _write_legacy_index(data_dir, rows: dict[str, dict]):
     index_path.write_text(json.dumps(rows), encoding="utf-8")
 
 
+def test_parity_snapshot_missing_does_not_build_full_report(tmp_path, monkeypatch):
+    snapshot_path = tmp_path / "dlp" / "meter_parity_snapshot.json"
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_PARITY_SNAPSHOT_FILE", str(snapshot_path))
+    monkeypatch.setattr(
+        meter_storage_v2,
+        "build_parity_report",
+        lambda: (_ for _ in ()).throw(AssertionError("GET snapshot read must not full-scan")),
+    )
+
+    report = meter_storage_v2.read_parity_snapshot()
+
+    assert report["status"] == "missing"
+    assert report["missing_reason"] == "snapshot_missing"
+    assert report["snapshot_missing"] is True
+    assert report["read_mode"] == "snapshot_first"
+
+
+def test_parity_rebuild_writes_snapshot_and_get_reads_it(tmp_path, monkeypatch):
+    data_dir = tmp_path / "data"
+    sqlite_path = tmp_path / "meter_store.sqlite3"
+    snapshot_path = tmp_path / "dlp" / "meter_parity_snapshot.json"
+    monkeypatch.setenv("OMNIMEMORA_METER_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("OMNIMEMORA_METER_STORE_V2_FILE", str(sqlite_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_PARITY_SNAPSHOT_FILE", str(snapshot_path))
+
+    payload = _payload("req-snapshot-rebuild")
+    _write_legacy_index(data_dir, {"req-snapshot-rebuild": payload})
+
+    rebuilt = meter_storage_v2.parity_with_rebuild()
+    snapshot_read = meter_storage_v2.read_parity_snapshot()
+
+    assert snapshot_path.exists()
+    assert rebuilt["snapshot"]["schema_version"] == "dlp-meter-storage-v2-parity-snapshot-v1"
+    assert rebuilt["snapshot"]["hash_summary"]["critical_mismatch_count"] == 0
+    assert snapshot_read["snapshot_missing"] is False
+    assert snapshot_read["read_mode"] == "snapshot_first"
+    assert snapshot_read["critical_mismatch_count"] == rebuilt["parity"]["critical_mismatch_count"]
+    assert snapshot_read["payload_hash_mismatch_count"] == rebuilt["parity"]["payload_hash_mismatch_count"]
+    assert snapshot_read["legacy_count"] == rebuilt["parity"]["legacy_count"]
+    assert snapshot_read["sqlite_count"] == rebuilt["parity"]["sqlite_count"]
+
+
+def test_parity_snapshot_atomic_write_failure_preserves_old_snapshot(tmp_path, monkeypatch):
+    snapshot_path = tmp_path / "dlp" / "meter_parity_snapshot.json"
+    old_parity = {
+        "schema_version": "dlp-meter-storage-v2-parity-v1",
+        "generated_at": "2026-04-27T00:00:00+00:00",
+        "mode": "dual_write_observe_only",
+        "status": "passed",
+        "legacy_count": 1,
+        "sqlite_count": 1,
+        "matching_request_id_count": 1,
+        "payload_hash_mismatch_count": 0,
+        "semantic_hash_mismatch_count": 0,
+        "critical_payload_hash_mismatch_count": 0,
+        "critical_mismatch_count": 0,
+        "missing_in_sqlite_count": 0,
+        "missing_in_legacy_count": 0,
+        "hash_mismatch_samples": [],
+        "read_path_switch_deferred": True,
+        "legacy_authoritative": True,
+    }
+    new_parity = dict(old_parity, critical_mismatch_count=1, status="degraded")
+    meter_storage_v2.write_parity_snapshot(old_parity, path=snapshot_path)
+    before = snapshot_path.read_text(encoding="utf-8")
+
+    def fail_replace(_src, _dst):
+        raise OSError("simulated replace failure")
+
+    monkeypatch.setattr(meter_storage_v2.os, "replace", fail_replace)
+
+    try:
+        meter_storage_v2.write_parity_snapshot(new_parity, path=snapshot_path)
+    except OSError:
+        pass
+
+    after = snapshot_path.read_text(encoding="utf-8")
+    assert after == before
+    assert meter_storage_v2.read_parity_snapshot(path=snapshot_path)["critical_mismatch_count"] == 0
+
+
 def test_parity_report_passes_when_legacy_and_sqlite_match(tmp_path, monkeypatch):
     data_dir = tmp_path / "data"
     sqlite_path = tmp_path / "meter_store.sqlite3"
