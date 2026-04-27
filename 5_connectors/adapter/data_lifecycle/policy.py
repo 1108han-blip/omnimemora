@@ -46,6 +46,7 @@ class DataLifecyclePolicy:
     meter_cleanup_scaleup_readiness_file: str = ""
     meter_cleanup_repeatable_pilot_protocol_file: str = ""
     meter_cleanup_second_file_pilot_proposal_file: str = ""
+    meter_cleanup_second_file_pilot_approval_readiness_file: str = ""
     meter_backup_export_readiness_file: str = ""
     meter_backup_export_plan_file: str = ""
     meter_backup_export_package_manifest_file: str = ""
@@ -217,6 +218,10 @@ def load_policy() -> DataLifecyclePolicy:
         "OMNIMEMORA_DLP_METER_CLEANUP_SECOND_FILE_PILOT_PROPOSAL_FILE",
         str(base_dir / "meter_cleanup_second_file_pilot_proposal.json"),
     )
+    meter_cleanup_second_file_pilot_approval_readiness_file = os.getenv(
+        "OMNIMEMORA_DLP_METER_CLEANUP_SECOND_FILE_PILOT_APPROVAL_READINESS_FILE",
+        str(base_dir / "meter_cleanup_second_file_pilot_approval_readiness.json"),
+    )
     meter_backup_export_readiness_file = os.getenv(
         "OMNIMEMORA_DLP_METER_BACKUP_EXPORT_READINESS_FILE",
         str(base_dir / "meter_backup_export_readiness.json"),
@@ -343,6 +348,7 @@ def load_policy() -> DataLifecyclePolicy:
         meter_cleanup_scaleup_readiness_file=meter_cleanup_scaleup_readiness_file,
         meter_cleanup_repeatable_pilot_protocol_file=meter_cleanup_repeatable_pilot_protocol_file,
         meter_cleanup_second_file_pilot_proposal_file=meter_cleanup_second_file_pilot_proposal_file,
+        meter_cleanup_second_file_pilot_approval_readiness_file=meter_cleanup_second_file_pilot_approval_readiness_file,
         meter_backup_export_readiness_file=meter_backup_export_readiness_file,
         meter_backup_export_plan_file=meter_backup_export_plan_file,
         meter_backup_export_package_manifest_file=meter_backup_export_package_manifest_file,

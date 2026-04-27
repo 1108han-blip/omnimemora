@@ -699,6 +699,7 @@ def build_health_payload(
                 "scaleup_ready": False,
                 "repeatable_pilot_protocol_status": "missing",
                 "second_file_pilot_proposal_status": "missing",
+                "second_file_pilot_approval_readiness_status": "missing",
                 "second_file_pilot_allowed": False,
                 "cleanup_scope_expansion_started": False,
             },

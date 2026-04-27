@@ -2001,6 +2001,79 @@ def test_meter_cleanup_second_file_pilot_proposal_does_not_expose_execute_delete
         assert response.status_code == 404
 
 
+def test_data_lifecycle_meter_cleanup_second_file_pilot_approval_readiness_endpoint_returns_missing_when_absent(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_cleanup_second_file_pilot_approval_readiness_mod,
+        "read_approval_readiness",
+        lambda policy=None: None,
+    )
+
+    client = TestClient(app)
+    response = client.get("/data-lifecycle/meter-storage/cleanup/second-file-pilot/approval-readiness")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-second-file-cleanup-pilot-approval-readiness-v1"
+    assert payload["status"] == "missing"
+    assert payload["mode"] == "approval_readiness_only"
+    assert payload["required_operator_approval"] is True
+    assert payload["operator_approval_written"] is False
+    assert payload["second_file_pilot_allowed"] is False
+    assert payload["execution_started"] is False
+    assert payload["cleanup_scope_expansion_started"] is False
+
+
+def test_data_lifecycle_meter_cleanup_second_file_pilot_approval_readiness_rebuild_endpoint_returns_record_and_report(monkeypatch):
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    expected_record = {
+        "cycle_id": "cycle-second-file-approval-readiness",
+        "trigger": "meter_cleanup_second_file_pilot_approval_readiness_rebuild",
+        "status": "success",
+    }
+    expected_report = {
+        "schema_version": "res-second-file-cleanup-pilot-approval-readiness-v1",
+        "mode": "approval_readiness_only",
+        "status": "ready_for_operator_decision",
+        "operator_approval_written": False,
+        "second_file_pilot_allowed": False,
+        "execution_started": False,
+        "cleanup_scope_expansion_started": False,
+    }
+    monkeypatch.setattr(
+        data_lifecycle_api._meter_cleanup_second_file_pilot_approval_readiness_mod,
+        "rebuild_approval_readiness",
+        lambda policy=None: (expected_record, expected_report),
+    )
+
+    client = TestClient(app)
+    response = client.post("/data-lifecycle/meter-storage/cleanup/second-file-pilot/approval-readiness/rebuild")
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["schema_version"] == "res-second-file-cleanup-pilot-approval-readiness-rebuild-v1"
+    assert payload["record"]["trigger"] == "meter_cleanup_second_file_pilot_approval_readiness_rebuild"
+    assert payload["second_file_pilot_approval_readiness"]["status"] == "ready_for_operator_decision"
+    assert payload["second_file_pilot_approval_readiness"]["second_file_pilot_allowed"] is False
+
+
+def test_meter_cleanup_second_file_pilot_approval_readiness_does_not_expose_execute_delete_move_compress_truncate_batch():
+    app = FastAPI()
+    app.include_router(data_lifecycle_api.router)
+    client = TestClient(app)
+    forbidden_paths = [
+        "/data-lifecycle/meter-storage/cleanup/second-file-pilot/approval-readiness/execute",
+        "/data-lifecycle/meter-storage/cleanup/second-file-pilot/approval-readiness/delete",
+        "/data-lifecycle/meter-storage/cleanup/second-file-pilot/approval-readiness/move",
+        "/data-lifecycle/meter-storage/cleanup/second-file-pilot/approval-readiness/compress",
+        "/data-lifecycle/meter-storage/cleanup/second-file-pilot/approval-readiness/truncate",
+        "/data-lifecycle/meter-storage/cleanup/second-file-pilot/approval-readiness/batch",
+    ]
+    for path in forbidden_paths:
+        response = client.post(path)
+        assert response.status_code == 404
+
+
 def test_data_lifecycle_meter_backup_export_readiness_endpoint_returns_missing_when_absent(monkeypatch):
     app = FastAPI()
     app.include_router(data_lifecycle_api.router)

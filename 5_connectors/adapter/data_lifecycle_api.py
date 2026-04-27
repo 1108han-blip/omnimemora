@@ -112,6 +112,31 @@ except Exception:
             raise RuntimeError("meter cleanup second-file pilot proposal module unavailable")
 
     _meter_cleanup_second_file_pilot_proposal_mod = _MissingMeterCleanupSecondFilePilotProposalModule()
+try:
+    _meter_cleanup_second_file_pilot_approval_readiness_mod = importlib.import_module(
+        "5_connectors.adapter.data_lifecycle.meter_cleanup_second_file_pilot_approval_readiness"
+    )
+except Exception:
+    class _MissingMeterCleanupSecondFilePilotApprovalReadinessModule:
+        METER_CLEANUP_SECOND_FILE_PILOT_APPROVAL_READINESS_SCHEMA_VERSION = (
+            "res-second-file-cleanup-pilot-approval-readiness-v1"
+        )
+        METER_CLEANUP_SECOND_FILE_PILOT_APPROVAL_READINESS_REBUILD_SCHEMA_VERSION = (
+            "res-second-file-cleanup-pilot-approval-readiness-rebuild-v1"
+        )
+        METER_CLEANUP_SECOND_FILE_PILOT_APPROVAL_READINESS_MODE = "approval_readiness_only"
+
+        @staticmethod
+        def read_approval_readiness(policy=None):
+            return None
+
+        @staticmethod
+        def rebuild_approval_readiness(policy=None):
+            raise RuntimeError("meter cleanup second-file pilot approval readiness module unavailable")
+
+    _meter_cleanup_second_file_pilot_approval_readiness_mod = (
+        _MissingMeterCleanupSecondFilePilotApprovalReadinessModule()
+    )
 _meter_backup_export_readiness_mod = importlib.import_module(
     "5_connectors.adapter.data_lifecycle.meter_backup_export_readiness"
 )
@@ -576,6 +601,50 @@ async def post_data_lifecycle_meter_storage_cleanup_second_file_pilot_proposal_r
         "schema_version": _meter_cleanup_second_file_pilot_proposal_mod.METER_CLEANUP_SECOND_FILE_PILOT_PROPOSAL_REBUILD_SCHEMA_VERSION,
         "record": record,
         "second_file_pilot_proposal": report,
+    }
+
+
+@router.get("/data-lifecycle/meter-storage/cleanup/second-file-pilot/approval-readiness")
+async def get_data_lifecycle_meter_storage_cleanup_second_file_pilot_approval_readiness():
+    policy = _policy_mod.load_policy()
+    report = _meter_cleanup_second_file_pilot_approval_readiness_mod.read_approval_readiness(policy=policy)
+    if report is None:
+        return {
+            "schema_version": _meter_cleanup_second_file_pilot_approval_readiness_mod.METER_CLEANUP_SECOND_FILE_PILOT_APPROVAL_READINESS_SCHEMA_VERSION,
+            "status": "missing",
+            "mode": _meter_cleanup_second_file_pilot_approval_readiness_mod.METER_CLEANUP_SECOND_FILE_PILOT_APPROVAL_READINESS_MODE,
+            "required_operator_approval": True,
+            "operator_approval_written": False,
+            "second_file_pilot_allowed": False,
+            "execution_started": False,
+            "cleanup_scope_expansion_started": False,
+        }
+    return report
+
+
+@router.post("/data-lifecycle/meter-storage/cleanup/second-file-pilot/approval-readiness/rebuild")
+async def post_data_lifecycle_meter_storage_cleanup_second_file_pilot_approval_readiness_rebuild():
+    policy = _policy_mod.load_policy()
+    try:
+        record, report = await asyncio.to_thread(
+            _meter_cleanup_second_file_pilot_approval_readiness_mod.rebuild_approval_readiness,
+            policy=policy,
+        )
+    except Exception as exc:
+        latest = _meter_cleanup_second_file_pilot_approval_readiness_mod.read_approval_readiness(policy=policy)
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "schema_version": _meter_cleanup_second_file_pilot_approval_readiness_mod.METER_CLEANUP_SECOND_FILE_PILOT_APPROVAL_READINESS_REBUILD_SCHEMA_VERSION,
+                "message": "meter cleanup second-file pilot approval readiness rebuild failed",
+                "error": str(exc),
+                "second_file_pilot_approval_readiness": latest,
+            },
+        ) from exc
+    return {
+        "schema_version": _meter_cleanup_second_file_pilot_approval_readiness_mod.METER_CLEANUP_SECOND_FILE_PILOT_APPROVAL_READINESS_REBUILD_SCHEMA_VERSION,
+        "record": record,
+        "second_file_pilot_approval_readiness": report,
     }
 
 

@@ -311,6 +311,12 @@ def get_status_payload() -> dict[str, Any]:
             )
         except Exception:
             cleanup_second_file_proposal_mod = None
+        try:
+            cleanup_second_file_approval_readiness_mod = importlib.import_module(
+                "5_connectors.adapter.data_lifecycle.meter_cleanup_second_file_pilot_approval_readiness"
+            )
+        except Exception:
+            cleanup_second_file_approval_readiness_mod = None
         preview = cleanup_mod.read_preview()
         cleanup_gate = cleanup_gate_mod.read_gate()
         cleanup_txn_preview = cleanup_txn_mod.read_preview()
@@ -325,6 +331,11 @@ def get_status_payload() -> dict[str, Any]:
         )
         cleanup_second_file_proposal = (
             cleanup_second_file_proposal_mod.read_proposal() if cleanup_second_file_proposal_mod is not None else None
+        )
+        cleanup_second_file_approval_readiness = (
+            cleanup_second_file_approval_readiness_mod.read_approval_readiness()
+            if cleanup_second_file_approval_readiness_mod is not None
+            else None
         )
         if isinstance(preview, dict):
             blocking_reasons = preview.get("blocking_reasons") or []
@@ -361,6 +372,9 @@ def get_status_payload() -> dict[str, Any]:
                 "scaleup_ready": bool((cleanup_scaleup_readiness or {}).get("ready_for_scaleup") is True),
                 "repeatable_pilot_protocol_status": str((cleanup_repeatable_protocol or {}).get("status") or "missing"),
                 "second_file_pilot_proposal_status": str((cleanup_second_file_proposal or {}).get("status") or "missing"),
+                "second_file_pilot_approval_readiness_status": str(
+                    (cleanup_second_file_approval_readiness or {}).get("status") or "missing"
+                ),
                 "second_file_pilot_allowed": bool((cleanup_second_file_proposal or {}).get("second_file_pilot_allowed") is True),
                 "cleanup_scope_expansion_started": False,
             }
@@ -393,6 +407,7 @@ def get_status_payload() -> dict[str, Any]:
                 "scaleup_ready": False,
                 "repeatable_pilot_protocol_status": "missing",
                 "second_file_pilot_proposal_status": "missing",
+                "second_file_pilot_approval_readiness_status": "missing",
                 "second_file_pilot_allowed": False,
                 "cleanup_scope_expansion_started": False,
             }
@@ -425,6 +440,7 @@ def get_status_payload() -> dict[str, Any]:
             "scaleup_ready": False,
             "repeatable_pilot_protocol_status": "missing",
             "second_file_pilot_proposal_status": "missing",
+            "second_file_pilot_approval_readiness_status": "missing",
             "second_file_pilot_allowed": False,
             "cleanup_scope_expansion_started": False,
         }
