@@ -50,3 +50,6 @@ def test_default_internal_get_paths_skip_trace_writes():
     Request.method = "GET"
     Request.url.path = "/debug/request_evidence"
     assert main_mod._skip_default_trace_write(Request()) is False
+
+    Request.url.path = "/data-lifecycle/meter-storage/status"
+    assert main_mod._skip_default_trace_write(Request()) is True

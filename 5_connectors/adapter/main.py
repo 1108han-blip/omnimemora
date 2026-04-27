@@ -199,6 +199,7 @@ _ULTRA_FAST_INTERNAL_GET_PATHS = frozenset(
         "/metrics/summary",
         "/metrics/core_capabilities",
         "/data-lifecycle/status",
+        "/data-lifecycle/meter-storage/status",
         "/data-lifecycle/meter-storage/parity",
     }
 )

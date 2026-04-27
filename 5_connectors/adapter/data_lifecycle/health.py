@@ -211,6 +211,14 @@ def _raw_log_retention_view(current_policy: DataLifecyclePolicy) -> dict[str, An
     }
 
 
+def _fast_raw_log_retention_view() -> dict[str, Any]:
+    return {
+        "status": "bounded",
+        "retention_days": 7,
+        "max_active_lines": 1000,
+    }
+
+
 def _frozen_archive_views() -> dict[str, dict[str, Any]]:
     return {
         "retention_manifest": _frozen_artifact_view("frozen_internal_diagnostic"),
@@ -368,6 +376,7 @@ def build_health_payload(
 ) -> dict[str, Any]:
     current_policy = policy or load_policy()
     current_now = float(now_ts if now_ts is not None else time.time())
+    is_full = str(detail or "fast").strip().lower() == "full"
 
     summary_payload = summary_store.read_summary(policy=current_policy)
     summary_freshness = _summary_freshness(summary_payload, policy=current_policy, now_ts=current_now)
@@ -380,9 +389,14 @@ def build_health_payload(
         max(0.0, current_now - float(summary_generated_at)) if isinstance(summary_generated_at, (int, float)) else None
     )
 
-    last_maintenance = state_store.latest_record(trigger=MAINTENANCE_TRIGGERS, policy=current_policy)
-    recent_degraded = _recent_degraded_records(policy=current_policy, now_ts=current_now)
-    raw_log_retention_view = _raw_log_retention_view(current_policy)
+    if is_full:
+        last_maintenance = state_store.latest_record(trigger=MAINTENANCE_TRIGGERS, policy=current_policy)
+        recent_degraded = _recent_degraded_records(policy=current_policy, now_ts=current_now)
+        raw_log_retention_view = _raw_log_retention_view(current_policy)
+    else:
+        last_maintenance = None
+        recent_degraded = []
+        raw_log_retention_view = _fast_raw_log_retention_view()
     status, recommended_action = _derive_status(
         summary_freshness=summary_freshness,
         last_maintenance=last_maintenance,
@@ -512,7 +526,7 @@ def build_health_payload(
             "cleanup_scope_expansion_started": False,
         },
     }
-    if str(detail or "fast").strip().lower() != "full":
+    if not is_full:
         return payload
 
     recent_maintenance = state_store.read_recent_records(limit=20, trigger=MAINTENANCE_TRIGGERS, policy=current_policy)

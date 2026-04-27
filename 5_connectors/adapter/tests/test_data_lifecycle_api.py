@@ -246,7 +246,7 @@ def test_dlp_health_status_maintenance_failed(tmp_path):
             status="failed",
             completed_at=datetime.fromtimestamp(101.0, tz=timezone.utc),
         )
-        payload = health_mod.build_health_payload(policy=policy, now_ts=102.0)
+        payload = health_mod.build_health_payload(policy=policy, now_ts=102.0, detail="full")
     finally:
         state_store.RETENTION_DAYS = original_retention_days
     assert payload["status"] == "maintenance_failed"
