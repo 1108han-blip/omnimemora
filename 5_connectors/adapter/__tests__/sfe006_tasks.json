@@ -1,0 +1,162 @@
+[
+  {
+    "id": "task-001",
+    "description": "Write a README for a Python project",
+    "protocol": "anthropic",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Write a README.md for a Python CLI tool called 'omni-status' that shows system metrics. Include: installation, usage examples, configuration, and license."
+      }
+    ],
+    "quality_check": {
+      "must_contain": ["install", "usage", "README"],
+      "must_not_contain": ["sorry", "cannot", "error"],
+      "min_length": 200
+    }
+  },
+  {
+    "id": "task-002",
+    "description": "Explain a Python code snippet",
+    "protocol": "anthropic",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Explain what this Python code does and suggest improvements:\ndef fetch(url, timeout=30):\n    return requests.get(url, timeout=timeout)"
+      }
+    ],
+    "quality_check": {
+      "must_contain": ["requests", "timeout"],
+      "must_not_contain": ["sorry", "cannot"],
+      "min_length": 100
+    }
+  },
+  {
+    "id": "task-003",
+    "description": "Write unit tests for a function",
+    "protocol": "anthropic",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Write pytest unit tests for this function:\ndef add(a, b):\n    return a + b"
+      }
+    ],
+    "quality_check": {
+      "must_contain": ["pytest", "def test_"],
+      "must_not_contain": ["sorry", "cannot", "error"],
+      "min_length": 100
+    }
+  },
+  {
+    "id": "task-004",
+    "description": "Debug a JavaScript error",
+    "protocol": "anthropic",
+    "messages": [
+      {
+        "role": "user",
+        "content": "I'm getting 'TypeError: Cannot read property of undefined' in my JavaScript. Here's the code:\nconst data = fetchData();\nconsole.log(data.name.toUpperCase());"
+      }
+    ],
+    "quality_check": {
+      "must_contain": ["undefined", "null", "check"],
+      "must_not_contain": ["sorry", "cannot"],
+      "min_length": 80
+    }
+  },
+  {
+    "id": "task-005",
+    "description": "Refactor a long function",
+    "protocol": "anthropic",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Refactor this long function to be more readable:\ndef process_user(user):\n    name = user.get('name', '')\n    email = user.get('email', '')\n    age = user.get('age', 0)\n    if age > 18:\n        return f'{name} ({email}) is an adult'\n    else:\n        return f'{name} ({email}) is a minor'"
+      }
+    ],
+    "quality_check": {
+      "must_contain": ["def ", "return"],
+      "must_not_contain": ["sorry", "cannot", "error"],
+      "min_length": 100
+    }
+  },
+  {
+    "id": "task-006",
+    "description": "Write SQL query for reports",
+    "protocol": "anthropic",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Write a SQL query that shows the top 10 customers by total order value, including their name, email, and total spend. Tables: customers(id, name, email), orders(id, customer_id, total)"
+      }
+    ],
+    "quality_check": {
+      "must_contain": ["SELECT", "ORDER BY", "LIMIT 10"],
+      "must_not_contain": ["sorry", "cannot", "error"],
+      "min_length": 80
+    }
+  },
+  {
+    "id": "task-007",
+    "description": "Explain a design pattern",
+    "protocol": "anthropic",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Explain the Repository pattern in Python. When should I use it? Show a simple example."
+      }
+    ],
+    "quality_check": {
+      "must_contain": ["repository", "pattern", "example"],
+      "must_not_contain": ["sorry", "cannot"],
+      "min_length": 150
+    }
+  },
+  {
+    "id": "task-008",
+    "description": "Optimize a slow algorithm",
+    "protocol": "anthropic",
+    "messages": [
+      {
+        "role": "user",
+        "content": "This function is slow for large inputs. Optimize it:\ndef find_duplicates(items):\n    duplicates = []\n    for i in range(len(items)):\n        for j in range(i+1, len(items)):\n            if items[i] == items[j]:\n                duplicates.append(items[i])\n    return duplicates"
+      }
+    ],
+    "quality_check": {
+      "must_contain": ["set(", "dict(", "O(n)"],
+      "must_not_contain": ["sorry", "cannot", "error"],
+      "min_length": 80
+    }
+  },
+  {
+    "id": "task-009",
+    "description": "Write API documentation",
+    "protocol": "anthropic",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Write OpenAPI 3.0 documentation for a GET /users/{id} endpoint that returns user info. Include request parameters, response schema, and error codes."
+      }
+    ],
+    "quality_check": {
+      "must_contain": ["openapi", "200", "users"],
+      "must_not_contain": ["sorry", "cannot", "error"],
+      "min_length": 150
+    }
+  },
+  {
+    "id": "task-010",
+    "description": "Docker compose for web app",
+    "protocol": "anthropic",
+    "messages": [
+      {
+        "role": "user",
+        "content": "Write a docker-compose.yml for a web app with: Python FastAPI backend, PostgreSQL database, and Redis cache. Include healthchecks."
+      }
+    ],
+    "quality_check": {
+      "must_contain": ["fastapi", "postgres", "redis", "version:"],
+      "must_not_contain": ["sorry", "cannot", "error"],
+      "min_length": 150
+    }
+  }
+]
