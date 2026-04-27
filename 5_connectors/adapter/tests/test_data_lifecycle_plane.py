@@ -57,6 +57,7 @@ class MockMeterStore:
 
 
 def test_summary_builder_family_window_equivalent_to_legacy_logic(monkeypatch):
+    monkeypatch.setenv("OMNIMEMORA_STATUS_READ_MODEL_METER_READ_PATH", "legacy_only")
     now = datetime.now(timezone.utc)
     ts = now.isoformat()
     meters = [
@@ -144,6 +145,14 @@ def test_summary_store_atomic_read_and_freshness(tmp_path):
     stale = summary_store.read_stale_usable_summary(policy=custom_policy, now_ts=111.0)
     assert stale == payload
     assert summary_store.read_stale_usable_summary(policy=custom_policy, now_ts=221.0) is None
+
+
+def test_policy_defaults_disable_background_maintenance(monkeypatch):
+    monkeypatch.delenv("OMNIMEMORA_DLP_MAINTENANCE_ENABLED", raising=False)
+
+    policy = policy_mod.load_policy()
+
+    assert policy.maintenance_enabled is False
 
 
 def test_maintenance_manager_run_once_writes_summary_and_state_without_deleting_raw(tmp_path):

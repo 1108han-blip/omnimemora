@@ -64,7 +64,7 @@ class DataLifecyclePolicy:
     raw_evidence_segments_mode: str = "disabled"
     raw_evidence_segment_max_bytes: int = 32 * 1024 * 1024
     raw_evidence_segment_max_age_seconds: int = 6 * 60 * 60
-    maintenance_enabled: bool = True
+    maintenance_enabled: bool = False
     maintenance_startup_delay_seconds: float = 5.0
     maintenance_interval_seconds: float = 60.0
     maintenance_budget_seconds: float = 8.0
@@ -299,7 +299,7 @@ def load_policy() -> DataLifecyclePolicy:
         os.getenv("OMNIMEMORA_DLP_SUMMARY_STALE_MAX_AGE_SECONDS", "3600")
     )
     maintenance_enabled = os.getenv(
-        "OMNIMEMORA_DLP_MAINTENANCE_ENABLED", "true"
+        "OMNIMEMORA_DLP_MAINTENANCE_ENABLED", "false"
     ).strip().lower() in {"1", "true", "yes", "on"}
     maintenance_startup_delay_seconds = float(
         os.getenv("OMNIMEMORA_DLP_MAINTENANCE_STARTUP_DELAY_SECONDS", "5")
