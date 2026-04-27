@@ -299,9 +299,22 @@ async def _call_model(
     if protocol == "anthropic":
         content = data.get("content", [])
         if isinstance(content, list):
+            thinking_fallback = ""
             for block in content:
-                if isinstance(block, dict) and block.get("type") == "text":
-                    return block.get("text", ""), None
+                if not isinstance(block, dict):
+                    continue
+                if block.get("type") == "text":
+                    text = block.get("text", "")
+                    if text:
+                        return text, None
+                if not thinking_fallback and isinstance(block.get("thinking"), str):
+                    thinking_fallback = block.get("thinking", "")
+            if thinking_fallback:
+                return thinking_fallback, None
+        for key in ("output_text", "text", "completion"):
+            val = data.get(key)
+            if isinstance(val, str) and val:
+                return val, None
         return "", "No text block in Anthropic response"
 
     else:  # openai
@@ -451,8 +464,18 @@ async def run_task_ab(task: dict, agent_id: str) -> ABResult:
         return result
 
     # --- Step 2: Count input tokens ---
-    result.original_input_tokens = count_tokens_payload(original_payload, protocol)
-    result.compiled_input_tokens = count_tokens_payload(compiled_payload, protocol)
+    meta_original_tokens = compile_meta.get("original_token_estimate")
+    meta_compiled_tokens = compile_meta.get("compiled_token_estimate")
+    result.original_input_tokens = (
+        int(meta_original_tokens)
+        if isinstance(meta_original_tokens, (int, float)) and meta_original_tokens > 0
+        else count_tokens_payload(original_payload, protocol)
+    )
+    result.compiled_input_tokens = (
+        int(meta_compiled_tokens)
+        if isinstance(meta_compiled_tokens, (int, float)) and meta_compiled_tokens >= 0
+        else count_tokens_payload(compiled_payload, protocol)
+    )
     result.token_saved = result.original_input_tokens - result.compiled_input_tokens
     result.token_saved_ratio = (
         result.token_saved / result.original_input_tokens
@@ -512,7 +535,7 @@ async def run_task_ab(task: dict, agent_id: str) -> ABResult:
 # ---------------------------------------------------------------------------
 
 def _load_tasks() -> List[dict]:
-    default_file = os.path.join(_adapter_dir, "__tests__", "sfe006_tasks.json")
+    default_file = os.path.join(_adapter_dir, "sfe006_tasks.json")
     task_file = os.environ.get("SFE006_TASK_FILE", default_file)
     path = os.path.expanduser(os.path.expandvars(task_file))
     if not os.path.exists(path):

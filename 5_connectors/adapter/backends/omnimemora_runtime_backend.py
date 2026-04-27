@@ -86,12 +86,57 @@ class OmniMemoraRuntimeBackend(MemoryBackend):
         response.raise_for_status()
         return response.json()
 
+    def _build_scope_fields(
+        self,
+        *,
+        scope: str,
+        scope_ref: str,
+        access_plan: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        """Translate backend-neutral scope info into runtime body fields."""
+        scope_value = str(scope or "agent")
+        scope_ref_value = str(scope_ref or "default")
+        body: Dict[str, Any] = {
+            "scope": scope_value,
+            "tenant_id": "default",
+        }
+
+        identity = access_plan.get("identity") if isinstance(access_plan, dict) else None
+        if isinstance(identity, dict):
+            tenant_id = str(identity.get("tenant_id") or "").strip()
+            if tenant_id:
+                body["tenant_id"] = tenant_id
+            workspace_id = str(identity.get("window_id") or "").strip()
+            if workspace_id:
+                body["workspace_id"] = workspace_id
+            user_id = str(identity.get("user_id") or "").strip()
+            if user_id:
+                body["user_id"] = user_id
+
+        if scope_value == "agent":
+            body["agent_id"] = scope_ref_value
+            body["sharing_mode"] = "isolated"
+        elif scope_value == "workspace":
+            body["workspace_id"] = scope_ref_value
+            body["sharing_mode"] = "shared"
+        elif scope_value == "user":
+            body["user_id"] = scope_ref_value
+            body["sharing_mode"] = "isolated"
+
+        return body
+
     async def search(self, request: MemorySearchRequest, **kwargs) -> MemorySearchResult:
         """Search via POST /memory/search"""
+        scope_fields = self._build_scope_fields(
+            scope=request.scope,
+            scope_ref=request.scope_ref,
+            access_plan=request.access_plan,
+        )
         body = {
             "keyword": request.query,
             "query": request.query,
             "limit": request.limit,
+            **scope_fields,
         }
         if isinstance(request.access_plan, dict) and request.access_plan:
             body["access_plan"] = request.access_plan
@@ -121,12 +166,18 @@ class OmniMemoraRuntimeBackend(MemoryBackend):
 
     async def write(self, request: MemoryWriteRequest, **kwargs) -> MemoryRecord:
         """Write via POST /memory/write"""
+        scope_fields = self._build_scope_fields(
+            scope=request.scope,
+            scope_ref=request.scope_ref,
+            access_plan=request.access_plan,
+        )
         body = {
             "content": request.content,
             "scope": request.scope,
             "scope_ref": request.scope_ref,
             "metadata": request.metadata,
             "overwrite": request.overwrite,
+            **scope_fields,
         }
         if isinstance(request.access_plan, dict) and request.access_plan:
             body["access_plan"] = request.access_plan

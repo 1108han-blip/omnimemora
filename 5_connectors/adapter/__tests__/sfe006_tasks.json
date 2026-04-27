@@ -1,162 +1,142 @@
 [
   {
-    "id": "task-001",
-    "description": "Write a README for a Python project",
+    "id": "real-long-001",
+    "description": "Claude Code real prompt excerpt: SFE-007 execution order and boundaries",
     "protocol": "anthropic",
     "messages": [
       {
         "role": "user",
-        "content": "Write a README.md for a Python CLI tool called 'omni-status' that shows system metrics. Include: installation, usage examples, configuration, and license."
+        "content": "对，先清理工作区，再做 SFE-007。顺序应该是：1. 先收口 SFE-006，只包含 test_sfe006_real_token_saving_ab_gate.py、sfe006_tasks.json、sfe006_README.md、sfe006_STATUS.md，结论固定为 harness implemented but value not yet established。2. 确认其它脏文件不是 SFE-006，不要混线。3. SFE-006 单独提交。4. 确认工作区只剩允许漂移。5. 再开 SFE-007，只做 response -> internal memory write -> next related request retrieve，不混 SFE-006/5173/RES/meter UI。"
       }
     ],
     "quality_check": {
-      "must_contain": ["install", "usage", "README"],
-      "must_not_contain": ["sorry", "cannot", "error"],
-      "min_length": 200
+      "min_length": 120
     }
   },
   {
-    "id": "task-002",
-    "description": "Explain a Python code snippet",
+    "id": "real-long-002",
+    "description": "Claude Code real prompt excerpt: SFE-006 harness-only conclusion and next actions",
     "protocol": "anthropic",
     "messages": [
       {
         "role": "user",
-        "content": "Explain what this Python code does and suggest improvements:\ndef fetch(url, timeout=30):\n    return requests.get(url, timeout=timeout)"
+        "content": "收到。这个 SFE-006 框架方向是对的，但现在只能算测试框架完成，不能算产品价值验证完成。结论应写死：SFE-006 A/B gate harness implemented; real token-saving quality result not yet established。下一步最小动作不是再写代码，而是从最近 Claude Code / OpenClaw 真实会话提取 10 条 prompt，写入 sfe006_tasks.json，定义每条任务的最低质量标准，跑 SFE-006，再根据 >=9/10 pass 与否决定是否可声明真实省 token。"
       }
     ],
     "quality_check": {
-      "must_contain": ["requests", "timeout"],
-      "must_not_contain": ["sorry", "cannot"],
-      "min_length": 100
+      "min_length": 120
     }
   },
   {
-    "id": "task-003",
-    "description": "Write unit tests for a function",
+    "id": "real-long-003",
+    "description": "Claude Code real prompt excerpt: prioritize real token-saving proof before metrics/UI",
     "protocol": "anthropic",
     "messages": [
       {
         "role": "user",
-        "content": "Write pytest unit tests for this function:\ndef add(a, b):\n    return a + b"
+        "content": "你说得对。优先级应该改成：先证明真实省 token + 不降质量，再管计量和 5173。现在最小正确目标不是账算准，而是同一个真实任务 A 原始 prompt 发给模型，B OmniMemora 编译 prompt 发给同一个模型；比较 B 输入 token 是否更少，输出是否完成同一任务，质量不差于 A 才算真实省 token。不要改 dashboard，不要改统计，不要继续治理，只做 SFE-006 real token-saving A/B gate。"
       }
     ],
     "quality_check": {
-      "must_contain": ["pytest", "def test_"],
-      "must_not_contain": ["sorry", "cannot", "error"],
-      "min_length": 100
+      "min_length": 120
     }
   },
   {
-    "id": "task-004",
-    "description": "Debug a JavaScript error",
+    "id": "real-long-004",
+    "description": "Claude Code real prompt excerpt: diagnose why token saving not established",
     "protocol": "anthropic",
     "messages": [
       {
         "role": "user",
-        "content": "I'm getting 'TypeError: Cannot read property of undefined' in my JavaScript. Here's the code:\nconst data = fetchData();\nconsole.log(data.name.toUpperCase());"
+        "content": "没达到省 token 效果，核心原因不是没有记忆，而是 OmniMemora 没有稳定接到、编译、替换真实客户端请求的完整链路。按真实数据分层说明：真实请求是否拿到完整上下文、是否拿到 wrapper/system-reminder 而不是干净用户任务、产品是否只在记录诊断而没有稳定处在真实发送路径。并给出最小闭环检查：真实请求 -> 18011 -> 原始 prompt -> 编译 prompt -> 上游最终发送 payload -> meter 记录。"
       }
     ],
     "quality_check": {
-      "must_contain": ["undefined", "null", "check"],
-      "must_not_contain": ["sorry", "cannot"],
-      "min_length": 80
+      "min_length": 140
     }
   },
   {
-    "id": "task-005",
-    "description": "Refactor a long function",
+    "id": "real-long-005",
+    "description": "Claude Code real prompt excerpt: RES-027C contract repair",
     "protocol": "anthropic",
     "messages": [
       {
         "role": "user",
-        "content": "Refactor this long function to be more readable:\ndef process_user(user):\n    name = user.get('name', '')\n    email = user.get('email', '')\n    age = user.get('age', 0)\n    if age > 18:\n        return f'{name} ({email}) is an adult'\n    else:\n        return f'{name} ({email}) is a minor'"
+        "content": "RES-027C Meter Parity Contract Repair：修正 parity hash contract，把 provenance-only 差异从 critical mismatch 中分离。保留 raw/full payload hash 做诊断，新增 critical business hash 只用于 critical_mismatch_count；sharing_policy_source 这类来源标记不进入 critical hash；request_id、tenant、agent、family、token/count、task/context、query、timestamp 仍为 critical。输出应明确 semantic mismatch 与 critical mismatch 的边界和 gate 影响。"
       }
     ],
     "quality_check": {
-      "must_contain": ["def ", "return"],
-      "must_not_contain": ["sorry", "cannot", "error"],
-      "min_length": 100
+      "min_length": 140
     }
   },
   {
-    "id": "task-006",
-    "description": "Write SQL query for reports",
+    "id": "real-long-006",
+    "description": "OpenClaw real prompt excerpt: build AI movie asset pipeline folder/doc structure",
     "protocol": "anthropic",
     "messages": [
       {
         "role": "user",
-        "content": "Write a SQL query that shows the top 10 customers by total order value, including their name, email, and total spend. Tables: customers(id, name, email), orders(id, customer_id, total)"
+        "content": "根据下面要求完善文件架构和文档：在 /Volumes/Omni/work/movie 创建路径，把方案拆解到相应目录并形成 readme 模板。按 AI 电影级连续叙事生产链，角色资产分身份层、表演动作层、镜头环境层；不要把角色表情场景镜头塞进一个 prompt。先搭角色资产包，包括 identity matrix、12 表情矩阵、口型资产、眼神资产，给出命名规范与目录结构占位模板。"
       }
     ],
     "quality_check": {
-      "must_contain": ["SELECT", "ORDER BY", "LIMIT 10"],
-      "must_not_contain": ["sorry", "cannot", "error"],
-      "min_length": 80
+      "min_length": 160
     }
   },
   {
-    "id": "task-007",
-    "description": "Explain a design pattern",
+    "id": "real-long-007",
+    "description": "OpenClaw real prompt excerpt: generate short filename slug from long conversation summary",
     "protocol": "anthropic",
     "messages": [
       {
         "role": "user",
-        "content": "Explain the Repository pattern in Python. When should I use it? Show a simple example."
+        "content": "Based on this conversation, generate a short 1-2 word filename slug (lowercase, hyphen-separated, no file extension). Conversation summary includes rsync failure details, one failed VOB file, and a follow-up request to continue syncing remaining files. Return only the slug with no extra text."
       }
     ],
     "quality_check": {
-      "must_contain": ["repository", "pattern", "example"],
-      "must_not_contain": ["sorry", "cannot"],
-      "min_length": 150
+      "min_length": 5
     }
   },
   {
-    "id": "task-008",
-    "description": "Optimize a slow algorithm",
+    "id": "real-long-008",
+    "description": "Claude Code real prompt excerpt: active model and runtime caveat context",
     "protocol": "anthropic",
     "messages": [
       {
         "role": "user",
-        "content": "This function is slow for large inputs. Optimize it:\ndef find_duplicates(items):\n    duplicates = []\n    for i in range(len(items)):\n        for j in range(i+1, len(items)):\n            if items[i] == items[j]:\n                duplicates.append(items[i])\n    return duplicates"
+        "content": "As you answer, currentDate is 2026/04/26 and local-command-caveat says command-result messages should not be replied unless explicitly asked. 在此约束下回答：现在用的是什么模型？需要给出简短直接答案，不要展开治理。"
       }
     ],
     "quality_check": {
-      "must_contain": ["set(", "dict(", "O(n)"],
-      "must_not_contain": ["sorry", "cannot", "error"],
-      "min_length": 80
+      "min_length": 30
     }
   },
   {
-    "id": "task-009",
-    "description": "Write API documentation",
+    "id": "real-long-009",
+    "description": "Claude Code real prompt excerpt: SFE-006 gate design and acceptance criteria",
     "protocol": "anthropic",
     "messages": [
       {
         "role": "user",
-        "content": "Write OpenAPI 3.0 documentation for a GET /users/{id} endpoint that returns user info. Include request parameters, response schema, and error codes."
+        "content": "设计并执行 SFE-006 Real Token Saving A/B Gate：同一真实任务分别走原始 prompt 和 OmniMemora 编译 prompt，比较输入 token 与输出质量。硬性规则：compile_success、compiled_input_tokens < original_input_tokens、quality_pass。门槛：eligible >= 10 时至少 9/10 通过，若 eligible < 10 则需全过。请输出可执行测试方案与失败处理策略。"
       }
     ],
     "quality_check": {
-      "must_contain": ["openapi", "200", "users"],
-      "must_not_contain": ["sorry", "cannot", "error"],
-      "min_length": 150
+      "min_length": 120
     }
   },
   {
-    "id": "task-010",
-    "description": "Docker compose for web app",
+    "id": "real-long-010",
+    "description": "Claude Code real prompt excerpt: keep scope strict and avoid unrelated lines",
     "protocol": "anthropic",
     "messages": [
       {
         "role": "user",
-        "content": "Write a docker-compose.yml for a web app with: Python FastAPI backend, PostgreSQL database, and Redis cache. Include healthchecks."
+        "content": "保持执行边界：不动 5173、不动 meter UI、不动 RES/DLP、不改产品定义、不新增治理。只跑 harness，记录真实结果。先跑 SFE-007 Path A/Path B 验证 adapter 可达、memory write/search 可达、写入后能搜到；通过后再跑 SFE-006 A/B，只判断 compiled prompt 是否更短与输出质量是否不差。"
       }
     ],
     "quality_check": {
-      "must_contain": ["fastapi", "postgres", "redis", "version:"],
-      "must_not_contain": ["sorry", "cannot", "error"],
-      "min_length": 150
+      "min_length": 120
     }
   }
 ]

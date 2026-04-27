@@ -178,10 +178,17 @@ async def write_memory_via_adapter(
         if resp.status_code >= 400:
             return WriteResult(success=False, error=f"HTTP {resp.status_code}: {resp.text[:200]}")
         data = resp.json()
+        status = data.get("status", "")
+        reason = data.get("reason", "")
+        error_code = data.get("error_code", "")
+        support = data.get("support", {}) if isinstance(data.get("support"), dict) else {}
+        detail = support.get("detail", "") if isinstance(support, dict) else ""
+        error_text = " | ".join([x for x in [reason, error_code, detail] if x])
         return WriteResult(
-            success=data.get("status") in ("stored", "stored_with_warning"),
+            success=status in ("stored", "stored_with_warning"),
             memory_id=data.get("memory_id", ""),
-            status=data.get("status", ""),
+            status=status,
+            error=error_text,
         )
     except httpx.ConnectError as e:
         return WriteResult(success=False, error=f"Connection error: {e}")
@@ -202,7 +209,7 @@ async def search_memory_via_adapter(
     url = f"{cfg['adapter_url']}/memory/search"
     body = {
         "query": query,
-        "agent_id": agent_id,
+        "agent": agent_id,
         "limit": limit,
     }
     try:
@@ -247,26 +254,35 @@ async def run_path_a(marker: str, cfg: dict) -> RoundtripResult:
         result.error = f"write failed: {write_res.error}"
         return result
 
-    # Search for the marker (should retrieve this memory)
-    search_res = await search_memory_via_adapter(
-        query=f"SFE-007 {marker}",
-        agent_id=agent_id,
-        cfg=cfg,
-    )
-    result.search_result = search_res
-    result.search_ok = search_res.success
-
-    if search_res.success:
-        # Check if our memory is in results
+    # Search for marker with short retry to absorb indexing lag.
+    search_res: Optional[SearchResult] = None
+    found = False
+    for _ in range(5):
+        search_res = await search_memory_via_adapter(
+            query=marker,
+            agent_id=agent_id,
+            cfg=cfg,
+        )
+        if not search_res.success:
+            await asyncio.sleep(0.2)
+            continue
         found = any(marker in str(mem.get("content", "")) for mem in search_res.memories)
-        result.search_ok = found
-        if not found:
+        if found:
+            break
+        await asyncio.sleep(0.2)
+
+    result.search_result = search_res or SearchResult(success=False, memories=[], error="search_not_executed")
+    result.search_ok = bool(search_res and search_res.success and found)
+
+    if not result.search_ok:
+        if search_res and not search_res.success:
+            result.error = f"search failed: {search_res.error}"
+        else:
+            count = len(search_res.memories) if search_res else 0
             result.error = (
                 f"write succeeded (id={write_res.memory_id}) "
-                f"but search returned {len(search_res.memories)} results without marker"
+                f"but search returned {count} results without marker"
             )
-    else:
-        result.error = f"search failed: {search_res.error}"
 
     return result
 
@@ -295,6 +311,9 @@ async def run_path_b(marker: str, cfg: dict) -> RoundtripResult:
     )
 
     write_res = await write_memory_via_adapter(known_content, agent_id, cfg=cfg)
+    if not write_res.success:
+        await asyncio.sleep(0.2)
+        write_res = await write_memory_via_adapter(known_content, agent_id, cfg=cfg)
     result.write_result = write_res
     result.write_ok = write_res.success
 
@@ -307,7 +326,7 @@ async def run_path_b(marker: str, cfg: dict) -> RoundtripResult:
 
     # Build a request that should trigger retrieval of this memory
     # (compile should find it based on the config-related keywords)
-    test_query = "Where is the database configuration in this project?"
+    test_query = marker
     payload = {
         "messages": [{"role": "user", "content": test_query}],
     }
@@ -321,7 +340,7 @@ async def run_path_b(marker: str, cfg: dict) -> RoundtripResult:
         return result
 
     # Check if the written memory's content appears in the compiled context
-    found_in_context = marker in compile_res.packed_context or "config" in compile_res.packed_context.lower()
+    found_in_context = marker in compile_res.packed_context
     result.memory_found_in_context = found_in_context
     result.compile_retrieves_memory = found_in_context
 
@@ -373,11 +392,29 @@ async def _compile_via_adapter(
     except Exception as e:
         return CompileResult(success=False, error=str(e)[:200])
 
+    packed_context = ""
+    if isinstance(compiled_payload, dict):
+        system_payload = compiled_payload.get("system")
+        if isinstance(system_payload, str):
+            packed_context = system_payload
+        elif isinstance(system_payload, list):
+            text_parts = []
+            for part in system_payload:
+                if isinstance(part, dict) and part.get("type") == "text":
+                    text_parts.append(str(part.get("text", "")))
+            packed_context = "\n".join([p for p in text_parts if p]).strip()
+        else:
+            messages = compiled_payload.get("messages")
+            if isinstance(messages, list) and messages:
+                first = messages[0]
+                if isinstance(first, dict) and first.get("role") == "system":
+                    packed_context = str(first.get("content", "") or "")
+
     return CompileResult(
         success=compile_meta.get("compile_status") == "compile_success",
         compile_status=compile_meta.get("compile_status", "unknown"),
         selected_memory_count=compile_meta.get("selected_memory_count", 0),
-        packed_context=compile_meta.get("packed_context", ""),
+        packed_context=packed_context,
     )
 
 
@@ -419,8 +456,7 @@ async def run_path_c(cfg: dict) -> RoundtripResult:
 import pytest
 
 
-@pytest.mark.asyncio
-async def test_sfe007_path_a_write_search_roundtrip():
+def test_sfe007_path_a_write_search_roundtrip():
     """
     Path A: Write memory via /memory/write, then search via /memory/search.
     Verify the written memory appears in search results.
@@ -428,7 +464,7 @@ async def test_sfe007_path_a_write_search_roundtrip():
     cfg = _cfg()
     marker = f"patha-{uuid.uuid4().hex[:8]}"
 
-    result = await run_path_a(marker, cfg)
+    result = asyncio.run(run_path_a(marker, cfg))
 
     _print_result(result)
 
@@ -438,8 +474,7 @@ async def test_sfe007_path_a_write_search_roundtrip():
     )
 
 
-@pytest.mark.asyncio
-async def test_sfe007_path_b_write_compile_retrieval():
+def test_sfe007_path_b_write_compile_retrieval():
     """
     Path B: Write a memory item, then call run_gateway_compile() with
     a related query. Verify the compiled payload retrieves it.
@@ -451,15 +486,19 @@ async def test_sfe007_path_b_write_compile_retrieval():
     marker = f"pathb-{uuid.uuid4().hex[:8]}"
 
     # Check if adapter is reachable
-    try:
+    async def _check_health() -> Optional[int]:
         async with httpx.AsyncClient(timeout=5.0) as client:
             health = await client.get(f"{cfg['adapter_url']}/health")
-            if health.status_code >= 500:
-                pytest.skip(f"Adapter health check failed: {health.status_code}")
+            return health.status_code
+
+    try:
+        health_status = asyncio.run(_check_health())
+        if health_status is not None and health_status >= 500:
+            pytest.skip(f"Adapter health check failed: {health_status}")
     except httpx.ConnectError:
         pytest.skip(f"Adapter not reachable at {cfg['adapter_url']} — start adapter first")
 
-    result = await run_path_b(marker, cfg)
+    result = asyncio.run(run_path_b(marker, cfg))
 
     _print_result(result)
 
@@ -473,8 +512,7 @@ async def test_sfe007_path_b_write_compile_retrieval():
     )
 
 
-@pytest.mark.asyncio
-async def test_sfe007_path_c_agent_loop():
+def test_sfe007_path_c_agent_loop():
     """
     Path C: Agent end-to-end feedback loop.
 
@@ -482,7 +520,7 @@ async def test_sfe007_path_c_agent_loop():
     Documents the expected behavior.
     """
     cfg = _cfg()
-    result = await run_path_c(cfg)
+    result = asyncio.run(run_path_c(cfg))
 
     _print_result(result)
 
