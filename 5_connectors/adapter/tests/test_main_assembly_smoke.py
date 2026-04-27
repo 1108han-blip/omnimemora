@@ -54,8 +54,17 @@ def test_default_internal_get_paths_skip_trace_writes():
     Request.url.path = "/data-lifecycle/meter-storage/status"
     assert main_mod._skip_default_trace_write(Request()) is True
 
+    Request.url.path = "/usage/token-savings"
+    assert main_mod._skip_default_trace_write(Request()) is True
+
 
 def test_diagnostics_health_defaults_to_local_fast_mode():
     diagnostics_surface = importlib.import_module("5_connectors.adapter.diagnostics_surface")
 
     assert diagnostics_surface.health.__defaults__ == ("local",)
+
+
+def test_local_usage_status_is_not_quota_observation_path():
+    quota_observer = importlib.import_module("5_connectors.adapter.quota_observer")
+
+    assert quota_observer.is_quota_related_path("/usage/token-savings") is False

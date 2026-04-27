@@ -29,6 +29,24 @@ def _configure(legacy_get_meter):
     )
 
 
+def test_token_savings_all_uses_summary_first_fast_path(monkeypatch):
+    app = FastAPI()
+    app.include_router(usage_surface.router)
+    _configure(lambda _rid: None)
+    monkeypatch.setattr(
+        usage_surface._metrics_service,
+        "compute_metrics_summary",
+        lambda tenant: {"request_count": 3, "tokens_saved": 90, "token_saving_ratio": 0.3},
+    )
+
+    client = TestClient(app)
+    response = client.get("/usage/token-savings?tenant=all")
+
+    assert response.status_code == 200
+    assert response.json()["read_mode"] == "summary_first"
+    assert response.json()["total_requests"] == 3
+
+
 def test_request_meter_route_uses_resolver_and_headers(monkeypatch):
     app = FastAPI()
     app.include_router(usage_surface.router)

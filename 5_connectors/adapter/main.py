@@ -197,7 +197,12 @@ _ULTRA_FAST_INTERNAL_GET_PATHS = frozenset(
     {
         "/health",
         "/metrics/summary",
+        "/metrics/summary_24h",
         "/metrics/core_capabilities",
+        "/metrics/core_capabilities/trend",
+        "/metrics/recent_requests",
+        "/usage/token-savings",
+        "/usage/token-savings/trend",
         "/data-lifecycle/status",
         "/data-lifecycle/meter-storage/status",
         "/data-lifecycle/meter-storage/parity",

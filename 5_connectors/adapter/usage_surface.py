@@ -1,4 +1,5 @@
 from datetime import datetime
+import importlib
 from typing import Any, Callable, Optional
 
 from fastapi import APIRouter, HTTPException, Response
@@ -7,6 +8,7 @@ from .access import get_tenant_registry_entry
 from .application import request_meter_read_resolver as _request_meter_resolver
 
 router = APIRouter()
+_metrics_service = importlib.import_module("5_connectors.adapter.metrics_service")
 
 _config = None
 _get_tenant_usage_fn: Optional[Callable[..., Any]] = None
@@ -28,6 +30,35 @@ def configure_usage_surface(
     _get_meter_fn = get_meter_fn
 
 
+def _fast_all_usage_payload(tenant: str) -> Optional[dict[str, Any]]:
+    if tenant != "all":
+        return None
+    summary = _metrics_service.compute_metrics_summary("all")
+    if not isinstance(summary, dict):
+        return None
+    request_count = int(summary.get("request_count") or 0)
+    tokens_saved = int(summary.get("tokens_saved") or 0)
+    savings_ratio = float(summary.get("token_saving_ratio") or 0.0)
+    return {
+        "tenant": tenant,
+        "request_count": request_count,
+        "total_requests": request_count,
+        "saved_tokens_estimate_total": tokens_saved,
+        "actual_tokens_estimate_total": 0,
+        "baseline_tokens_total": 0,
+        "actual_tokens_total": 0,
+        "saved_tokens_total": tokens_saved,
+        "average_savings_ratio": savings_ratio,
+        "last_request_at": None,
+        "current_period_usage": 0,
+        "by_agent": [],
+        "by_workspace": [],
+        "period_breakdown": {"today": 0, "week": 0, "month": 0},
+        "recent_requests": [],
+        "read_mode": "summary_first",
+    }
+
+
 @router.get("/usage/token-savings")
 async def get_token_savings(
     tenant: str,
@@ -38,7 +69,11 @@ async def get_token_savings(
     start_dt = datetime.fromisoformat(start_time) if start_time else None
     end_dt = datetime.fromisoformat(end_time) if end_time else None
 
-    usage = _get_tenant_usage_fn(tenant, agent=agent, start_time=start_dt, end_time=end_dt)
+    usage = None
+    if agent is None and start_dt is None and end_dt is None:
+        usage = _fast_all_usage_payload(tenant)
+    if usage is None:
+        usage = _get_tenant_usage_fn(tenant, agent=agent, start_time=start_dt, end_time=end_dt)
     registry_entry = get_tenant_registry_entry(_config.omnimemora_access_registry_path, tenant)
     monthly_quota_tokens = None
     plan = None

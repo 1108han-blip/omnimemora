@@ -27,9 +27,16 @@ PROXY_INGRESS_PATHS = {
     "/v1/chat/completions",
 }
 
+LOCAL_USAGE_STATUS_PATHS = {
+    "/usage/token-savings",
+    "/usage/token-savings/trend",
+}
+
 
 def is_quota_related_path(path: str) -> bool:
     lowered = (path or "").lower()
+    if lowered in LOCAL_USAGE_STATUS_PATHS:
+        return False
     if lowered in PROXY_INGRESS_PATHS:
         return True
     return any(token in lowered for token in QUOTA_ROUTE_KEYWORDS)
