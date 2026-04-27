@@ -100,6 +100,7 @@ export interface CoreCapabilitiesResponse {
   period: '24h';
   observed_request_count: number;
   non_value_count: number;
+  internal_or_wrapper_count?: number;
   cards: {
     real_requests: RealRequestsCard;
     context_compression: ContextCompressionCard;
@@ -112,6 +113,7 @@ export interface CoreCapabilitiesTrendPoint {
   date: string;
   observed_request_count: number;
   non_value_count: number;
+  internal_or_wrapper_count?: number;
   real_requests: RealRequestsCard;
   context_compression: ContextCompressionCard;
   memory_enhancement: MemoryEnhancementCard;
@@ -176,10 +178,16 @@ export interface RecentRequest {
   saved_tokens: number;
   savings_ratio: number;
   query: string;
+  raw_query?: string;
+  user_visible_query?: string;
   packed_memory_count: number;
   local_cards_used: number;
   remote_used_count: number;
   request_class: 'internal' | 'task_non_value' | 'value_qualified';
+  qualification_reason?: string;
+  value_paths?: string[];
+  diagnostic_label?: string;
+  display_savings_as_value?: boolean;
 }
 
 export interface RecentRequestsResponse {

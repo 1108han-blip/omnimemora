@@ -41,6 +41,52 @@ function buildHrefForTab(tab: 'overview' | 'agents', tenant: string): string {
   return `${buildPathForTab(tab)}?${params.toString()}`;
 }
 
+function PersonalValueLoopPanel({
+  request,
+  wrapperCount,
+}: {
+  request: RecentRequest | null;
+  wrapperCount: number;
+}) {
+  const valuePaths = request?.value_paths ?? [];
+  const helped = request?.request_class === 'value_qualified' && valuePaths.length > 0;
+  const status = helped ? 'Working' : request ? 'Not helping yet' : 'Only observing';
+  const statusClass = helped
+    ? 'text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-300 dark:bg-emerald-950 dark:border-emerald-900'
+    : request
+      ? 'text-amber-800 bg-amber-50 border-amber-200 dark:text-amber-200 dark:bg-amber-950 dark:border-amber-900'
+      : 'text-zinc-600 bg-zinc-50 border-zinc-200 dark:text-zinc-300 dark:bg-zinc-900 dark:border-zinc-700';
+
+  const visibleQuery = (request?.user_visible_query || request?.query || '').trim();
+
+  return (
+    <section className={`rounded-xl border px-5 py-4 ${statusClass}`}>
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div>
+          <h2 className="text-sm font-semibold">Personal Value Loop</h2>
+          <p className="mt-1 text-xs opacity-80">
+            {helped
+              ? `OmniMemora used ${valuePaths.length} value path(s): ${valuePaths.join(', ')}.`
+              : request
+                ? `No memory was used because ${request.qualification_reason || 'no value path was detected'}.`
+                : wrapperCount > 0
+                  ? `Only wrapper/context envelope traffic was observed. No user task reached the value loop yet.`
+                  : `No recent user-visible task was observed.`}
+          </p>
+          {visibleQuery && (
+            <p className="mt-2 max-w-3xl truncate font-mono text-[11px] opacity-70" title={visibleQuery}>
+              Latest task: {visibleQuery}
+            </p>
+          )}
+        </div>
+        <div className="shrink-0 rounded-full border border-current px-3 py-1 text-[11px] font-semibold">
+          {status}
+        </div>
+      </div>
+    </section>
+  );
+}
+
 export default function App() {
   const [tenant, setTenant] = useState<string>(() => {
     const fromUrl = new URLSearchParams(window.location.search).get('tenant');
@@ -264,6 +310,10 @@ export default function App() {
     () => normalizeRecentRequestUsageList(requests),
     [requests]
   );
+  const latestUserVisibleRequest = useMemo(
+    () => rankRecentRequests(requests.filter((req) => req.request_class !== 'internal' && !isInternalEvent(req.query, req.agent)))[0] ?? null,
+    [requests]
+  );
   const usageFamilies = useMemo(
     () => normalizeAgentUsageList(usage?.by_agent ?? []),
     [usage?.by_agent]
@@ -362,6 +412,12 @@ export default function App() {
         : 'no-active';
   const hasRecentControlSignal = activeAgentControls.some((ctrl) => isWithinWindow(ctrl.last_seen_at, 5));
   const overviewHasOnlyControlSignal = activeTab === 'overview' && requests.length === 0 && hasRecentControlSignal;
+  const internalOrWrapperCount = coreCap24h?.internal_or_wrapper_count ?? Math.max(
+    0,
+    (coreCap24h?.observed_request_count ?? 0) -
+      (coreCap24h?.non_value_count ?? 0) -
+      (coreCap24h?.cards.real_requests.count ?? 0)
+  );
 
   return (
     <div className="min-h-screen bg-zinc-50 dark:bg-zinc-950">
@@ -493,9 +549,21 @@ export default function App() {
                     <span className="text-zinc-400">Non-Value</span>
                     <span className="font-mono font-semibold text-amber-600 dark:text-amber-400">{coreCap24h.non_value_count.toLocaleString()}</span>
                   </div>
+                  <div className="w-px h-3 bg-zinc-300 dark:bg-zinc-600" />
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-zinc-400">Internal/Wrapper</span>
+                    <span className="font-mono font-semibold text-zinc-500 dark:text-zinc-400">{internalOrWrapperCount.toLocaleString()}</span>
+                  </div>
+                </div>
+              )}
+              {coreCap24h && coreCap24h.observed_request_count > 0 && coreCap24h.cards.real_requests.count === 0 && (
+                <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950 dark:text-amber-200">
+                  当前 OmniMemora 只观察到流量，还没有证明“用了记忆”。Non-value 请求不会再把 token reduction 当作产品价值展示。
                 </div>
               )}
             </section>
+
+            <PersonalValueLoopPanel request={latestUserVisibleRequest} wrapperCount={internalOrWrapperCount} />
 
             {/* Module 2: Agent Usage */}
             <section>

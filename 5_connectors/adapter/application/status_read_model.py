@@ -1171,47 +1171,18 @@ def _derive_product_nodes(meter_dict: Dict[str, Any], chain_dict: Dict[str, Any]
 
 def _classify_meter_request(meter: Any) -> Dict[str, Any]:
     request_classifier = _get_request_classifier()
-    agent = getattr(meter, "agent", "") or ""
-    query = getattr(meter, "query", "") or ""
-    coarse_class = request_classifier.classify_request(agent, query)
-
-    packed = getattr(meter, "packed_memory_count", 0) or 0
-    local_cards = getattr(meter, "local_cards_used", 0) or 0
-    remote = getattr(meter, "remote_used_count", 0) or 0
-
-    value_paths: List[str] = []
-    if packed > 0:
-        value_paths.append("packed_memory")
-    if local_cards > 0:
-        value_paths.append("local_cards")
-    if remote > 0:
-        value_paths.append("remote_forward")
-
-    if coarse_class == "internal":
-        request_class = "internal"
-        qualification_reason = "bootstrap/handshake/transport event"
-    elif coarse_class == "task_non_value":
-        if value_paths:
-            request_class = "value_qualified"
-            qualification_reason = f"user-visible task with active value path: {', '.join(value_paths)}"
-        else:
-            request_class = "task_non_value"
-            qualification_reason = "user-visible task but no established value path (no memory pack, no local cards, no remote forward)"
-    else:
-        if value_paths:
-            request_class = "value_qualified"
-            qualification_reason = f"user-visible task with active value path: {', '.join(value_paths)}"
-        else:
-            request_class = "task_non_value"
-            qualification_reason = "user-visible task but no established value path"
+    description = request_classifier.describe_request_value(meter)
 
     return {
-        "request_class": request_class,
-        "value_path": value_paths,
-        "qualification_reason": qualification_reason,
-        "packed_memory_count": packed,
-        "local_cards_used": local_cards,
-        "remote_used_count": remote,
+        "request_class": description["request_class"],
+        "value_path": description["value_paths"],
+        "value_paths": description["value_paths"],
+        "qualification_reason": description["qualification_reason"],
+        "user_visible_query": description["user_visible_query"],
+        "diagnostic_label": description["diagnostic_label"],
+        "packed_memory_count": getattr(meter, "packed_memory_count", 0) or 0,
+        "local_cards_used": getattr(meter, "local_cards_used", 0) or 0,
+        "remote_used_count": getattr(meter, "remote_used_count", 0) or 0,
     }
 
 

@@ -148,6 +148,63 @@ def classify_request(agent: str, query: str, extra: Optional[dict] = None) -> st
     return "internal"
 
 
+def value_paths_for_meter(meter: Any) -> List[str]:
+    """Return concrete OmniMemora value paths observed on a meter record."""
+    paths: List[str] = []
+    if (getattr(meter, "packed_memory_count", 0) or 0) > 0:
+        paths.append("packed_memory")
+    if (getattr(meter, "local_cards_used", 0) or 0) > 0:
+        paths.append("local_cards")
+    if (getattr(meter, "remote_used_count", 0) or 0) > 0:
+        paths.append("remote_forward")
+    return paths
+
+
+def describe_request_value(meter: Any) -> dict:
+    """
+    Build user-facing value-loop diagnostics for dashboard surfaces.
+
+    Token reduction is intentionally not treated as a value path. A request only
+    becomes value-qualified when OmniMemora actually contributed memory/context
+    evidence through a concrete value path.
+    """
+    agent = getattr(meter, "agent", "") or ""
+    raw_query = getattr(meter, "query", "") or ""
+    visible_query = extract_user_visible_query(raw_query)
+    coarse_class = classify_request(agent, raw_query)
+    value_paths = value_paths_for_meter(meter)
+    task_type = getattr(meter, "task_type", None) or "unknown"
+
+    if coarse_class == "internal":
+        request_class = "internal"
+        if is_wrapper_context_envelope(raw_query):
+            reason = "system wrapper only"
+            label = "wrapper/context envelope"
+        else:
+            reason = "no user-visible task content"
+            label = "internal product traffic"
+    elif value_paths:
+        request_class = "value_qualified"
+        reason = f"memory value path active: {', '.join(value_paths)}"
+        label = "OmniMemora helped"
+    else:
+        request_class = "task_non_value"
+        reasons = ["no memory packed", "no value path"]
+        if task_type == "unknown":
+            reasons.insert(1, "task unknown")
+        reason = "; ".join(reasons)
+        label = "not helping yet"
+
+    return {
+        "request_class": request_class,
+        "value_paths": value_paths,
+        "value_path": value_paths,
+        "qualification_reason": reason,
+        "user_visible_query": visible_query,
+        "diagnostic_label": label,
+    }
+
+
 def is_internal_request(meter: Any) -> bool:
     """
     Returns True only for internal classification.
@@ -184,10 +241,7 @@ def is_task_non_value(meter: Any) -> bool:
     if classify_request(agent, query) != "task_non_value":
         return False
     # Must also have no value paths
-    packed = getattr(meter, "packed_memory_count", 0) or 0
-    local_cards = getattr(meter, "local_cards_used", 0) or 0
-    remote = getattr(meter, "remote_used_count", 0) or 0
-    return not (packed > 0 or local_cards > 0 or remote > 0)
+    return not value_paths_for_meter(meter)
 
 
 def is_value_qualified(meter: Any) -> bool:
@@ -216,10 +270,7 @@ def is_value_qualified(meter: Any) -> bool:
         return False
 
     # Check value paths
-    packed = getattr(meter, "packed_memory_count", 0) or 0
-    local_cards = getattr(meter, "local_cards_used", 0) or 0
-    remote = getattr(meter, "remote_used_count", 0) or 0
-    return packed > 0 or local_cards > 0 or remote > 0
+    return bool(value_paths_for_meter(meter))
 
 
 def is_real_request(meter: Any) -> bool:
@@ -262,6 +313,17 @@ def is_task_request(meter: Any) -> bool:
     even if it originated from a validation run.
     """
     return bool(extract_user_visible_query(getattr(meter, "query", "") or ""))
+
+
+def is_wrapper_context_envelope(query: str) -> bool:
+    """Return True for system-reminder/context envelopes without a user task."""
+    raw = (query or "").strip()
+    if not raw:
+        return False
+    lower = raw.lower()
+    if not lower.startswith("<system-reminder"):
+        return False
+    return not extract_user_visible_query(raw)
 
 
 def is_default_overview_request(meter: Any) -> bool:
@@ -344,6 +406,12 @@ def extract_user_visible_query(query: str) -> str:
         return ""
 
     lower = raw.lower()
+    if lower.startswith("<system-reminder"):
+        closing = lower.find("</system-reminder>")
+        if closing == -1:
+            return ""
+        return raw[closing + len("</system-reminder>") :].strip()
+
     if not any(lower.startswith(prefix) for prefix in _INTERNAL_QUERY_PREFIXES):
         return raw
 

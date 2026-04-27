@@ -21,7 +21,7 @@ function requestClassColor(cls: RecentRequest['request_class']): string {
 
 export function LiveRequestFlow({ requests, onSelect, selectedRequestId = null }: LiveRequestFlowProps) {
   // Filter out internal events and normalize agent names
-  const userFacingRequests = requests.filter(req => !isInternalEvent(req.query, req.agent));
+  const userFacingRequests = requests.filter(req => req.request_class !== 'internal' && !isInternalEvent(req.query, req.agent));
   const normalizedRequests = rankRecentRequests(userFacingRequests).map(req => ({
     ...req,
     agent: normalizeFamilyName(req.agent),
@@ -40,7 +40,7 @@ export function LiveRequestFlow({ requests, onSelect, selectedRequestId = null }
     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
       <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Live Request Flow</h3>
-        <span className="text-xs text-zinc-400">{displayedRequests.length} task requests</span>
+        <span className="text-xs text-zinc-400">{displayedRequests.length} user-visible requests</span>
       </div>
       <div className="divide-y divide-zinc-100 dark:divide-zinc-800 max-h-64 overflow-y-auto">
         {displayedRequests.map((req) => (
@@ -56,8 +56,8 @@ export function LiveRequestFlow({ requests, onSelect, selectedRequestId = null }
             <div className="flex items-center justify-between gap-4">
               <span className="text-zinc-400">{formatTime(req.timestamp)}</span>
               <span className="font-medium text-zinc-600 dark:text-zinc-300">{req.agent}</span>
-              <span className={req.bypass ? 'text-amber-600' : 'text-emerald-600'}>
-                {req.bypass ? 'bypass' : `saved ${formatRatioPct(req.savings_ratio)}`}
+              <span className={valueBadgeClass(req)}>
+                {valueBadgeLabel(req)}
               </span>
               <span className="text-zinc-500">{req.packed_memory_count} mems</span>
               <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
@@ -70,13 +70,43 @@ export function LiveRequestFlow({ requests, onSelect, selectedRequestId = null }
               <span className={`text-[10px] font-medium ${requestClassColor(req.request_class)}`}>
                 [{requestClassLabel(req.request_class)}]
               </span>
-              <span className="text-zinc-300 truncate max-w-[200px]">{req.query || req.request_id}</span>
+              <span className="text-zinc-300 truncate max-w-[240px]" title={requestDisplayText(req)}>
+                {requestDisplayText(req)}
+              </span>
             </div>
+            {req.request_class !== 'value_qualified' && req.qualification_reason && (
+              <div className="mt-1 truncate text-[10px] text-amber-600 dark:text-amber-300">
+                No memory was used because {req.qualification_reason}.
+              </div>
+            )}
           </button>
         ))}
       </div>
     </div>
   );
+}
+
+function requestDisplayText(req: RecentRequest): string {
+  const visible = (req.user_visible_query || req.query || '').trim();
+  if (visible) return visible;
+  return req.diagnostic_label || 'wrapper/context envelope';
+}
+
+function valueBadgeLabel(req: RecentRequest): string {
+  if (req.bypass) return 'bypass';
+  if (req.display_savings_as_value || req.request_class === 'value_qualified') {
+    return `value ${formatRatioPct(req.savings_ratio)}`;
+  }
+  if (req.savings_ratio > 0) return 'diagnostic reduction';
+  return req.diagnostic_label || 'not helping yet';
+}
+
+function valueBadgeClass(req: RecentRequest): string {
+  if (req.bypass) return 'text-amber-600';
+  if (req.display_savings_as_value || req.request_class === 'value_qualified') {
+    return 'text-emerald-600';
+  }
+  return 'text-zinc-500';
 }
 
 function formatTime(ts: string): string {

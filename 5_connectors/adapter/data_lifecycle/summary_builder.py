@@ -167,6 +167,7 @@ def _build_core_capabilities_24h_payload(
     value_qualified_meters = [m for m in observed_list if is_value_qualified(m)]
     task_non_value_count = sum(1 for m in observed_list if is_task_non_value(m))
     observed_count = len(observed_list)
+    internal_or_wrapper_count = max(0, observed_count - task_non_value_count - len(value_qualified_meters))
     qualified_count = len(value_qualified_meters)
     qualified_ratio = (qualified_count / observed_count) if observed_count > 0 else 0.0
 
@@ -175,6 +176,7 @@ def _build_core_capabilities_24h_payload(
             "period": "24h",
             "observed_request_count": observed_count,
             "non_value_count": task_non_value_count,
+            "internal_or_wrapper_count": internal_or_wrapper_count,
             "cards": {
                 "real_requests": {"count": 0, "ratio": 0.0},
                 "context_compression": {"ratio": 0.0, "baseline_tokens": 0, "actual_tokens": 0},
@@ -200,6 +202,7 @@ def _build_core_capabilities_24h_payload(
         "period": "24h",
         "observed_request_count": observed_count,
         "non_value_count": task_non_value_count,
+        "internal_or_wrapper_count": internal_or_wrapper_count,
         "cards": {
             "real_requests": {"count": qualified_count, "ratio": round(qualified_ratio, 4)},
             "context_compression": {

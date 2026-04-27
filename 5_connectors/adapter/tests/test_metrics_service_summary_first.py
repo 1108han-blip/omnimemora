@@ -22,6 +22,7 @@ class Meter:
         remote_used_count: int,
         agent: str = "openclaw",
         savings_ratio: float = 0.0,
+        task_type: str = "implementation",
     ) -> None:
         self.request_id = request_id
         self.timestamp = timestamp
@@ -35,7 +36,7 @@ class Meter:
         self.agent = agent
         self.savings_ratio = savings_ratio
         self.context_bypass = False
-        self.task_type = "implementation"
+        self.task_type = task_type
 
 
 def test_metrics_summary_first_uses_dlp_summary_without_legacy(monkeypatch):
@@ -51,6 +52,7 @@ def test_metrics_summary_first_uses_dlp_summary_without_legacy(monkeypatch):
         "period": "24h",
         "observed_request_count": 3,
         "non_value_count": 1,
+        "internal_or_wrapper_count": 0,
         "cards": {
             "real_requests": {"count": 2, "ratio": 0.6667},
             "context_compression": {"ratio": 0.4, "baseline_tokens": 100, "actual_tokens": 60},
@@ -240,3 +242,79 @@ def test_summary_fallback_path_uses_resolver_meters(monkeypatch):
     payload = metrics_service.compute_metrics_summary("all")
     assert payload["request_count"] == 1
     assert payload["tokens_saved"] == 30
+
+
+def test_system_reminder_only_request_is_wrapper_internal(monkeypatch):
+    now = datetime.now(timezone.utc)
+    wrapper = Meter(
+        request_id="req-wrapper",
+        timestamp=now.isoformat(),
+        query="<system-reminder>As you answer the user's questions, use this context.</system-reminder>",
+        baseline_tokens_estimate=1000,
+        actual_tokens_estimate=10,
+        saved_tokens_estimate=990,
+        packed_memory_count=0,
+        local_cards_used=0,
+        remote_used_count=0,
+        agent="claude_code",
+        savings_ratio=0.99,
+    )
+
+    monkeypatch.setattr(metrics_service, "_collect_meters_24h", lambda _tenant: [wrapper])
+    payload = metrics_service.get_recent_requests("all", limit=10, include_internal=True, value_qualified_only=False)
+    assert payload[0]["request_class"] == "internal"
+    assert payload[0]["diagnostic_label"] == "wrapper/context envelope"
+    assert payload[0]["user_visible_query"] == ""
+    assert payload[0]["display_savings_as_value"] is False
+
+    visible_payload = metrics_service.get_recent_requests("all", limit=10, include_internal=False, value_qualified_only=False)
+    assert visible_payload == []
+
+
+def test_non_value_recent_request_explains_missing_value_path(monkeypatch):
+    now = datetime.now(timezone.utc)
+    meter = Meter(
+        request_id="req-non-value",
+        timestamp=now.isoformat(),
+        query="Explain current dashboard numbers",
+        baseline_tokens_estimate=1000,
+        actual_tokens_estimate=10,
+        saved_tokens_estimate=990,
+        packed_memory_count=0,
+        local_cards_used=0,
+        remote_used_count=0,
+        task_type="unknown",
+        savings_ratio=0.99,
+    )
+
+    monkeypatch.setattr(metrics_service, "_collect_meters_24h", lambda _tenant: [meter])
+    payload = metrics_service.get_recent_requests("all", limit=10, include_internal=False, value_qualified_only=False)
+    assert payload[0]["request_class"] == "task_non_value"
+    assert "no memory packed" in payload[0]["qualification_reason"]
+    assert "task unknown" in payload[0]["qualification_reason"]
+    assert "no value path" in payload[0]["qualification_reason"]
+    assert payload[0]["value_paths"] == []
+    assert payload[0]["display_savings_as_value"] is False
+
+
+def test_value_qualified_recent_request_lists_value_paths(monkeypatch):
+    now = datetime.now(timezone.utc)
+    meter = Meter(
+        request_id="req-value",
+        timestamp=now.isoformat(),
+        query="Use the project memory to summarize the current phase",
+        baseline_tokens_estimate=1000,
+        actual_tokens_estimate=700,
+        saved_tokens_estimate=300,
+        packed_memory_count=2,
+        local_cards_used=1,
+        remote_used_count=0,
+        savings_ratio=0.3,
+    )
+
+    monkeypatch.setattr(metrics_service, "_collect_meters_24h", lambda _tenant: [meter])
+    payload = metrics_service.get_recent_requests("all", limit=10, include_internal=False, value_qualified_only=True)
+    assert payload[0]["request_class"] == "value_qualified"
+    assert payload[0]["value_paths"]
+    assert "packed_memory" in payload[0]["value_paths"]
+    assert payload[0]["display_savings_as_value"] is True

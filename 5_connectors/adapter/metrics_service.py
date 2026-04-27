@@ -260,34 +260,33 @@ def get_recent_requests(
 
     recent = sorted_meters[:limit]
 
-    def _request_class(m):
-        if _5_rc.is_internal_request(m):
-            return "internal"
-        if _5_rc.is_value_qualified(m):
-            return "value_qualified"
-        if _5_rc.is_task_non_value(m):
-            return "task_non_value"
-        agent = getattr(m, "agent", "") or ""
-        query = getattr(m, "query", "") or ""
-        return _5_rc.classify_request(agent, query)
-
-    return [
-        {
-            "request_id": m.request_id,
-            "agent": m.agent,
-            "timestamp": m.timestamp,
-            "task_type": getattr(m, "task_type", None) or "unknown",
-            "bypass": m.context_bypass,
-            "saved_tokens": m.saved_tokens_estimate,
-            "savings_ratio": m.savings_ratio,
-            "query": _5_rc.extract_user_visible_query(getattr(m, "query", ""))[:160],
-            "packed_memory_count": m.packed_memory_count,
-            "local_cards_used": m.local_cards_used,
-            "remote_used_count": getattr(m, "remote_used_count", 0),
-            "request_class": _request_class(m),
-        }
-        for m in recent
-    ]
+    recent_payload = []
+    for m in recent:
+        value_description = _5_rc.describe_request_value(m)
+        raw_query = getattr(m, "query", "") or ""
+        recent_payload.append(
+            {
+                "request_id": m.request_id,
+                "agent": m.agent,
+                "timestamp": m.timestamp,
+                "task_type": getattr(m, "task_type", None) or "unknown",
+                "bypass": m.context_bypass,
+                "saved_tokens": m.saved_tokens_estimate,
+                "savings_ratio": m.savings_ratio,
+                "query": value_description["user_visible_query"][:160],
+                "raw_query": raw_query,
+                "user_visible_query": value_description["user_visible_query"][:240],
+                "packed_memory_count": m.packed_memory_count,
+                "local_cards_used": m.local_cards_used,
+                "remote_used_count": getattr(m, "remote_used_count", 0),
+                "request_class": value_description["request_class"],
+                "qualification_reason": value_description["qualification_reason"],
+                "value_paths": value_description["value_paths"],
+                "diagnostic_label": value_description["diagnostic_label"],
+                "display_savings_as_value": value_description["request_class"] == "value_qualified",
+            }
+        )
+    return recent_payload
 
 
 def list_tenants() -> List[str]:
@@ -347,6 +346,7 @@ def _compute_core_capabilities_legacy(tenant: str) -> Dict[str, Any]:
     observed_meters = _default_overview_meters(meters, include_internal=True, include_task_non_value=True)
     value_qualified_meters = [m for m in observed_meters if _5_rc.is_value_qualified(m)]
     task_non_value_count = sum(1 for m in observed_meters if _5_rc.is_task_non_value(m))
+    internal_or_wrapper_count = sum(1 for m in observed_meters if _5_rc.is_internal_request(m))
     observed_count = len(observed_meters)
     qualified_count = len(value_qualified_meters)
     qualified_ratio = qualified_count / observed_count if observed_count > 0 else 0.0
@@ -356,6 +356,7 @@ def _compute_core_capabilities_legacy(tenant: str) -> Dict[str, Any]:
             "period": "24h",
             "observed_request_count": observed_count,
             "non_value_count": task_non_value_count,
+            "internal_or_wrapper_count": internal_or_wrapper_count,
             "cards": {
                 "real_requests": {"count": 0, "ratio": 0.0},
                 "context_compression": {"ratio": 0.0, "baseline_tokens": 0, "actual_tokens": 0},
@@ -379,6 +380,7 @@ def _compute_core_capabilities_legacy(tenant: str) -> Dict[str, Any]:
         "period": "24h",
         "observed_request_count": observed_count,
         "non_value_count": task_non_value_count,
+        "internal_or_wrapper_count": internal_or_wrapper_count,
         "cards": {
             "real_requests": {"count": qualified_count, "ratio": round(qualified_ratio, 4)},
             "context_compression": {
@@ -424,6 +426,7 @@ def compute_core_capabilities_trend(tenant: str, days: int = 7) -> Dict[str, Any
         day_meters = buckets[day_str]
         value_qualified_meters = [m for m in day_meters if _5_rc.is_value_qualified(m)]
         task_non_value_count = sum(1 for m in day_meters if _5_rc.is_task_non_value(m))
+        internal_or_wrapper_count = sum(1 for m in day_meters if _5_rc.is_internal_request(m))
         observed_count = len(day_meters)
         qualified_count = len(value_qualified_meters)
         qualified_ratio = qualified_count / observed_count if observed_count > 0 else 0.0
@@ -434,6 +437,7 @@ def compute_core_capabilities_trend(tenant: str, days: int = 7) -> Dict[str, Any
                     "date": day_str,
                     "observed_request_count": observed_count,
                     "non_value_count": task_non_value_count,
+                    "internal_or_wrapper_count": internal_or_wrapper_count,
                     "real_requests": {"count": 0, "ratio": 0.0},
                     "context_compression": {"ratio": 0.0, "baseline_tokens": 0, "actual_tokens": 0},
                     "memory_enhancement": {"rate": 0.0, "memory_count": 0},
@@ -458,6 +462,7 @@ def compute_core_capabilities_trend(tenant: str, days: int = 7) -> Dict[str, Any
                 "date": day_str,
                 "observed_request_count": observed_count,
                 "non_value_count": task_non_value_count,
+                "internal_or_wrapper_count": internal_or_wrapper_count,
                 "real_requests": {"count": qualified_count, "ratio": round(qualified_ratio, 4)},
                 "context_compression": {
                     "ratio": round(compression_ratio, 4),
