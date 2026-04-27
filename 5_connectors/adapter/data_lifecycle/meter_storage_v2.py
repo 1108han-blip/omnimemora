@@ -36,9 +36,46 @@ def _to_iso(ts: datetime) -> str:
     return ts.astimezone(timezone.utc).isoformat()
 
 
+# Provenance-only fields: present in SQLite (new write path) but not in legacy.
+# These do NOT represent business data drift; they are metadata about which
+# storage path wrote the record. They must not block parity pass.
+_PROVENANCE_ONLY_FIELDS = frozenset({
+    "sharing_policy_source",
+})
+
+# Nested provenance-only fields (dot-path style for deep inspection).
+_NESTED_PROVENANCE_ONLY_FIELDS = frozenset({
+    "access_plan.sharing_policy_source",
+})
+
+
 def _stable_hash(payload: Any) -> str:
     text = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _critical_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """Strip provenance-only fields so they don't affect critical hash."""
+    result: dict[str, Any] = {}
+    for key, value in payload.items():
+        if key in _PROVENANCE_ONLY_FIELDS:
+            continue
+        if isinstance(value, dict):
+            # Check nested provenance-only fields by constructing the dot-path
+            sub = _critical_payload(value)
+            # If all nested keys were stripped and the value was a dict with only
+            # provenance-only keys, omit the key entirely.
+            if sub:
+                result[key] = sub
+        else:
+            result[key] = value
+    return result
+
+
+def _critical_hash(payload: dict[str, Any]) -> str:
+    """Hash over business fields only, excluding provenance-only metadata."""
+    critical = _critical_payload(payload)
+    return _stable_hash(critical)
 
 
 def _legacy_index() -> dict[str, dict[str, Any]]:
@@ -578,23 +615,60 @@ def build_parity_report(*, sample_limit: int = DEFAULT_PARITY_SAMPLE_LIMIT) -> d
     missing_in_legacy = sorted(list(sqlite_ids - legacy_ids))
 
     payload_hash_mismatch_count = 0
+    critical_payload_hash_mismatch_count = 0
+    semantic_hash_mismatch_count = 0
     mismatch_samples: list[dict[str, Any]] = []
     for request_id in matching_ids:
-        legacy_hash = _stable_hash(legacy[request_id])
-        sqlite_hash = _stable_hash(sqlite_rows[request_id])
-        if legacy_hash != sqlite_hash:
+        legacy_raw_hash = _stable_hash(legacy[request_id])
+        sqlite_raw_hash = _stable_hash(sqlite_rows[request_id])
+        legacy_critical_hash = _critical_hash(legacy[request_id])
+        sqlite_critical_hash = _critical_hash(sqlite_rows[request_id])
+
+        raw_mismatch = legacy_raw_hash != sqlite_raw_hash
+        critical_mismatch = legacy_critical_hash != sqlite_critical_hash
+
+        if raw_mismatch:
             payload_hash_mismatch_count += 1
-            if len(mismatch_samples) < max(1, int(sample_limit)):
-                mismatch_samples.append(
-                    {
-                        "request_id": request_id,
-                        "legacy_hash": legacy_hash,
-                        "sqlite_hash": sqlite_hash,
-                    }
-                )
+        if critical_mismatch:
+            critical_payload_hash_mismatch_count += 1
+        elif raw_mismatch:
+            # Raw mismatch but critical hash agrees: provenance drift only.
+            semantic_hash_mismatch_count += 1
+
+        if len(mismatch_samples) < max(1, int(sample_limit)):
+            # Build noncritical_field_paths for provenance-only mismatches.
+            noncritical_field_paths: list[str] = []
+            if raw_mismatch and not critical_mismatch:
+                # Check top-level provenance-only fields.
+                for key in _PROVENANCE_ONLY_FIELDS:
+                    if key not in legacy[request_id] and key not in sqlite_rows[request_id]:
+                        continue
+                    lv = legacy[request_id].get(key)
+                    sv = sqlite_rows[request_id].get(key)
+                    if lv != sv:
+                        noncritical_field_paths.append(key)
+                # Check nested provenance-only: access_plan.sharing_policy_source
+                for key in {"access_plan"}:
+                    if key not in legacy[request_id] or key not in sqlite_rows[request_id]:
+                        continue
+                    lsp = legacy[request_id][key].get("sharing_policy_source") if isinstance(legacy[request_id][key], dict) else None
+                    ssp = sqlite_rows[request_id][key].get("sharing_policy_source") if isinstance(sqlite_rows[request_id][key], dict) else None
+                    if lsp != ssp:
+                        noncritical_field_paths.append(f"{key}.sharing_policy_source")
+
+            classification = "critical" if critical_mismatch else "provenance_only"
+            mismatch_samples.append(
+                {
+                    "request_id": request_id,
+                    "legacy_hash": legacy_raw_hash,
+                    "sqlite_hash": sqlite_raw_hash,
+                    "classification": classification,
+                    "noncritical_field_paths": noncritical_field_paths if noncritical_field_paths else [],
+                }
+            )
 
     critical_mismatch_count = (
-        len(missing_in_sqlite) + len(missing_in_legacy) + int(payload_hash_mismatch_count)
+        len(missing_in_sqlite) + len(missing_in_legacy) + int(critical_payload_hash_mismatch_count)
     )
     status = "passed" if critical_mismatch_count == 0 else "degraded"
 
@@ -608,6 +682,8 @@ def build_parity_report(*, sample_limit: int = DEFAULT_PARITY_SAMPLE_LIMIT) -> d
         "matching_request_id_count": len(matching_ids),
         "matching_request_id_sample_count": min(len(matching_ids), max(1, int(sample_limit))),
         "payload_hash_mismatch_count": int(payload_hash_mismatch_count),
+        "semantic_hash_mismatch_count": int(semantic_hash_mismatch_count),
+        "critical_payload_hash_mismatch_count": int(critical_payload_hash_mismatch_count),
         "critical_mismatch_count": int(critical_mismatch_count),
         "missing_in_sqlite_count": len(missing_in_sqlite),
         "missing_in_legacy_count": len(missing_in_legacy),
