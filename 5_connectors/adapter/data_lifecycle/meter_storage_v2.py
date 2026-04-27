@@ -41,6 +41,7 @@ def _to_iso(ts: datetime) -> str:
 # storage path wrote the record. They must not block parity pass.
 _PROVENANCE_ONLY_FIELDS = frozenset({
     "sharing_policy_source",
+    "timestamp",
 })
 
 # Nested provenance-only fields (dot-path style for deep inspection).
@@ -635,7 +636,7 @@ def build_parity_report(*, sample_limit: int = DEFAULT_PARITY_SAMPLE_LIMIT) -> d
             # Raw mismatch but critical hash agrees: provenance drift only.
             semantic_hash_mismatch_count += 1
 
-        if len(mismatch_samples) < max(1, int(sample_limit)):
+        if (raw_mismatch or critical_mismatch) and len(mismatch_samples) < max(1, int(sample_limit)):
             # Build noncritical_field_paths for provenance-only mismatches.
             noncritical_field_paths: list[str] = []
             if raw_mismatch and not critical_mismatch:

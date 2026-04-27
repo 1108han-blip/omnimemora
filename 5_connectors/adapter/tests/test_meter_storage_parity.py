@@ -180,6 +180,106 @@ def test_parity_detects_provenance_only_nested_diff_status_passed(tmp_path, monk
     assert "access_plan.sharing_policy_source" in samples[0]["noncritical_field_paths"]
 
 
+def test_parity_detects_timestamp_only_diff_status_passed(tmp_path, monkeypatch):
+    """Timestamp-only drift is temporal/provenance metadata, not business drift."""
+    data_dir = tmp_path / "data"
+    sqlite_path = tmp_path / "meter_store.sqlite3"
+    preview_path = tmp_path / "dlp" / "meter_cleanup_preview.json"
+    readiness_path = tmp_path / "dlp" / "meter_backup_export_readiness.json"
+    plan_path = tmp_path / "dlp" / "meter_backup_export_plan.json"
+    monkeypatch.setenv("OMNIMEMORA_METER_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("OMNIMEMORA_METER_STORE_V2_FILE", str(sqlite_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_CLEANUP_PREVIEW_FILE", str(preview_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_BACKUP_EXPORT_READINESS_FILE", str(readiness_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_BACKUP_EXPORT_PLAN_FILE", str(plan_path))
+
+    legacy_payload = _payload("req-timestamp-only")
+    sqlite_payload = dict(legacy_payload, timestamp="2026-04-25T12:00:01+00:00")
+    _write_legacy_index(data_dir, {"req-timestamp-only": legacy_payload})
+    meter_v2.upsert_meter(sqlite_payload)
+
+    report = meter_storage_v2.build_parity_report()
+    assert report["status"] == "passed"
+    assert report["payload_hash_mismatch_count"] == 1
+    assert report["semantic_hash_mismatch_count"] == 1
+    assert report["critical_payload_hash_mismatch_count"] == 0
+    assert report["critical_mismatch_count"] == 0
+    samples = report["hash_mismatch_samples"]
+    assert len(samples) == 1
+    assert samples[0]["classification"] == "provenance_only"
+    assert "timestamp" in samples[0]["noncritical_field_paths"]
+
+
+def test_parity_detects_combined_temporal_and_provenance_diff_status_passed(tmp_path, monkeypatch):
+    """RES-027D sample for timestamp + top-level/nested provenance drift."""
+    data_dir = tmp_path / "data"
+    sqlite_path = tmp_path / "meter_store.sqlite3"
+    preview_path = tmp_path / "dlp" / "meter_cleanup_preview.json"
+    readiness_path = tmp_path / "dlp" / "meter_backup_export_readiness.json"
+    plan_path = tmp_path / "dlp" / "meter_backup_export_plan.json"
+    monkeypatch.setenv("OMNIMEMORA_METER_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("OMNIMEMORA_METER_STORE_V2_FILE", str(sqlite_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_CLEANUP_PREVIEW_FILE", str(preview_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_BACKUP_EXPORT_READINESS_FILE", str(readiness_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_BACKUP_EXPORT_PLAN_FILE", str(plan_path))
+
+    legacy_payload = dict(
+        _payload("req-combined-provenance"),
+        access_plan={"mode": "efficient", "sharing_policy_source": "compile_orchestrator_private_first"},
+        sharing_policy_source="compile_orchestrator_private_first",
+    )
+    sqlite_payload = dict(
+        legacy_payload,
+        timestamp="2026-04-25T12:00:01+00:00",
+        sharing_policy_source="ingress_private_first",
+        access_plan={"mode": "efficient", "sharing_policy_source": "ingress_private_first"},
+    )
+    _write_legacy_index(data_dir, {"req-combined-provenance": legacy_payload})
+    meter_v2.upsert_meter(sqlite_payload)
+
+    report = meter_storage_v2.build_parity_report()
+    assert report["status"] == "passed"
+    assert report["payload_hash_mismatch_count"] == 1
+    assert report["semantic_hash_mismatch_count"] == 1
+    assert report["critical_payload_hash_mismatch_count"] == 0
+    assert report["critical_mismatch_count"] == 0
+    samples = report["hash_mismatch_samples"]
+    assert len(samples) == 1
+    assert samples[0]["classification"] == "provenance_only"
+    assert set(samples[0]["noncritical_field_paths"]) == {
+        "timestamp",
+        "sharing_policy_source",
+        "access_plan.sharing_policy_source",
+    }
+
+
+def test_parity_samples_exclude_raw_hash_identical_records(tmp_path, monkeypatch):
+    """Matching raw hashes must not appear in hash_mismatch_samples."""
+    data_dir = tmp_path / "data"
+    sqlite_path = tmp_path / "meter_store.sqlite3"
+    preview_path = tmp_path / "dlp" / "meter_cleanup_preview.json"
+    readiness_path = tmp_path / "dlp" / "meter_backup_export_readiness.json"
+    plan_path = tmp_path / "dlp" / "meter_backup_export_plan.json"
+    monkeypatch.setenv("OMNIMEMORA_METER_DATA_DIR", str(data_dir))
+    monkeypatch.setenv("OMNIMEMORA_METER_STORE_V2_FILE", str(sqlite_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_CLEANUP_PREVIEW_FILE", str(preview_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_BACKUP_EXPORT_READINESS_FILE", str(readiness_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_BACKUP_EXPORT_PLAN_FILE", str(plan_path))
+
+    matching_payload = _payload("req-identical")
+    legacy_diff = _payload("req-business-sample", saved_tokens=100)
+    sqlite_diff = _payload("req-business-sample", saved_tokens=777)
+    _write_legacy_index(data_dir, {"req-identical": matching_payload, "req-business-sample": legacy_diff})
+    meter_v2.upsert_meter(matching_payload)
+    meter_v2.upsert_meter(sqlite_diff)
+
+    report = meter_storage_v2.build_parity_report()
+    assert report["payload_hash_mismatch_count"] == 1
+    samples = report["hash_mismatch_samples"]
+    assert [sample["request_id"] for sample in samples] == ["req-business-sample"]
+    assert samples[0]["classification"] == "critical"
+
+
 def test_parity_detects_business_field_diff_status_degraded(tmp_path, monkeypatch):
     """Business field diff (e.g. saved_tokens_estimate) blocks parity pass."""
     data_dir = tmp_path / "data"
