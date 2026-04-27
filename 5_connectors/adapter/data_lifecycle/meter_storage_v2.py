@@ -322,12 +322,15 @@ def _frozen_backup_export_status() -> dict[str, Any]:
     }
 
 
-def get_status_payload() -> dict[str, Any]:
+def get_status_payload(*, detail: str = "fast") -> dict[str, Any]:
     parity_snapshot = read_parity_snapshot()
     snapshot_counts = parity_snapshot.get("source_counts") if isinstance(parity_snapshot.get("source_counts"), dict) else {}
+    snapshot_hash = parity_snapshot.get("hash_summary") if isinstance(parity_snapshot.get("hash_summary"), dict) else {}
     sqlite_count = int(parity_snapshot.get("sqlite_count", snapshot_counts.get("sqlite_count", 0)) or 0)
     legacy_count = int(parity_snapshot.get("legacy_count", snapshot_counts.get("legacy_count", 0)) or 0)
-    critical_mismatch_count = int(parity_snapshot.get("critical_mismatch_count", 0) or 0)
+    critical_mismatch_count = int(
+        parity_snapshot.get("critical_mismatch_count", snapshot_hash.get("critical_mismatch_count", 0)) or 0
+    )
     status = "healthy" if critical_mismatch_count == 0 else "degraded"
     read_mode = str(os.getenv(_read_resolver.READ_PATH_ENV, _read_resolver.MODE_SQLITE_FIRST)).strip().lower()
     if read_mode not in {_read_resolver.MODE_SQLITE_FIRST, _read_resolver.MODE_LEGACY_ONLY}:
@@ -359,10 +362,23 @@ def get_status_payload() -> dict[str, Any]:
     if status_mode not in {_status_read_resolver.MODE_SQLITE_FIRST, _status_read_resolver.MODE_LEGACY_ONLY}:
         status_mode = _status_read_resolver.MODE_SQLITE_FIRST
     status_switch_enabled = status_mode == _status_read_resolver.MODE_SQLITE_FIRST
-    cleanup_view = _frozen_cleanup_status()
-    backup_export_view = _frozen_backup_export_status()
+    compact_cleanup = {
+        "status": "frozen",
+        "cleanup_allowed": False,
+        "execution_allowed": False,
+        "second_file_pilot_allowed": False,
+        "cleanup_scope_expansion_started": False,
+        "cleanup_execution_started": False,
+    }
+    compact_backup_export = {
+        "status": "frozen",
+        "backup_export_allowed": False,
+        "execution_allowed": False,
+        "backup_export_execution_started": False,
+        "cleanup_execution_started": False,
+    }
 
-    return {
+    payload = {
         "schema_version": METER_STORAGE_STATUS_SCHEMA_VERSION,
         "status": status,
         "mode": METER_STORAGE_MODE,
@@ -389,14 +405,37 @@ def get_status_payload() -> dict[str, Any]:
             "sqlite_count": sqlite_count,
             "legacy_count": legacy_count,
         },
+        "parity_snapshot": {
+            "status": parity_snapshot.get("status"),
+            "read_mode": parity_snapshot.get("read_mode"),
+            "snapshot_missing": bool(parity_snapshot.get("snapshot_missing", False)),
+            "payload_hash_mismatch_count": int(
+                parity_snapshot.get("payload_hash_mismatch_count", snapshot_hash.get("payload_hash_mismatch_count", 0)) or 0
+            ),
+            "semantic_hash_mismatch_count": int(
+                parity_snapshot.get("semantic_hash_mismatch_count", snapshot_hash.get("semantic_hash_mismatch_count", 0)) or 0
+            ),
+            "critical_payload_hash_mismatch_count": int(
+                parity_snapshot.get(
+                    "critical_payload_hash_mismatch_count",
+                    snapshot_hash.get("critical_payload_hash_mismatch_count", 0),
+                )
+                or 0
+            ),
+            "critical_mismatch_count": critical_mismatch_count,
+        },
         "write_errors": {
             "count": 0,
             "latest": None,
             "read_mode": "fast_status_default",
         },
-        "cleanup": cleanup_view,
-        "backup_export": backup_export_view,
+        "cleanup": compact_cleanup,
+        "backup_export": compact_backup_export,
     }
+    if str(detail or "fast").strip().lower() == "full":
+        payload["cleanup"] = _frozen_cleanup_status()
+        payload["backup_export"] = _frozen_backup_export_status()
+    return payload
 
 
 def rebuild_from_legacy(*, sample_limit: int = DEFAULT_PARITY_SAMPLE_LIMIT) -> tuple[dict[str, Any], dict[str, Any]]:

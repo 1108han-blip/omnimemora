@@ -168,9 +168,9 @@ _snapshot_cache = importlib.import_module("5_connectors.adapter.application.cont
 
 
 @router.get("/data-lifecycle/status")
-async def get_data_lifecycle_status():
+async def get_data_lifecycle_status(detail: str = Query("fast")):
     policy = _policy_mod.load_policy()
-    return _health.build_health_payload(policy=policy)
+    return _health.build_health_payload(policy=policy, detail=detail)
 
 
 @router.post("/data-lifecycle/maintenance/refresh")
@@ -192,8 +192,8 @@ async def post_data_lifecycle_manual_refresh():
 
 
 @router.get("/data-lifecycle/meter-storage/status")
-async def get_data_lifecycle_meter_storage_status():
-    return _meter_storage_v2_mod.get_status_payload()
+async def get_data_lifecycle_meter_storage_status(detail: str = Query("fast")):
+    return _meter_storage_v2_mod.get_status_payload(detail=detail)
 
 
 @router.post("/data-lifecycle/meter-storage/rebuild")

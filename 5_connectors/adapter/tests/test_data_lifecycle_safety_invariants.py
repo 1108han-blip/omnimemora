@@ -627,19 +627,19 @@ def test_forbidden_basename_set_covers_all_dlp_control_artifacts():
 # ---------------------------------------------------------------------------
 
 def test_health_surface_non_active_quarantine_record_view_has_safety_flags(tmp_path):
-    """Health payload key is 'archive_non_active_quarantine' (the quarantine record view)."""
+    """Frozen health view keeps destructive safety flags denied."""
     policy = _build_policy(tmp_path)
     origin, candidate, target = _seed_full_chain(policy)
     non_active_quarantine_mod.execute_single_non_active_copy_quarantine(policy=policy)
-    health = health_mod.build_health_payload(policy=policy)
+    health = health_mod.build_health_payload(policy=policy, detail="full")
     # Key is archive_non_active_quarantine (not _record_view suffix)
     view = health.get("archive_non_active_quarantine") or {}
-    assert view.get("status") == "success"
+    assert view.get("status") == "frozen"
     assert view.get("source_move_executed") is False
-    assert view.get("non_active_copy_move_executed") is True
+    assert view.get("non_active_copy_move_executed") is False
     assert view.get("delete_compress_executed") is False
     assert view.get("production_read_path_unchanged") is True
-    assert view.get("checksum_match") is True
+    assert view.get("checksum_match") is False
 
 
 # ---------------------------------------------------------------------------
@@ -650,7 +650,7 @@ def test_health_surface_non_active_gate_denies_source_move_delete_compress(tmp_p
     policy = _build_policy(tmp_path)
     # Build gate (no approval)
     archive_non_active_gate_mod.build_gate(policy=policy)
-    health = health_mod.build_health_payload(policy=policy)
+    health = health_mod.build_health_payload(policy=policy, detail="full")
     # Key in health payload is archive_non_active_execution_gate (gate view)
     view = health.get("archive_non_active_execution_gate") or {}
     assert view.get("source_move_allowed") is False

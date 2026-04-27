@@ -364,6 +364,7 @@ def build_health_payload(
     *,
     policy: Optional[DataLifecyclePolicy] = None,
     now_ts: Optional[float] = None,
+    detail: str = "fast",
 ) -> dict[str, Any]:
     current_policy = policy or load_policy()
     current_now = float(now_ts if now_ts is not None else time.time())
@@ -381,33 +382,14 @@ def build_health_payload(
 
     last_maintenance = state_store.latest_record(trigger=MAINTENANCE_TRIGGERS, policy=current_policy)
     recent_degraded = _recent_degraded_records(policy=current_policy, now_ts=current_now)
-    recent_maintenance = state_store.read_recent_records(limit=20, trigger=MAINTENANCE_TRIGGERS, policy=current_policy)
-    storage_inventory = _collect_storage_inventory(current_policy)
-    storage_pressure, storage_recommendation = _derive_storage_pressure(
-        int(storage_inventory.get("total_bytes", 0)),
-        recent_maintenance,
-    )
-    raw_evidence_segments_view = {
-        "status": "frozen",
-        "mode": str(getattr(current_policy, "raw_evidence_segments_mode", "disabled") or "disabled"),
-        "generated_at": None,
-        "total_segments": 0,
-        "active_segments": 0,
-        "sealed_segments": 0,
-        "total_bytes": 0,
-        "warnings_count": 0,
-        "mirror_enabled": getattr(current_policy, "raw_evidence_segments_mode", "disabled")
-        == "dual_write_observe_only",
-    }
     raw_log_retention_view = _raw_log_retention_view(current_policy)
-    archive_views = _frozen_archive_views()
     status, recommended_action = _derive_status(
         summary_freshness=summary_freshness,
         last_maintenance=last_maintenance,
         recent_degraded_count=len(recent_degraded),
     )
     try:
-        meter_storage_v2_view = meter_storage_v2.get_status_payload()
+        meter_storage_v2_view = meter_storage_v2.get_status_payload(detail=detail)
     except Exception:
         meter_storage_v2_view = {
             "schema_version": meter_storage_v2.METER_STORAGE_STATUS_SCHEMA_VERSION,
@@ -496,10 +478,11 @@ def build_health_payload(
             },
         }
 
-    return {
+    payload = {
         "schema_version": HEALTH_SCHEMA_VERSION,
         "status": status,
         "recommended_action": recommended_action,
+        "detail": "fast",
         "summary": {
             "present": isinstance(summary_payload, dict),
             "contract_valid": _is_valid_summary_contract(summary_payload),
@@ -519,19 +502,56 @@ def build_health_payload(
             "count": len(recent_degraded),
             "latest_record": recent_degraded[0] if recent_degraded else None,
         },
-        "storage_pressure": storage_pressure,
-        "storage": {
-            "total_bytes": int(storage_inventory.get("total_bytes", 0)),
-            "recommendation": storage_recommendation,
-            "tracked_files": storage_inventory.get("tracked_files", []),
-            "recent_maintenance_scanned_bytes_max": max(
-                (int(record.get("bytes_scanned", 0) or 0) for record in recent_maintenance),
-                default=0,
-            ),
-        },
-        "raw_evidence_segments": raw_evidence_segments_view,
         "raw_log_retention": raw_log_retention_view,
         "meter_storage_v2": meter_storage_v2_view,
+        "frozen_governance": {
+            "status": "cold_path_only",
+            "detail": "use_detail_full_or_dedicated_debug_endpoints",
+            "cleanup_execution_started": False,
+            "backup_export_execution_started": False,
+            "cleanup_scope_expansion_started": False,
+        },
+    }
+    if str(detail or "fast").strip().lower() != "full":
+        return payload
+
+    recent_maintenance = state_store.read_recent_records(limit=20, trigger=MAINTENANCE_TRIGGERS, policy=current_policy)
+    storage_inventory = _collect_storage_inventory(current_policy)
+    storage_pressure, storage_recommendation = _derive_storage_pressure(
+        int(storage_inventory.get("total_bytes", 0)),
+        recent_maintenance,
+    )
+    raw_evidence_segments_view = {
+        "status": "frozen",
+        "mode": str(getattr(current_policy, "raw_evidence_segments_mode", "disabled") or "disabled"),
+        "generated_at": None,
+        "total_segments": 0,
+        "active_segments": 0,
+        "sealed_segments": 0,
+        "total_bytes": 0,
+        "warnings_count": 0,
+        "mirror_enabled": getattr(current_policy, "raw_evidence_segments_mode", "disabled")
+        == "dual_write_observe_only",
+    }
+    archive_views = _frozen_archive_views()
+    payload.update(
+        {
+            "detail": "full",
+            "storage_pressure": storage_pressure,
+            "storage": {
+                "total_bytes": int(storage_inventory.get("total_bytes", 0)),
+                "recommendation": storage_recommendation,
+                "tracked_files": storage_inventory.get("tracked_files", []),
+                "recent_maintenance_scanned_bytes_max": max(
+                    (int(record.get("bytes_scanned", 0) or 0) for record in recent_maintenance),
+                    default=0,
+                ),
+            },
+            "raw_evidence_segments": raw_evidence_segments_view,
+        }
+    )
+    payload.update(
+        {
         "retention_manifest": archive_views["retention_manifest"],
         "traceability_report": archive_views["traceability_report"],
         "archive_plan": archive_views["archive_plan"],
@@ -548,4 +568,6 @@ def build_health_payload(
         "archive_non_active_quarantine_readiness": archive_views["archive_non_active_quarantine_readiness"],
         "archive_non_active_execution_gate": archive_views["archive_non_active_execution_gate"],
         "archive_non_active_quarantine": archive_views["archive_non_active_quarantine"],
-    }
+        }
+    )
+    return payload

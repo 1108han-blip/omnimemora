@@ -454,7 +454,7 @@ def test_rebuild_and_status_payload_keep_legacy_authoritative(tmp_path, monkeypa
         },
     )
     record, parity = meter_storage_v2.rebuild_from_legacy()
-    status = meter_storage_v2.get_status_payload()
+    status = meter_storage_v2.get_status_payload(detail="full")
 
     assert record["non_destructive"] is True
     assert record["legacy_scanned_count"] == 2

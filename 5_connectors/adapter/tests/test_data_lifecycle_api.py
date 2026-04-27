@@ -148,12 +148,13 @@ def test_dlp_health_fast_status_does_not_read_frozen_governance_artifacts(tmp_pa
             raise AssertionError(name)
         return importlib.import_module(name)
 
-    monkeypatch.setattr(health_mod.meter_storage_v2, "get_status_payload", lambda: {"status": "healthy"})
+    monkeypatch.setattr(health_mod.meter_storage_v2, "get_status_payload", lambda detail="fast": {"status": "healthy"})
     monkeypatch.setattr(importlib, "import_module", fail_import)
 
     payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
-    assert payload["retention_manifest"]["status"] == "frozen"
-    assert payload["archive_plan"]["status"] == "frozen"
+    assert payload["detail"] == "fast"
+    assert "retention_manifest" not in payload
+    assert "archive_plan" not in payload
     assert payload["raw_log_retention"]["status"] == "bounded"
 
 
@@ -214,7 +215,7 @@ def test_dlp_health_status_uninitialized(tmp_path):
     policy = _build_policy(tmp_path)
     payload = health_mod.build_health_payload(policy=policy, now_ts=100.0)
     assert payload["status"] == "uninitialized"
-    assert payload["raw_evidence_segments"]["status"] == "frozen"
+    assert payload["frozen_governance"]["status"] == "cold_path_only"
 
 
 def test_dlp_health_status_degraded_for_invalid_summary(tmp_path):
@@ -255,7 +256,7 @@ def test_data_lifecycle_status_endpoint_returns_health_payload(monkeypatch):
     app = FastAPI()
     app.include_router(data_lifecycle_api.router)
     expected = {"schema_version": "dlp-lifecycle-health-v1", "status": "healthy"}
-    monkeypatch.setattr(data_lifecycle_api._health, "build_health_payload", lambda policy=None: expected)
+    monkeypatch.setattr(data_lifecycle_api._health, "build_health_payload", lambda policy=None, detail="fast": expected)
 
     client = TestClient(app)
     response = client.get("/data-lifecycle/status")
@@ -616,7 +617,7 @@ def test_dlp_health_exposes_storage_pressure_without_cleanup(tmp_path, monkeypat
     monkeypatch.setattr(health_mod, "STORAGE_PRESSURE_WARNING_BYTES", 1)
     monkeypatch.setattr(health_mod, "STORAGE_PRESSURE_CRITICAL_BYTES", 10**12)
 
-    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0, detail="full")
     assert payload["storage_pressure"] == "warning"
     assert payload["storage"]["total_bytes"] >= 1
     assert summary_path.exists()
@@ -630,7 +631,7 @@ def test_dlp_health_uses_fast_frozen_retention_manifest_summary(tmp_path):
         encoding="utf-8",
     )
 
-    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0, detail="full")
     retention_manifest = payload.get("retention_manifest") or {}
     assert retention_manifest["status"] == "frozen"
     assert retention_manifest["artifact_count"] == 0
@@ -646,7 +647,7 @@ def test_dlp_health_uses_fast_frozen_traceability_report_summary(tmp_path):
         encoding="utf-8",
     )
 
-    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0, detail="full")
     traceability_report = payload.get("traceability_report") or {}
     assert traceability_report["status"] == "frozen"
     assert traceability_report["sample_count"] == 0
@@ -664,7 +665,7 @@ def test_dlp_health_uses_fast_frozen_archive_plan_summary(tmp_path):
         encoding="utf-8",
     )
 
-    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0, detail="full")
     archive_plan = payload.get("archive_plan") or {}
     assert archive_plan["status"] == "frozen"
     assert archive_plan["mode"] == "automatic_cleanup_expansion_paused"
@@ -682,7 +683,7 @@ def test_dlp_health_exposes_archive_transaction_preview_summary(tmp_path):
         '{"schema_version":"dlp-archive-transaction-preview-v1","preview_id":"tx1","generated_at":"2026-04-25T00:00:00+00:00","mode":"preview_only","plan_ref":{"status":"present"},"items":[],"summary":{"eligible_input_count":3,"preview_item_count":2,"excluded_blocked_count":4,"excluded_review_required_count":1,"blocked_precondition_count":0,"total_preview_bytes":3456,"warnings_count":2},"warnings":[]}',
         encoding="utf-8",
     )
-    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0, detail="full")
     txn = payload.get("archive_transaction_preview") or {}
     assert txn["status"] == "frozen"
     assert txn["mode"] == "automatic_cleanup_expansion_paused"
@@ -702,7 +703,7 @@ def test_dlp_health_exposes_archive_restore_readiness_summary(tmp_path):
         '{"schema_version":"dlp-archive-restore-readiness-v1","readiness_id":"r1","generated_at":"2026-04-25T00:00:00+00:00","mode":"readiness_only","transaction_preview_ref":{"status":"present"},"traceability_ref":{"status":"present"},"request_mappings":[],"summary":{"sample_count":6,"mapped_request_count":5,"unmapped_request_count":1,"warnings_count":1},"warnings":[]}',
         encoding="utf-8",
     )
-    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0, detail="full")
     readiness = payload.get("archive_restore_readiness") or {}
     assert readiness["status"] == "frozen"
     assert readiness["mode"] == "automatic_cleanup_expansion_paused"
@@ -775,7 +776,7 @@ def test_dlp_health_exposes_archive_execution_gate_summary(tmp_path):
         '{"schema_version":"dlp-archive-execution-gate-v1","gate_id":"g1","generated_at":"2026-04-25T00:00:00+00:00","mode":"gate_only","allowed":false,"status":"blocked","blocking_reasons":["missing_operator_approval"],"approval":{"status":"missing","operator_id":null,"expires_at":null},"summary":{"allowed":false,"status":"blocked","blocking_count":1,"approval_status":"missing","expires_at":null,"warnings_count":0},"warnings":[]}',
         encoding="utf-8",
     )
-    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0, detail="full")
     gate = payload.get("archive_execution_gate") or {}
     assert gate["status"] == "frozen"
     assert gate["allowed"] is False
@@ -859,7 +860,7 @@ def test_dlp_health_exposes_archive_pilot_summary(tmp_path):
         '{"schema_version":"dlp-archive-pilot-record-v1","pilot_id":"pilot-1","generated_at":"2026-04-25T00:00:00+00:00","mode":"copy_to_archive_only","status":"success","source_kind":"compile_events","source_bytes":123,"archive_bytes":123,"checksum_match":true,"source_retained":true,"read_path_unchanged":true}',
         encoding="utf-8",
     )
-    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0, detail="full")
     pilot = payload.get("archive_pilot") or {}
     assert pilot["status"] == "frozen"
     assert pilot["pilot_id"] is None
@@ -923,7 +924,7 @@ def test_dlp_health_exposes_archive_readthrough_summary(tmp_path):
         '{"schema_version":"dlp-archive-readthrough-report-v1","report_id":"rt-1","generated_at":"2026-04-25T00:00:00+00:00","mode":"shadow_validation_only","status":"passed","source_retained":true,"archive_copy_readable":true,"checksum_match":true,"read_path_unchanged":true}',
         encoding="utf-8",
     )
-    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0, detail="full")
     readthrough = payload.get("archive_readthrough") or {}
     assert readthrough["status"] == "frozen"
     assert readthrough["source_retained"] is False
@@ -983,7 +984,7 @@ def test_dlp_health_exposes_archive_fallback_simulation_summary(tmp_path):
         '{"schema_version":"dlp-archive-fallback-simulation-v1","simulation_id":"fb1","generated_at":"2026-04-25T00:00:00+00:00","mode":"diagnostic_fallback_only","status":"passed","source_missing_simulated":true,"fallback_available":true,"archive_copy_readable":true,"checksum_match":true,"production_read_path_unchanged":true,"summary":{"request_evidence_fallback_status":"mapped","validated_at":"2026-04-25T00:00:00+00:00"}}',
         encoding="utf-8",
     )
-    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0, detail="full")
     fallback = payload.get("archive_fallback_simulation") or {}
     assert fallback["status"] == "frozen"
     assert fallback["mode"] == "automatic_cleanup_expansion_paused"
@@ -1044,7 +1045,7 @@ def test_dlp_health_exposes_archive_quarantine_readiness_summary(tmp_path):
         '{"schema_version":"dlp-source-quarantine-readiness-plan-v1","plan_id":"q1","generated_at":"2026-04-25T00:00:00+00:00","mode":"readiness_plan_only","status":"ready_for_approval","source_move_executed":false,"source_retained":true,"production_read_path_unchanged":true,"transaction_preview":{"planned_action":"quarantine_source_preview_only"},"summary":{"candidate_present":true,"blocking_count":0}}',
         encoding="utf-8",
     )
-    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0, detail="full")
     quarantine = payload.get("archive_quarantine_readiness") or {}
     assert quarantine["status"] == "frozen"
     assert quarantine["mode"] == "automatic_cleanup_expansion_paused"
@@ -1108,7 +1109,7 @@ def test_dlp_health_exposes_archive_quarantine_record_summary(tmp_path):
         '{"schema_version":"dlp-source-quarantine-record-v1","record_id":"qr1","generated_at":"2026-04-25T00:00:00+00:00","mode":"single_artifact_quarantine_only","status":"blocked","blocking_reasons":["candidate_is_active_hot_source"],"source_kind":"compile_events","source_move_executed":false,"source_retained":true,"checksum_match":false,"quarantine_path":"/tmp/q","summary":{"blocking_count":1}}',
         encoding="utf-8",
     )
-    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0, detail="full")
     quarantine = payload.get("archive_quarantine") or {}
     assert quarantine["status"] == "frozen"
     assert quarantine["mode"] == "automatic_cleanup_expansion_paused"
@@ -1170,7 +1171,7 @@ def test_dlp_health_exposes_archive_restore_pilot_summary(tmp_path):
         '{"schema_version":"dlp-archive-restore-pilot-record-v1","restore_id":"restore-1","generated_at":"2026-04-25T00:00:00+00:00","mode":"conditional_restore_to_staging","status":"blocked_no_successful_quarantine","restore_target_scope":"staging","restore_target_path":null,"checksum_match":false,"production_source_overwrite":false,"archive_copy_retained":true,"quarantine_copy_retained":true}',
         encoding="utf-8",
     )
-    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0, detail="full")
     restore = payload.get("archive_restore_pilot") or {}
     assert restore["status"] == "frozen"
     assert restore["mode"] == "automatic_cleanup_expansion_paused"
@@ -1236,7 +1237,7 @@ def test_dlp_health_exposes_archive_non_active_candidate_summary(tmp_path):
         '{"schema_version":"dlp-non-active-candidate-report-v1","report_id":"n1","generated_at":"2026-04-25T00:00:00+00:00","mode":"non_active_selection_report_only","candidates":[],"summary":{"total_scanned":3,"forbidden_count":2,"plausible_non_active_count":1,"review_required_count":0,"source_move_delete_compress_executed":false,"warnings_count":0},"warnings":[]}',
         encoding="utf-8",
     )
-    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0, detail="full")
     non_active = payload.get("archive_non_active_candidates") or {}
     assert non_active["status"] == "frozen"
     assert non_active["mode"] == "automatic_cleanup_expansion_paused"
@@ -1303,7 +1304,7 @@ def test_dlp_health_exposes_archive_non_active_quarantine_readiness_summary(tmp_
         '{"schema_version":"dlp-non-active-quarantine-readiness-v1","plan_id":"naq1","generated_at":"2026-04-25T00:00:00+00:00","mode":"non_active_quarantine_readiness_only","status":"ready_for_operator_approval","selected_candidate":{"candidate_kind":"archive_pilot_copy","candidate_path":"/tmp/archive.copy","planned_quarantine_path":"/tmp/archive.copy.quarantine"},"transaction_preview":{"planned_quarantine_path":"/tmp/archive.copy.quarantine"},"summary":{"selected_candidate_present":true,"blocking_count":0,"source_move_executed":false,"non_active_copy_move_executed":false,"delete_compress_executed":false,"warnings_count":0},"warnings":[]}',
         encoding="utf-8",
     )
-    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0, detail="full")
     readiness = payload.get("archive_non_active_quarantine_readiness") or {}
     assert readiness["status"] == "frozen"
     assert readiness["mode"] == "automatic_cleanup_expansion_paused"
@@ -1366,7 +1367,7 @@ def test_dlp_health_exposes_archive_non_active_execution_gate_summary(tmp_path):
         '{"schema_version":"dlp-non-active-copy-execution-gate-v1","gate_id":"ng1","generated_at":"2026-04-25T00:00:00+00:00","mode":"gate_only","allowed":false,"status":"blocked","blocking_reasons":["missing_operator_approval"],"approval":{"status":"missing"},"summary":{"allowed":false,"status":"blocked","blocking_count":1,"approval_status":"missing","source_move_allowed":false,"delete_allowed":false,"compress_allowed":false,"warnings_count":1},"warnings":[]}',
         encoding="utf-8",
     )
-    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0, detail="full")
     gate = payload.get("archive_non_active_execution_gate") or {}
     assert gate["status"] == "frozen"
     assert gate["allowed"] is False
@@ -1447,7 +1448,7 @@ def test_dlp_health_exposes_archive_non_active_quarantine_record_summary(tmp_pat
         '{"schema_version":"dlp-non-active-copy-quarantine-record-v1","quarantine_id":"naq1","generated_at":"2026-04-25T00:00:00+00:00","mode":"single_non_active_copy_quarantine_only","status":"success","candidate_kind":"archive_pilot_copy","candidate_path":"/tmp/archive.copy","quarantine_path":"/tmp/archive.copy.quarantine","checksum_match":true,"source_move_executed":false,"non_active_copy_move_executed":true,"delete_compress_executed":false,"production_read_path_unchanged":true,"summary":{"blocking_count":0}}',
         encoding="utf-8",
     )
-    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0, detail="full")
     quarantine = payload.get("archive_non_active_quarantine") or {}
     assert quarantine["status"] == "frozen"
     assert quarantine["mode"] == "automatic_cleanup_expansion_paused"
@@ -1467,7 +1468,7 @@ def test_data_lifecycle_meter_storage_status_endpoint(monkeypatch):
         "status": "healthy",
         "mode": "dual_write_observe_only",
     }
-    monkeypatch.setattr(data_lifecycle_api._meter_storage_v2_mod, "get_status_payload", lambda: expected)
+    monkeypatch.setattr(data_lifecycle_api._meter_storage_v2_mod, "get_status_payload", lambda detail="fast": expected)
 
     client = TestClient(app)
     response = client.get("/data-lifecycle/meter-storage/status")
