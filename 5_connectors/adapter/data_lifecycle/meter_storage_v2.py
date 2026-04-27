@@ -7,6 +7,7 @@ import importlib
 import json
 import os
 import tempfile
+import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
@@ -30,6 +31,8 @@ METER_STORAGE_PARITY_SNAPSHOT_SCHEMA_VERSION = "dlp-meter-storage-v2-parity-snap
 METER_STORAGE_MODE = "dual_write_observe_only"
 DEFAULT_PARITY_SAMPLE_LIMIT = 200
 PARITY_SNAPSHOT_ENV = "OMNIMEMORA_DLP_METER_PARITY_SNAPSHOT_FILE"
+_PARITY_SNAPSHOT_CACHE_LOCK = threading.Lock()
+_PARITY_SNAPSHOT_CACHE: dict[str, tuple[tuple[int, int], dict[str, Any]]] = {}
 
 
 def _utc_now() -> datetime:
@@ -181,7 +184,24 @@ def write_parity_snapshot(parity: dict[str, Any], *, path: Optional[str | Path] 
     snapshot_path = parity_snapshot_path(path)
     _write_json_atomic(snapshot_path, snapshot, tmp_prefix="meter_parity_snapshot_")
     snapshot["snapshot_path"] = str(snapshot_path)
+    with _PARITY_SNAPSHOT_CACHE_LOCK:
+        _PARITY_SNAPSHOT_CACHE.pop(str(snapshot_path), None)
     return snapshot
+
+
+def _read_snapshot_payload_cached(snapshot_path: Path) -> dict[str, Any]:
+    stat = snapshot_path.stat()
+    cache_key = str(snapshot_path)
+    signature = (int(stat.st_mtime_ns), int(stat.st_size))
+    with _PARITY_SNAPSHOT_CACHE_LOCK:
+        cached = _PARITY_SNAPSHOT_CACHE.get(cache_key)
+        if cached is not None and cached[0] == signature:
+            return dict(cached[1])
+    payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+    if isinstance(payload, dict):
+        with _PARITY_SNAPSHOT_CACHE_LOCK:
+            _PARITY_SNAPSHOT_CACHE[cache_key] = (signature, dict(payload))
+    return payload
 
 
 def read_parity_snapshot(*, path: Optional[str | Path] = None) -> dict[str, Any]:
@@ -204,7 +224,7 @@ def read_parity_snapshot(*, path: Optional[str | Path] = None) -> dict[str, Any]
             "snapshot_missing": True,
         }
     try:
-        payload = json.loads(snapshot_path.read_text(encoding="utf-8"))
+        payload = _read_snapshot_payload_cached(snapshot_path)
     except Exception as exc:
         return {
             **base,

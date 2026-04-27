@@ -1,5 +1,6 @@
 import importlib
 import json
+from pathlib import Path
 
 
 meter_v2 = importlib.import_module("5_connectors.adapter.infrastructure.meter_store_v2")
@@ -69,6 +70,45 @@ def test_parity_rebuild_writes_snapshot_and_get_reads_it(tmp_path, monkeypatch):
     assert snapshot_read["payload_hash_mismatch_count"] == rebuilt["parity"]["payload_hash_mismatch_count"]
     assert snapshot_read["legacy_count"] == rebuilt["parity"]["legacy_count"]
     assert snapshot_read["sqlite_count"] == rebuilt["parity"]["sqlite_count"]
+
+
+def test_parity_snapshot_read_reuses_unchanged_file_cache(tmp_path, monkeypatch):
+    snapshot_path = tmp_path / "dlp" / "meter_parity_snapshot.json"
+    meter_storage_v2.write_parity_snapshot(
+        {
+            "schema_version": "dlp-meter-storage-v2-parity-v1",
+            "generated_at": "2026-04-27T00:00:00+00:00",
+            "mode": "dual_write_observe_only",
+            "status": "passed",
+            "legacy_count": 1,
+            "sqlite_count": 1,
+            "matching_request_id_count": 1,
+            "payload_hash_mismatch_count": 0,
+            "semantic_hash_mismatch_count": 0,
+            "critical_payload_hash_mismatch_count": 0,
+            "critical_mismatch_count": 0,
+            "missing_in_sqlite_count": 0,
+            "missing_in_legacy_count": 0,
+        },
+        path=snapshot_path,
+    )
+    meter_storage_v2._PARITY_SNAPSHOT_CACHE.clear()
+    read_count = {"value": 0}
+    original_read_text = Path.read_text
+
+    def counting_read_text(self, *args, **kwargs):
+        if self == snapshot_path:
+            read_count["value"] += 1
+        return original_read_text(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "read_text", counting_read_text)
+
+    first = meter_storage_v2.read_parity_snapshot(path=snapshot_path)
+    second = meter_storage_v2.read_parity_snapshot(path=snapshot_path)
+
+    assert first["status"] == "passed"
+    assert second["status"] == "passed"
+    assert read_count["value"] == 1
 
 
 def test_parity_snapshot_atomic_write_failure_preserves_old_snapshot(tmp_path, monkeypatch):
