@@ -46,6 +46,7 @@ def append_event(event: dict) -> None:
     line = json.dumps(event, ensure_ascii=False) + "\n"
     with open(EVENTS_PATH, "a", encoding="utf-8") as f:
         f.write(line)
+    enforce_jsonl_retention(EVENTS_PATH, retention_days=RETENTION_DAYS, max_active_lines=MAX_RECENT_READ_LINES)
 
 
 def read_recent_events(limit: int = 500) -> list[dict]:

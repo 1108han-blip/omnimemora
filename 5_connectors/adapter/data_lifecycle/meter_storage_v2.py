@@ -241,13 +241,93 @@ def read_parity_snapshot(*, path: Optional[str | Path] = None) -> dict[str, Any]
     }
 
 
+def _frozen_cleanup_status() -> dict[str, Any]:
+    return {
+        "status": "frozen",
+        "mode": "manual_maintenance_preferred",
+        "cleanup_allowed": False,
+        "candidate_file_count": 0,
+        "estimated_reclaim_bytes": 0,
+        "blocking_reasons_count": 0,
+        "execution_gate_status": "frozen",
+        "execution_gate_allowed": False,
+        "transaction_preview_status": "frozen",
+        "transaction_execution_allowed": False,
+        "rollback_drill_status": "frozen",
+        "rollback_drill_checksum_match": False,
+        "rollback_required": True,
+        "pilot_status": "frozen",
+        "pilot_mode": "single_reversible_quarantine_only",
+        "source_move_executed": False,
+        "delete_executed": False,
+        "compress_executed": False,
+        "truncate_executed": False,
+        "batch_cleanup_executed": False,
+        "stability_window_status": "frozen",
+        "stability_window_observed_pilot_status": "frozen",
+        "stability_window_cleanup_scope_expansion_started": False,
+        "scaleup_readiness_status": "frozen",
+        "scaleup_ready": False,
+        "repeatable_pilot_protocol_status": "frozen",
+        "second_file_pilot_proposal_status": "frozen",
+        "second_file_pilot_approval_readiness_status": "frozen",
+        "second_file_pilot_allowed": False,
+        "cleanup_scope_expansion_started": False,
+    }
+
+
+def _frozen_backup_export_status() -> dict[str, Any]:
+    return {
+        "status": "frozen",
+        "mode": "manual_maintenance_preferred",
+        "backup_export_allowed": False,
+        "cleanup_allowed": False,
+        "execution_allowed": False,
+        "candidate_file_count": 0,
+        "estimated_export_bytes": 0,
+        "blocking_reasons_count": 0,
+        "plan_status": "frozen",
+        "dry_run_mode": "dry_run_preview_only",
+        "destination_status": {
+            "status": "frozen",
+            "path": None,
+            "exists": False,
+            "is_directory": False,
+            "free_bytes": None,
+            "required_free_bytes": None,
+            "policy_ok": False,
+        },
+        "package_manifest_status": "frozen",
+        "package_manifest_file_count": 0,
+        "package_manifest_total_bytes": 0,
+        "approval_template_status": "frozen",
+        "execution_gate_status": "frozen",
+        "execution_gate_allowed": False,
+        "approval_status": "frozen",
+        "execution_proposal_status": "frozen",
+        "operator_decision_required": False,
+        "copy_pilot_status": "frozen",
+        "copy_pilot_source_retained": True,
+        "copy_pilot_checksum_match": False,
+        "copy_pilot_cleanup_started": False,
+        "copy_pilot_read_path_unchanged": True,
+        "restore_readback_status": "frozen",
+        "restore_readback_source_retained": True,
+        "restore_readback_backup_copy_readable": False,
+        "restore_readback_checksum_match": False,
+        "restore_readback_production_restore_started": False,
+        "restore_readback_cleanup_started": False,
+        "backup_export_execution_started": False,
+        "cleanup_execution_started": False,
+    }
+
+
 def get_status_payload() -> dict[str, Any]:
     _meter_v2.init_schema()
     meta = _meter_v2.get_meta()
     latest_error = _meter_v2.latest_write_error()
     write_error_count = _meter_v2.count_write_errors()
     sqlite_count = _meter_v2.count_records()
-    legacy_count = len(_legacy_index())
 
     status = "healthy"
     if write_error_count > 0:
@@ -283,394 +363,11 @@ def get_status_payload() -> dict[str, Any]:
     if status_mode not in {_status_read_resolver.MODE_SQLITE_FIRST, _status_read_resolver.MODE_LEGACY_ONLY}:
         status_mode = _status_read_resolver.MODE_SQLITE_FIRST
     status_switch_enabled = status_mode == _status_read_resolver.MODE_SQLITE_FIRST
-    cleanup_view: dict[str, Any]
-    try:
-        cleanup_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_cleanup_preview")
-        cleanup_gate_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_cleanup_execution_gate")
-        cleanup_txn_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_cleanup_transaction_preview")
-        cleanup_rollback_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_cleanup_rollback_drill")
-        cleanup_pilot_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_cleanup_quarantine_pilot")
-        cleanup_stability_mod = importlib.import_module(
-            "5_connectors.adapter.data_lifecycle.meter_cleanup_stability_window"
-        )
-        try:
-            cleanup_scaleup_readiness_mod = importlib.import_module(
-                "5_connectors.adapter.data_lifecycle.meter_cleanup_scaleup_readiness"
-            )
-        except Exception:
-            cleanup_scaleup_readiness_mod = None
-        try:
-            cleanup_repeatable_protocol_mod = importlib.import_module(
-                "5_connectors.adapter.data_lifecycle.meter_cleanup_repeatable_pilot_protocol"
-            )
-        except Exception:
-            cleanup_repeatable_protocol_mod = None
-        try:
-            cleanup_second_file_proposal_mod = importlib.import_module(
-                "5_connectors.adapter.data_lifecycle.meter_cleanup_second_file_pilot_proposal"
-            )
-        except Exception:
-            cleanup_second_file_proposal_mod = None
-        try:
-            cleanup_second_file_approval_readiness_mod = importlib.import_module(
-                "5_connectors.adapter.data_lifecycle.meter_cleanup_second_file_pilot_approval_readiness"
-            )
-        except Exception:
-            cleanup_second_file_approval_readiness_mod = None
-        preview = cleanup_mod.read_preview()
-        cleanup_gate = cleanup_gate_mod.read_gate()
-        cleanup_txn_preview = cleanup_txn_mod.read_preview()
-        cleanup_rollback = cleanup_rollback_mod.read_rollback_drill_report()
-        cleanup_pilot = cleanup_pilot_mod.read_latest_pilot()
-        cleanup_stability = cleanup_stability_mod.read_stability_window_report()
-        cleanup_scaleup_readiness = (
-            cleanup_scaleup_readiness_mod.read_readiness_report() if cleanup_scaleup_readiness_mod is not None else None
-        )
-        cleanup_repeatable_protocol = (
-            cleanup_repeatable_protocol_mod.read_protocol() if cleanup_repeatable_protocol_mod is not None else None
-        )
-        cleanup_second_file_proposal = (
-            cleanup_second_file_proposal_mod.read_proposal() if cleanup_second_file_proposal_mod is not None else None
-        )
-        cleanup_second_file_approval_readiness = (
-            cleanup_second_file_approval_readiness_mod.read_approval_readiness()
-            if cleanup_second_file_approval_readiness_mod is not None
-            else None
-        )
-        if isinstance(preview, dict):
-            blocking_reasons = preview.get("blocking_reasons") or []
-            summary = preview.get("summary") or {}
-            cleanup_view = {
-                "status": str(preview.get("status") or "blocked"),
-                "mode": str(preview.get("mode") or cleanup_mod.METER_CLEANUP_PREVIEW_MODE),
-                "cleanup_allowed": bool(preview.get("cleanup_allowed")),
-                "candidate_file_count": int(summary.get("candidate_file_count", 0) or 0),
-                "estimated_reclaim_bytes": int(preview.get("estimated_reclaim_bytes", 0) or 0),
-                "blocking_reasons_count": int(len(blocking_reasons)),
-                "execution_gate_status": str((cleanup_gate or {}).get("cleanup_gate_status") or "missing"),
-                "execution_gate_allowed": bool((cleanup_gate or {}).get("cleanup_allowed") is True),
-                "transaction_preview_status": str((cleanup_txn_preview or {}).get("status") or "missing"),
-                "transaction_execution_allowed": bool((cleanup_txn_preview or {}).get("execution_allowed") is True),
-                "rollback_drill_status": str((cleanup_rollback or {}).get("status") or "missing"),
-                "rollback_drill_checksum_match": bool((cleanup_rollback or {}).get("checksum_match", False)),
-                "rollback_required": bool((cleanup_gate or {}).get("rollback_required", True)),
-                "pilot_status": str((cleanup_pilot or {}).get("status") or "missing"),
-                "pilot_mode": str((cleanup_pilot or {}).get("mode") or "single_reversible_quarantine_only"),
-                "source_move_executed": bool((cleanup_pilot or {}).get("source_move_executed", False)),
-                "delete_executed": bool((cleanup_pilot or {}).get("delete_executed", False)),
-                "compress_executed": bool((cleanup_pilot or {}).get("compress_executed", False)),
-                "truncate_executed": bool((cleanup_pilot or {}).get("truncate_executed", False)),
-                "batch_cleanup_executed": bool((cleanup_pilot or {}).get("batch_cleanup_executed", False)),
-                "stability_window_status": str((cleanup_stability or {}).get("status") or "missing"),
-                "stability_window_observed_pilot_status": str(
-                    (cleanup_stability or {}).get("observed_pilot_status") or "missing"
-                ),
-                "stability_window_cleanup_scope_expansion_started": bool(
-                    (cleanup_stability or {}).get("cleanup_scope_expansion_started", False)
-                ),
-                "scaleup_readiness_status": str((cleanup_scaleup_readiness or {}).get("status") or "missing"),
-                "scaleup_ready": bool((cleanup_scaleup_readiness or {}).get("ready_for_scaleup") is True),
-                "repeatable_pilot_protocol_status": str((cleanup_repeatable_protocol or {}).get("status") or "missing"),
-                "second_file_pilot_proposal_status": str((cleanup_second_file_proposal or {}).get("status") or "missing"),
-                "second_file_pilot_approval_readiness_status": str(
-                    (cleanup_second_file_approval_readiness or {}).get("status") or "missing"
-                ),
-                "second_file_pilot_allowed": bool((cleanup_second_file_proposal or {}).get("second_file_pilot_allowed") is True),
-                "cleanup_scope_expansion_started": False,
-            }
-        else:
-            cleanup_view = {
-                "status": "missing",
-                "mode": "preview_only",
-                "cleanup_allowed": False,
-                "candidate_file_count": 0,
-                "estimated_reclaim_bytes": 0,
-                "blocking_reasons_count": 0,
-                "execution_gate_status": "missing",
-                "execution_gate_allowed": False,
-                "transaction_preview_status": "missing",
-                "transaction_execution_allowed": False,
-                "rollback_drill_status": "missing",
-                "rollback_drill_checksum_match": False,
-                "rollback_required": True,
-                "pilot_status": "missing",
-                "pilot_mode": "single_reversible_quarantine_only",
-                "source_move_executed": False,
-                "delete_executed": False,
-                "compress_executed": False,
-                "truncate_executed": False,
-                "batch_cleanup_executed": False,
-                "stability_window_status": "missing",
-                "stability_window_observed_pilot_status": "missing",
-                "stability_window_cleanup_scope_expansion_started": False,
-                "scaleup_readiness_status": "missing",
-                "scaleup_ready": False,
-                "repeatable_pilot_protocol_status": "missing",
-                "second_file_pilot_proposal_status": "missing",
-                "second_file_pilot_approval_readiness_status": "missing",
-                "second_file_pilot_allowed": False,
-                "cleanup_scope_expansion_started": False,
-            }
-    except Exception:
-        cleanup_view = {
-            "status": "missing",
-            "mode": "preview_only",
-            "cleanup_allowed": False,
-            "candidate_file_count": 0,
-            "estimated_reclaim_bytes": 0,
-            "blocking_reasons_count": 0,
-            "execution_gate_status": "missing",
-            "execution_gate_allowed": False,
-            "transaction_preview_status": "missing",
-            "transaction_execution_allowed": False,
-            "rollback_drill_status": "missing",
-            "rollback_drill_checksum_match": False,
-            "rollback_required": True,
-            "pilot_status": "missing",
-            "pilot_mode": "single_reversible_quarantine_only",
-            "source_move_executed": False,
-            "delete_executed": False,
-            "compress_executed": False,
-            "truncate_executed": False,
-            "batch_cleanup_executed": False,
-            "stability_window_status": "missing",
-            "stability_window_observed_pilot_status": "missing",
-            "stability_window_cleanup_scope_expansion_started": False,
-            "scaleup_readiness_status": "missing",
-            "scaleup_ready": False,
-            "repeatable_pilot_protocol_status": "missing",
-            "second_file_pilot_proposal_status": "missing",
-            "second_file_pilot_approval_readiness_status": "missing",
-            "second_file_pilot_allowed": False,
-            "cleanup_scope_expansion_started": False,
-        }
-    backup_export_view: dict[str, Any]
-    try:
-        backup_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_backup_export_readiness")
-        readiness = backup_mod.read_readiness()
-        plan_mod = importlib.import_module("5_connectors.adapter.data_lifecycle.meter_backup_export_plan")
-        plan = plan_mod.read_plan()
-        package_manifest_mod = importlib.import_module(
-            "5_connectors.adapter.data_lifecycle.meter_backup_export_package_manifest"
-        )
-        package_manifest = package_manifest_mod.read_package_manifest()
-        approval_template_mod = importlib.import_module(
-            "5_connectors.adapter.data_lifecycle.meter_backup_export_approval_template"
-        )
-        approval_template = approval_template_mod.read_approval_template()
-        execution_gate_mod = importlib.import_module(
-            "5_connectors.adapter.data_lifecycle.meter_backup_export_execution_gate"
-        )
-        execution_gate = execution_gate_mod.read_gate()
-        operator_approval_mod = importlib.import_module(
-            "5_connectors.adapter.data_lifecycle.meter_backup_export_operator_approval"
-        )
-        operator_approval = operator_approval_mod.read_operator_approval()
-        execution_proposal_mod = importlib.import_module(
-            "5_connectors.adapter.data_lifecycle.meter_backup_export_execution_proposal"
-        )
-        execution_proposal = execution_proposal_mod.read_execution_proposal()
-        copy_pilot_mod = importlib.import_module(
-            "5_connectors.adapter.data_lifecycle.meter_backup_export_copy_pilot"
-        )
-        copy_pilot = copy_pilot_mod.read_latest_copy_pilot()
-        restore_readback_mod = importlib.import_module(
-            "5_connectors.adapter.data_lifecycle.meter_backup_export_restore_readback"
-        )
-        restore_readback = restore_readback_mod.read_restore_readback_report()
-        if isinstance(readiness, dict):
-            summary = readiness.get("summary") or {}
-            blocking_reasons = readiness.get("blocking_reasons") or []
-            plan_summary = (plan or {}).get("summary") or {}
-            plan_blocking = (plan or {}).get("blocking_reasons") or []
-            plan_dest = (plan or {}).get("destination_status")
-            if not isinstance(plan_dest, dict):
-                plan_dest = {
-                    "status": "unknown",
-                    "path": None,
-                    "exists": False,
-                    "is_directory": False,
-                    "free_bytes": None,
-                    "required_free_bytes": None,
-                    "policy_ok": False,
-                }
-            candidate_count = int(
-                plan_summary.get("candidate_file_count", summary.get("candidate_file_count", 0)) or 0
-            )
-            estimated_export_bytes = int(
-                plan_summary.get("estimated_export_bytes", readiness.get("estimated_export_bytes", 0)) or 0
-            )
-            blocking_count = int(
-                plan_summary.get("blocking_reasons_count", len(plan_blocking) if isinstance(plan_blocking, list) else 0)
-                or len(blocking_reasons)
-            )
-            manifest_summary = (package_manifest or {}).get("summary") or {}
-            manifest_file_count = int(
-                manifest_summary.get(
-                    "file_count",
-                    len((package_manifest or {}).get("would_export_files") or [])
-                    if isinstance((package_manifest or {}).get("would_export_files"), list)
-                    else 0,
-                )
-                or 0
-            )
-            manifest_total_bytes = int(
-                manifest_summary.get("total_bytes", (package_manifest or {}).get("total_bytes", 0))
-                or 0
-            )
-            gate_summary = (execution_gate or {}).get("summary") or {}
-            gate_blocking_count = int(gate_summary.get("blocking_count", 0) or 0)
-            approval_status = str(
-                ((execution_gate or {}).get("approval") or {}).get("status")
-                or ("present" if isinstance(operator_approval, dict) else "missing")
-            )
-            backup_export_view = {
-                "status": str(readiness.get("status") or "blocked"),
-                "mode": str(readiness.get("mode") or backup_mod.METER_BACKUP_EXPORT_READINESS_MODE),
-                "backup_export_allowed": bool(readiness.get("backup_export_allowed")),
-                "cleanup_allowed": False,
-                "execution_allowed": False,
-                "candidate_file_count": candidate_count,
-                "estimated_export_bytes": estimated_export_bytes,
-                "blocking_reasons_count": gate_blocking_count if isinstance(execution_gate, dict) else blocking_count,
-                "plan_status": str((plan or {}).get("status") or "missing"),
-                "dry_run_mode": str((plan or {}).get("mode") or "dry_run_preview_only"),
-                "destination_status": plan_dest,
-                "package_manifest_status": str((package_manifest or {}).get("status") or "missing"),
-                "package_manifest_file_count": manifest_file_count,
-                "package_manifest_total_bytes": manifest_total_bytes,
-                "approval_template_status": str((approval_template or {}).get("status") or "missing"),
-                "execution_gate_status": str((execution_gate or {}).get("status") or "missing"),
-                "execution_gate_allowed": bool((execution_gate or {}).get("allowed") is True),
-                "approval_status": approval_status,
-                "execution_proposal_status": str((execution_proposal or {}).get("proposal_status") or "missing"),
-                "operator_decision_required": bool(
-                    (execution_proposal or {}).get("operator_decision_required")
-                    if isinstance(execution_proposal, dict)
-                    else True
-                ),
-                "copy_pilot_status": str((copy_pilot or {}).get("status") or "missing"),
-                "copy_pilot_source_retained": bool(
-                    (copy_pilot or {}).get("source_retained")
-                    if isinstance(copy_pilot, dict)
-                    else True
-                ),
-                "copy_pilot_checksum_match": bool(
-                    (copy_pilot or {}).get("checksum_match")
-                    if isinstance(copy_pilot, dict)
-                    else False
-                ),
-                "copy_pilot_cleanup_started": False,
-                "copy_pilot_read_path_unchanged": True,
-                "restore_readback_status": str((restore_readback or {}).get("status") or "missing"),
-                "restore_readback_source_retained": bool(
-                    (restore_readback or {}).get("source_retained")
-                    if isinstance(restore_readback, dict)
-                    else True
-                ),
-                "restore_readback_backup_copy_readable": bool(
-                    (restore_readback or {}).get("backup_copy_readable")
-                    if isinstance(restore_readback, dict)
-                    else False
-                ),
-                "restore_readback_checksum_match": bool(
-                    (restore_readback or {}).get("checksum_match")
-                    if isinstance(restore_readback, dict)
-                    else False
-                ),
-                "restore_readback_production_restore_started": False,
-                "restore_readback_cleanup_started": False,
-                "backup_export_execution_started": False,
-                "cleanup_execution_started": False,
-            }
-        else:
-            backup_export_view = {
-                "status": "missing",
-                "mode": "backup_export_readiness_only",
-                "backup_export_allowed": False,
-                "cleanup_allowed": False,
-                "execution_allowed": False,
-                "candidate_file_count": 0,
-                "estimated_export_bytes": 0,
-                "blocking_reasons_count": 0,
-                "plan_status": "missing",
-                "dry_run_mode": "dry_run_preview_only",
-                "destination_status": {
-                    "status": "unknown",
-                    "path": None,
-                    "exists": False,
-                    "is_directory": False,
-                    "free_bytes": None,
-                    "required_free_bytes": None,
-                    "policy_ok": False,
-                },
-                "package_manifest_status": "missing",
-                "package_manifest_file_count": 0,
-                "package_manifest_total_bytes": 0,
-                "approval_template_status": "missing",
-                "execution_gate_status": "missing",
-                "execution_gate_allowed": False,
-                "approval_status": "missing",
-                "execution_proposal_status": "missing",
-                "operator_decision_required": True,
-                "copy_pilot_status": "missing",
-                "copy_pilot_source_retained": True,
-                "copy_pilot_checksum_match": False,
-                "copy_pilot_cleanup_started": False,
-                "copy_pilot_read_path_unchanged": True,
-                "restore_readback_status": "missing",
-                "restore_readback_source_retained": True,
-                "restore_readback_backup_copy_readable": False,
-                "restore_readback_checksum_match": False,
-                "restore_readback_production_restore_started": False,
-                "restore_readback_cleanup_started": False,
-                "backup_export_execution_started": False,
-                "cleanup_execution_started": False,
-            }
-    except Exception:
-        backup_export_view = {
-            "status": "missing",
-            "mode": "backup_export_readiness_only",
-            "backup_export_allowed": False,
-            "cleanup_allowed": False,
-            "execution_allowed": False,
-            "candidate_file_count": 0,
-            "estimated_export_bytes": 0,
-            "blocking_reasons_count": 0,
-            "plan_status": "missing",
-            "dry_run_mode": "dry_run_preview_only",
-            "destination_status": {
-                "status": "unknown",
-                "path": None,
-                "exists": False,
-                "is_directory": False,
-                "free_bytes": None,
-                "required_free_bytes": None,
-                "policy_ok": False,
-            },
-            "package_manifest_status": "missing",
-            "package_manifest_file_count": 0,
-            "package_manifest_total_bytes": 0,
-            "approval_template_status": "missing",
-            "execution_gate_status": "missing",
-            "execution_gate_allowed": False,
-            "approval_status": "missing",
-            "execution_proposal_status": "missing",
-            "operator_decision_required": True,
-            "copy_pilot_status": "missing",
-            "copy_pilot_source_retained": True,
-            "copy_pilot_checksum_match": False,
-            "copy_pilot_cleanup_started": False,
-            "copy_pilot_read_path_unchanged": True,
-            "restore_readback_status": "missing",
-            "restore_readback_source_retained": True,
-            "restore_readback_backup_copy_readable": False,
-            "restore_readback_checksum_match": False,
-            "restore_readback_production_restore_started": False,
-            "restore_readback_cleanup_started": False,
-            "backup_export_execution_started": False,
-            "cleanup_execution_started": False,
-        }
+    parity_snapshot = read_parity_snapshot()
+    snapshot_counts = parity_snapshot.get("source_counts") if isinstance(parity_snapshot.get("source_counts"), dict) else {}
+    legacy_count = int(parity_snapshot.get("legacy_count", snapshot_counts.get("legacy_count", 0)) or 0)
+    cleanup_view = _frozen_cleanup_status()
+    backup_export_view = _frozen_backup_export_status()
 
     return {
         "schema_version": METER_STORAGE_STATUS_SCHEMA_VERSION,

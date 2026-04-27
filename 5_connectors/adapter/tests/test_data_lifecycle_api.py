@@ -15,6 +15,7 @@ data_lifecycle_api = importlib.import_module("5_connectors.adapter.data_lifecycl
 compile_store = importlib.import_module("5_connectors.adapter.infrastructure.compile_store")
 proxy_store = importlib.import_module("5_connectors.adapter.infrastructure.proxy_store")
 trace_events = importlib.import_module("5_connectors.adapter.trace_events")
+log_segments = importlib.import_module("5_connectors.adapter.log_segments")
 
 
 def _build_policy(tmp_path, *, ttl_seconds=10.0, stale_max_age_seconds=300.0):
@@ -114,9 +115,46 @@ def test_internal_event_logs_are_capped_to_recent_tail(tmp_path, monkeypatch):
     assert all(json.loads(line)["request_id"] != "old" for line in compile_path.read_text(encoding="utf-8").splitlines())
     assert all(json.loads(line)["request_id"] != "old" for line in proxy_path.read_text(encoding="utf-8").splitlines())
     assert all(json.loads(line)["request_id"] != "old" for line in trace_path.read_text(encoding="utf-8").splitlines())
-    assert len(compile_path.read_text(encoding="utf-8").splitlines()) <= 6
-    assert len(proxy_path.read_text(encoding="utf-8").splitlines()) <= 6
-    assert len(trace_path.read_text(encoding="utf-8").splitlines()) <= 6
+    assert len(compile_path.read_text(encoding="utf-8").splitlines()) <= 5
+    assert len(proxy_path.read_text(encoding="utf-8").splitlines()) <= 5
+    assert len(trace_path.read_text(encoding="utf-8").splitlines()) <= 5
+
+
+def test_segment_tail_reader_returns_newest_lines_across_rotated_files(tmp_path):
+    base = tmp_path / "trace_events.jsonl"
+    older = tmp_path / "trace_events.20260425010101.jsonl"
+    newer = tmp_path / "trace_events.20260426010101.jsonl"
+    older.write_text('{"id":"old-1"}\n{"id":"old-2"}\n', encoding="utf-8")
+    newer.write_text('{"id":"new-1"}\n{"id":"new-2"}\n', encoding="utf-8")
+    base.write_text('{"id":"active-1"}\n{"id":"active-2"}\n', encoding="utf-8")
+    log_segments.os.utime(older, (1, 1))
+    log_segments.os.utime(newer, (2, 2))
+    log_segments.os.utime(base, (3, 3))
+
+    lines = log_segments.read_segment_lines(base, max_lines=3)
+
+    assert [json.loads(line)["id"] for line in lines] == ["new-2", "active-1", "active-2"]
+
+
+def test_dlp_health_fast_status_does_not_read_frozen_governance_artifacts(tmp_path, monkeypatch):
+    policy = _build_policy(tmp_path)
+
+    def fail_import(name):
+        if name.startswith("5_connectors.adapter.data_lifecycle.archive_"):
+            raise AssertionError(name)
+        if name.startswith("5_connectors.adapter.data_lifecycle.raw_evidence_segments"):
+            raise AssertionError(name)
+        if name.startswith("5_connectors.adapter.data_lifecycle.retention"):
+            raise AssertionError(name)
+        return importlib.import_module(name)
+
+    monkeypatch.setattr(health_mod.meter_storage_v2, "get_status_payload", lambda: {"status": "healthy"})
+    monkeypatch.setattr(importlib, "import_module", fail_import)
+
+    payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
+    assert payload["retention_manifest"]["status"] == "frozen"
+    assert payload["archive_plan"]["status"] == "frozen"
+    assert payload["raw_log_retention"]["status"] == "bounded"
 
 
 def test_maintenance_state_retention_prunes_old_records(tmp_path, monkeypatch):
@@ -176,7 +214,7 @@ def test_dlp_health_status_uninitialized(tmp_path):
     policy = _build_policy(tmp_path)
     payload = health_mod.build_health_payload(policy=policy, now_ts=100.0)
     assert payload["status"] == "uninitialized"
-    assert payload["raw_evidence_segments"]["status"] == "missing"
+    assert payload["raw_evidence_segments"]["status"] == "frozen"
 
 
 def test_dlp_health_status_degraded_for_invalid_summary(tmp_path):
@@ -188,6 +226,8 @@ def test_dlp_health_status_degraded_for_invalid_summary(tmp_path):
 
 def test_dlp_health_status_maintenance_failed(tmp_path):
     policy = _build_policy(tmp_path)
+    original_retention_days = state_store.RETENTION_DAYS
+    state_store.RETENTION_DAYS = 36500
     summary_store.write_summary_atomic(
         {
             "schema_version": "dlp-family-window-summary-v1",
@@ -198,13 +238,16 @@ def test_dlp_health_status_maintenance_failed(tmp_path):
         },
         policy=policy,
     )
-    _append_record(
-        policy,
-        trigger="manual_refresh",
-        status="failed",
-        completed_at=datetime.fromtimestamp(101.0, tz=timezone.utc),
-    )
-    payload = health_mod.build_health_payload(policy=policy, now_ts=102.0)
+    try:
+        _append_record(
+            policy,
+            trigger="manual_refresh",
+            status="failed",
+            completed_at=datetime.fromtimestamp(101.0, tz=timezone.utc),
+        )
+        payload = health_mod.build_health_payload(policy=policy, now_ts=102.0)
+    finally:
+        state_store.RETENTION_DAYS = original_retention_days
     assert payload["status"] == "maintenance_failed"
 
 
@@ -579,7 +622,7 @@ def test_dlp_health_exposes_storage_pressure_without_cleanup(tmp_path, monkeypat
     assert summary_path.exists()
 
 
-def test_dlp_health_exposes_retention_manifest_summary(tmp_path):
+def test_dlp_health_uses_fast_frozen_retention_manifest_summary(tmp_path):
     policy = _build_policy(tmp_path)
     manifest_path = tmp_path / "retention_manifest.json"
     manifest_path.write_text(
@@ -589,13 +632,13 @@ def test_dlp_health_exposes_retention_manifest_summary(tmp_path):
 
     payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
     retention_manifest = payload.get("retention_manifest") or {}
-    assert retention_manifest["status"] == "present"
-    assert retention_manifest["artifact_count"] == 3
-    assert retention_manifest["total_bytes"] == 1234
-    assert retention_manifest["warnings_count"] == 1
+    assert retention_manifest["status"] == "frozen"
+    assert retention_manifest["artifact_count"] == 0
+    assert retention_manifest["total_bytes"] == 0
+    assert retention_manifest["warnings_count"] == 0
 
 
-def test_dlp_health_exposes_traceability_report_summary(tmp_path):
+def test_dlp_health_uses_fast_frozen_traceability_report_summary(tmp_path):
     policy = _build_policy(tmp_path)
     traceability_path = tmp_path / "traceability_report.json"
     traceability_path.write_text(
@@ -605,15 +648,15 @@ def test_dlp_health_exposes_traceability_report_summary(tmp_path):
 
     payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
     traceability_report = payload.get("traceability_report") or {}
-    assert traceability_report["status"] == "present"
-    assert traceability_report["sample_count"] == 12
-    assert traceability_report["fail_count"] == 1
-    assert traceability_report["warnings_count"] == 3
+    assert traceability_report["status"] == "frozen"
+    assert traceability_report["sample_count"] == 0
+    assert traceability_report["fail_count"] == 0
+    assert traceability_report["warnings_count"] == 0
     assert traceability_report["unexplained_partial_count"] == 0
     assert traceability_report["current_epoch_pass_rate"] is None
 
 
-def test_dlp_health_exposes_archive_plan_summary(tmp_path):
+def test_dlp_health_uses_fast_frozen_archive_plan_summary(tmp_path):
     policy = _build_policy(tmp_path)
     archive_path = tmp_path / "archive_candidate_plan.json"
     archive_path.write_text(
@@ -623,13 +666,13 @@ def test_dlp_health_exposes_archive_plan_summary(tmp_path):
 
     payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
     archive_plan = payload.get("archive_plan") or {}
-    assert archive_plan["status"] == "present"
-    assert archive_plan["mode"] == "dry_run_only"
-    assert archive_plan["eligible_count"] == 3
-    assert archive_plan["blocked_count"] == 2
-    assert archive_plan["review_required_count"] == 1
-    assert archive_plan["total_candidate_bytes"] == 98765
-    assert archive_plan["warnings_count"] == 4
+    assert archive_plan["status"] == "frozen"
+    assert archive_plan["mode"] == "automatic_cleanup_expansion_paused"
+    assert archive_plan["eligible_count"] == 0
+    assert archive_plan["blocked_count"] == 0
+    assert archive_plan["review_required_count"] == 0
+    assert archive_plan["total_candidate_bytes"] == 0
+    assert archive_plan["warnings_count"] == 0
 
 
 def test_dlp_health_exposes_archive_transaction_preview_summary(tmp_path):
@@ -641,15 +684,15 @@ def test_dlp_health_exposes_archive_transaction_preview_summary(tmp_path):
     )
     payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
     txn = payload.get("archive_transaction_preview") or {}
-    assert txn["status"] == "present"
-    assert txn["mode"] == "preview_only"
-    assert txn["eligible_input_count"] == 3
-    assert txn["preview_item_count"] == 2
-    assert txn["excluded_blocked_count"] == 4
-    assert txn["excluded_review_required_count"] == 1
+    assert txn["status"] == "frozen"
+    assert txn["mode"] == "automatic_cleanup_expansion_paused"
+    assert txn["eligible_input_count"] == 0
+    assert txn["preview_item_count"] == 0
+    assert txn["excluded_blocked_count"] == 0
+    assert txn["excluded_review_required_count"] == 0
     assert txn["blocked_precondition_count"] == 0
-    assert txn["total_preview_bytes"] == 3456
-    assert txn["warnings_count"] == 2
+    assert txn["total_preview_bytes"] == 0
+    assert txn["warnings_count"] == 0
 
 
 def test_dlp_health_exposes_archive_restore_readiness_summary(tmp_path):
@@ -661,12 +704,12 @@ def test_dlp_health_exposes_archive_restore_readiness_summary(tmp_path):
     )
     payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
     readiness = payload.get("archive_restore_readiness") or {}
-    assert readiness["status"] == "present"
-    assert readiness["mode"] == "readiness_only"
-    assert readiness["sample_count"] == 6
-    assert readiness["mapped_request_count"] == 5
-    assert readiness["unmapped_request_count"] == 1
-    assert readiness["warnings_count"] == 1
+    assert readiness["status"] == "frozen"
+    assert readiness["mode"] == "automatic_cleanup_expansion_paused"
+    assert readiness["sample_count"] == 0
+    assert readiness["mapped_request_count"] == 0
+    assert readiness["unmapped_request_count"] == 0
+    assert readiness["warnings_count"] == 0
 
 
 def test_data_lifecycle_archive_execution_gate_endpoint_returns_missing_when_absent(monkeypatch):
@@ -734,11 +777,11 @@ def test_dlp_health_exposes_archive_execution_gate_summary(tmp_path):
     )
     payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
     gate = payload.get("archive_execution_gate") or {}
-    assert gate["status"] == "present"
+    assert gate["status"] == "frozen"
     assert gate["allowed"] is False
-    assert gate["gate_status"] == "blocked"
-    assert gate["blocking_count"] == 1
-    assert gate["approval_status"] == "missing"
+    assert gate["gate_status"] == "frozen"
+    assert gate["blocking_count"] == 0
+    assert gate["approval_status"] == "frozen"
 
 
 def test_data_lifecycle_archive_pilot_copy_one_endpoint_returns_record(monkeypatch):
@@ -818,13 +861,13 @@ def test_dlp_health_exposes_archive_pilot_summary(tmp_path):
     )
     payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
     pilot = payload.get("archive_pilot") or {}
-    assert pilot["status"] == "present"
-    assert pilot["pilot_id"] == "pilot-1"
-    assert pilot["source_kind"] == "compile_events"
-    assert pilot["source_bytes"] == 123
-    assert pilot["archive_bytes"] == 123
-    assert pilot["checksum_match"] is True
-    assert pilot["source_retained"] is True
+    assert pilot["status"] == "frozen"
+    assert pilot["pilot_id"] is None
+    assert pilot["source_kind"] is None
+    assert pilot["source_bytes"] == 0
+    assert pilot["archive_bytes"] == 0
+    assert pilot["checksum_match"] is False
+    assert pilot["source_retained"] is False
     assert pilot["read_path_unchanged"] is True
 
 
@@ -882,12 +925,12 @@ def test_dlp_health_exposes_archive_readthrough_summary(tmp_path):
     )
     payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
     readthrough = payload.get("archive_readthrough") or {}
-    assert readthrough["status"] == "passed"
-    assert readthrough["source_retained"] is True
-    assert readthrough["archive_copy_readable"] is True
-    assert readthrough["checksum_match"] is True
+    assert readthrough["status"] == "frozen"
+    assert readthrough["source_retained"] is False
+    assert readthrough["archive_copy_readable"] is False
+    assert readthrough["checksum_match"] is False
     assert readthrough["read_path_unchanged"] is True
-    assert readthrough["validated_at"] == "2026-04-25T00:00:00+00:00"
+    assert readthrough["validated_at"] is None
 
 
 def test_data_lifecycle_archive_fallback_simulation_endpoint_returns_missing_when_absent(monkeypatch):
@@ -942,14 +985,14 @@ def test_dlp_health_exposes_archive_fallback_simulation_summary(tmp_path):
     )
     payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
     fallback = payload.get("archive_fallback_simulation") or {}
-    assert fallback["status"] == "passed"
-    assert fallback["mode"] == "diagnostic_fallback_only"
-    assert fallback["fallback_available"] is True
-    assert fallback["archive_copy_readable"] is True
-    assert fallback["checksum_match"] is True
-    assert fallback["source_missing_simulated"] is True
+    assert fallback["status"] == "frozen"
+    assert fallback["mode"] == "automatic_cleanup_expansion_paused"
+    assert fallback["fallback_available"] is False
+    assert fallback["archive_copy_readable"] is False
+    assert fallback["checksum_match"] is False
+    assert fallback["source_missing_simulated"] is False
     assert fallback["production_read_path_unchanged"] is True
-    assert fallback["request_evidence_fallback_status"] == "mapped"
+    assert fallback["request_evidence_fallback_status"] is None
 
 
 def test_data_lifecycle_archive_quarantine_readiness_endpoint_returns_missing_when_absent(monkeypatch):
@@ -1003,14 +1046,14 @@ def test_dlp_health_exposes_archive_quarantine_readiness_summary(tmp_path):
     )
     payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
     quarantine = payload.get("archive_quarantine_readiness") or {}
-    assert quarantine["status"] == "ready_for_approval"
-    assert quarantine["mode"] == "readiness_plan_only"
-    assert quarantine["candidate_present"] is True
+    assert quarantine["status"] == "frozen"
+    assert quarantine["mode"] == "automatic_cleanup_expansion_paused"
+    assert quarantine["candidate_present"] is False
     assert quarantine["blocking_count"] == 0
     assert quarantine["source_move_executed"] is False
-    assert quarantine["source_retained"] is True
+    assert quarantine["source_retained"] is False
     assert quarantine["production_read_path_unchanged"] is True
-    assert quarantine["planned_action"] == "quarantine_source_preview_only"
+    assert quarantine["planned_action"] is None
 
 
 def test_data_lifecycle_archive_quarantine_latest_endpoint_returns_missing_when_absent(monkeypatch):
@@ -1067,13 +1110,13 @@ def test_dlp_health_exposes_archive_quarantine_record_summary(tmp_path):
     )
     payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
     quarantine = payload.get("archive_quarantine") or {}
-    assert quarantine["status"] == "blocked"
-    assert quarantine["mode"] == "single_artifact_quarantine_only"
-    assert quarantine["source_kind"] == "compile_events"
+    assert quarantine["status"] == "frozen"
+    assert quarantine["mode"] == "automatic_cleanup_expansion_paused"
+    assert quarantine["source_kind"] is None
     assert quarantine["source_move_executed"] is False
-    assert quarantine["source_retained"] is True
-    assert quarantine["blocking_count"] == 1
-    assert quarantine["quarantine_path"] == "/tmp/q"
+    assert quarantine["source_retained"] is False
+    assert quarantine["blocking_count"] == 0
+    assert quarantine["quarantine_path"] is None
 
 
 def test_data_lifecycle_archive_restore_pilot_latest_endpoint_returns_missing_when_absent(monkeypatch):
@@ -1129,9 +1172,9 @@ def test_dlp_health_exposes_archive_restore_pilot_summary(tmp_path):
     )
     payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
     restore = payload.get("archive_restore_pilot") or {}
-    assert restore["status"] == "blocked_no_successful_quarantine"
-    assert restore["mode"] == "conditional_restore_to_staging"
-    assert restore["restore_target_scope"] == "staging"
+    assert restore["status"] == "frozen"
+    assert restore["mode"] == "automatic_cleanup_expansion_paused"
+    assert restore["restore_target_scope"] is None
     assert restore["production_source_overwrite"] is False
     assert restore["archive_copy_retained"] is True
     assert restore["quarantine_copy_retained"] is True
@@ -1195,11 +1238,11 @@ def test_dlp_health_exposes_archive_non_active_candidate_summary(tmp_path):
     )
     payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
     non_active = payload.get("archive_non_active_candidates") or {}
-    assert non_active["status"] == "present"
-    assert non_active["mode"] == "non_active_selection_report_only"
-    assert non_active["total_scanned"] == 3
-    assert non_active["plausible_non_active_count"] == 1
-    assert non_active["forbidden_count"] == 2
+    assert non_active["status"] == "frozen"
+    assert non_active["mode"] == "automatic_cleanup_expansion_paused"
+    assert non_active["total_scanned"] == 0
+    assert non_active["plausible_non_active_count"] == 0
+    assert non_active["forbidden_count"] == 0
     assert non_active["source_move_delete_compress_executed"] is False
 
 
@@ -1262,11 +1305,11 @@ def test_dlp_health_exposes_archive_non_active_quarantine_readiness_summary(tmp_
     )
     payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
     readiness = payload.get("archive_non_active_quarantine_readiness") or {}
-    assert readiness["status"] == "ready_for_operator_approval"
-    assert readiness["mode"] == "non_active_quarantine_readiness_only"
-    assert readiness["selected_candidate_present"] is True
-    assert readiness["selected_candidate_kind"] == "archive_pilot_copy"
-    assert readiness["planned_quarantine_path"] == "/tmp/archive.copy.quarantine"
+    assert readiness["status"] == "frozen"
+    assert readiness["mode"] == "automatic_cleanup_expansion_paused"
+    assert readiness["selected_candidate_present"] is False
+    assert readiness["selected_candidate_kind"] is None
+    assert readiness["planned_quarantine_path"] is None
     assert readiness["source_move_executed"] is False
     assert readiness["non_active_copy_move_executed"] is False
     assert readiness["delete_compress_executed"] is False
@@ -1325,11 +1368,11 @@ def test_dlp_health_exposes_archive_non_active_execution_gate_summary(tmp_path):
     )
     payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
     gate = payload.get("archive_non_active_execution_gate") or {}
-    assert gate["status"] == "present"
+    assert gate["status"] == "frozen"
     assert gate["allowed"] is False
-    assert gate["gate_status"] == "blocked"
-    assert gate["blocking_count"] == 1
-    assert gate["approval_status"] == "missing"
+    assert gate["gate_status"] == "frozen"
+    assert gate["blocking_count"] == 0
+    assert gate["approval_status"] == "frozen"
     assert gate["source_move_allowed"] is False
     assert gate["delete_allowed"] is False
     assert gate["compress_allowed"] is False
@@ -1406,12 +1449,12 @@ def test_dlp_health_exposes_archive_non_active_quarantine_record_summary(tmp_pat
     )
     payload = health_mod.build_health_payload(policy=policy, now_ts=101.0)
     quarantine = payload.get("archive_non_active_quarantine") or {}
-    assert quarantine["status"] == "success"
-    assert quarantine["mode"] == "single_non_active_copy_quarantine_only"
-    assert quarantine["candidate_kind"] == "archive_pilot_copy"
-    assert quarantine["checksum_match"] is True
+    assert quarantine["status"] == "frozen"
+    assert quarantine["mode"] == "automatic_cleanup_expansion_paused"
+    assert quarantine["candidate_kind"] is None
+    assert quarantine["checksum_match"] is False
     assert quarantine["source_move_executed"] is False
-    assert quarantine["non_active_copy_move_executed"] is True
+    assert quarantine["non_active_copy_move_executed"] is False
     assert quarantine["delete_compress_executed"] is False
     assert quarantine["production_read_path_unchanged"] is True
 

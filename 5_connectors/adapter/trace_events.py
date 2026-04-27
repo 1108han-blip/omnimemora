@@ -47,6 +47,7 @@ def append_trace_event(event: Dict[str, Any]) -> None:
 
     with open(path, "a", encoding="utf-8") as handle:
         handle.write(json.dumps(event, ensure_ascii=False) + "\n")
+    enforce_jsonl_retention(path, retention_days=RETENTION_DAYS, max_active_lines=MAX_RECENT_READ_LINES)
 
 
 def read_recent_trace_events(limit: int = 200, trace_id: Optional[str] = None) -> List[Dict[str, Any]]:

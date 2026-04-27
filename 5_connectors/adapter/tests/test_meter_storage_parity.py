@@ -470,42 +470,42 @@ def test_rebuild_and_status_payload_keep_legacy_authoritative(tmp_path, monkeypa
     assert status["read_path"]["metrics_read_mode"] == "sqlite_first_legacy_fallback"
     assert status["read_path"]["status_read_model_read_mode"] == "sqlite_first_legacy_fallback"
     assert status["read_path"]["cleanup_eligibility"] == "readiness_only"
-    assert status["cleanup"]["status"] == "missing"
-    assert status["cleanup"]["mode"] == "preview_only"
+    assert status["cleanup"]["status"] == "frozen"
+    assert status["cleanup"]["mode"] == "manual_maintenance_preferred"
     assert status["cleanup"]["cleanup_allowed"] is False
-    assert status["cleanup"]["stability_window_status"] == "missing"
-    assert status["cleanup"]["stability_window_observed_pilot_status"] == "missing"
+    assert status["cleanup"]["stability_window_status"] == "frozen"
+    assert status["cleanup"]["stability_window_observed_pilot_status"] == "frozen"
     assert status["cleanup"]["stability_window_cleanup_scope_expansion_started"] is False
-    assert status["cleanup"]["scaleup_readiness_status"] == "missing"
+    assert status["cleanup"]["scaleup_readiness_status"] == "frozen"
     assert status["cleanup"]["scaleup_ready"] is False
-    assert status["cleanup"]["repeatable_pilot_protocol_status"] == "missing"
-    assert status["cleanup"]["second_file_pilot_proposal_status"] == "missing"
-    assert status["cleanup"]["second_file_pilot_approval_readiness_status"] == "missing"
+    assert status["cleanup"]["repeatable_pilot_protocol_status"] == "frozen"
+    assert status["cleanup"]["second_file_pilot_proposal_status"] == "frozen"
+    assert status["cleanup"]["second_file_pilot_approval_readiness_status"] == "frozen"
     assert status["cleanup"]["second_file_pilot_allowed"] is False
     assert status["cleanup"]["cleanup_scope_expansion_started"] is False
-    assert status["backup_export"]["status"] == "missing"
-    assert status["backup_export"]["mode"] == "backup_export_readiness_only"
+    assert status["backup_export"]["status"] == "frozen"
+    assert status["backup_export"]["mode"] == "manual_maintenance_preferred"
     assert status["backup_export"]["backup_export_allowed"] is False
     assert status["backup_export"]["cleanup_allowed"] is False
     assert status["backup_export"]["execution_allowed"] is False
-    assert status["backup_export"]["plan_status"] == "missing"
+    assert status["backup_export"]["plan_status"] == "frozen"
     assert status["backup_export"]["dry_run_mode"] == "dry_run_preview_only"
-    assert status["backup_export"]["destination_status"]["status"] == "unknown"
-    assert status["backup_export"]["package_manifest_status"] == "missing"
+    assert status["backup_export"]["destination_status"]["status"] == "frozen"
+    assert status["backup_export"]["package_manifest_status"] == "frozen"
     assert status["backup_export"]["package_manifest_file_count"] == 0
     assert status["backup_export"]["package_manifest_total_bytes"] == 0
-    assert status["backup_export"]["approval_template_status"] == "missing"
-    assert status["backup_export"]["execution_gate_status"] == "missing"
+    assert status["backup_export"]["approval_template_status"] == "frozen"
+    assert status["backup_export"]["execution_gate_status"] == "frozen"
     assert status["backup_export"]["execution_gate_allowed"] is False
-    assert status["backup_export"]["approval_status"] == "missing"
-    assert status["backup_export"]["execution_proposal_status"] == "missing"
-    assert status["backup_export"]["operator_decision_required"] is True
-    assert status["backup_export"]["copy_pilot_status"] == "missing"
+    assert status["backup_export"]["approval_status"] == "frozen"
+    assert status["backup_export"]["execution_proposal_status"] == "frozen"
+    assert status["backup_export"]["operator_decision_required"] is False
+    assert status["backup_export"]["copy_pilot_status"] == "frozen"
     assert status["backup_export"]["copy_pilot_source_retained"] is True
     assert status["backup_export"]["copy_pilot_checksum_match"] is False
     assert status["backup_export"]["copy_pilot_cleanup_started"] is False
     assert status["backup_export"]["copy_pilot_read_path_unchanged"] is True
-    assert status["backup_export"]["restore_readback_status"] == "missing"
+    assert status["backup_export"]["restore_readback_status"] == "frozen"
     assert status["backup_export"]["restore_readback_source_retained"] is True
     assert status["backup_export"]["restore_readback_backup_copy_readable"] is False
     assert status["backup_export"]["restore_readback_checksum_match"] is False
@@ -513,3 +513,39 @@ def test_rebuild_and_status_payload_keep_legacy_authoritative(tmp_path, monkeypa
     assert status["backup_export"]["restore_readback_cleanup_started"] is False
     assert status["backup_export"]["backup_export_execution_started"] is False
     assert status["backup_export"]["cleanup_execution_started"] is False
+
+
+def test_status_payload_uses_parity_snapshot_and_does_not_scan_legacy_index(tmp_path, monkeypatch):
+    sqlite_path = tmp_path / "meter_store.sqlite3"
+    snapshot_path = tmp_path / "meter_parity_snapshot.json"
+    monkeypatch.setenv("OMNIMEMORA_METER_STORE_V2_FILE", str(sqlite_path))
+    monkeypatch.setenv("OMNIMEMORA_DLP_METER_PARITY_SNAPSHOT_FILE", str(snapshot_path))
+    meter_storage_v2.write_parity_snapshot(
+        {
+            "status": "passed",
+            "legacy_count": 2,
+            "sqlite_count": 2,
+            "critical_mismatch_count": 0,
+            "payload_hash_mismatch_count": 0,
+            "semantic_hash_mismatch_count": 0,
+            "critical_payload_hash_mismatch_count": 0,
+            "missing_in_sqlite_count": 0,
+            "missing_in_legacy_count": 0,
+            "matching_request_id_count": 2,
+        }
+    )
+
+    def fail_legacy_index():
+        raise AssertionError("legacy index scan should not run on status")
+
+    def fail_parity_build(*args, **kwargs):
+        raise AssertionError("full parity build should not run on status")
+
+    monkeypatch.setattr(meter_storage_v2, "_legacy_index", fail_legacy_index)
+    monkeypatch.setattr(meter_storage_v2, "build_parity_report", fail_parity_build)
+
+    status = meter_storage_v2.get_status_payload()
+
+    assert status["storage"]["legacy_count"] == 2
+    assert status["cleanup"]["status"] == "frozen"
+    assert status["backup_export"]["status"] == "frozen"

@@ -28,6 +28,7 @@ def append_state_record(record: dict[str, Any], policy: Optional[DataLifecyclePo
     enforce_jsonl_retention(path, retention_days=RETENTION_DAYS, max_active_lines=MAX_RECENT_READ_LINES)
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, ensure_ascii=False) + "\n")
+    enforce_jsonl_retention(path, retention_days=RETENTION_DAYS, max_active_lines=MAX_RECENT_READ_LINES)
 
 
 def _normalize_filter_values(value: Optional[str | Iterable[str]]) -> Optional[set[str]]:

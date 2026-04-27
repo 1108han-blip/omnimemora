@@ -69,6 +69,7 @@ def append_compile_event(event: Dict[str, Any]) -> None:
     try:
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(event, ensure_ascii=False) + "\n")
+        enforce_jsonl_retention(path, retention_days=RETENTION_DAYS, max_active_lines=MAX_RECENT_READ_LINES)
     except Exception as e:
         loguru.logger.warning(f"[COMPILE_STORE] append failed: {e}")
         return
