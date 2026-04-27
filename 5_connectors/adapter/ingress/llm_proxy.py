@@ -87,7 +87,6 @@ _v2_compute = importlib.import_module("4_core.logic.v2_compute")
 _memory_backend_singleton: Optional[MemoryBackend] = None
 _internal_memory_write_dedup: dict[str, float] = {}
 _INTERNAL_MEMORY_WRITE_DEDUP_WINDOW_SECONDS = 10 * 60
-_INTERNAL_MEMORY_DEFAULT_TTL_SECONDS = 7 * 24 * 60 * 60
 _INTERNAL_MEMORY_MAX_CHARS = 1000
 
 
@@ -2022,7 +2021,6 @@ async def _auto_write_internal_work_memory(
         result_summary=result_summary,
         source_request_id=request_id,
     )
-    expire_at = int(now) + _INTERNAL_MEMORY_DEFAULT_TTL_SECONDS
 
     write_req = MemoryWriteRequest(
         content=content,
@@ -2037,7 +2035,6 @@ async def _auto_write_internal_work_memory(
             "sharing_mode": "isolated",
             "memory_type": "work_experience",
             "memory_level": "short_term",
-            "expire_at": expire_at,
             "source_request_id": request_id,
             "task_type": task_type,
             "write_origin": "llm_proxy_auto_write_v1",

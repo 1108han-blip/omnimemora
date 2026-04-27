@@ -68,6 +68,7 @@ def test_auto_memory_write_stores_internal_work_memory():
     assert req.metadata["tenant_id"] == "default"
     assert req.metadata["sharing_mode"] == "isolated"
     assert req.metadata["source_request_id"] == "req-auto-1"
+    assert "expire_at" not in req.metadata
     assert len(req.content) <= 1000
     content_obj = json.loads(req.content)
     assert content_obj["task_type"] == "implementation"
