@@ -193,6 +193,24 @@ _register_read_model_and_diagnostics(app)
 _dlp_scheduler = None
 
 
+_ULTRA_FAST_INTERNAL_GET_PATHS = frozenset(
+    {
+        "/health",
+        "/metrics/summary",
+        "/metrics/core_capabilities",
+        "/data-lifecycle/status",
+        "/data-lifecycle/meter-storage/parity",
+    }
+)
+
+
+def _skip_default_trace_write(request: Request) -> bool:
+    if request.method.upper() != "GET":
+        return False
+    request_path = str(getattr(getattr(request, "url", None), "path", "") or "")
+    return request_path in _ULTRA_FAST_INTERNAL_GET_PATHS
+
+
 @app.on_event("startup")
 async def _startup_data_lifecycle_scheduler() -> None:
     global _dlp_scheduler
@@ -212,7 +230,8 @@ async def _shutdown_data_lifecycle_scheduler() -> None:
 @app.middleware("http")
 async def attach_request_id(request: Request, call_next):
     context = ensure_request_context(request)
-    if config.trace_events_enabled:
+    skip_trace_write = _skip_default_trace_write(request)
+    if config.trace_events_enabled and not skip_trace_write:
         append_trace_event(
             build_trace_event(
                 trace_id=context["trace_id"],
@@ -246,7 +265,7 @@ async def attach_request_id(request: Request, call_next):
             f"upstream_url={upstream_url} "
             f"action={action}"
         )
-    if config.trace_events_enabled:
+    if config.trace_events_enabled and not skip_trace_write:
         append_trace_event(
             build_trace_event(
                 trace_id=context["trace_id"],

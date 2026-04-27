@@ -30,3 +30,23 @@ def test_main_support_error_catalog_uses_current_memory_backend_codes():
 
     assert "ADAPTER_MEMORY_BACKEND_UNAVAILABLE" in main_mod.SUPPORT_ERROR_CATALOG
     assert "ADAPTER_MEMORY_BACKEND_TIMEOUT" in main_mod.SUPPORT_ERROR_CATALOG
+
+
+def test_default_internal_get_paths_skip_trace_writes():
+    main_mod = importlib.import_module("5_connectors.adapter.main")
+
+    class URL:
+        path = "/data-lifecycle/status"
+
+    class Request:
+        method = "GET"
+        url = URL()
+
+    assert main_mod._skip_default_trace_write(Request()) is True
+
+    Request.method = "POST"
+    assert main_mod._skip_default_trace_write(Request()) is False
+
+    Request.method = "GET"
+    Request.url.path = "/debug/request_evidence"
+    assert main_mod._skip_default_trace_write(Request()) is False
