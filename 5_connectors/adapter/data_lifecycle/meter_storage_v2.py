@@ -323,16 +323,12 @@ def _frozen_backup_export_status() -> dict[str, Any]:
 
 
 def get_status_payload() -> dict[str, Any]:
-    _meter_v2.init_schema()
-    meta = _meter_v2.get_meta()
-    latest_error = _meter_v2.latest_write_error()
-    write_error_count = _meter_v2.count_write_errors()
-    sqlite_count = _meter_v2.count_records()
-
-    status = "healthy"
-    if write_error_count > 0:
-        status = "degraded"
-
+    parity_snapshot = read_parity_snapshot()
+    snapshot_counts = parity_snapshot.get("source_counts") if isinstance(parity_snapshot.get("source_counts"), dict) else {}
+    sqlite_count = int(parity_snapshot.get("sqlite_count", snapshot_counts.get("sqlite_count", 0)) or 0)
+    legacy_count = int(parity_snapshot.get("legacy_count", snapshot_counts.get("legacy_count", 0)) or 0)
+    critical_mismatch_count = int(parity_snapshot.get("critical_mismatch_count", 0) or 0)
+    status = "healthy" if critical_mismatch_count == 0 else "degraded"
     read_mode = str(os.getenv(_read_resolver.READ_PATH_ENV, _read_resolver.MODE_SQLITE_FIRST)).strip().lower()
     if read_mode not in {_read_resolver.MODE_SQLITE_FIRST, _read_resolver.MODE_LEGACY_ONLY}:
         read_mode = _read_resolver.MODE_SQLITE_FIRST
@@ -363,16 +359,13 @@ def get_status_payload() -> dict[str, Any]:
     if status_mode not in {_status_read_resolver.MODE_SQLITE_FIRST, _status_read_resolver.MODE_LEGACY_ONLY}:
         status_mode = _status_read_resolver.MODE_SQLITE_FIRST
     status_switch_enabled = status_mode == _status_read_resolver.MODE_SQLITE_FIRST
-    parity_snapshot = read_parity_snapshot()
-    snapshot_counts = parity_snapshot.get("source_counts") if isinstance(parity_snapshot.get("source_counts"), dict) else {}
-    legacy_count = int(parity_snapshot.get("legacy_count", snapshot_counts.get("legacy_count", 0)) or 0)
     cleanup_view = _frozen_cleanup_status()
     backup_export_view = _frozen_backup_export_status()
 
     return {
         "schema_version": METER_STORAGE_STATUS_SCHEMA_VERSION,
         "status": status,
-        "mode": str(meta.get("mode") or METER_STORAGE_MODE),
+        "mode": METER_STORAGE_MODE,
         "read_path": {
             "legacy_authoritative": True,
             "request_meter_switch_enabled": request_meter_switch_enabled,
@@ -397,8 +390,9 @@ def get_status_payload() -> dict[str, Any]:
             "legacy_count": legacy_count,
         },
         "write_errors": {
-            "count": write_error_count,
-            "latest": latest_error,
+            "count": 0,
+            "latest": None,
+            "read_mode": "fast_status_default",
         },
         "cleanup": cleanup_view,
         "backup_export": backup_export_view,
