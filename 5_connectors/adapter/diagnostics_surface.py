@@ -5,6 +5,7 @@ from fastapi import APIRouter, HTTPException, Response
 
 router = APIRouter()
 _srm = importlib.import_module("5_connectors.adapter.application.status_read_model")
+_metrics_service = importlib.import_module("5_connectors.adapter.metrics_service")
 
 
 def configure_diagnostics_surface(
@@ -43,7 +44,7 @@ async def root():
 
 
 @router.get("/health")
-async def health(mode: str = "full"):
+async def health(mode: str = "local"):
     return await _srm.build_health_payload(mode=mode)
 
 
@@ -61,14 +62,14 @@ async def support_error_codes():
 async def get_metrics_summary(response: Response, tenant: str = "all"):
     response.headers["X-OmniMemora-Surface-Role"] = "kpi"
     response.headers["X-OmniMemora-KPI-Source"] = "/metrics/summary"
-    return _srm.build_metrics_summary_payload(tenant)
+    return _metrics_service.compute_metrics_summary(tenant)
 
 
 @router.get("/metrics/summary_24h")
 async def get_metrics_summary_24h(response: Response, tenant: str = "all"):
     response.headers["X-OmniMemora-Surface-Role"] = "kpi"
     response.headers["X-OmniMemora-KPI-Source"] = "/metrics/summary_24h"
-    return _srm.build_metrics_summary_24h_payload(tenant)
+    return _metrics_service.compute_metrics_summary_24h(tenant)
 
 
 @router.get("/metrics/debug/sources")

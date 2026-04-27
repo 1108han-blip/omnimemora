@@ -872,7 +872,7 @@ def build_root_payload() -> Dict[str, Any]:
     return result
 
 
-async def build_health_payload(mode: str = "full") -> Dict[str, Any]:
+async def build_health_payload(mode: str = "local") -> Dict[str, Any]:
     _require_diag_config()
     if mode == "local":
         return {
