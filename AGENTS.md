@@ -33,6 +33,42 @@ Use the following only when you are explicitly operating on Phase 3 experiment f
 - Do not treat legacy endpoints (for example `:8000`) as product truth for current-stage checks.
 - Do not bypass product behavior by writing meter files directly or simulating usage outside product API calls.
 
+## MVP Constitution Rule (Mandatory)
+
+Fixed target:
+
+`MVP first; token saving first; no complexity expansion`.
+
+OmniMemora MVP exists only to prove:
+
+- real user requests save tokens.
+- real user requests save cost.
+- the product stays stable, ultra-low-latency, and does not slow the user down.
+
+Non-MVP expansion is forbidden by default:
+
+- do not continue DLP/RES governance work unless it directly improves token saving, cost saving, speed, or product shrinkage.
+- do not expand archive, quarantine, restore, approval, gate, readiness, proposal, or traceability tracks.
+- do not preserve long-term evidence for its own sake.
+- do not build automatic cleanup chains when a simple retention limit, truncation, deletion, or split is enough.
+- do not add UI, reports, dashboards, or diagnostics that cannot prove token-saving value.
+
+Internal data rules:
+
+- internal logs are not assets.
+- evidence, trace, proxy, compile, maintenance, and temporary compile artifacts are not user value.
+- retain internal logs for at most 7 days by default.
+- delete what can be deleted; split or hard-cap any large file that cannot be deleted.
+- do not touch user-facing memory under this rule.
+
+Engineering admission rules:
+
+- new engineering must directly make the product save more tokens, save more cost, run faster, or get smaller.
+- new code must replace old code, not stack complexity on top of it.
+- default internal interface targets are p50 <10ms, p95 <30ms, max <100ms.
+- default read paths must not scan historical files or read frozen governance artifacts.
+- if token saving, cost saving, speed, or shrinkage cannot be shown, the work stops.
+
 ## Shrink-First Product Rule (Mandatory)
 
 Fixed target:
