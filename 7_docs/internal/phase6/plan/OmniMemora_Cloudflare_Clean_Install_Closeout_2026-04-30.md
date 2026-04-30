@@ -52,6 +52,52 @@
 | `GET https://doloclaw.com/api/control/recommendation/candidates/latest` | HTTP 200, `schema_version=omnimemora-cloud-candidate-pointer-v1`, `status=not_configured` |
 | `GET https://doloclaw.com/missing` | HTTP 404 |
 
+## Download Availability
+
+Release `1.0.0-beta.1` artifacts are publicly reachable from R2 through `assets.doloclaw.com`:
+
+| Artifact | Result |
+|----------|--------|
+| `omnimemora-darwin-arm64.zip` | HTTP 200 |
+| `omnimemora-darwin-amd64.zip` | HTTP 200 |
+| `omnimemora-windows-amd64.zip` | HTTP 200 |
+| `SHA256SUMS.txt` | HTTP 200 |
+| `RELEASE_INDEX.txt` | HTTP 200 |
+
+R2 object listing confirms the same five objects under `omnimemora/beta/1.0.0-beta.1/`.
+
+## Feedback Email Fix
+
+Cloudflare Email Routing status:
+
+- domain routing status: `ready`
+- target address `1108.han@gmail.com`: verified
+- route created: `support@doloclaw.com -> 1108.han@gmail.com`
+- disabled default drop-all rule remains disabled
+
+This fixes the prior support-email gap where the UI and download page pointed to `support@doloclaw.com`, but Cloudflare had no enabled forwarding rule for that address.
+
+## Current Usage Visibility
+
+Current measurable surfaces:
+
+- GitHub traffic API reports repository views and clones.
+- Cloudflare HTTP analytics is available for the last 24h on the current plan.
+- R2 object listing confirms artifact existence, but does not provide actual per-object download user counts.
+
+Observed on 2026-04-30:
+
+- GitHub repository views for the reported 14-day window: `0` total, `0` unique.
+- GitHub repository clones for the reported 14-day window: `300` total, `64` unique.
+- Cloudflare last-24h analytics showed bot/scanner traffic against `doloclaw.com` and `assets.doloclaw.com`.
+- No reliable actual-product-download user count is available yet from the current R2/API setup.
+
+Required follow-up for exact download counts:
+
+- add a Worker-tracked download redirect endpoint, or
+- enable Cloudflare logs/analytics retention that can count `assets.doloclaw.com/omnimemora/beta/...zip` requests, or
+- write explicit download events to a small analytics store.
+
 ## Railway Non-Interference
 
 - Railway project `omnimemora-adapter` remains present.
