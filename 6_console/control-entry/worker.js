@@ -1,23 +1,66 @@
 const PACKAGE_VERSION = "__PACKAGE_VERSION__";
 const DOWNLOAD_BASE_URL = `https://assets.doloclaw.com/omnimemora/beta/${PACKAGE_VERSION}`;
 const SUPPORT_EMAIL = "__SUPPORT_EMAIL__";
+const CANDIDATE_POINTER_SCHEMA = "omnimemora-cloud-candidate-pointer-v1";
 
-function jsonResponse(url) {
-  return new Response(
-    JSON.stringify({
+function json(payload, init = {}) {
+  return new Response(JSON.stringify(payload), {
+    status: init.status || 200,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      ...(init.headers || {})
+    }
+  });
+}
+
+function rootResponse(url) {
+  return json({
       service: "omnimemora-control-entry",
       role: "control-plane-entry",
       host: url.hostname,
       path: url.pathname,
       message: "OmniMemora control entry is active."
-    }),
-    {
-      status: 200,
-      headers: {
-        "content-type": "application/json; charset=utf-8",
-        "cache-control": "no-store"
-      }
+  });
+}
+
+function healthResponse(url) {
+  return json({
+    status: "healthy",
+    service: "omnimemora-control-entry",
+    role: "control-plane-entry",
+    host: url.hostname,
+    product: "omnimemora",
+    release_posture: "proprietary-controlled-beta",
+    capabilities: {
+      download_entry: true,
+      candidate_pointer_reserved: true,
+      candidate_auto_promote: false,
+      cloud_compile: false
     }
+  });
+}
+
+function candidatePointerResponse(url) {
+  return json({
+    schema_version: CANDIDATE_POINTER_SCHEMA,
+    status: "not_configured",
+    candidate: null,
+    source: "cloudflare-control-entry",
+    product: "omnimemora",
+    host: url.hostname,
+    message: "Cloud candidate pointer endpoint is reserved. Local active policy remains authoritative."
+  });
+}
+
+function notFoundResponse(url) {
+  return json(
+    {
+      error: "not_found",
+      service: "omnimemora-control-entry",
+      path: url.pathname
+    },
+    { status: 404 }
   );
 }
 
@@ -204,9 +247,24 @@ function downloadHtml() {
 
 addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
+  if (url.pathname === "/" || url.pathname === "") {
+    event.respondWith(rootResponse(url));
+    return;
+  }
+  if (url.pathname === "/health") {
+    event.respondWith(healthResponse(url));
+    return;
+  }
   if (url.pathname === "/download") {
     event.respondWith(downloadHtml());
     return;
   }
-  event.respondWith(jsonResponse(url));
+  if (
+    url.pathname === "/api/control/recommendation/candidates/latest" ||
+    url.pathname === "/api/policy/candidates/latest"
+  ) {
+    event.respondWith(candidatePointerResponse(url));
+    return;
+  }
+  event.respondWith(notFoundResponse(url));
 });
