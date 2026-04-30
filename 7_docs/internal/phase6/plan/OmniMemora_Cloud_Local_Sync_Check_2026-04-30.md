@@ -60,6 +60,44 @@ Cloud probes on 2026-04-30:
 
 Conclusion (cloud reality): cloud health could not be confirmed from current network/runtime context.
 
+## Cloudflare Platform Reality
+
+Platform checks on 2026-04-30:
+
+- `doloclaw.com` zone is active in Cloudflare.
+- Public nameservers match Cloudflare zone nameservers: `aarav.ns.cloudflare.com`, `rafe.ns.cloudflare.com`.
+- `api.doloclaw.com` has no Cloudflare DNS record.
+- Worker script `omnimemora-control-entry` exists.
+- Worker routes exist:
+  - `doloclaw.com/* -> omnimemora-control-entry`
+  - `www.doloclaw.com/* -> omnimemora-control-entry`
+- Live `https://doloclaw.com/` returns HTTP 200 with `service=omnimemora-control-entry`.
+- Live `https://www.doloclaw.com/` returns HTTP 301 to `https://doloclaw.com/`.
+
+Cloudflare drift note:
+
+- DNS still contains proxied CNAME records:
+  - `doloclaw.com -> openviking-site.pages.dev`
+  - `www.doloclaw.com -> openviking-site.pages.dev`
+- The Worker route currently overrides the official entry path, but the old Pages target remains in DNS and should be treated as residual cloud configuration drift.
+
+Conclusion (Cloudflare platform reality): official root entry works through the Worker route; `api.doloclaw.com` is intentionally or currently absent; residual `openviking-site` DNS targets remain.
+
+## Railway Platform Reality
+
+Platform checks on 2026-04-30:
+
+- Railway CLI is logged in as the expected operator account.
+- Railway project exists: `omnimemora-adapter`.
+- Production service exists: `omnimemora-adapter`.
+- Latest deployment status: `SUCCESS`.
+- Railway service domain exists: `omnimemora-adapter-production.up.railway.app`.
+- Railway custom domains list is empty; `api.doloclaw.com` is not attached to Railway.
+- Production variable keys do not include `VIKING_URL` or `VIKING_API_KEY`.
+- Public `GET https://omnimemora-adapter-production.up.railway.app/health` timed out after 10s.
+
+Conclusion (Railway platform reality): legacy public custom-domain and `VIKING_*` surfaces remain removed, but the Railway default domain is not health-confirmed from this run.
+
 ## Drift Signal Snapshot
 
 `python3 tools/verification/operational_drift_check.py`
@@ -73,14 +111,17 @@ Conclusion (cloud reality): cloud health could not be confirmed from current net
 ## Sync Decision
 
 - `repo reality` and local `running reality` are aligned enough for local validation.
-- `cloud reality` is not verifiable in this run due to DNS/timeout failures.
-- Therefore, **cloud-local sync is partially verified only** (local pass, cloud blocked).
+- Cloudflare root entry is platform-verified and live on the Worker route.
+- Railway platform inventory is verified, but Railway public health is blocked by timeout.
+- `api.doloclaw.com` has no Cloudflare DNS record and does not resolve.
+- Therefore, **cloud-local sync is partially verified only** (local pass, Cloudflare root pass, Railway health blocked, API subdomain absent).
 
 ## Required Next Actions
 
 1. Re-run cloud probes from a network environment that can resolve `api.doloclaw.com`.
 2. If Railway timeout persists, verify deployment health/logs in platform console before claiming sync.
 3. Close PBK-001/PBK-002 Layer 2 record gaps before any new phase-level promotion declaration.
+4. Decide whether residual `openviking-site.pages.dev` DNS targets should be removed or explicitly kept as non-active fallback metadata.
 
 ## Product Messaging (MVP-safe)
 
