@@ -66,6 +66,17 @@ Release `1.0.0-beta.1` artifacts are publicly reachable from R2 through `assets.
 
 R2 object listing confirms the same five objects under `omnimemora/beta/1.0.0-beta.1/`.
 
+The public download page now links through Worker-tracked redirect paths:
+
+| Public path | Redirect target |
+|-------------|-----------------|
+| `/download/file/darwin-arm64` | `omnimemora-darwin-arm64.zip` |
+| `/download/file/darwin-amd64` | `omnimemora-darwin-amd64.zip` |
+| `/download/file/windows-amd64` | `omnimemora-windows-amd64.zip` |
+| `/download/file/sha256sums` | `SHA256SUMS.txt` |
+
+These paths preserve the simple R2 file layout while giving Cloudflare HTTP analytics a stable project-owned path to count.
+
 ## Feedback Email Fix
 
 Cloudflare Email Routing status:
@@ -83,20 +94,24 @@ Current measurable surfaces:
 
 - GitHub traffic API reports repository views and clones.
 - Cloudflare HTTP analytics is available for the last 24h on the current plan.
-- R2 object listing confirms artifact existence, but does not provide actual per-object download user counts.
+- Download attempts can now be counted by Cloudflare `clientRequestPath` for `/download/file/...`.
+- R2 object listing confirms artifact existence, but does not provide historical per-object download user counts.
 
 Observed on 2026-04-30:
 
 - GitHub repository views for the reported 14-day window: `0` total, `0` unique.
 - GitHub repository clones for the reported 14-day window: `300` total, `64` unique.
 - Cloudflare last-24h analytics showed bot/scanner traffic against `doloclaw.com` and `assets.doloclaw.com`.
-- No reliable actual-product-download user count is available yet from the current R2/API setup.
+- Exact historical direct-R2 product download counts before the tracked redirect change cannot be reconstructed reliably.
+- Download tracking is active from the Worker redirect deployment onward; analytics may lag before new path rows appear.
 
-Required follow-up for exact download counts:
+Download count query shape:
 
-- add a Worker-tracked download redirect endpoint, or
-- enable Cloudflare logs/analytics retention that can count `assets.doloclaw.com/omnimemora/beta/...zip` requests, or
-- write explicit download events to a small analytics store.
+- source: Cloudflare GraphQL HTTP analytics
+- filter: `clientRequestHTTPHost == "doloclaw.com"`
+- paths: `/download/file/darwin-arm64`, `/download/file/darwin-amd64`, `/download/file/windows-amd64`, `/download/file/sha256sums`
+- retention: current-plan analytics window only unless a later paid log-retention path is enabled
+- privacy: no personal user database is created by this change
 
 ## Railway Non-Interference
 

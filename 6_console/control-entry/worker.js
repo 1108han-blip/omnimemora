@@ -2,6 +2,13 @@ const PACKAGE_VERSION = "__PACKAGE_VERSION__";
 const DOWNLOAD_BASE_URL = `https://assets.doloclaw.com/omnimemora/beta/${PACKAGE_VERSION}`;
 const SUPPORT_EMAIL = "__SUPPORT_EMAIL__";
 const CANDIDATE_POINTER_SCHEMA = "omnimemora-cloud-candidate-pointer-v1";
+const DOWNLOAD_FILES = {
+  "darwin-arm64": "omnimemora-darwin-arm64.zip",
+  "darwin-amd64": "omnimemora-darwin-amd64.zip",
+  "windows-amd64": "omnimemora-windows-amd64.zip",
+  "sha256sums": "SHA256SUMS.txt",
+  "release-index": "RELEASE_INDEX.txt"
+};
 
 function json(payload, init = {}) {
   return new Response(JSON.stringify(payload), {
@@ -64,19 +71,29 @@ function notFoundResponse(url) {
   );
 }
 
+function downloadRedirectResponse(url) {
+  const parts = url.pathname.split("/").filter(Boolean);
+  const key = parts[2] || "";
+  const filename = DOWNLOAD_FILES[key];
+  if (!filename) {
+    return notFoundResponse(url);
+  }
+  return Response.redirect(`${DOWNLOAD_BASE_URL}/${filename}`, 302);
+}
+
 function downloadHtml() {
   const downloads = [
     {
       label: "macOS (Apple Silicon)",
-      href: `${DOWNLOAD_BASE_URL}/omnimemora-darwin-arm64.zip`
+      href: `/download/file/darwin-arm64`
     },
     {
       label: "macOS (Intel)",
-      href: `${DOWNLOAD_BASE_URL}/omnimemora-darwin-amd64.zip`
+      href: `/download/file/darwin-amd64`
     },
     {
       label: "Windows (x64)",
-      href: `${DOWNLOAD_BASE_URL}/omnimemora-windows-amd64.zip`
+      href: `/download/file/windows-amd64`
     }
   ];
 
@@ -189,7 +206,7 @@ function downloadHtml() {
 
       <h2>Supported Platforms</h2>
       <ul class="downloads">${list}</ul>
-      <p><a href="${DOWNLOAD_BASE_URL}/SHA256SUMS.txt">Download SHA256SUMS.txt</a></p>
+      <p><a href="/download/file/sha256sums">Download SHA256SUMS.txt</a></p>
 
       <h2>Install Steps</h2>
       <ul>
@@ -257,6 +274,10 @@ addEventListener("fetch", (event) => {
   }
   if (url.pathname === "/download") {
     event.respondWith(downloadHtml());
+    return;
+  }
+  if (url.pathname.startsWith("/download/file/")) {
+    event.respondWith(downloadRedirectResponse(url));
     return;
   }
   if (
