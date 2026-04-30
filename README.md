@@ -103,5 +103,7 @@ If KPI and diagnostics disagree, trust `/metrics/summary` first.
 ## Governance
 
 - [3_governance/AUDIT_SCHEME.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/3_governance/AUDIT_SCHEME.md) — 审计触发规则、执行骨架、结论路由
+- [7_docs/internal/phase6/plan/OmniMemora_Cloud_Local_Sync_Check_2026-04-30.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase6/plan/OmniMemora_Cloud_Local_Sync_Check_2026-04-30.md) — 云端-本地同步核对记录（2026-04-30）
+- [docs/spec/OMNIMEMORA_MVP_PROMO_2026-04-30.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/docs/spec/OMNIMEMORA_MVP_PROMO_2026-04-30.md) — 闭源受控发布宣传文案草案（MVP）
 
 > **Phase 标签说明**：内部执行阶段标签（如 `internal Phase 6 workstream`）不等同于正式 roadmap phase 改号。若 `ROADMAP.md` 未被正式更新，内部阶段标签只表示执行 workstream，不代表产品阶段编号变更。
