@@ -27,7 +27,14 @@
   },
   "bundle": {
     "active": true,
-    "targets": ["dmg", "msi"],
-    "category": "Productivity"
+    "targets": [
+      "dmg",
+      "msi"
+    ],
+    "category": "Productivity",
+    "icon": [
+      "icons/icon.icns",
+      "icons/icon.png"
+    ]
   }
 }
