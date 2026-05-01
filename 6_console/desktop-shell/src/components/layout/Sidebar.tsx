@@ -2,22 +2,25 @@ import { Activity, Bot, Bug, ChevronLeft, ChevronRight, Gauge, LineChart, Settin
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
 import { useDashboardStore, type PageKey } from '../../store/useDashboardStore';
+import { copy } from '../../lib/i18n';
 
-const items: Array<{ key: PageKey; label: string; icon: React.ComponentType<{ className?: string }> }> = [
-  { key: 'overview', label: 'Overview', icon: Gauge },
-  { key: 'live-flow', label: 'Live Flow', icon: Activity },
-  { key: 'agents', label: 'Agents', icon: Bot },
-  { key: 'policies', label: 'Policies', icon: Shield },
-  { key: 'context-debug', label: 'Context Debug', icon: Bug },
-  { key: 'savings', label: 'Savings', icon: LineChart },
-  { key: 'settings', label: 'Settings', icon: SlidersHorizontal },
+const items: Array<{ key: PageKey; labelKey: keyof typeof copy.en.nav; icon: React.ComponentType<{ className?: string }> }> = [
+  { key: 'overview', labelKey: 'overview', icon: Gauge },
+  { key: 'live-flow', labelKey: 'liveFlow', icon: Activity },
+  { key: 'agents', labelKey: 'agents', icon: Bot },
+  { key: 'policies', labelKey: 'policies', icon: Shield },
+  { key: 'context-debug', labelKey: 'contextDebug', icon: Bug },
+  { key: 'savings', labelKey: 'savings', icon: LineChart },
+  { key: 'settings', labelKey: 'settings', icon: SlidersHorizontal },
 ];
 
 export function Sidebar() {
+  const language = useDashboardStore((state) => state.language);
   const page = useDashboardStore((state) => state.page);
   const collapsed = useDashboardStore((state) => state.sidebarCollapsed);
   const setPage = useDashboardStore((state) => state.setPage);
   const toggleSidebar = useDashboardStore((state) => state.toggleSidebar);
+  const t = copy[language].nav;
 
   return (
     <aside className={cn('flex h-screen shrink-0 flex-col border-r border-border bg-background transition-all duration-200', collapsed ? 'w-[62px]' : 'w-[228px]')}>
@@ -28,7 +31,7 @@ export function Sidebar() {
         {!collapsed && (
           <div className="min-w-0">
             <p className="truncate text-sm font-semibold text-foreground">OmniMemora</p>
-            <p className="text-[11px] text-muted">Memory Control Plane</p>
+            <p className="text-[11px] text-muted">{t.product}</p>
           </div>
         )}
       </div>
@@ -43,7 +46,7 @@ export function Sidebar() {
               onClick={() => setPage(item.key)}
             >
               <Icon className="h-4 w-4 shrink-0" />
-              {!collapsed && <span className="truncate">{item.label}</span>}
+              {!collapsed && <span className="truncate">{t[item.labelKey]}</span>}
             </button>
           );
         })}
@@ -51,7 +54,7 @@ export function Sidebar() {
       <div className="border-t border-border p-2">
         <Button variant="ghost" size="sm" className="w-full justify-start" onClick={toggleSidebar}>
           {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
-          {!collapsed && 'Collapse'}
+          {!collapsed && t.collapse}
         </Button>
       </div>
     </aside>

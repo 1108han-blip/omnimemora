@@ -2,11 +2,14 @@ import type {
   AgentControlResponse,
   AgentId,
   AgentStatus,
+  AgentControlCard,
   CoreCapabilitiesResponse,
+  CoreCapabilitiesTrendResponse,
   DesktopCommandResult,
   DesktopStatus,
   ProductConsoleSnapshot,
   RecentRequestsResponse,
+  RequestEvidence,
   UsageSummary,
 } from './types';
 
@@ -196,15 +199,16 @@ function normalizeUsage(raw: Record<string, unknown>): UsageSummary {
 }
 
 export async function getProductConsoleSnapshot(): Promise<ProductConsoleSnapshot> {
-  const [core, recent, usage, controls] = await Promise.allSettled([
+  const [core, coreTrend, recent, usage, controls] = await Promise.allSettled([
     fetchProductJson<CoreCapabilitiesResponse>('/metrics/core_capabilities?tenant=all'),
-    fetchProductJson<RecentRequestsResponse>('/metrics/recent_requests?tenant=all&limit=6&value_qualified_only=false'),
+    fetchProductJson<CoreCapabilitiesTrendResponse>('/metrics/core_capabilities/trend?tenant=all&days=7'),
+    fetchProductJson<RecentRequestsResponse>('/metrics/recent_requests?tenant=all&limit=30&value_qualified_only=false'),
     fetchProductJson<Record<string, unknown>>('/usage/token-savings?tenant=all'),
     fetchProductJson<AgentControlResponse>('/agents/control'),
   ]);
 
-  const fulfilled = [core, recent, usage, controls].filter((result) => result.status === 'fulfilled');
-  const firstError = [core, recent, usage, controls].find((result) => result.status === 'rejected');
+  const fulfilled = [core, coreTrend, recent, usage, controls].filter((result) => result.status === 'fulfilled');
+  const firstError = [core, coreTrend, recent, usage, controls].find((result) => result.status === 'rejected');
 
   return {
     online: fulfilled.length > 0,
@@ -217,10 +221,52 @@ export async function getProductConsoleSnapshot(): Promise<ProductConsoleSnapsho
             : String(firstError.reason)
           : 'Product console is offline.',
     core: core.status === 'fulfilled' ? core.value : null,
+    coreTrend: coreTrend.status === 'fulfilled' ? coreTrend.value : null,
     recent: recent.status === 'fulfilled' ? recent.value : null,
     usage: usage.status === 'fulfilled' ? normalizeUsage(usage.value) : null,
     controls: controls.status === 'fulfilled' ? controls.value : null,
   };
+}
+
+export async function fetchRequestEvidence(requestId: string): Promise<RequestEvidence> {
+  const raw = await fetchProductJson<RequestEvidence>(`/debug/request_evidence?request_id=${encodeURIComponent(requestId)}`, 3000);
+  return {
+    ...raw,
+    skill_suggestions: Array.isArray(raw.skill_suggestions) ? raw.skill_suggestions : [],
+    skill_policy_name: raw.skill_policy_name ?? 'local_fallback',
+    skill_policy_version: raw.skill_policy_version ?? 'static_catalog_v1',
+    skill_policy_source: raw.skill_policy_source ?? 'local_builtin',
+    skill_policy_status: raw.skill_policy_status ?? 'fallback',
+  };
+}
+
+async function postAgentControlAction(action: 'install' | 'uninstall' | 'enable' | 'disable', familyId: string): Promise<AgentControlCard> {
+  const response = await fetch(`${PRODUCT_API_BASE}/agents/control/${action}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ family_id: familyId }),
+  });
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(detail || `Failed to ${action} ${familyId}`);
+  }
+  return response.json();
+}
+
+export function installAgent(familyId: string): Promise<AgentControlCard> {
+  return postAgentControlAction('install', familyId);
+}
+
+export function uninstallAgent(familyId: string): Promise<AgentControlCard> {
+  return postAgentControlAction('uninstall', familyId);
+}
+
+export function enableAgentRoute(familyId: string): Promise<AgentControlCard> {
+  return postAgentControlAction('enable', familyId);
+}
+
+export function disableAgentRoute(familyId: string): Promise<AgentControlCard> {
+  return postAgentControlAction('disable', familyId);
 }
 
 export function buildFeedbackMailto(status: DesktopStatus): string {

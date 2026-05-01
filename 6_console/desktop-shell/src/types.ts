@@ -75,6 +75,22 @@ export interface CoreCapabilitiesResponse {
   };
 }
 
+export interface CoreCapabilitiesTrendPoint {
+  date: string;
+  observed_request_count: number;
+  non_value_count: number;
+  internal_or_wrapper_count?: number;
+  real_requests: CoreCapabilitiesResponse['cards']['real_requests'];
+  context_compression: CoreCapabilitiesResponse['cards']['context_compression'];
+  memory_enhancement: CoreCapabilitiesResponse['cards']['memory_enhancement'];
+  token_savings: CoreCapabilitiesResponse['cards']['token_savings'];
+}
+
+export interface CoreCapabilitiesTrendResponse {
+  days: number;
+  trend: CoreCapabilitiesTrendPoint[];
+}
+
 export interface RecentRequest {
   request_id: string;
   agent: string;
@@ -152,10 +168,87 @@ export interface AgentControlResponse {
   };
 }
 
+export type RequestStatus = 'success' | 'warning' | 'failed' | 'bypassed' | 'not_used';
+export type NodeStatus = 'success' | 'warning' | 'failed' | 'bypassed' | 'not_used';
+export type ContextOptimizationState = 'optimized_visible' | 'traffic_but_no_optimization' | 'bypass_or_not_applicable';
+
+export interface RequestEvidenceNode {
+  id: string;
+  label: string;
+  status: NodeStatus;
+  duration_ms: number;
+  note: string;
+}
+
+export interface RequestEvidenceContext {
+  before_tokens: number;
+  after_tokens: number;
+  saved_tokens: number;
+  savings_ratio: number;
+  selected_memory_count: number;
+  dropped_memory_count: number;
+  selected_memories: MemoryEntry[];
+  dropped_memories: MemoryEntry[];
+  context_state: ContextOptimizationState;
+}
+
+export interface MemoryEntry {
+  uri: string;
+  content: string;
+  abstract?: string;
+  score: number;
+  category: string;
+  level: number;
+  metadata: Record<string, unknown>;
+}
+
+export interface RequestEvidenceStatus {
+  request_status: RequestStatus;
+  bypass: boolean;
+  failure_stage: string | null;
+  failure_reason: string | null;
+  error_code?: string | null;
+}
+
+export interface RequestEvidenceRequest {
+  request_id: string;
+  timestamp: string;
+  raw_agent_id: string;
+  agent_family: string;
+  task_type: string;
+  query_summary: string;
+}
+
+export interface RequestEvidenceChain {
+  nodes: RequestEvidenceNode[];
+  trace_id: string;
+}
+
+export interface SkillSuggestionView {
+  skill_id: string;
+  title: string;
+  reason: string;
+  confidence: number;
+  source: string;
+}
+
+export interface RequestEvidence {
+  request: RequestEvidenceRequest;
+  status: RequestEvidenceStatus;
+  context: RequestEvidenceContext;
+  chain: RequestEvidenceChain;
+  skill_suggestions: SkillSuggestionView[];
+  skill_policy_name?: string;
+  skill_policy_version?: string;
+  skill_policy_source?: string;
+  skill_policy_status?: string;
+}
+
 export interface ProductConsoleSnapshot {
   online: boolean;
   error: string | null;
   core: CoreCapabilitiesResponse | null;
+  coreTrend: CoreCapabilitiesTrendResponse | null;
   recent: RecentRequestsResponse | null;
   usage: UsageSummary | null;
   controls: AgentControlResponse | null;
