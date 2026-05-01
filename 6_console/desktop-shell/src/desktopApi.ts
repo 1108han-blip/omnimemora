@@ -89,10 +89,12 @@ export async function runDesktopCommand(command: 'start_services' | 'stop_servic
 export function buildFeedbackMailto(status: DesktopStatus): string {
   const subject = encodeURIComponent('OmniMemora Desktop Beta Feedback');
   const services = status.services.map((service) => `${service.name}:${service.state}`).join(',');
+  const updates = status.updates.map((update) => `${update.layer}:${update.status}`).join(',');
   const body = encodeURIComponent([
     `version: ${status.app_version}`,
     `platform: ${navigator.userAgent || 'unknown'}`,
     `services: ${services}`,
+    `updates: ${updates}`,
     'request_id: ',
     'error_code: ',
     'steps:',

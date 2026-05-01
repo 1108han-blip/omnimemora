@@ -211,7 +211,7 @@ fn http_probe(port: u16, path: &str, expect_json_status: Option<&str>) -> Result
             return Err(format!("端口 {port} 响应不是预期服务"));
         }
     }
-    Ok(format!("端口 {port} 健康。"))
+    Ok("本地服务健康。".to_string())
 }
 
 fn service_probe(
@@ -254,9 +254,10 @@ fn service_probe(
                 },
                 url: format!("http://127.0.0.1:{port}{path}"),
                 detail: if tcp_open {
-                    format!("端口 {port} 被占用，但不是预期的 OmniMemora 服务：{http_err}")
+                    "本地服务入口被其他进程占用；桌面 App 不会强行关闭未知进程。".to_string()
                 } else {
-                    http_err
+                    let _ = http_err;
+                    "服务暂不可用；可以点击 Start 由桌面 App 启动。".to_string()
                 },
                 managed_by_desktop,
                 pid,
