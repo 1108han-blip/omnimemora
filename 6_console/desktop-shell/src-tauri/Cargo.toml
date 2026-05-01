@@ -1,0 +1,16 @@
+[package]
+name = "omnimemora-desktop-shell"
+version = "1.0.0-beta.2"
+description = "OmniMemora desktop beta shell"
+authors = ["OmniMemora"]
+edition = "2021"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+tauri = { version = "2", features = [] }
+
+[features]
+default = []
