@@ -44,3 +44,6 @@ Thumbs.db
 
 # Verification logs (generated)
 tools/verification/logs/
+
+# Local visual verification artifacts
+output/playwright/
