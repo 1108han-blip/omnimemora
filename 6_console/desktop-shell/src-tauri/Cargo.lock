@@ -2041,6 +2041,7 @@ name = "omnimemora-desktop-shell"
 version = "1.0.0-beta.2"
 dependencies = [
  "serde",
+ "serde_json",
  "tauri",
  "tauri-build",
 ]

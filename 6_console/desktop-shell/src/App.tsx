@@ -61,7 +61,7 @@ export default function App() {
           </p>
         </div>
         <div className={allHealthy ? 'status healthy' : 'status warning'}>
-          {allHealthy ? 'Ready' : 'Needs attention'}
+          {allHealthy ? 'Ready' : status.services.some((service) => service.state === 'blocked') ? 'Port blocked' : 'Needs attention'}
         </div>
       </section>
 
@@ -76,7 +76,7 @@ export default function App() {
                   <span className={`pill ${service.state}`}>{service.state}</span>
                 </div>
                 <p>{service.detail}</p>
-                <code>{service.url}</code>
+                <code>{service.managed_by_desktop ? `managed pid: ${service.pid ?? 'unknown'}` : 'external or not managed by desktop'}</code>
               </article>
             ))}
           </div>
@@ -115,6 +115,7 @@ export default function App() {
           <h2>Support</h2>
           <p>{message}</p>
           <p className="muted">Version {status.app_version}. Data directory: {status.data_dir}</p>
+          <p className="muted">Advanced diagnostics show ports, but users do not need to open them manually.</p>
         </div>
         <a className="feedback" href={buildFeedbackMailto(status)}>Send Feedback</a>
       </section>

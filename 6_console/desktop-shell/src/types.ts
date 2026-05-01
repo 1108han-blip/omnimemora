@@ -1,5 +1,5 @@
 export type ServiceName = 'runtime' | 'adapter' | 'ui';
-export type ServiceState = 'healthy' | 'unreachable' | 'unknown';
+export type ServiceState = 'healthy' | 'unreachable' | 'unknown' | 'blocked';
 export type UpdateLayer = 'desktop_shell' | 'local_components' | 'cloud_policy';
 
 export interface ServiceStatus {
@@ -8,6 +8,8 @@ export interface ServiceStatus {
   state: ServiceState;
   url: string;
   detail: string;
+  managed_by_desktop: boolean;
+  pid: number | null;
 }
 
 export interface UpdateLayerStatus {

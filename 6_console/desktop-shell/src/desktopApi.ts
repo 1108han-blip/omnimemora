@@ -10,6 +10,8 @@ const DEFAULT_STATUS: DesktopStatus = {
       state: 'unknown',
       url: 'http://127.0.0.1:8765/health',
       detail: 'Waiting for desktop host status.',
+      managed_by_desktop: false,
+      pid: null,
     },
     {
       name: 'adapter',
@@ -17,6 +19,8 @@ const DEFAULT_STATUS: DesktopStatus = {
       state: 'unknown',
       url: 'http://127.0.0.1:18011/health',
       detail: 'Waiting for desktop host status.',
+      managed_by_desktop: false,
+      pid: null,
     },
     {
       name: 'ui',
@@ -24,6 +28,8 @@ const DEFAULT_STATUS: DesktopStatus = {
       state: 'unknown',
       url: 'http://127.0.0.1:5173/',
       detail: 'Waiting for desktop host status.',
+      managed_by_desktop: false,
+      pid: null,
     },
   ],
   updates: [
