@@ -109,6 +109,8 @@ def upload_artifacts(package_version: str, token_id: str, token_value: str) -> N
         "omnimemora-windows-amd64.zip",
         "SHA256SUMS.txt",
         "RELEASE_INDEX.txt",
+        f"{package_version}.json",
+        "latest.json",
     ]
     time.sleep(2)
     for name in upload_names:
@@ -117,6 +119,8 @@ def upload_artifacts(package_version: str, token_id: str, token_value: str) -> N
         extra = {"ContentType": "application/octet-stream"}
         if name.endswith(".txt"):
             extra = {"ContentType": "text/plain; charset=utf-8"}
+        if name.endswith(".json"):
+            extra = {"ContentType": "application/json; charset=utf-8"}
         last_exc = None
         for attempt in range(3):
             try:
@@ -161,7 +165,7 @@ def deploy_worker(package_version: str) -> None:
 
 
 def main() -> None:
-    package_version = sys.argv[1] if len(sys.argv) > 1 else "1.0.0-beta.1"
+    package_version = sys.argv[1] if len(sys.argv) > 1 else "1.0.0-beta.2"
     token_id, token_value = create_r2_upload_token()
     try:
         upload_artifacts(package_version, token_id, token_value)

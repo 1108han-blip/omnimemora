@@ -11,17 +11,13 @@ This is a closed beta build of OmniMemora.
 - 18011 = product ingress
 - 8765 = internal memory plane
 
-This package is for controlled user testing only. It is not an open-source release and not a public production installer.
+This package is for controlled user testing only. It is not an open-source release and not a public production release.
 
 ## Quick Start
 
-1. Extract the archive.
-2. Run `./omnimemora start` on macOS or `omnimemora.exe start` on Windows.
-3. Open the dashboard if it does not open automatically.
-4. Verify:
-   - `http://127.0.0.1:5173`
-   - `http://127.0.0.1:18011/health`
-   - `http://127.0.0.1:8765/health`
+1. Download the installer for your platform from the OmniMemora download page.
+2. Open OmniMemora from the desktop app.
+3. Use the app status screen for startup, repair, updates, and feedback.
 
 ## Main commands
 
@@ -52,8 +48,14 @@ Support contact: {{SUPPORT_EMAIL}}
 - This is a controlled beta package.
 - No commercial use is permitted.
 - No redistribution is permitted.
-- Automatic update is not included.
+- Desktop-shell replacement is manual in this beta.
+- Local component updates are manifest-based and require user confirmation.
+- Cloud policy candidates require explicit user confirmation before activation.
 
 ## Download base
 
 {{DOWNLOAD_BASE_URL}}
+
+## Release manifest
+
+https://doloclaw.com/releases/latest.json

@@ -7,7 +7,9 @@ const DOWNLOAD_FILES = {
   "darwin-amd64": "omnimemora-darwin-amd64.zip",
   "windows-amd64": "omnimemora-windows-amd64.zip",
   "sha256sums": "SHA256SUMS.txt",
-  "release-index": "RELEASE_INDEX.txt"
+  "release-index": "RELEASE_INDEX.txt",
+  "latest-manifest": "latest.json",
+  "version-manifest": `${PACKAGE_VERSION}.json`
 };
 
 function json(payload, init = {}) {
@@ -81,6 +83,18 @@ function downloadRedirectResponse(url) {
   return Response.redirect(`${DOWNLOAD_BASE_URL}/${filename}`, 302);
 }
 
+function releaseManifestResponse(url) {
+  const parts = url.pathname.split("/").filter(Boolean);
+  const name = parts[1] || "";
+  if (name === "latest.json") {
+    return Response.redirect(`${DOWNLOAD_BASE_URL}/latest.json`, 302);
+  }
+  if (name === `${PACKAGE_VERSION}.json`) {
+    return Response.redirect(`${DOWNLOAD_BASE_URL}/${PACKAGE_VERSION}.json`, 302);
+  }
+  return notFoundResponse(url);
+}
+
 function downloadHtml() {
   const downloads = [
     {
@@ -109,7 +123,7 @@ function downloadHtml() {
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>OmniMemora Controlled Beta Download</title>
+  <title>OmniMemora Desktop Beta Installer</title>
   <style>
     :root {
       color-scheme: light;
@@ -197,9 +211,9 @@ function downloadHtml() {
 <body>
   <main>
     <section class="panel">
-      <span class="badge">Controlled Beta</span>
-      <h1>OmniMemora Download</h1>
-      <p>Closed beta package. Source code is not included. Copyright is reserved. Commercial use and redistribution are prohibited.</p>
+      <span class="badge">Desktop Beta</span>
+      <h1>OmniMemora Desktop Beta Installer</h1>
+      <p>Closed beta installer package. Source code is not included. Copyright is reserved. Commercial use and redistribution are prohibited.</p>
 
       <h2>Package Version</h2>
       <p><code>${PACKAGE_VERSION}</code></p>
@@ -207,18 +221,20 @@ function downloadHtml() {
       <h2>Supported Platforms</h2>
       <ul class="downloads">${list}</ul>
       <p><a href="/download/file/sha256sums">Download SHA256SUMS.txt</a></p>
+      <p><a href="/releases/latest.json">View latest release manifest</a></p>
 
       <h2>Install Steps</h2>
       <ul>
-        <li>Download the package for your platform and extract it.</li>
-        <li>Run <code>./omnimemora start</code> on macOS or <code>omnimemora.exe start</code> on Windows.</li>
-        <li>Verify <code>5173</code>, <code>18011</code>, and <code>8765</code> are healthy.</li>
+        <li>Download the installer for your platform.</li>
+        <li>Open OmniMemora from the desktop app.</li>
+        <li>Use the app status screen for startup, repair, update, and feedback.</li>
       </ul>
 
       <h2>Known Limits</h2>
       <ul>
-        <li>This is a controlled beta package, not a public production installer.</li>
-        <li>Automatic updates are not included.</li>
+        <li>This is a controlled beta installer, not a public production release.</li>
+        <li>Desktop-shell replacement is manual in this version; local component updates are manifest-based.</li>
+        <li>Cloud policy candidates are visible but are not auto-promoted over local active policy.</li>
         <li>Feedback should include version, system, <code>request_id</code>, <code>error_code</code>, and reproduction steps.</li>
       </ul>
 
@@ -278,6 +294,10 @@ addEventListener("fetch", (event) => {
   }
   if (url.pathname.startsWith("/download/file/")) {
     event.respondWith(downloadRedirectResponse(url));
+    return;
+  }
+  if (url.pathname.startsWith("/releases/")) {
+    event.respondWith(releaseManifestResponse(url));
     return;
   }
   if (

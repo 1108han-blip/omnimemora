@@ -2,12 +2,13 @@ OMNIMEMORA CONTROLLED BETA RELEASE NOTES
 Package version: {{PACKAGE_VERSION}}
 
 Highlights
-- Closed beta package for local-first OmniMemora usage.
+- Desktop beta package foundation for local-first OmniMemora usage.
+- Release manifest is published at https://doloclaw.com/releases/latest.json.
 - Product entry remains local: 5173 control surface, 18011 product ingress, 8765 internal memory plane.
-- Skill Suggestion v1 and Cloud Reset mainline are already aligned with current running reality.
+- Cloud policy updates remain candidate-only and do not auto-promote over local active policy.
 
 What this beta is for
-- Verify real installation and startup behavior.
+- Verify real desktop installation and startup behavior.
 - Collect request_id and error_code based feedback from real users.
 - Validate whether local-first token/context value is understandable to target users.
 
@@ -15,6 +16,7 @@ What this beta is not
 - Not an open-source release.
 - Not a public production launch.
 - Not a commercial license.
+- Not a silent forced update channel.
 
 Download base
 {{DOWNLOAD_BASE_URL}}
