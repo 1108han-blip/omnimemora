@@ -15,12 +15,6 @@ import { copy, detectLanguage, type Language } from '../lib/i18n';
 
 export type PageKey = 'overview' | 'live-flow' | 'agents' | 'policies' | 'context-debug' | 'savings' | 'settings';
 
-export interface PolicyState {
-  compressionLevel: number;
-  fallbackEnabled: boolean;
-  aggressiveMode: boolean;
-}
-
 interface DashboardState {
   page: PageKey;
   sidebarCollapsed: boolean;
@@ -32,7 +26,6 @@ interface DashboardState {
   evidenceByRequestId: Record<string, RequestEvidence | null>;
   evidenceLoading: boolean;
   evidenceError: string | null;
-  policies: PolicyState;
   lastMessage: string;
   loading: boolean;
   agentBusy: string | null;
@@ -48,7 +41,6 @@ interface DashboardState {
   detachAgent: (familyId: string) => Promise<void>;
   enableRouting: (familyId: string) => Promise<void>;
   disableRouting: (familyId: string) => Promise<void>;
-  setPolicy: <K extends keyof PolicyState>(key: K, value: PolicyState[K]) => void;
 }
 
 function userFacingRequests(product: ProductConsoleSnapshot | null): RecentRequest[] {
@@ -68,11 +60,6 @@ export const useDashboardStore = create<DashboardState>((set, get) => {
     evidenceByRequestId: {},
     evidenceLoading: false,
     evidenceError: null,
-    policies: {
-      compressionLevel: 62,
-      fallbackEnabled: true,
-      aggressiveMode: false,
-    },
     lastMessage: copy[language].header.ready,
     loading: false,
     agentBusy: null,
@@ -188,6 +175,5 @@ export const useDashboardStore = create<DashboardState>((set, get) => {
         set({ agentBusy: null });
       }
     },
-    setPolicy: (key, value) => set((state) => ({ policies: { ...state.policies, [key]: value } })),
   };
 });

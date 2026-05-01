@@ -29,7 +29,7 @@ function decisionLabel(decision: 'COMPILED' | 'BYPASS' | 'FALLBACK', t: typeof c
 }
 
 function displayText(request: RecentRequest): string {
-  return request.user_visible_query || request.query || request.raw_query || request.diagnostic_label || request.request_id;
+  return request.user_visible_query || request.query || request.diagnostic_label || request.request_id;
 }
 
 function evidenceTokens(evidence: RequestEvidence | null | undefined) {
@@ -54,6 +54,10 @@ export function LiveFlowPage() {
   const selected = requests.find((request) => request.request_id === selectedRequestId) ?? null;
   const selectedEvidence = selected ? evidenceByRequestId[selected.request_id] : null;
   const selectedTokens = evidenceTokens(selectedEvidence);
+  const selectedExpanded = selectedTokens.before != null && selectedTokens.after != null && selectedTokens.after > selectedTokens.before;
+  const selectedDisplayText = selected
+    ? selected.user_visible_query || selected.query || selectedEvidence?.request.query_summary || selected.diagnostic_label || selected.request_id
+    : t.notAvailable;
 
   return (
     <div className="grid h-[calc(100vh-92px)] grid-cols-[1fr_420px] gap-3 max-2xl:grid-cols-1">
@@ -92,7 +96,9 @@ export function LiveFlowPage() {
                       <TD><Badge tone={tone(decision) as never}>{decisionLabel(decision, t)}</Badge></TD>
                       <TD className="text-right font-mono text-xs">{tokens.before == null ? t.notAvailable : compactNumber(tokens.before)}</TD>
                       <TD className="text-right font-mono text-xs">{tokens.after == null ? t.notAvailable : compactNumber(tokens.after)}</TD>
-                      <TD className="text-right font-mono text-xs text-success">{tokens.saving == null ? percent(request.savings_ratio) : percent(tokens.saving)}</TD>
+                      <TD className={tokens.before != null && tokens.after != null && tokens.after > tokens.before ? 'text-right font-mono text-xs text-warning' : 'text-right font-mono text-xs text-success'}>
+                        {tokens.saving == null ? percent(request.savings_ratio) : percent(tokens.saving)}
+                      </TD>
                     </TR>
                   );
                 })}
@@ -114,11 +120,15 @@ export function LiveFlowPage() {
                 <div className="grid grid-cols-3 gap-2">
                   <div className="rounded-md border border-border bg-background p-2"><p className="text-xs text-muted">{t.before}</p><strong>{compactNumber(selectedTokens.before)}</strong></div>
                   <div className="rounded-md border border-border bg-background p-2"><p className="text-xs text-muted">{t.after}</p><strong>{compactNumber(selectedTokens.after)}</strong></div>
-                  <div className="rounded-md border border-border bg-background p-2"><p className="text-xs text-muted">{t.saving}</p><strong className="text-success">{percent(selectedTokens.saving)}</strong></div>
+                  <div className="rounded-md border border-border bg-background p-2">
+                    <p className="text-xs text-muted">{selectedExpanded ? t.expandedTokens : t.saving}</p>
+                    <strong className={selectedExpanded ? 'text-warning' : 'text-success'}>{selectedExpanded ? `+${compactNumber((selectedTokens.after ?? 0) - (selectedTokens.before ?? 0))}` : percent(selectedTokens.saving)}</strong>
+                  </div>
                 </div>
+                {selectedExpanded && <p className="rounded-md border border-warning/30 bg-warning/10 p-2 text-xs text-warning">{t.expandedDetail}</p>}
                 <section>
                   <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">{t.raw}</p>
-                  <pre className="max-h-32 overflow-auto rounded-md border border-border bg-background p-2 font-mono text-xs text-muted">{selected.raw_query || selected.query || selectedEvidence.request.query_summary}</pre>
+                  <pre className="max-h-32 overflow-auto rounded-md border border-border bg-background p-2 font-mono text-xs text-muted">{selectedDisplayText}</pre>
                 </section>
                 <section>
                   <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">{t.compiled}</p>
