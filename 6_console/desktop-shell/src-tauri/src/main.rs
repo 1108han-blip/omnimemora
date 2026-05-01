@@ -15,6 +15,9 @@ const RUNTIME_PORT: u16 = 8765;
 const ADAPTER_PORT: u16 = 18011;
 const UI_PORT: u16 = 5173;
 const INTERNAL_TOKEN: &str = "omnimemora-desktop-beta-local";
+const LATEST_MANIFEST_URL: &str = "https://doloclaw.com/releases/latest.json";
+const CLOUD_POLICY_CANDIDATE_URL: &str =
+    "https://doloclaw.com/api/control/recommendation/candidates/latest";
 
 #[derive(Serialize, Deserialize, Clone)]
 struct ManagedProcess {
@@ -100,6 +103,14 @@ fn logs_dir() -> PathBuf {
 
 fn state_path() -> PathBuf {
     current_dir().join("desktop_state.json")
+}
+
+fn downloaded_manifest_path() -> PathBuf {
+    downloads_dir().join("latest.json")
+}
+
+fn downloaded_candidate_path() -> PathBuf {
+    downloads_dir().join("cloud_policy_candidate.json")
 }
 
 fn repo_root() -> PathBuf {
@@ -256,6 +267,7 @@ fn service_probe(
 
 fn release_manifest_from_disk() -> Option<Value> {
     let candidates = [
+        downloaded_manifest_path(),
         current_dir().join("manifest.json"),
         repo_root().join("4_core/local-runtime/release/1.0.0-beta.2/latest.json"),
         repo_root().join("4_core/local-runtime/release/1.0.0-beta.2/1.0.0-beta.2.json"),
@@ -270,6 +282,53 @@ fn release_manifest_from_disk() -> Option<Value> {
     None
 }
 
+fn installed_component_version() -> Option<String> {
+    fs::read_to_string(current_dir().join("manifest.json"))
+        .ok()
+        .and_then(|raw| serde_json::from_str::<Value>(&raw).ok())
+        .and_then(|value| {
+            value
+                .get("version")
+                .and_then(Value::as_str)
+                .map(ToString::to_string)
+        })
+}
+
+fn candidate_policy_status() -> (String, Option<String>, String) {
+    let Ok(raw) = fs::read_to_string(downloaded_candidate_path()) else {
+        return (
+            "not_checked".to_string(),
+            None,
+            "云端策略保持 candidate-only；不会自动覆盖本地 active policy。".to_string(),
+        );
+    };
+    let Ok(value) = serde_json::from_str::<Value>(&raw) else {
+        return (
+            "blocked".to_string(),
+            None,
+            "云端策略候选响应不是有效 JSON；不会启用。".to_string(),
+        );
+    };
+    let version = value
+        .get("policy_version")
+        .or_else(|| value.get("version"))
+        .and_then(Value::as_str)
+        .map(ToString::to_string);
+    let status = value
+        .get("status")
+        .and_then(Value::as_str)
+        .unwrap_or("candidate");
+    (
+        if version.is_some() {
+            "available".to_string()
+        } else {
+            "not_checked".to_string()
+        },
+        version,
+        format!("云端策略候选状态：{status}。只显示候选，不自动启用。"),
+    )
+}
+
 fn update_statuses() -> Vec<UpdateLayerStatus> {
     let manifest = release_manifest_from_disk();
     let available = manifest
@@ -277,11 +336,15 @@ fn update_statuses() -> Vec<UpdateLayerStatus> {
         .and_then(|value| value.get("version"))
         .and_then(Value::as_str)
         .map(ToString::to_string);
+    let installed = installed_component_version();
+    let current_components = installed.clone().unwrap_or_else(|| APP_VERSION.to_string());
     let local_status = match &available {
+        Some(_) if installed.is_none() => "available",
         Some(version) if version != APP_VERSION => "available",
         Some(_) => "current",
         None => "not_checked",
     };
+    let (cloud_status, cloud_version, cloud_detail) = candidate_policy_status();
     vec![
         UpdateLayerStatus {
             layer: "desktop_shell",
@@ -292,7 +355,7 @@ fn update_statuses() -> Vec<UpdateLayerStatus> {
         },
         UpdateLayerStatus {
             layer: "local_components",
-            current_version: APP_VERSION.to_string(),
+            current_version: current_components,
             available_version: available,
             status: local_status.to_string(),
             detail: "本地组件更新走 release manifest、SHA256 校验和回滚流程。".to_string(),
@@ -300,9 +363,9 @@ fn update_statuses() -> Vec<UpdateLayerStatus> {
         UpdateLayerStatus {
             layer: "cloud_policy",
             current_version: "local-active".to_string(),
-            available_version: None,
-            status: "not_checked".to_string(),
-            detail: "云端策略保持 candidate-only；不会自动覆盖本地 active policy。".to_string(),
+            available_version: cloud_version,
+            status: cloud_status,
+            detail: cloud_detail,
         },
     ]
 }
@@ -496,6 +559,156 @@ fn wait_for_service(port: u16, path: &str, expected: Option<&str>) -> bool {
     false
 }
 
+fn platform_id() -> &'static str {
+    match (env::consts::OS, env::consts::ARCH) {
+        ("macos", "aarch64") => "darwin-arm64",
+        ("macos", "x86_64") => "darwin-amd64",
+        ("windows", "x86_64") => "windows-amd64",
+        _ => "unsupported",
+    }
+}
+
+fn run_capture(mut command: Command, label: &str) -> Result<String, String> {
+    let output = command
+        .output()
+        .map_err(|err| format!("{label} 执行失败: {err}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("{label} 返回失败: {}", stderr.trim()));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn curl_to_string(url: &str) -> Result<String, String> {
+    let mut command = Command::new("curl");
+    command.args(["-fsSL", "--connect-timeout", "8", "--max-time", "30", url]);
+    run_capture(command, "下载 manifest")
+}
+
+fn curl_to_file(url: &str, dest: &Path) -> Result<(), String> {
+    ensure_dirs()?;
+    let mut command = Command::new("curl");
+    command
+        .args(["-fL", "--connect-timeout", "8", "--max-time", "300", "-o"])
+        .arg(dest)
+        .arg(url);
+    run_capture(command, "下载更新包").map(|_| ())
+}
+
+fn sha256_file(path: &Path) -> Result<String, String> {
+    let mut command = Command::new("shasum");
+    command.args(["-a", "256"]).arg(path);
+    let output = run_capture(command, "SHA256 校验")?;
+    output
+        .split_whitespace()
+        .next()
+        .map(ToString::to_string)
+        .ok_or_else(|| "SHA256 输出为空。".to_string())
+}
+
+fn parse_json(raw: &str, context: &str) -> Result<Value, String> {
+    serde_json::from_str(raw).map_err(|err| format!("{context} 不是有效 JSON: {err}"))
+}
+
+fn fetch_latest_manifest() -> Result<Value, String> {
+    ensure_dirs()?;
+    let raw = curl_to_string(LATEST_MANIFEST_URL)?;
+    let value = parse_json(&raw, "线上 release manifest")?;
+    fs::write(downloaded_manifest_path(), raw)
+        .map_err(|err| format!("无法保存 release manifest: {err}"))?;
+    Ok(value)
+}
+
+fn fetch_cloud_policy_candidate() -> Result<(), String> {
+    ensure_dirs()?;
+    let raw = curl_to_string(CLOUD_POLICY_CANDIDATE_URL)?;
+    let _ = parse_json(&raw, "云端策略候选")?;
+    fs::write(downloaded_candidate_path(), raw)
+        .map_err(|err| format!("无法保存云端策略候选: {err}"))
+}
+
+fn platform_manifest<'a>(manifest: &'a Value, platform: &str) -> Result<&'a Value, String> {
+    manifest
+        .get("platforms")
+        .and_then(|value| value.get(platform))
+        .ok_or_else(|| format!("release manifest 不包含当前平台 {platform}。"))
+}
+
+fn manifest_version(manifest: &Value) -> Result<String, String> {
+    manifest
+        .get("version")
+        .and_then(Value::as_str)
+        .map(ToString::to_string)
+        .ok_or_else(|| "release manifest 缺少 version。".to_string())
+}
+
+fn manifest_package(manifest: &Value, platform: &str) -> Result<(String, String, String), String> {
+    let entry = platform_manifest(manifest, platform)?;
+    let package = entry
+        .get("package")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{platform} manifest 缺少 package。"))?;
+    let sha = entry
+        .get("sha256")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{platform} manifest 缺少 sha256。"))?;
+    let url = entry
+        .get("download_url")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{platform} manifest 缺少 download_url。"))?;
+    Ok((package.to_string(), sha.to_string(), url.to_string()))
+}
+
+fn unpack_zip(zip_path: &Path, dest: &Path) -> Result<(), String> {
+    if dest.exists() {
+        fs::remove_dir_all(dest)
+            .map_err(|err| format!("无法清理 staging 目录 {}: {err}", dest.display()))?;
+    }
+    fs::create_dir_all(dest)
+        .map_err(|err| format!("无法创建 staging 目录 {}: {err}", dest.display()))?;
+    let mut command = Command::new("unzip");
+    command.args(["-q"]).arg(zip_path).arg("-d").arg(dest);
+    run_capture(command, "解包更新包").map(|_| ())
+}
+
+fn unpacked_component_root(staging: &Path) -> Result<PathBuf, String> {
+    let mut roots = Vec::new();
+    for entry in fs::read_dir(staging).map_err(|err| format!("无法读取 staging 目录: {err}"))?
+    {
+        let entry = entry.map_err(|err| format!("无法读取 staging 条目: {err}"))?;
+        if entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
+            roots.push(entry.path());
+        }
+    }
+    if roots.len() != 1 {
+        return Err("更新包结构不正确：staging 中应只有一个组件目录。".to_string());
+    }
+    Ok(roots.remove(0))
+}
+
+fn component_health_ok() -> bool {
+    wait_for_service(RUNTIME_PORT, "/health", Some("\"status\":"))
+        && wait_for_service(ADAPTER_PORT, "/health", Some("\"status\":\"healthy\""))
+        && wait_for_service(UI_PORT, "/", None)
+}
+
+fn restore_previous_components() -> Result<(), String> {
+    if !previous_dir().exists() {
+        return Err("没有 previous 组件可回滚。".to_string());
+    }
+    let rollback_snapshot = rollback_dir().join(format!("failed-current-{}", unix_now()));
+    if current_dir().exists() {
+        if rollback_snapshot.exists() {
+            fs::remove_dir_all(&rollback_snapshot)
+                .map_err(|err| format!("无法清理旧 rollback snapshot: {err}"))?;
+        }
+        fs::rename(current_dir(), &rollback_snapshot)
+            .map_err(|err| format!("无法保存失败版本到 rollback: {err}"))?;
+    }
+    fs::rename(previous_dir(), current_dir()).map_err(|err| format!("无法恢复 previous: {err}"))?;
+    Ok(())
+}
+
 fn start_all_services() -> Result<String, String> {
     ensure_dirs()?;
     let mut state = prune_dead_processes(read_state());
@@ -584,26 +797,112 @@ fn restart_services() -> DesktopCommandResult {
 
 #[tauri::command]
 fn check_for_updates() -> DesktopCommandResult {
-    command_result(
-        true,
-        "已检查本地 release manifest。线上 manifest 拉取将在下一阶段接入。",
-    )
+    match fetch_latest_manifest() {
+        Ok(manifest) => {
+            let version = manifest
+                .get("version")
+                .and_then(Value::as_str)
+                .unwrap_or("unknown");
+            let candidate_message = match fetch_cloud_policy_candidate() {
+                Ok(_) => "云端策略候选也已检查；仍保持 candidate-only。",
+                Err(_) => "云端策略候选暂不可用；本地 active policy 未改变。",
+            };
+            command_result(
+                true,
+                format!("已检查线上 release manifest：{version}。{candidate_message}"),
+            )
+        }
+        Err(err) => command_result(false, format!("检查更新失败：{err}")),
+    }
 }
 
 #[tauri::command]
 fn install_update() -> DesktopCommandResult {
-    command_result(
-        false,
-        "组件安装更新将在 manifest 下载、SHA256 校验和回滚流程完成后启用。",
-    )
+    let result = (|| -> Result<String, String> {
+        let platform = platform_id();
+        if platform == "unsupported" {
+            return Err("当前平台暂未支持自动组件更新。".to_string());
+        }
+        let manifest = fetch_latest_manifest().or_else(|_| {
+            release_manifest_from_disk()
+                .ok_or_else(|| "无法获取线上或本地 release manifest。".to_string())
+        })?;
+        let version = manifest_version(&manifest)?;
+        let installed = installed_component_version();
+        if installed.as_deref() == Some(version.as_str()) {
+            return Ok(format!("本地组件已是最新版本：{version}。"));
+        }
+        let (package, expected_sha, download_url) = manifest_package(&manifest, platform)?;
+        let zip_path = downloads_dir().join(&package);
+        curl_to_file(&download_url, &zip_path)?;
+        let actual_sha = sha256_file(&zip_path)?;
+        if actual_sha != expected_sha {
+            return Err(format!(
+                "SHA256 不匹配，已阻止安装。expected={expected_sha} actual={actual_sha}"
+            ));
+        }
+
+        let staging = downloads_dir().join(format!("staging-{version}-{platform}"));
+        unpack_zip(&zip_path, &staging)?;
+        let unpacked_root = unpacked_component_root(&staging)?;
+        if !unpacked_root.join("manifest.json").exists()
+            || !unpacked_root.join("tools/_run_adapter.py").exists()
+        {
+            return Err("更新包缺少 manifest 或 adapter launcher。".to_string());
+        }
+
+        stop_all_services()?;
+        if previous_dir().exists() {
+            fs::remove_dir_all(previous_dir())
+                .map_err(|err| format!("无法清理 previous 目录: {err}"))?;
+        }
+        if current_dir().exists() {
+            fs::rename(current_dir(), previous_dir())
+                .map_err(|err| format!("无法切换 current 到 previous: {err}"))?;
+        }
+        fs::rename(&unpacked_root, current_dir())
+            .map_err(|err| format!("无法安装新组件到 current: {err}"))?;
+        let _ = fs::remove_dir_all(&staging);
+
+        match start_all_services() {
+            Ok(_) if component_health_ok() => Ok(format!("本地组件已更新到 {version}。")),
+            Ok(_) => {
+                stop_all_services().ok();
+                restore_previous_components().ok();
+                start_all_services().ok();
+                Err("更新后健康检查未通过，已尝试自动回滚。".to_string())
+            }
+            Err(err) => {
+                restore_previous_components().ok();
+                start_all_services().ok();
+                Err(format!("更新后服务启动失败，已尝试自动回滚：{err}"))
+            }
+        }
+    })();
+
+    match result {
+        Ok(message) => command_result(true, message),
+        Err(err) => command_result(false, err),
+    }
 }
 
 #[tauri::command]
 fn rollback() -> DesktopCommandResult {
-    command_result(
-        false,
-        "当前没有已安装的组件更新可回滚；rollback 将在组件更新阶段启用。",
-    )
+    let result = (|| -> Result<String, String> {
+        stop_all_services()?;
+        restore_previous_components()?;
+        match start_all_services() {
+            Ok(_) if component_health_ok() => {
+                Ok("已回滚本地组件；桌面壳和用户 memory 数据未回滚。".to_string())
+            }
+            Ok(_) => Err("回滚后健康检查未通过，请检查本地组件包。".to_string()),
+            Err(err) => Err(format!("回滚后服务启动失败：{err}")),
+        }
+    })();
+    match result {
+        Ok(message) => command_result(true, message),
+        Err(err) => command_result(false, err),
+    }
 }
 
 fn main() {
