@@ -1,4 +1,16 @@
-import type { AgentId, AgentStatus, DesktopCommandResult, DesktopStatus } from './types';
+import type {
+  AgentControlResponse,
+  AgentId,
+  AgentStatus,
+  CoreCapabilitiesResponse,
+  DesktopCommandResult,
+  DesktopStatus,
+  ProductConsoleSnapshot,
+  RecentRequestsResponse,
+  UsageSummary,
+} from './types';
+
+const PRODUCT_API_BASE = 'http://127.0.0.1:18011';
 
 const DEFAULT_STATUS: DesktopStatus = {
   app_version: '1.0.0-beta.3',
@@ -144,6 +156,71 @@ export async function runAgentCommand(command: 'attach_agent' | 'detach_agent', 
       status: DEFAULT_STATUS,
     };
   }
+}
+
+async function fetchProductJson<T>(path: string, timeoutMs = 2200): Promise<T> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(`${PRODUCT_API_BASE}${path}`, { signal: controller.signal });
+    if (!response.ok) {
+      throw new Error(`${path} returned ${response.status}`);
+    }
+    return response.json();
+  } finally {
+    window.clearTimeout(timer);
+  }
+}
+
+function normalizeUsage(raw: Record<string, unknown>): UsageSummary {
+  return {
+    tenant: (raw.tenant as string) ?? 'all',
+    request_count: Number(raw.request_count ?? 0),
+    total_requests: Number(raw.total_requests ?? 0),
+    saved_tokens_total: Number(raw.saved_tokens_total ?? raw.saved_tokens_estimate_total ?? 0),
+    average_savings_ratio: Number(raw.average_savings_ratio ?? 0),
+    last_request_at: (raw.last_request_at as string | null) ?? null,
+    by_agent: Array.isArray(raw.by_agent)
+      ? raw.by_agent.map((entry) => {
+          const item = entry as Record<string, unknown>;
+          return {
+            agent: (item.agent as string) ?? 'unknown',
+            requests: Number(item.requests ?? 0),
+            saved_tokens: Number(item.saved_tokens ?? 0),
+            savings_ratio: Number(item.savings_ratio ?? 0),
+            last_request_at: (item.last_request_at as string | null) ?? null,
+          };
+        })
+      : [],
+  };
+}
+
+export async function getProductConsoleSnapshot(): Promise<ProductConsoleSnapshot> {
+  const [core, recent, usage, controls] = await Promise.allSettled([
+    fetchProductJson<CoreCapabilitiesResponse>('/metrics/core_capabilities?tenant=all'),
+    fetchProductJson<RecentRequestsResponse>('/metrics/recent_requests?tenant=all&limit=6&value_qualified_only=false'),
+    fetchProductJson<Record<string, unknown>>('/usage/token-savings?tenant=all'),
+    fetchProductJson<AgentControlResponse>('/agents/control'),
+  ]);
+
+  const fulfilled = [core, recent, usage, controls].filter((result) => result.status === 'fulfilled');
+  const firstError = [core, recent, usage, controls].find((result) => result.status === 'rejected');
+
+  return {
+    online: fulfilled.length > 0,
+    error:
+      fulfilled.length > 0
+        ? null
+        : firstError?.status === 'rejected'
+          ? firstError.reason instanceof Error
+            ? firstError.reason.message
+            : String(firstError.reason)
+          : 'Product console is offline.',
+    core: core.status === 'fulfilled' ? core.value : null,
+    recent: recent.status === 'fulfilled' ? recent.value : null,
+    usage: usage.status === 'fulfilled' ? normalizeUsage(usage.value) : null,
+    controls: controls.status === 'fulfilled' ? controls.value : null,
+  };
 }
 
 export function buildFeedbackMailto(status: DesktopStatus): string {
