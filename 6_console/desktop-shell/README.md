@@ -2,7 +2,7 @@
 
 Tauri-based desktop shell foundation for `1.0.0-beta.2`.
 
-This batch defines the desktop GUI, service status model, update-layer model, and Tauri command contract. It does not yet implement real service mutation or build distributable installers.
+This batch defines the desktop GUI, service status model, update-layer model, and Tauri command contract. It does not yet implement real service mutation.
 
 ## Current behavior
 
@@ -27,4 +27,8 @@ Tauri installer validation requires Rust/Cargo:
 npm run tauri:build
 ```
 
-If `cargo` is missing, Tauri build fails before compiling Rust. That is an environment prerequisite, not a desktop-shell source validation pass.
+On macOS arm64, `npm run tauri:build` produces:
+
+```text
+src-tauri/target/release/bundle/dmg/OmniMemora Desktop_1.0.0-beta.2_aarch64.dmg
+```
