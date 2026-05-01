@@ -5,9 +5,12 @@ const CANDIDATE_POINTER_SCHEMA = "omnimemora-cloud-candidate-pointer-v1";
 const PROMPT_OS_URL = "https://prompt.doloclaw.com/";
 const PROMO_VIDEO_FILENAME = "omnimemora-promo-guide.mp4";
 const DOWNLOAD_FILES = {
-  "darwin-arm64": "omnimemora-darwin-arm64.zip",
+  "darwin-arm64": `OmniMemora-Desktop-${PACKAGE_VERSION}-darwin-arm64.dmg`,
+  "darwin-arm64-components": "omnimemora-darwin-arm64.zip",
   "darwin-amd64": "omnimemora-darwin-amd64.zip",
+  "darwin-amd64-components": "omnimemora-darwin-amd64.zip",
   "windows-amd64": "omnimemora-windows-amd64.zip",
+  "windows-amd64-components": "omnimemora-windows-amd64.zip",
   "sha256sums": "SHA256SUMS.txt",
   "release-index": "RELEASE_INDEX.txt",
   "latest-manifest": "latest.json",
@@ -708,15 +711,15 @@ function releaseManifestResponse(url) {
 function downloadHtml() {
   const downloads = [
     {
-      label: "macOS (Apple Silicon)",
+      label: "macOS (Apple Silicon DMG)",
       href: `/download/file/darwin-arm64`
     },
     {
-      label: "macOS (Intel)",
+      label: "macOS (Intel component zip, installer pending)",
       href: `/download/file/darwin-amd64`
     },
     {
-      label: "Windows (x64)",
+      label: "Windows (x64 component zip, installer validation pending)",
       href: `/download/file/windows-amd64`
     }
   ];

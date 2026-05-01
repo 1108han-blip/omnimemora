@@ -104,6 +104,7 @@ def upload_artifacts(package_version: str, token_id: str, token_value: str) -> N
         raise SystemExit(f"release directory missing: {release_dir}")
 
     upload_names = [
+        f"OmniMemora-Desktop-{package_version}-darwin-arm64.dmg",
         "omnimemora-darwin-amd64.zip",
         "omnimemora-darwin-arm64.zip",
         "omnimemora-windows-amd64.zip",

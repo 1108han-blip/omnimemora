@@ -10,6 +10,8 @@ RELEASE_DIR="$ROOT_DIR/release/$PACKAGE_VERSION"
 SUPPORT_EMAIL=${OMNIMEMORA_BETA_SUPPORT_EMAIL:-"support@doloclaw.com"}
 DOWNLOAD_BASE_URL=${OMNIMEMORA_DOWNLOAD_BASE_URL:-"https://assets.doloclaw.com/omnimemora/beta/$PACKAGE_VERSION"}
 PUBLISHED_AT=${OMNIMEMORA_RELEASE_PUBLISHED_AT:-"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"}
+DESKTOP_DMG_SOURCE="$REPO_ROOT/6_console/desktop-shell/src-tauri/target/release/bundle/dmg/OmniMemora Desktop_${PACKAGE_VERSION}_aarch64.dmg"
+DESKTOP_DMG_NAME="OmniMemora-Desktop-${PACKAGE_VERSION}-darwin-arm64.dmg"
 
 echo "Building OmniMemora controlled beta package set: $PACKAGE_VERSION"
 
@@ -152,6 +154,16 @@ build "darwin" "amd64" "omnimemora-darwin-amd64" "darwin-amd64"
 build "darwin" "arm64" "omnimemora-darwin-arm64" "darwin-arm64"
 build "windows" "amd64" "omnimemora-windows-amd64" "windows-amd64"
 
+if [ -f "$DESKTOP_DMG_SOURCE" ]; then
+    cp "$DESKTOP_DMG_SOURCE" "$RELEASE_DIR/$DESKTOP_DMG_NAME"
+    (
+        cd "$RELEASE_DIR"
+        shasum -a 256 "$DESKTOP_DMG_NAME" >> SHA256SUMS.txt
+    )
+else
+    echo "Warning: macOS arm64 desktop installer DMG not found: $DESKTOP_DMG_SOURCE" >&2
+fi
+
 sha_for() {
     local filename="$1"
     awk -v name="$filename" '$2 == name {print $1}' "$RELEASE_DIR/SHA256SUMS.txt"
@@ -162,10 +174,12 @@ write_release_manifest() {
     local darwin_arm64_sha
     local darwin_amd64_sha
     local windows_amd64_sha
+    local desktop_dmg_sha
 
     darwin_arm64_sha="$(sha_for omnimemora-darwin-arm64.zip)"
     darwin_amd64_sha="$(sha_for omnimemora-darwin-amd64.zip)"
     windows_amd64_sha="$(sha_for omnimemora-windows-amd64.zip)"
+    desktop_dmg_sha="$(sha_for "$DESKTOP_DMG_NAME")"
 
     cat > "$manifest_path" <<EOF
 {
@@ -177,17 +191,25 @@ write_release_manifest() {
     "darwin-arm64": {
       "package": "omnimemora-darwin-arm64.zip",
       "sha256": "$darwin_arm64_sha",
-      "download_url": "https://doloclaw.com/download/file/darwin-arm64"
+      "download_url": "https://doloclaw.com/download/file/darwin-arm64-components"
     },
     "darwin-amd64": {
       "package": "omnimemora-darwin-amd64.zip",
       "sha256": "$darwin_amd64_sha",
-      "download_url": "https://doloclaw.com/download/file/darwin-amd64"
+      "download_url": "https://doloclaw.com/download/file/darwin-amd64-components"
     },
     "windows-amd64": {
       "package": "omnimemora-windows-amd64.zip",
       "sha256": "$windows_amd64_sha",
-      "download_url": "https://doloclaw.com/download/file/windows-amd64"
+      "download_url": "https://doloclaw.com/download/file/windows-amd64-components"
+    }
+  },
+  "desktop_installers": {
+    "darwin-arm64": {
+      "package": "$DESKTOP_DMG_NAME",
+      "sha256": "$desktop_dmg_sha",
+      "download_url": "https://doloclaw.com/download/file/darwin-arm64",
+      "validation": "hdiutil imageinfo passed locally"
     }
   },
   "components": {
