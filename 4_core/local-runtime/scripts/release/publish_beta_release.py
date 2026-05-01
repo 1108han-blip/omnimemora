@@ -166,7 +166,7 @@ def deploy_worker(package_version: str) -> None:
 
 
 def main() -> None:
-    package_version = sys.argv[1] if len(sys.argv) > 1 else "1.0.0-beta.2"
+    package_version = sys.argv[1] if len(sys.argv) > 1 else "1.0.0-beta.3"
     token_id, token_value = create_r2_upload_token()
     try:
         upload_artifacts(package_version, token_id, token_value)

@@ -2,7 +2,7 @@
 # scripts/release/build_release.sh - Build closed beta release archives
 set -euo pipefail
 
-PACKAGE_VERSION=${1:-"1.0.0-beta.2"}
+PACKAGE_VERSION=${1:-"1.0.0-beta.3"}
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REPO_ROOT="$(cd "$ROOT_DIR/../.." && pwd)"
@@ -241,7 +241,7 @@ write_release_manifest() {
   },
   "download_url": "https://doloclaw.com/download",
   "release_notes": "Desktop beta foundation: tracked installer downloads, release manifest, local component update metadata, and candidate-only cloud policy update posture.",
-  "minimum_supported_desktop_version": "1.0.0-beta.2",
+  "minimum_supported_desktop_version": "1.0.0-beta.3",
   "force_update": false
 }
 EOF
