@@ -40,167 +40,593 @@ function htmlResponse(html, init = {}) {
   });
 }
 
+function faviconResponse() {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="16" fill="#f7f2e8"/>
+  <circle cx="32" cy="32" r="19" fill="#0f6258"/>
+  <circle cx="32" cy="32" r="9" fill="#f7f2e8"/>
+  <path d="M17 45 45 17" stroke="#b95d31" stroke-width="6" stroke-linecap="round"/>
+</svg>`;
+  return new Response(svg, {
+    status: 200,
+    headers: {
+      "content-type": "image/svg+xml; charset=utf-8",
+      "cache-control": "public, max-age=86400"
+    }
+  });
+}
+
 function rootResponse(url) {
   const html = `<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Dolo Claw Products</title>
+  <title>Dolo Claw | Product Entry</title>
+  <link rel="icon" href="/favicon.ico" type="image/svg+xml" />
   <style>
     :root {
       color-scheme: light;
-      --bg: #f6f1e7;
-      --panel: #fffdf7;
-      --ink: #15120d;
-      --muted: #62594c;
-      --line: #d8cfbf;
-      --green: #1d6f63;
-      --copper: #b85c38;
-      --slate: #28323a;
+      --paper: #f7f2e8;
+      --surface: #fffaf0;
+      --surface-strong: #ffffff;
+      --ink: #151711;
+      --soft-ink: #4e554b;
+      --muted: #767263;
+      --line: rgba(21, 23, 17, 0.13);
+      --line-strong: rgba(21, 23, 17, 0.22);
+      --forest: #0f6258;
+      --forest-ink: #073b35;
+      --copper: #b95d31;
+      --blue: #2f5b83;
+      --sand: #e9dcc7;
+      --shadow: 0 26px 90px rgba(38, 35, 26, 0.15);
+      --radius-xl: 34px;
+      --radius-lg: 24px;
+      --radius-md: 16px;
     }
     * { box-sizing: border-box; }
+    html { scroll-behavior: smooth; }
     body {
       margin: 0;
       min-height: 100vh;
       background:
-        linear-gradient(135deg, rgba(29, 111, 99, 0.11), transparent 38%),
-        radial-gradient(circle at 80% 10%, rgba(184, 92, 56, 0.14), transparent 28%),
-        var(--bg);
+        radial-gradient(circle at 8% 12%, rgba(15, 98, 88, 0.16), transparent 29rem),
+        radial-gradient(circle at 86% 4%, rgba(185, 93, 49, 0.16), transparent 25rem),
+        linear-gradient(135deg, rgba(47, 91, 131, 0.10), transparent 45%),
+        var(--paper);
       color: var(--ink);
-      font: 16px/1.6 ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font: 16px/1.55 Charter, "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+      -webkit-font-smoothing: antialiased;
+      text-rendering: optimizeLegibility;
     }
+    body::before {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      pointer-events: none;
+      content: "";
+      background-image:
+        linear-gradient(rgba(21, 23, 17, 0.045) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(21, 23, 17, 0.045) 1px, transparent 1px);
+      background-size: 42px 42px;
+      mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.62), transparent 82%);
+    }
+    a { color: inherit; }
     main {
-      width: min(1120px, calc(100% - 40px));
+      width: min(1180px, calc(100% - 40px));
       margin: 0 auto;
-      padding: 56px 0;
+      padding: 22px 0 42px;
     }
-    .hero {
-      display: grid;
+    .nav {
+      position: sticky;
+      top: 14px;
+      z-index: 5;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
       gap: 18px;
-      margin-bottom: 34px;
+      margin-bottom: 46px;
+      padding: 12px 14px 12px 18px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255, 250, 240, 0.78);
+      box-shadow: 0 12px 42px rgba(38, 35, 26, 0.09);
+      backdrop-filter: blur(18px);
     }
-    .kicker {
-      width: max-content;
-      padding: 7px 11px;
-      border: 1px solid rgba(29, 111, 99, 0.35);
-      color: var(--green);
-      background: rgba(255, 253, 247, 0.7);
-      font: 700 12px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace;
-      letter-spacing: 0.04em;
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      min-width: max-content;
+      color: var(--forest-ink);
+      font: 800 13px/1.1 Optima, Candara, "Gill Sans", sans-serif;
+      letter-spacing: 0.15em;
       text-transform: uppercase;
     }
-    h1 {
-      max-width: 860px;
-      margin: 0;
-      font-size: clamp(42px, 7vw, 82px);
-      line-height: 0.98;
-      letter-spacing: 0;
+    .mark {
+      width: 34px;
+      height: 34px;
+      border: 1px solid rgba(15, 98, 88, 0.35);
+      border-radius: 50%;
+      background:
+        linear-gradient(135deg, rgba(15, 98, 88, 0.90), rgba(47, 91, 131, 0.85)),
+        var(--forest);
+      box-shadow: inset 0 0 0 7px rgba(255, 250, 240, 0.82);
     }
-    .hero p {
-      max-width: 760px;
-      margin: 0;
-      color: var(--muted);
-      font-size: 19px;
+    .navlinks {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font: 800 13px/1 Optima, Candara, "Gill Sans", sans-serif;
     }
-    .grid {
+    .navlinks a {
+      display: inline-flex;
+      min-height: 38px;
+      align-items: center;
+      justify-content: center;
+      border-radius: 999px;
+      padding: 0 14px;
+      color: var(--soft-ink);
+      text-decoration: none;
+      transition: background 160ms ease, color 160ms ease, transform 160ms ease;
+    }
+    .navlinks a:hover {
+      background: rgba(15, 98, 88, 0.09);
+      color: var(--forest-ink);
+      transform: translateY(-1px);
+    }
+    .shell {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 18px;
+      grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.95fr);
+      gap: 24px;
+      align-items: stretch;
+    }
+    .hero {
+      position: relative;
+      min-height: 610px;
+      overflow: hidden;
+      padding: clamp(30px, 5vw, 58px);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      background:
+        linear-gradient(145deg, rgba(255, 255, 255, 0.56), rgba(255, 250, 240, 0.72) 46%, rgba(233, 220, 199, 0.88)),
+        var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .hero::after {
+      position: absolute;
+      right: -160px;
+      bottom: -210px;
+      width: 420px;
+      height: 420px;
+      border-radius: 50%;
+      content: "";
+      background:
+        radial-gradient(circle, rgba(15, 98, 88, 0.18), transparent 63%),
+        conic-gradient(from 120deg, rgba(15, 98, 88, 0.16), rgba(185, 93, 49, 0.14), rgba(47, 91, 131, 0.13), rgba(15, 98, 88, 0.16));
+      filter: blur(2px);
+    }
+    .kicker {
+      position: relative;
+      z-index: 1;
+      display: inline-flex;
+      width: fit-content;
+      align-items: center;
+      gap: 10px;
+      padding: 9px 12px;
+      border: 1px solid rgba(15, 98, 88, 0.24);
+      border-radius: 999px;
+      color: var(--forest-ink);
+      background: rgba(255, 255, 255, 0.56);
+      font: 800 12px/1.2 Optima, Candara, "Gill Sans", sans-serif;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+    }
+    .kicker::before {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      content: "";
+      background: var(--forest);
+      box-shadow: 0 0 0 5px rgba(15, 98, 88, 0.11);
+    }
+    h1 {
+      position: relative;
+      z-index: 1;
+      max-width: 860px;
+      margin: 30px 0 0;
+      font-size: clamp(54px, 8vw, 116px);
+      line-height: 0.88;
+      letter-spacing: -0.07em;
+      font-weight: 760;
+    }
+    .hero .lead {
+      position: relative;
+      z-index: 1;
+      max-width: 640px;
+      margin: 30px 0 0;
+      color: var(--soft-ink);
+      font-size: clamp(18px, 2vw, 23px);
+      line-height: 1.45;
+    }
+    .hero-actions {
+      position: relative;
+      z-index: 1;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 34px;
+    }
+    .proof-strip {
+      position: relative;
+      z-index: 1;
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 54px;
+    }
+    .proof {
+      min-height: 112px;
+      padding: 18px;
+      border: 1px solid rgba(21, 23, 17, 0.10);
+      border-radius: 22px;
+      background: rgba(255, 255, 255, 0.47);
+    }
+    .proof strong {
+      display: block;
+      font: 900 25px/1 Optima, Candara, "Gill Sans", sans-serif;
+      letter-spacing: -0.02em;
+    }
+    .proof span {
+      display: block;
+      margin-top: 10px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.35;
+    }
+    .side {
+      display: grid;
+      gap: 16px;
     }
     .product {
+      position: relative;
       display: flex;
-      min-height: 360px;
+      min-height: 294px;
       flex-direction: column;
       justify-content: space-between;
+      overflow: hidden;
       padding: 28px;
       border: 1px solid var(--line);
-      background: rgba(255, 253, 247, 0.86);
-      box-shadow: 0 20px 58px rgba(21, 18, 13, 0.09);
+      border-radius: var(--radius-lg);
+      background: rgba(255, 250, 240, 0.86);
+      box-shadow: 0 18px 52px rgba(38, 35, 26, 0.10);
+      transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+    }
+    .product:hover {
+      transform: translateY(-3px);
+      border-color: var(--line-strong);
+      box-shadow: 0 28px 70px rgba(38, 35, 26, 0.14);
+    }
+    .product::before {
+      position: absolute;
+      top: 0;
+      right: 0;
+      left: 0;
+      height: 7px;
+      content: "";
+      background: linear-gradient(90deg, var(--accent), rgba(255, 255, 255, 0));
+    }
+    .prompt { --accent: var(--copper); }
+    .omni { --accent: var(--forest); }
+    .product-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 16px;
     }
     .product h2 {
-      margin: 14px 0 12px;
-      font-size: 34px;
-      line-height: 1.08;
+      margin: 16px 0 12px;
+      font-size: clamp(27px, 3vw, 39px);
+      line-height: 1;
+      letter-spacing: -0.04em;
     }
     .product p {
       margin: 0;
-      color: var(--muted);
+      color: var(--soft-ink);
+      font-size: 16px;
     }
     .tag {
-      width: max-content;
-      color: var(--slate);
-      font: 700 13px/1 ui-monospace, SFMono-Regular, Menlo, monospace;
+      width: fit-content;
+      color: var(--accent);
+      font: 900 12px/1 Optima, Candara, "Gill Sans", sans-serif;
+      letter-spacing: 0.14em;
       text-transform: uppercase;
+    }
+    .status {
+      min-width: max-content;
+      padding: 7px 10px;
+      border: 1px solid rgba(21, 23, 17, 0.11);
+      border-radius: 999px;
+      color: var(--soft-ink);
+      background: rgba(255, 255, 255, 0.55);
+      font: 800 12px/1 Optima, Candara, "Gill Sans", sans-serif;
     }
     .actions {
       display: flex;
       flex-wrap: wrap;
-      gap: 10px;
-      margin-top: 28px;
+      gap: 11px;
+      margin-top: 24px;
     }
-    a.button {
+    .button {
       display: inline-flex;
       align-items: center;
       justify-content: center;
-      min-height: 44px;
-      padding: 11px 15px;
-      border: 1px solid var(--line);
+      min-height: 48px;
+      padding: 0 18px;
+      border: 1px solid rgba(21, 23, 17, 0.92);
+      border-radius: 999px;
       background: var(--ink);
-      color: var(--panel);
+      color: var(--surface);
       text-decoration: none;
-      font-weight: 800;
+      font: 900 14px/1 Optima, Candara, "Gill Sans", sans-serif;
+      letter-spacing: 0.01em;
+      box-shadow: 0 10px 26px rgba(21, 23, 17, 0.16);
+      transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease, border-color 160ms ease, color 160ms ease;
     }
-    a.button.secondary {
-      background: transparent;
-      color: var(--green);
-      border-color: rgba(29, 111, 99, 0.35);
+    .button:hover {
+      transform: translateY(-2px);
+      background: var(--forest-ink);
+      box-shadow: 0 16px 34px rgba(21, 23, 17, 0.18);
     }
-    .omni { border-top: 7px solid var(--green); }
-    .prompt { border-top: 7px solid var(--copper); }
+    .button:active {
+      transform: translateY(0);
+      box-shadow: 0 8px 20px rgba(21, 23, 17, 0.12);
+    }
+    .button:focus-visible,
+    .navlinks a:focus-visible {
+      outline: 3px solid rgba(185, 93, 49, 0.34);
+      outline-offset: 3px;
+    }
+    .button.secondary {
+      background: rgba(255, 255, 255, 0.42);
+      color: var(--forest-ink);
+      border-color: rgba(15, 98, 88, 0.34);
+      box-shadow: none;
+    }
+    .button.secondary:hover {
+      background: rgba(15, 98, 88, 0.09);
+      border-color: rgba(15, 98, 88, 0.58);
+      color: var(--forest-ink);
+      box-shadow: none;
+    }
+    .button.disabled,
+    .button[aria-disabled="true"] {
+      cursor: not-allowed;
+      background: rgba(21, 23, 17, 0.07);
+      border-color: rgba(21, 23, 17, 0.12);
+      color: rgba(21, 23, 17, 0.42);
+      box-shadow: none;
+      pointer-events: none;
+    }
+    .operations {
+      display: grid;
+      grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+      gap: 16px;
+      margin-top: 24px;
+    }
+    .panel {
+      padding: 24px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius-lg);
+      background: rgba(255, 250, 240, 0.78);
+      box-shadow: 0 16px 48px rgba(38, 35, 26, 0.08);
+    }
+    .panel h3 {
+      margin: 0 0 14px;
+      font-size: 24px;
+      line-height: 1.05;
+      letter-spacing: -0.03em;
+    }
+    .panel p {
+      margin: 0;
+      color: var(--soft-ink);
+    }
+    .empty {
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      gap: 16px;
+      align-items: start;
+    }
+    .empty-icon {
+      display: grid;
+      width: 48px;
+      height: 48px;
+      place-items: center;
+      border: 1px dashed rgba(47, 91, 131, 0.38);
+      border-radius: 16px;
+      color: var(--blue);
+      background: rgba(47, 91, 131, 0.08);
+      font: 900 22px/1 Optima, Candara, "Gill Sans", sans-serif;
+    }
+    .list {
+      display: grid;
+      gap: 11px;
+      margin: 18px 0 0;
+      padding: 0;
+      list-style: none;
+    }
+    .list li {
+      display: flex;
+      justify-content: space-between;
+      gap: 14px;
+      padding: 12px 0;
+      border-top: 1px solid rgba(21, 23, 17, 0.09);
+      color: var(--soft-ink);
+    }
+    .list strong {
+      color: var(--ink);
+      font: 900 13px/1.2 Optima, Candara, "Gill Sans", sans-serif;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
     .footer {
-      margin-top: 22px;
-      color: rgba(21, 18, 13, 0.58);
-      font: 600 13px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 12px;
+      margin-top: 24px;
+      padding: 18px 4px 0;
+      color: rgba(21, 23, 17, 0.56);
+      font: 800 12px/1.5 Optima, Candara, "Gill Sans", sans-serif;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
     }
-    @media (max-width: 760px) {
-      main { padding: 34px 0; }
-      .grid { grid-template-columns: 1fr; }
-      .product { min-height: 300px; }
+    @media (max-width: 980px) {
+      .shell,
+      .operations {
+        grid-template-columns: 1fr;
+      }
+      .hero {
+        min-height: auto;
+      }
+    }
+    @media (max-width: 720px) {
+      main {
+        width: min(100% - 24px, 1180px);
+        padding-top: 12px;
+      }
+      .nav {
+        position: static;
+        align-items: flex-start;
+        border-radius: 24px;
+      }
+      .navlinks {
+        width: 100%;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+      }
+      .navlinks a {
+        min-height: 34px;
+        padding-inline: 10px;
+      }
+      .shell {
+        gap: 14px;
+      }
+      .hero,
+      .product,
+      .panel {
+        border-radius: 24px;
+      }
+      .hero {
+        padding: 26px;
+      }
+      .hero-actions,
+      .actions {
+        flex-direction: column;
+      }
+      .button {
+        width: 100%;
+      }
+      .proof-strip {
+        grid-template-columns: 1fr;
+        margin-top: 34px;
+      }
+      .empty {
+        grid-template-columns: 1fr;
+      }
     }
   </style>
 </head>
 <body>
   <main>
-    <section class="hero">
-      <span class="kicker">Dolo Claw Product Entry</span>
-      <h1>两个产品，一个入口。</h1>
-      <p>Prompt_OS 用来校准图像和视频生成提示词；OmniMemora 用本地控制面和网关路径，让真实请求更省 token、更可控。</p>
-    </section>
-    <section class="grid" aria-label="Dolo Claw products">
-      <article class="product prompt">
-        <div>
-          <div class="tag">Prompt_OS</div>
-          <h2>图像 / 视频 Prompt 校准工作台</h2>
-          <p>把自然语言输入整理成更稳定的生成提示词，面向图片、视频和多参考素材场景。</p>
-        </div>
-        <div class="actions">
+    <nav class="nav" aria-label="Dolo Claw product navigation">
+      <a class="brand" href="/" aria-label="Dolo Claw home"><span class="mark" aria-hidden="true"></span><span>Dolo Claw</span></a>
+      <div class="navlinks">
+        <a href="#products">Products</a>
+        <a href="/download">Download</a>
+        <a href="/health">Status</a>
+      </div>
+    </nav>
+
+    <section class="shell" aria-label="Dolo Claw product entry">
+      <div class="hero">
+        <span class="kicker">Product entry · controlled beta</span>
+        <h1>AI, under control.</h1>
+        <p class="lead">Prompt calibration and local-first memory control, organized as two focused product paths under one Dolo Claw entry.</p>
+        <div class="hero-actions" aria-label="Primary actions">
           <a class="button" href="${PROMPT_OS_URL}">进入 Prompt_OS</a>
+          <a class="button secondary" href="/download">下载 OmniMemora</a>
         </div>
-      </article>
-      <article class="product omni">
-        <div>
-          <div class="tag">OmniMemora</div>
-          <h2>本地优先的 LLM 请求控制入口</h2>
-          <p>用户显式开启后，经由本地网关执行 recall、compress、inject，并保持原有上游模型语义。</p>
+        <div class="proof-strip" aria-label="Platform principles">
+          <div class="proof"><strong>2</strong><span>active product entries with isolated cloud surfaces.</span></div>
+          <div class="proof"><strong>5173</strong><span>OmniMemora user control and display surface.</span></div>
+          <div class="proof"><strong>18011</strong><span>opt-in product ingress for token-saving requests.</span></div>
         </div>
-        <div class="actions">
-          <a class="button" href="/download">下载 OmniMemora</a>
-          <a class="button secondary" href="/health">查看健康状态</a>
-        </div>
-      </article>
+      </div>
+
+      <div class="side" id="products">
+        <article class="product prompt">
+          <div>
+            <div class="product-head">
+              <div class="tag">Prompt_OS</div>
+              <span class="status">Live</span>
+            </div>
+            <h2>Prompt calibration for image and video generation.</h2>
+            <p>把自然语言输入整理成更稳定的图像 / 视频生成提示词，保留创作意图，同时降低反复试错成本。</p>
+          </div>
+          <div class="actions">
+            <a class="button" href="${PROMPT_OS_URL}">Open Prompt_OS</a>
+            <a class="button secondary" href="${PROMPT_OS_URL}" aria-label="Open Prompt_OS in dedicated product site">独立产品站</a>
+          </div>
+        </article>
+
+        <article class="product omni">
+          <div>
+            <div class="product-head">
+              <div class="tag">OmniMemora</div>
+              <span class="status">Beta ${PACKAGE_VERSION}</span>
+            </div>
+            <h2>Local-first memory control for real LLM requests.</h2>
+            <p>用户显式开启后，经由本地网关执行 recall、compress、inject，目标是让真实请求省 token、省成本，并保持上游模型语义。</p>
+          </div>
+          <div class="actions">
+            <a class="button" href="/download">Download OmniMemora</a>
+            <a class="button secondary" href="/health">Health status</a>
+          </div>
+        </article>
+      </div>
     </section>
-    <div class="footer">Host: ${url.hostname} · OmniMemora ${PACKAGE_VERSION} · support: ${SUPPORT_EMAIL}</div>
+
+    <section class="operations" aria-label="Operational state">
+      <div class="panel">
+        <h3>Clear operating boundaries.</h3>
+        <p>Prompt_OS and OmniMemora share the Dolo Claw entry, but keep separate product surfaces, domains, and runtime responsibilities.</p>
+        <ul class="list" aria-label="Boundary map">
+          <li><strong>Prompt_OS</strong><span>prompt.doloclaw.com</span></li>
+          <li><strong>OmniMemora</strong><span>download + control entry</span></li>
+          <li><strong>Support</strong><span>${SUPPORT_EMAIL}</span></li>
+        </ul>
+      </div>
+
+      <div class="panel empty" aria-label="Cloud candidate empty state">
+        <div class="empty-icon" aria-hidden="true">Ø</div>
+        <div>
+          <h3>No cloud candidate is currently promoted.</h3>
+          <p>Candidate promotion is intentionally empty until an operator publishes a verified cloud target. Local OmniMemora policy remains authoritative.</p>
+          <div class="actions">
+            <a class="button secondary" href="/candidate-pointer.json">View candidate pointer</a>
+            <span class="button disabled" aria-disabled="true">Auto-promote disabled</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="footer">
+      <span>Host: ${url.hostname}</span>
+      <span>OmniMemora ${PACKAGE_VERSION}</span>
+      <span>Support: ${SUPPORT_EMAIL}</span>
+    </div>
   </main>
 </body>
 </html>`;
@@ -489,6 +915,10 @@ addEventListener("fetch", (event) => {
   }
   if (url.pathname === "/health") {
     event.respondWith(healthResponse(url));
+    return;
+  }
+  if (url.pathname === "/favicon.ico") {
+    event.respondWith(faviconResponse());
     return;
   }
   if (url.pathname === "/download") {
