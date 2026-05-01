@@ -120,6 +120,30 @@ Fixed target:
 - Codex must not advance to the next gate unless the validation target is explicitly named and the conclusion scope is recorded.
 - When suitable, Codex should proactively use lower-cost subagents for bounded low-risk work such as document cleanup, inventories, checklist backfill, and contract comparison, while keeping main-thread control over gate decisions and workspace risk.
 
+## Cloud Platform Stewardship Rule (Mandatory)
+
+Codex is authorized to manage OmniMemora cloud resources on the operator's behalf when credentials are available.
+
+Default operating model:
+
+- Treat Cloudflare, Railway, GitHub, and future cloud services as shared platform resources that may host multiple projects.
+- Keep every project isolated by name, DNS hostname, route, Worker/Pages project, Railway project/service, bucket prefix, environment variable namespace, and documentation record.
+- Do not let OmniMemora changes mutate unrelated project resources such as separate product domains, subdomains, Workers, Pages, Vercel projects, Railway projects, buckets, or email routes.
+- When platform resources are shared, inspect and label the target project before mutation.
+
+Same-project iteration rule:
+
+- New OmniMemora cloud iterations should replace the previous OmniMemora iteration instead of accumulating parallel legacy surfaces.
+- Legacy OmniMemora resources that conflict with the current product identity should be deleted, disabled, or explicitly retired after replacement continuity is verified.
+- Do not keep old OmniMemora projects, routes, DNS records, variables, or workers as informal fallbacks unless a current record names the reason, owner, and retirement condition.
+- Small-project bias: if cloud state is tangled, prefer a clean rebuild over hours of incremental repair, provided user-facing continuity and data safety are checked first.
+
+Codex execution authority:
+
+- Codex should plan and execute cloud architecture, project isolation, DNS/routes, security configuration, deployment checks, runtime audits, and user-data handling checks without asking the operator to design the website or cloud structure.
+- Ask the operator only for product/business decisions that cannot be inferred safely, destructive actions involving user-facing data, billing/account ownership changes, or credentials not already available.
+- Reports must be in plain Chinese by default and distinguish repository reality, cloud platform reality, running reality, and user-data impact.
+
 ## One-Line Operator Command
 
 ```powershell

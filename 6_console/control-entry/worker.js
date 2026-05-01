@@ -1,39 +1,99 @@
 const PACKAGE_VERSION = "__PACKAGE_VERSION__";
 const DOWNLOAD_BASE_URL = `https://assets.doloclaw.com/omnimemora/beta/${PACKAGE_VERSION}`;
 const SUPPORT_EMAIL = "__SUPPORT_EMAIL__";
+const CANDIDATE_POINTER_SCHEMA = "omnimemora-cloud-candidate-pointer-v1";
+const DOWNLOAD_FILES = {
+  "darwin-arm64": "omnimemora-darwin-arm64.zip",
+  "darwin-amd64": "omnimemora-darwin-amd64.zip",
+  "windows-amd64": "omnimemora-windows-amd64.zip",
+  "sha256sums": "SHA256SUMS.txt",
+  "release-index": "RELEASE_INDEX.txt"
+};
 
-function jsonResponse(url) {
-  return new Response(
-    JSON.stringify({
+function json(payload, init = {}) {
+  return new Response(JSON.stringify(payload), {
+    status: init.status || 200,
+    headers: {
+      "content-type": "application/json; charset=utf-8",
+      "cache-control": "no-store",
+      ...(init.headers || {})
+    }
+  });
+}
+
+function rootResponse(url) {
+  return json({
       service: "omnimemora-control-entry",
       role: "control-plane-entry",
       host: url.hostname,
       path: url.pathname,
       message: "OmniMemora control entry is active."
-    }),
-    {
-      status: 200,
-      headers: {
-        "content-type": "application/json; charset=utf-8",
-        "cache-control": "no-store"
-      }
+  });
+}
+
+function healthResponse(url) {
+  return json({
+    status: "healthy",
+    service: "omnimemora-control-entry",
+    role: "control-plane-entry",
+    host: url.hostname,
+    product: "omnimemora",
+    release_posture: "proprietary-controlled-beta",
+    capabilities: {
+      download_entry: true,
+      candidate_pointer_reserved: true,
+      candidate_auto_promote: false,
+      cloud_compile: false
     }
+  });
+}
+
+function candidatePointerResponse(url) {
+  return json({
+    schema_version: CANDIDATE_POINTER_SCHEMA,
+    status: "not_configured",
+    candidate: null,
+    source: "cloudflare-control-entry",
+    product: "omnimemora",
+    host: url.hostname,
+    message: "Cloud candidate pointer endpoint is reserved. Local active policy remains authoritative."
+  });
+}
+
+function notFoundResponse(url) {
+  return json(
+    {
+      error: "not_found",
+      service: "omnimemora-control-entry",
+      path: url.pathname
+    },
+    { status: 404 }
   );
+}
+
+function downloadRedirectResponse(url) {
+  const parts = url.pathname.split("/").filter(Boolean);
+  const key = parts[2] || "";
+  const filename = DOWNLOAD_FILES[key];
+  if (!filename) {
+    return notFoundResponse(url);
+  }
+  return Response.redirect(`${DOWNLOAD_BASE_URL}/${filename}`, 302);
 }
 
 function downloadHtml() {
   const downloads = [
     {
       label: "macOS (Apple Silicon)",
-      href: `${DOWNLOAD_BASE_URL}/omnimemora-darwin-arm64.zip`
+      href: `/download/file/darwin-arm64`
     },
     {
       label: "macOS (Intel)",
-      href: `${DOWNLOAD_BASE_URL}/omnimemora-darwin-amd64.zip`
+      href: `/download/file/darwin-amd64`
     },
     {
       label: "Windows (x64)",
-      href: `${DOWNLOAD_BASE_URL}/omnimemora-windows-amd64.zip`
+      href: `/download/file/windows-amd64`
     }
   ];
 
@@ -146,7 +206,7 @@ function downloadHtml() {
 
       <h2>Supported Platforms</h2>
       <ul class="downloads">${list}</ul>
-      <p><a href="${DOWNLOAD_BASE_URL}/SHA256SUMS.txt">Download SHA256SUMS.txt</a></p>
+      <p><a href="/download/file/sha256sums">Download SHA256SUMS.txt</a></p>
 
       <h2>Install Steps</h2>
       <ul>
@@ -204,9 +264,28 @@ function downloadHtml() {
 
 addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
+  if (url.pathname === "/" || url.pathname === "") {
+    event.respondWith(rootResponse(url));
+    return;
+  }
+  if (url.pathname === "/health") {
+    event.respondWith(healthResponse(url));
+    return;
+  }
   if (url.pathname === "/download") {
     event.respondWith(downloadHtml());
     return;
   }
-  event.respondWith(jsonResponse(url));
+  if (url.pathname.startsWith("/download/file/")) {
+    event.respondWith(downloadRedirectResponse(url));
+    return;
+  }
+  if (
+    url.pathname === "/api/control/recommendation/candidates/latest" ||
+    url.pathname === "/api/policy/candidates/latest"
+  ) {
+    event.respondWith(candidatePointerResponse(url));
+    return;
+  }
+  event.respondWith(notFoundResponse(url));
 });
