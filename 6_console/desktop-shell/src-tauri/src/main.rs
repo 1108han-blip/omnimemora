@@ -69,6 +69,20 @@ struct DesktopCommandResult {
     status: DesktopStatus,
 }
 
+#[derive(Serialize, Clone)]
+struct AgentStatus {
+    id: &'static str,
+    name: &'static str,
+    state: String,
+    installed: bool,
+    running: bool,
+    attached: bool,
+    supported: bool,
+    experimental: bool,
+    detail: String,
+    config_path: String,
+}
+
 fn home_dir() -> PathBuf {
     env::var("HOME")
         .map(PathBuf::from)
@@ -410,6 +424,19 @@ fn first_existing(paths: &[PathBuf]) -> Option<PathBuf> {
     paths.iter().find(|path| path.exists()).cloned()
 }
 
+fn runtime_binary() -> Option<PathBuf> {
+    let root = repo_root();
+    first_existing(&[
+        env::var("OMNIMEMORA_RUNTIME_BIN")
+            .map(PathBuf::from)
+            .unwrap_or_default(),
+        current_dir().join("bin/omnimemora"),
+        current_dir().join("omnimemora"),
+        root.join("4_core/local-runtime/release/1.0.0-beta.2/omnimemora-darwin-arm64/omnimemora"),
+        root.join("tools/omnimemora-runtime"),
+    ])
+}
+
 fn python_bin() -> Option<String> {
     env::var("PYTHON_BIN").ok().or_else(|| {
         Command::new("which")
@@ -460,16 +487,8 @@ fn start_runtime() -> Result<Option<ManagedProcess>, String> {
         return Ok(None);
     }
     let root = repo_root();
-    let binary = first_existing(&[
-        env::var("OMNIMEMORA_RUNTIME_BIN")
-            .map(PathBuf::from)
-            .unwrap_or_default(),
-        current_dir().join("bin/omnimemora"),
-        current_dir().join("omnimemora"),
-        root.join("4_core/local-runtime/release/1.0.0-beta.2/omnimemora-darwin-arm64/omnimemora"),
-        root.join("tools/omnimemora-runtime"),
-    ])
-    .ok_or_else(|| "找不到 runtime binary。请先生成或安装 runtime 组件。".to_string())?;
+    let binary = runtime_binary()
+        .ok_or_else(|| "找不到 runtime binary。请先生成或安装 runtime 组件。".to_string())?;
     let agent_modes = root.join("5_connectors/adapter/config/agent_modes.json");
     let mut cmd = Command::new(&binary);
     cmd.arg("serve")
@@ -710,6 +729,128 @@ fn restore_previous_components() -> Result<(), String> {
     Ok(())
 }
 
+fn config_path_for_agent(agent: &str) -> PathBuf {
+    match agent {
+        "codex" => home_dir().join(".codex/config.toml"),
+        "claude" => {
+            let settings = home_dir().join(".claude/settings.json");
+            if settings.exists() {
+                settings
+            } else {
+                home_dir().join(".claude.json")
+            }
+        }
+        "openclaw" => home_dir().join(".openclaw/openclaw.json"),
+        _ => home_dir(),
+    }
+}
+
+fn agent_process_running(patterns: &[&str]) -> bool {
+    let output = Command::new("ps")
+        .args(["-axo", "command="])
+        .output()
+        .ok()
+        .map(|output| String::from_utf8_lossy(&output.stdout).to_lowercase())
+        .unwrap_or_default();
+    patterns
+        .iter()
+        .any(|pattern| output.contains(&pattern.to_lowercase()))
+}
+
+fn config_contains(path: &Path, needles: &[&str]) -> bool {
+    let Ok(raw) = fs::read_to_string(path) else {
+        return false;
+    };
+    needles.iter().any(|needle| raw.contains(needle))
+}
+
+fn agent_attached(agent: &str, path: &Path) -> bool {
+    match agent {
+        "codex" => config_contains(
+            path,
+            &[
+                r#"model_provider = "omnimemora""#,
+                "[model_providers.omnimemora]",
+                "[mcp_servers.omnimemora]",
+            ],
+        ),
+        "claude" => config_contains(path, &["omnimemora", "http://127.0.0.1:18011"]),
+        "openclaw" => config_contains(
+            path,
+            &[
+                ".omnimemora.attach.marker",
+                "omnimemora",
+                "http://127.0.0.1:18011",
+            ],
+        ),
+        _ => false,
+    }
+}
+
+fn agent_status(
+    id: &'static str,
+    name: &'static str,
+    running_patterns: &[&str],
+    supported: bool,
+    experimental: bool,
+) -> AgentStatus {
+    let config_path = config_path_for_agent(id);
+    let installed = config_path.exists();
+    let running = agent_process_running(running_patterns);
+    let attached = installed && agent_attached(id, &config_path);
+    let state = if attached {
+        "connected"
+    } else if installed || running {
+        "ready"
+    } else {
+        "not_found"
+    };
+    let detail = if attached {
+        "已连接到 OmniMemora；重启对应工具后配置生效。"
+    } else if installed || running {
+        "已发现本机工具，可以从这里连接。"
+    } else if experimental {
+        "未发现配置文件；Codex 当前保持实验入口，不默认启用。"
+    } else {
+        "未发现本机配置；仍可手动创建连接配置。"
+    };
+    AgentStatus {
+        id,
+        name,
+        state: state.to_string(),
+        installed,
+        running,
+        attached,
+        supported,
+        experimental,
+        detail: detail.to_string(),
+        config_path: config_path.display().to_string(),
+    }
+}
+
+fn detect_agents() -> Vec<AgentStatus> {
+    vec![
+        agent_status("claude", "Claude Code", &["claude"], true, false),
+        agent_status("openclaw", "OpenClaw", &["openclaw"], true, false),
+        agent_status("codex", "Codex", &["codex"], true, true),
+    ]
+}
+
+fn run_agent_cli(agent: &str, action: &str) -> Result<String, String> {
+    match agent {
+        "codex" | "claude" | "openclaw" => {}
+        _ => return Err("未知 AI tool。".to_string()),
+    }
+    let binary = runtime_binary()
+        .ok_or_else(|| "找不到 OmniMemora runtime binary，无法写入 agent 连接配置。".to_string())?;
+    let mut cmd = Command::new(&binary);
+    cmd.arg(action)
+        .arg(agent)
+        .current_dir(repo_root())
+        .env("OMNIMEMORA_ADAPTER_PORT", ADAPTER_PORT.to_string());
+    run_capture(cmd, "AI tool connection")
+}
+
 fn start_all_services() -> Result<String, String> {
     ensure_dirs()?;
     let mut state = prune_dead_processes(read_state());
@@ -906,6 +1047,30 @@ fn rollback() -> DesktopCommandResult {
     }
 }
 
+#[tauri::command]
+fn scan_agents() -> Vec<AgentStatus> {
+    detect_agents()
+}
+
+#[tauri::command]
+fn attach_agent(agent: String) -> DesktopCommandResult {
+    match run_agent_cli(&agent, "attach") {
+        Ok(_) => command_result(
+            true,
+            format!("已写入 {agent} 连接配置；请重启对应工具后使用。"),
+        ),
+        Err(err) => command_result(false, format!("连接 {agent} 失败：{err}")),
+    }
+}
+
+#[tauri::command]
+fn detach_agent(agent: String) -> DesktopCommandResult {
+    match run_agent_cli(&agent, "detach") {
+        Ok(_) => command_result(true, format!("已移除 {agent} 连接配置。")),
+        Err(err) => command_result(false, format!("断开 {agent} 失败：{err}")),
+    }
+}
+
 fn main() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
@@ -915,7 +1080,10 @@ fn main() {
             restart_services,
             check_for_updates,
             install_update,
-            rollback
+            rollback,
+            scan_agents,
+            attach_agent,
+            detach_agent
         ])
         .run(tauri::generate_context!())
         .expect("error while running OmniMemora desktop shell");

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { buildFeedbackMailto, getDesktopStatus, runDesktopCommand } from './desktopApi';
-import type { DesktopCommandResult, DesktopStatus, ServiceStatus, UpdateLayerStatus } from './types';
+import { buildFeedbackMailto, getDesktopStatus, runAgentCommand, runDesktopCommand, scanAgents } from './desktopApi';
+import type { AgentId, AgentStatus, DesktopCommandResult, DesktopStatus, ServiceStatus, UpdateLayerStatus } from './types';
 
 const serviceCopy: Record<ServiceStatus['name'], { title: string; eyebrow: string; summary: string }> = {
   runtime: {
@@ -26,10 +26,25 @@ const updateCopy: Record<UpdateLayerStatus['layer'], { title: string; eyebrow: s
   cloud_policy: { title: 'Cloud Policy', eyebrow: 'Candidate only' },
 };
 
+const agentCopy: Record<AgentId, { summary: string; accent: string }> = {
+  claude: {
+    summary: 'Connect Claude Code to OmniMemora through the product gateway after opt-in.',
+    accent: 'Claude-ready',
+  },
+  openclaw: {
+    summary: 'Attach OpenClaw with the stable marker and provider configuration.',
+    accent: 'Recommended',
+  },
+  codex: {
+    summary: 'Experimental connection path. Keep disabled unless you explicitly want to test it.',
+    accent: 'Experimental',
+  },
+};
+
 function statusTone(state: string): 'good' | 'attention' | 'neutral' | 'active' {
-  if (state === 'healthy' || state === 'current') return 'good';
+  if (state === 'healthy' || state === 'current' || state === 'connected') return 'good';
   if (state === 'available' || state === 'blocked' || state === 'unreachable') return 'attention';
-  if (state === 'updating') return 'active';
+  if (state === 'updating' || state === 'ready') return 'active';
   return 'neutral';
 }
 
@@ -49,6 +64,7 @@ function statusMessage(shellState: string): string {
 
 export default function App() {
   const [status, setStatus] = useState<DesktopStatus | null>(null);
+  const [agents, setAgents] = useState<AgentStatus[]>([]);
   const [busyCommand, setBusyCommand] = useState<string | null>(null);
   const [message, setMessage] = useState<string>('Loading desktop status...');
 
@@ -60,6 +76,7 @@ export default function App() {
 
   useEffect(() => {
     void refresh();
+    void scanAgents().then(setAgents);
     const timer = window.setInterval(() => void refresh(), 5000);
     return () => window.clearInterval(timer);
   }, [refresh]);
@@ -83,6 +100,8 @@ export default function App() {
     return status?.updates.some((update) => update.status === 'available') ?? false;
   }, [status]);
 
+  const connectedCount = useMemo(() => agents.filter((agent) => agent.attached).length, [agents]);
+
   const run = useCallback(async (command: Parameters<typeof runDesktopCommand>[0]) => {
     setBusyCommand(command);
     setMessage(command === 'install_update' ? 'Installing update...' : 'Working...');
@@ -90,6 +109,45 @@ export default function App() {
       const result: DesktopCommandResult = await runDesktopCommand(command);
       setMessage(result.message);
       if (result.status) setStatus(result.status);
+    } finally {
+      setBusyCommand(null);
+    }
+  }, []);
+
+  const rescanAgents = useCallback(async () => {
+    setBusyCommand('scan_agents');
+    setMessage('Scanning local AI tools...');
+    try {
+      const next = await scanAgents();
+      setAgents(next);
+      const found = next.filter((agent) => agent.installed || agent.running).length;
+      setMessage(found ? `Found ${found} AI tool connection candidate(s).` : 'No AI tools detected yet. Manual connection cards remain available.');
+    } finally {
+      setBusyCommand(null);
+    }
+  }, []);
+
+  const connectAgent = useCallback(async (agent: AgentId) => {
+    setBusyCommand(`attach_${agent}`);
+    setMessage(`Connecting ${agent}...`);
+    try {
+      const result = await runAgentCommand('attach_agent', agent);
+      setMessage(result.message);
+      if (result.status) setStatus(result.status);
+      setAgents(await scanAgents());
+    } finally {
+      setBusyCommand(null);
+    }
+  }, []);
+
+  const disconnectAgent = useCallback(async (agent: AgentId) => {
+    setBusyCommand(`detach_${agent}`);
+    setMessage(`Disconnecting ${agent}...`);
+    try {
+      const result = await runAgentCommand('detach_agent', agent);
+      setMessage(result.message);
+      if (result.status) setStatus(result.status);
+      setAgents(await scanAgents());
     } finally {
       setBusyCommand(null);
     }
@@ -162,6 +220,52 @@ export default function App() {
           <strong>{updateAvailable ? 'Available' : 'Current'}</strong>
           <p>Manifest + rollback</p>
         </article>
+        <article>
+          <span>AI tools</span>
+          <strong>{connectedCount}/{agents.length || 3}</strong>
+          <p>GUI connection control</p>
+        </article>
+      </section>
+
+      <section className="agent-panel">
+        <div className="section-heading with-action">
+          <div>
+            <span className="eyebrow">AI tool connections</span>
+            <h2>Connect agents without terminal setup.</h2>
+            <p>Scan finds local configs and running tools. If a tool is not found, use its manual connection card to create the config from the GUI.</p>
+          </div>
+          <button className="mini" disabled={!!busyCommand} onClick={() => void rescanAgents()}>
+            {busyCommand === 'scan_agents' ? 'Scanning...' : 'Scan AI Tools'}
+          </button>
+        </div>
+        <div className="agent-grid">
+          {(agents.length ? agents : []).map((agent) => {
+            const copy = agentCopy[agent.id];
+            return (
+              <article className={`agent-card ${agent.experimental ? 'is-experimental' : ''}`} key={agent.id}>
+                <div className="agent-topline">
+                  <span>{copy.accent}</span>
+                  <span className={`pill tone-${statusTone(agent.state)}`}>{agent.state.replace('_', ' ')}</span>
+                </div>
+                <h3>{agent.name}</h3>
+                <p>{copy.summary}</p>
+                <small>{agent.detail}</small>
+                <div className="agent-facts">
+                  <span>{agent.installed ? 'Config found' : 'Config missing'}</span>
+                  <span>{agent.running ? 'Running now' : 'Not running'}</span>
+                </div>
+                <div className="agent-actions">
+                  <button className="secondary" disabled={!!busyCommand || agent.attached} onClick={() => void connectAgent(agent.id)}>
+                    {busyCommand === `attach_${agent.id}` ? 'Connecting...' : agent.experimental ? 'Connect Experimental' : agent.installed || agent.running ? 'Connect' : 'Create Connection'}
+                  </button>
+                  <button className="ghost" disabled={!!busyCommand || !agent.attached} onClick={() => void disconnectAgent(agent.id)}>
+                    Disconnect
+                  </button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
       </section>
 
       <section className="content-grid">
@@ -198,7 +302,7 @@ export default function App() {
               <h2>Safe upgrades</h2>
             </div>
             <button className="mini" disabled={!!busyCommand} onClick={() => void run('check_for_updates')}>
-              Check
+              Check Updates
             </button>
           </div>
           <div className="timeline">
@@ -238,7 +342,7 @@ export default function App() {
           <span className="eyebrow">Support packet</span>
           <h2>Feedback with diagnostics, not prompts.</h2>
           <p>{message}</p>
-          <small>Claude Code ready · OpenClaw ready · Codex experimental/off by default · Advanced diagnostics hide ports from normal setup.</small>
+          <small>Agent connections are explicit and reversible · Codex remains experimental/off by default · Advanced diagnostics hide ports from normal setup.</small>
         </div>
         <a className="feedback" href={buildFeedbackMailto(status)}>Send Feedback</a>
       </section>

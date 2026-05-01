@@ -1,6 +1,8 @@
 export type ServiceName = 'runtime' | 'adapter' | 'ui';
 export type ServiceState = 'healthy' | 'unreachable' | 'unknown' | 'blocked';
 export type UpdateLayer = 'desktop_shell' | 'local_components' | 'cloud_policy';
+export type AgentId = 'claude' | 'openclaw' | 'codex';
+export type AgentState = 'connected' | 'ready' | 'not_found';
 
 export interface ServiceStatus {
   name: ServiceName;
@@ -32,4 +34,17 @@ export interface DesktopCommandResult {
   ok: boolean;
   message: string;
   status: DesktopStatus | null;
+}
+
+export interface AgentStatus {
+  id: AgentId;
+  name: string;
+  state: AgentState;
+  installed: boolean;
+  running: boolean;
+  attached: boolean;
+  supported: boolean;
+  experimental: boolean;
+  detail: string;
+  config_path: string;
 }

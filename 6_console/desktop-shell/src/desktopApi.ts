@@ -1,4 +1,4 @@
-import type { DesktopCommandResult, DesktopStatus } from './types';
+import type { AgentId, AgentStatus, DesktopCommandResult, DesktopStatus } from './types';
 
 const DEFAULT_STATUS: DesktopStatus = {
   app_version: '1.0.0-beta.2',
@@ -77,6 +77,66 @@ export async function getDesktopStatus(): Promise<DesktopStatus> {
 export async function runDesktopCommand(command: 'start_services' | 'stop_services' | 'restart_services' | 'check_for_updates' | 'install_update' | 'rollback'): Promise<DesktopCommandResult> {
   try {
     return await invokeDesktop<DesktopCommandResult>(command);
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : String(error),
+      status: DEFAULT_STATUS,
+    };
+  }
+}
+
+const DEFAULT_AGENTS: AgentStatus[] = [
+  {
+    id: 'claude',
+    name: 'Claude Code',
+    state: 'not_found',
+    installed: false,
+    running: false,
+    attached: false,
+    supported: true,
+    experimental: false,
+    detail: 'Open the desktop app to scan this Mac and connect Claude Code.',
+    config_path: '~/.claude/settings.json',
+  },
+  {
+    id: 'openclaw',
+    name: 'OpenClaw',
+    state: 'not_found',
+    installed: false,
+    running: false,
+    attached: false,
+    supported: true,
+    experimental: false,
+    detail: 'Open the desktop app to scan this Mac and connect OpenClaw.',
+    config_path: '~/.openclaw/openclaw.json',
+  },
+  {
+    id: 'codex',
+    name: 'Codex',
+    state: 'not_found',
+    installed: false,
+    running: false,
+    attached: false,
+    supported: true,
+    experimental: true,
+    detail: 'Codex is experimental and stays off by default.',
+    config_path: '~/.codex/config.toml',
+  },
+];
+
+export async function scanAgents(): Promise<AgentStatus[]> {
+  try {
+    return await invokeDesktop<AgentStatus[]>('scan_agents');
+  } catch {
+    return DEFAULT_AGENTS;
+  }
+}
+
+export async function runAgentCommand(command: 'attach_agent' | 'detach_agent', agent: AgentId): Promise<DesktopCommandResult> {
+  try {
+    const mod = await import('@tauri-apps/api/core');
+    return await mod.invoke<DesktopCommandResult>(command, { agent });
   } catch (error) {
     return {
       ok: false,
