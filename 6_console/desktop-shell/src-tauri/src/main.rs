@@ -9,7 +9,7 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-const APP_VERSION: &str = "1.0.0-beta.3";
+const APP_VERSION: &str = "1.0.0-beta.4";
 const SUPPORT_EMAIL: &str = "support@doloclaw.com";
 const RUNTIME_PORT: u16 = 8765;
 const ADAPTER_PORT: u16 = 18011;
@@ -284,8 +284,8 @@ fn release_manifest_from_disk() -> Option<Value> {
     let candidates = [
         downloaded_manifest_path(),
         current_dir().join("manifest.json"),
-        repo_root().join("4_core/local-runtime/release/1.0.0-beta.3/latest.json"),
-        repo_root().join("4_core/local-runtime/release/1.0.0-beta.3/1.0.0-beta.3.json"),
+        repo_root().join("4_core/local-runtime/release/1.0.0-beta.4/latest.json"),
+        repo_root().join("4_core/local-runtime/release/1.0.0-beta.4/1.0.0-beta.4.json"),
     ];
     for path in candidates {
         if let Ok(raw) = fs::read_to_string(path) {
@@ -432,7 +432,7 @@ fn runtime_binary() -> Option<PathBuf> {
             .unwrap_or_default(),
         current_dir().join("bin/omnimemora"),
         current_dir().join("omnimemora"),
-        root.join("4_core/local-runtime/release/1.0.0-beta.3/omnimemora-darwin-arm64/omnimemora"),
+        root.join("4_core/local-runtime/release/1.0.0-beta.4/omnimemora-darwin-arm64/omnimemora"),
         root.join("tools/omnimemora-runtime"),
     ])
 }

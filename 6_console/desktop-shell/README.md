@@ -1,6 +1,6 @@
 # OmniMemora Desktop Shell
 
-Tauri-based desktop shell foundation for `1.0.0-beta.3`.
+Tauri-based desktop shell foundation for `1.0.0-beta.4`.
 
 This batch defines the desktop GUI, service status model, update-layer model, and Tauri command contract. It does not yet implement real service mutation.
 
@@ -30,5 +30,5 @@ npm run tauri:build
 On macOS arm64, `npm run tauri:build` produces:
 
 ```text
-src-tauri/target/release/bundle/dmg/OmniMemora Desktop_1.0.0-beta.3_aarch64.dmg
+src-tauri/target/release/bundle/dmg/OmniMemora Desktop_1.0.0-beta.4_aarch64.dmg
 ```
