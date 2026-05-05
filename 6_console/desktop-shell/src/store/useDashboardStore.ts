@@ -10,7 +10,7 @@ import {
   scanAgents,
   uninstallAgent,
 } from '../desktopApi';
-import type { AgentStatus, DesktopStatus, ProductConsoleSnapshot, RecentRequest, RequestEvidence } from '../types';
+import type { AgentControlCard, AgentStatus, DesktopStatus, ProductConsoleSnapshot, RecentRequest, RequestEvidence } from '../types';
 import { copy, detectLanguage, type Language } from '../lib/i18n';
 
 export type PageKey = 'overview' | 'live-flow' | 'agents' | 'policies' | 'context-debug' | 'savings' | 'settings';
@@ -45,6 +45,25 @@ interface DashboardState {
 
 function userFacingRequests(product: ProductConsoleSnapshot | null): RecentRequest[] {
   return (product?.recent?.requests ?? []).filter((request) => request.request_class !== 'internal');
+}
+
+function patchAgentControlCard(product: ProductConsoleSnapshot | null, card: AgentControlCard): ProductConsoleSnapshot | null {
+  if (!product?.controls) return product;
+  const agents = product.controls.agents.some((agent) => agent.family_id === card.family_id)
+    ? product.controls.agents.map((agent) => (agent.family_id === card.family_id ? card : agent))
+    : [...product.controls.agents, card];
+  return {
+    ...product,
+    controls: {
+      ...product.controls,
+      agents,
+      count: agents.length,
+    },
+  };
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export const useDashboardStore = create<DashboardState>((set, get) => {
@@ -142,8 +161,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => {
     attachAgent: async (familyId) => {
       set({ agentBusy: familyId });
       try {
-        await installAgent(familyId);
+        const card = await installAgent(familyId);
+        set((state) => ({
+          product: patchAgentControlCard(state.product, card),
+          lastMessage: card.message || copy[state.language].header.synced,
+        }));
         await get().refreshReality();
+      } catch (error) {
+        set({ lastMessage: errorMessage(error) });
       } finally {
         set({ agentBusy: null });
       }
@@ -151,8 +176,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => {
     detachAgent: async (familyId) => {
       set({ agentBusy: familyId });
       try {
-        await uninstallAgent(familyId);
+        const card = await uninstallAgent(familyId);
+        set((state) => ({
+          product: patchAgentControlCard(state.product, card),
+          lastMessage: card.message || copy[state.language].header.synced,
+        }));
         await get().refreshReality();
+      } catch (error) {
+        set({ lastMessage: errorMessage(error) });
       } finally {
         set({ agentBusy: null });
       }
@@ -160,8 +191,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => {
     enableRouting: async (familyId) => {
       set({ agentBusy: familyId });
       try {
-        await enableAgentRoute(familyId);
+        const card = await enableAgentRoute(familyId);
+        set((state) => ({
+          product: patchAgentControlCard(state.product, card),
+          lastMessage: card.message || copy[state.language].header.synced,
+        }));
         await get().refreshReality();
+      } catch (error) {
+        set({ lastMessage: errorMessage(error) });
       } finally {
         set({ agentBusy: null });
       }
@@ -169,8 +206,14 @@ export const useDashboardStore = create<DashboardState>((set, get) => {
     disableRouting: async (familyId) => {
       set({ agentBusy: familyId });
       try {
-        await disableAgentRoute(familyId);
+        const card = await disableAgentRoute(familyId);
+        set((state) => ({
+          product: patchAgentControlCard(state.product, card),
+          lastMessage: card.message || copy[state.language].header.synced,
+        }));
         await get().refreshReality();
+      } catch (error) {
+        set({ lastMessage: errorMessage(error) });
       } finally {
         set({ agentBusy: null });
       }

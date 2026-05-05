@@ -248,7 +248,14 @@ async function postAgentControlAction(action: 'install' | 'uninstall' | 'enable'
   });
   if (!response.ok) {
     const detail = await response.text();
-    throw new Error(detail || `Failed to ${action} ${familyId}`);
+    let message = detail;
+    try {
+      const parsed = JSON.parse(detail) as { detail?: unknown };
+      message = typeof parsed.detail === 'string' ? parsed.detail : detail;
+    } catch {
+      message = detail;
+    }
+    throw new Error(message || `Failed to ${action} ${familyId}`);
   }
   return response.json();
 }
