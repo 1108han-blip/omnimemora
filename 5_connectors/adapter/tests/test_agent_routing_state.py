@@ -9,6 +9,12 @@ agent_routing_state = importlib.import_module("5_connectors.adapter.agent_routin
 
 
 class AgentRoutingStateTests(unittest.TestCase):
+    def test_agent_modes_path_honors_runtime_env_override(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="omnimemora-agent-routing-env-") as tmpdir:
+            path = Path(tmpdir) / "runtime-agent-modes.json"
+            with mock.patch.dict("os.environ", {"OMNIMEMORA_AGENT_MODES_PATH": str(path)}):
+                self.assertEqual(agent_routing_state._agent_modes_path(), path)
+
     def test_set_family_routing_enabled_persists_force_and_off(self) -> None:
         with tempfile.TemporaryDirectory(prefix="omnimemora-agent-routing-") as tmpdir:
             path = Path(tmpdir) / "agent_modes.json"

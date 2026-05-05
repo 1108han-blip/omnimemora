@@ -12,7 +12,7 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
-const APP_VERSION: &str = "1.0.0-beta.9";
+const APP_VERSION: &str = "1.0.0-beta.10";
 const SUPPORT_EMAIL: &str = "support@doloclaw.com";
 const RUNTIME_PORT: u16 = 8765;
 const ADAPTER_PORT: u16 = 18011;
@@ -102,6 +102,10 @@ fn app_root() -> PathBuf {
 
 fn current_dir() -> PathBuf {
     app_root().join("current")
+}
+
+fn current_agent_modes_path() -> PathBuf {
+    current_dir().join("5_connectors/adapter/config/agent_modes.json")
 }
 
 fn previous_dir() -> PathBuf {
@@ -385,8 +389,8 @@ fn release_manifest_from_disk() -> Option<Value> {
     let candidates = [
         downloaded_manifest_path(),
         current_dir().join("manifest.json"),
-        repo_root().join("4_core/local-runtime/release/1.0.0-beta.9/latest.json"),
-        repo_root().join("4_core/local-runtime/release/1.0.0-beta.9/1.0.0-beta.9.json"),
+        repo_root().join("4_core/local-runtime/release/1.0.0-beta.10/latest.json"),
+        repo_root().join("4_core/local-runtime/release/1.0.0-beta.10/1.0.0-beta.10.json"),
     ];
     for path in candidates {
         if let Ok(raw) = fs::read_to_string(path) {
@@ -533,7 +537,7 @@ fn runtime_binary() -> Option<PathBuf> {
             .unwrap_or_default(),
         current_dir().join("bin/omnimemora"),
         current_dir().join("omnimemora"),
-        root.join("4_core/local-runtime/release/1.0.0-beta.9/omnimemora-darwin-arm64/omnimemora"),
+        root.join("4_core/local-runtime/release/1.0.0-beta.10/omnimemora-darwin-arm64/omnimemora"),
         root.join("tools/omnimemora-runtime"),
     ])
 }
@@ -587,10 +591,9 @@ fn start_runtime() -> Result<Option<ManagedProcess>, String> {
     if http_probe(RUNTIME_PORT, "/health", Some("\"status\":")).is_ok() {
         return Ok(None);
     }
-    let root = repo_root();
     let binary = runtime_binary()
         .ok_or_else(|| "找不到 runtime binary。请先生成或安装 runtime 组件。".to_string())?;
-    let agent_modes = root.join("5_connectors/adapter/config/agent_modes.json");
+    let agent_modes = current_agent_modes_path();
     let mut cmd = Command::new(&binary);
     cmd.arg("serve")
         .env("OMNIMEMORA_RUNTIME_PORT", RUNTIME_PORT.to_string())
@@ -616,7 +619,7 @@ fn start_adapter() -> Result<Option<ManagedProcess>, String> {
         root.join("tools/_run_adapter.py"),
     ])
     .ok_or_else(|| "找不到 adapter launcher。".to_string())?;
-    let agent_modes = root.join("5_connectors/adapter/config/agent_modes.json");
+    let agent_modes = current_agent_modes_path();
     let mut cmd = Command::new(&python);
     cmd.arg(&launcher)
         .current_dir(&root)

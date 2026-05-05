@@ -1,4 +1,5 @@
 import json
+import os
 import threading
 from pathlib import Path
 from typing import Dict, Tuple
@@ -10,6 +11,9 @@ _agent_modes_cache: Tuple[Dict[str, str], str] = ({}, "off")
 
 
 def _agent_modes_path() -> Path:
+    configured = os.getenv("OMNIMEMORA_AGENT_MODES_PATH", "").strip()
+    if configured:
+        return Path(configured).expanduser()
     return Path(__file__).resolve().parent / "config" / "agent_modes.json"
 
 
