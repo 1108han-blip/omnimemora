@@ -10,7 +10,7 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
+use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
 const APP_VERSION: &str = "1.0.0-beta.9";
 const SUPPORT_EMAIL: &str = "support@doloclaw.com";
@@ -1183,13 +1183,25 @@ fn show_main_window(app_handle: &AppHandle) {
     }
 }
 
-fn setup_status_bar_icon(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
-    if let (Some(window), Some(icon)) = (
-        app.get_webview_window("main"),
-        app.default_window_icon().cloned(),
-    ) {
+fn ensure_main_window(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    if app.get_webview_window("main").is_none() {
+        WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
+            .title("OmniMemora Desktop")
+            .inner_size(1120.0, 760.0)
+            .min_inner_size(860.0, 620.0)
+            .resizable(true)
+            .center()
+            .build()?;
+    }
+    Ok(())
+}
+
+fn setup_desktop_shell(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    ensure_main_window(app)?;
+    if let (Some(window), Some(icon)) = (app.get_webview_window("main"), app.default_window_icon().cloned()) {
         window.set_icon(icon.clone())?;
     }
+    show_main_window(app.handle());
     let show = MenuItem::with_id(app, TRAY_SHOW_ID, "Show OmniMemora", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, TRAY_QUIT_ID, "Quit OmniMemora", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &quit])?;
@@ -1221,7 +1233,7 @@ fn setup_status_bar_icon(app: &mut tauri::App) -> Result<(), Box<dyn std::error:
 
 fn main() {
     let app = tauri::Builder::default()
-        .setup(setup_status_bar_icon)
+        .setup(setup_desktop_shell)
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -1247,11 +1259,7 @@ fn main() {
 
     app.run(|app_handle, event| {
         #[cfg(target_os = "macos")]
-        if let RunEvent::Reopen {
-            has_visible_windows: false,
-            ..
-        } = event
-        {
+        if let RunEvent::Reopen { .. } = event {
             show_main_window(app_handle);
         }
     });

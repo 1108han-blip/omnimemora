@@ -5,7 +5,22 @@ import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card'
 import { compactNumber, percent } from '../lib/utils';
 import { useDashboardStore } from '../store/useDashboardStore';
 import { copy } from '../lib/i18n';
-import type { AgentStatus } from '../types';
+import type { AgentControlCard, AgentStatus } from '../types';
+
+const DESKTOP_TO_PRODUCT_FAMILY: Record<string, string> = {
+  claude: 'claude_code',
+  openclaw: 'openclaw',
+  codex: 'codex_cli',
+};
+
+function productFamilyId(agent: AgentStatus): string {
+  return DESKTOP_TO_PRODUCT_FAMILY[agent.id] ?? agent.id;
+}
+
+function productCardFor(agent: AgentStatus, cards: AgentControlCard[]): AgentControlCard | undefined {
+  const familyId = productFamilyId(agent);
+  return cards.find((card) => card.family_id === familyId);
+}
 
 function scanLabel(agent: AgentStatus, t: typeof copy.en.agents | typeof copy.zh.agents): string {
   if (agent.attached) return t.scanAttached;
@@ -58,9 +73,12 @@ export function AgentsPage() {
                     {!canRoute && <p className="mt-1 text-xs text-warning">{t.blocked}</p>}
                   </div>
                 </div>
-                <div className="flex flex-wrap justify-end gap-2 max-xl:justify-start">
-                  <Button size="sm" variant="secondary" disabled={busy || agent.installed} onClick={() => void attachAgent(agent.family_id)}>{t.attach}</Button>
-                  <Button size="sm" variant="ghost" disabled={busy || !agent.installed} onClick={() => void detachAgent(agent.family_id)}>{t.detach}</Button>
+                <div className="grid grid-cols-2 gap-2 max-xl:max-w-[320px]">
+                  {agent.installed ? (
+                    <Button size="sm" variant="ghost" disabled={busy} onClick={() => void detachAgent(agent.family_id)}>{t.detach}</Button>
+                  ) : (
+                    <Button size="sm" variant="secondary" disabled={busy || !agent.detected} onClick={() => void attachAgent(agent.family_id)}>{t.attach}</Button>
+                  )}
                   {agent.routing_enabled ? (
                     <Button size="sm" variant="secondary" disabled={busy} onClick={() => void disableRouting(agent.family_id)}>{t.disable}</Button>
                   ) : (
@@ -76,13 +94,39 @@ export function AgentsPage() {
         <CardHeader><CardTitle>{t.scan}</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           {desktopAgents.map((agent) => (
-            <div key={agent.id} className="rounded-md border border-border bg-background p-3">
-              <div className="flex items-center justify-between gap-2">
-                <p className="font-medium text-foreground">{agent.name}</p>
-                <Badge tone={agent.attached ? 'success' : agent.installed || agent.running ? 'accent' : 'neutral'}>{scanLabel(agent, t)}</Badge>
-              </div>
-              <p className="mt-1 text-xs text-muted">{scanDetail(agent, t)}</p>
-            </div>
+            (() => {
+              const card = productCardFor(agent, cards);
+              const familyId = card?.family_id ?? productFamilyId(agent);
+              const attached = card?.installed ?? agent.attached;
+              const routingEnabled = card?.routing_enabled ?? false;
+              const canAttach = agent.supported && (agent.installed || agent.running || card?.detected);
+              const canEnable = attached && (card?.health_state ?? 'healthy') === 'healthy';
+              const busy = agentBusy === familyId;
+              return (
+                <div key={agent.id} className="rounded-md border border-border bg-background p-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-medium text-foreground">{agent.name}</p>
+                    <div className="flex flex-wrap justify-end gap-1">
+                      <Badge tone={attached ? 'success' : agent.installed || agent.running ? 'accent' : 'neutral'}>{attached ? t.attached : scanLabel(agent, t)}</Badge>
+                      <Badge tone={routingEnabled ? 'accent' : 'neutral'}>{routingEnabled ? t.routeOn : t.routeDisabled}</Badge>
+                    </div>
+                  </div>
+                  <p className="mt-1 text-xs text-muted">{attached ? t.scanDetailAttached : scanDetail(agent, t)}</p>
+                  <div className="mt-3 grid grid-cols-2 gap-2">
+                    {attached ? (
+                      <Button size="sm" variant="ghost" disabled={busy} onClick={() => void detachAgent(familyId)}>{t.detach}</Button>
+                    ) : (
+                      <Button size="sm" variant="secondary" disabled={busy || !canAttach} onClick={() => void attachAgent(familyId)}>{t.attach}</Button>
+                    )}
+                    {routingEnabled ? (
+                      <Button size="sm" variant="secondary" disabled={busy} onClick={() => void disableRouting(familyId)}>{t.disable}</Button>
+                    ) : (
+                      <Button size="sm" disabled={busy || !canEnable} onClick={() => void enableRouting(familyId)}>{t.enable}</Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })()
           ))}
           {!desktopAgents.length && <div className="rounded-md border border-border bg-background p-3 text-sm text-muted">{t.empty}</div>}
           <div className="rounded-md border border-border bg-panel p-3">
