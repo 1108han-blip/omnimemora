@@ -365,7 +365,9 @@ promote_runtime() {
 
     local runtime_src="$PROJECT_ROOT/4_core/local-runtime"
     local runtime_bin="$TOOLS_DIR/omnimemora-runtime"
+    local startup_repair_src="$TOOLS_DIR/start_omnimemora_daemon.sh"
     local service_runtime_dir="$CURRENT_SERVICE_DIR/tools/omnimemora-runtime"
+    local service_startup_repair="$CURRENT_SERVICE_DIR/tools/start_omnimemora_daemon.sh"
 
     # 1. 构建
     log_info "[1/4] 构建 Runtime ..." | log_output
@@ -380,6 +382,13 @@ promote_runtime() {
     log_info "[2/5] 同步 Runtime 到 $CURRENT_SERVICE_DIR ..." | log_output
     mkdir -p "$CURRENT_SERVICE_DIR/tools"
     cp "$runtime_bin" "$service_runtime_dir"
+    if [ ! -f "$startup_repair_src" ]; then
+        log_error "Product startup repair launcher 不存在: $startup_repair_src"
+        echo "failed:startup_repair_launcher_missing" >> "$PROMOTION_LOG"
+        return 1
+    fi
+    cp "$startup_repair_src" "$service_startup_repair"
+    chmod +x "$service_startup_repair"
     log_info "Runtime 同步完成" | log_output
 
     # 2b. 同步 CSP-001 compile strategy policy bundle

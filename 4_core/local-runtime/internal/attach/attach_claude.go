@@ -52,13 +52,20 @@ func AttachClaude() *AttachResult {
 	}
 
 	// Claude's actual LLM traffic follows ANTHROPIC_BASE_URL, not the memory block.
-	// Keep existing auth/model env values intact, but route the API hop through OmniMemora.
+	// Do not pin startup traffic to :18011 here: Claude wrappers and launchers
+	// must be able to health-check the product path and fall back to the user's
+	// direct upstream when the adapter is unavailable.
 	envCfg, _ := cfg["env"].(map[string]interface{})
-	if envCfg == nil {
-		envCfg = make(map[string]interface{})
+	if envCfg != nil {
+		if baseURL, ok := envCfg["ANTHROPIC_BASE_URL"].(string); ok && isProductAdapterBaseURL(baseURL) {
+			delete(envCfg, "ANTHROPIC_BASE_URL")
+		}
+		if len(envCfg) == 0 {
+			delete(cfg, "env")
+		} else {
+			cfg["env"] = envCfg
+		}
 	}
-	envCfg["ANTHROPIC_BASE_URL"] = ProductAdapterAnthropicEndpoint()
-	cfg["env"] = envCfg
 
 	// Write back
 	data, err := json.MarshalIndent(cfg, "", "  ")
@@ -80,6 +87,19 @@ func AttachClaude() *AttachResult {
 	_ = RestartAgent(AgentClaude)
 
 	return result
+}
+
+func isProductAdapterBaseURL(value string) bool {
+	switch value {
+	case ProductAdapterEndpoint(), ProductAdapterAnthropicEndpoint():
+		return true
+	case "http://127.0.0.1:18011", "http://127.0.0.1:18011/llm":
+		return true
+	case "http://localhost:18011", "http://localhost:18011/llm":
+		return true
+	default:
+		return false
+	}
 }
 
 // DetachClaude removes OmniMemora from Claude Code config

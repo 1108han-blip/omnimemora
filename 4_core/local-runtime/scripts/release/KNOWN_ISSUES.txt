@@ -7,7 +7,7 @@ Package version: {{PACKAGE_VERSION}}
 - Failed component updates must roll back to the previous local component set.
 - Cloud-enhanced candidate source remains optional; local operation is the primary path.
 - Cloud policy candidates are not auto-promoted over local active policy.
-- Some client integrations may still require manual attach/connect guidance.
+- Some client integrations may still require manual attach/connect guidance; attached Claude-family launchers should not require manual JSON edits when 18011 is initially unavailable.
 - When reporting problems, include: product version, platform, request_id, error_code, steps to reproduce, and screenshots when available.
 
 Support

@@ -5,6 +5,7 @@ Highlights
 - Desktop beta package foundation for local-first OmniMemora usage.
 - Release manifest is published at https://doloclaw.com/releases/latest.json.
 - Product entry remains local: 5173 control surface, 18011 product ingress, 8765 internal memory plane.
+- Attached agents repair local product startup before falling back to direct upstream when 18011 is unavailable.
 - Cloud policy updates remain candidate-only and do not auto-promote over local active policy.
 
 What this beta is for

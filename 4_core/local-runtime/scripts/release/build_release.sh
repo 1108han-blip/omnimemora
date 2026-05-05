@@ -2,7 +2,7 @@
 # scripts/release/build_release.sh - Build closed beta release archives
 set -euo pipefail
 
-PACKAGE_VERSION=${1:-"1.0.0-beta.4"}
+PACKAGE_VERSION=${1:-"1.0.0-beta.5"}
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REPO_ROOT="$(cd "$ROOT_DIR/../.." && pwd)"
@@ -63,11 +63,14 @@ build() {
     )
 
     require_path "$REPO_ROOT/tools/_run_adapter.py" "Adapter launcher is required for desktop-managed startup."
+    require_path "$REPO_ROOT/tools/start_omnimemora_daemon.sh" "Product startup repair launcher is required for attached agent fallback."
     require_path "$REPO_ROOT/4_core/logic" "Adapter imports require packaged 4_core/logic source."
     require_path "$REPO_ROOT/5_connectors/adapter" "Adapter source is required for desktop-managed startup."
     require_path "$REPO_ROOT/6_console/demo-dashboard/dist/index.html" "Build 6_console/demo-dashboard before release packaging."
 
     cp "$REPO_ROOT/tools/_run_adapter.py" "$RELEASE_DIR/$package_name/tools/_run_adapter.py"
+    cp "$REPO_ROOT/tools/start_omnimemora_daemon.sh" "$RELEASE_DIR/$package_name/tools/start_omnimemora_daemon.sh"
+    chmod +x "$RELEASE_DIR/$package_name/tools/start_omnimemora_daemon.sh"
     rsync -a --delete \
         --exclude '__pycache__' \
         --exclude '.pytest_cache' \
@@ -108,6 +111,7 @@ EOF
   "layout": {
     "runtime_binary": "bin/$binary_name",
     "adapter_launcher": "tools/_run_adapter.py",
+    "product_startup_repair": "tools/start_omnimemora_daemon.sh",
     "adapter_source": "5_connectors/adapter",
     "logic_source": "4_core/logic",
     "ui_dist": "ui/dist",
@@ -240,8 +244,8 @@ write_release_manifest() {
     "windows-amd64": "$windows_amd64_sha"
   },
   "download_url": "https://doloclaw.com/download",
-  "release_notes": "Desktop beta foundation: tracked installer downloads, release manifest, local component update metadata, and candidate-only cloud policy update posture.",
-  "minimum_supported_desktop_version": "1.0.0-beta.4",
+  "release_notes": "Attached agents repair local product startup before falling back to direct upstream when the product ingress is unavailable.",
+  "minimum_supported_desktop_version": "1.0.0-beta.5",
   "force_update": false
 }
 EOF
