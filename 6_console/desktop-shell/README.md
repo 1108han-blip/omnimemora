@@ -1,8 +1,8 @@
 # OmniMemora Desktop Shell
 
-Tauri-based desktop shell foundation for `1.0.0-beta.5`.
+Tauri-based desktop shell for `1.0.0-beta.6`.
 
-This batch defines the desktop GUI, service status model, update-layer model, and Tauri command contract. It does not yet implement real service mutation.
+This shell provides the local desktop control entry for service status, explicit service actions, local component updates, rollback, agent connection, and feedback.
 
 ## Current behavior
 
@@ -11,7 +11,7 @@ This batch defines the desktop GUI, service status model, update-layer model, an
   - runtime: `127.0.0.1:8765`
   - adapter: `127.0.0.1:18011`
   - UI: `127.0.0.1:5173`
-- Start/stop/restart/update/rollback commands are contract placeholders and return a clear foundation-only message.
+- Start/stop/restart, manifest update, rollback, and agent connect/disconnect commands call the local desktop host.
 - Feedback uses `support@doloclaw.com` with version and service state prefilled.
 
 ## Validation
@@ -30,5 +30,5 @@ npm run tauri:build
 On macOS arm64, `npm run tauri:build` produces:
 
 ```text
-src-tauri/target/release/bundle/dmg/OmniMemora Desktop_1.0.0-beta.5_aarch64.dmg
+src-tauri/target/release/bundle/dmg/OmniMemora Desktop_1.0.0-beta.6_aarch64.dmg
 ```
