@@ -1,6 +1,6 @@
 # OmniMemora Desktop Shell
 
-Tauri-based desktop shell for `1.0.0-beta.7`.
+Tauri-based desktop shell for `1.0.0-beta.8`.
 
 This shell provides the local desktop control entry for service status, explicit service actions, local component updates, rollback, agent connection, and feedback.
 
@@ -30,5 +30,5 @@ npm run tauri:build
 On macOS arm64, `npm run tauri:build` produces:
 
 ```text
-src-tauri/target/release/bundle/dmg/OmniMemora Desktop_1.0.0-beta.7_aarch64.dmg
+src-tauri/target/release/bundle/dmg/OmniMemora Desktop_1.0.0-beta.8_aarch64.dmg
 ```

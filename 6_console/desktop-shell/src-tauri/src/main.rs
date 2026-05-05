@@ -8,9 +8,11 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-use tauri::{Manager, RunEvent, WindowEvent};
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
+use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
 
-const APP_VERSION: &str = "1.0.0-beta.7";
+const APP_VERSION: &str = "1.0.0-beta.8";
 const SUPPORT_EMAIL: &str = "support@doloclaw.com";
 const RUNTIME_PORT: u16 = 8765;
 const ADAPTER_PORT: u16 = 18011;
@@ -19,6 +21,8 @@ const INTERNAL_TOKEN: &str = "omnimemora-desktop-beta-local";
 const LATEST_MANIFEST_URL: &str = "https://doloclaw.com/releases/latest.json";
 const CLOUD_POLICY_CANDIDATE_URL: &str =
     "https://doloclaw.com/api/control/recommendation/candidates/latest";
+const TRAY_SHOW_ID: &str = "show";
+const TRAY_QUIT_ID: &str = "quit";
 
 #[derive(Serialize, Deserialize, Clone)]
 struct ManagedProcess {
@@ -381,8 +385,8 @@ fn release_manifest_from_disk() -> Option<Value> {
     let candidates = [
         downloaded_manifest_path(),
         current_dir().join("manifest.json"),
-        repo_root().join("4_core/local-runtime/release/1.0.0-beta.7/latest.json"),
-        repo_root().join("4_core/local-runtime/release/1.0.0-beta.7/1.0.0-beta.7.json"),
+        repo_root().join("4_core/local-runtime/release/1.0.0-beta.8/latest.json"),
+        repo_root().join("4_core/local-runtime/release/1.0.0-beta.8/1.0.0-beta.8.json"),
     ];
     for path in candidates {
         if let Ok(raw) = fs::read_to_string(path) {
@@ -529,7 +533,7 @@ fn runtime_binary() -> Option<PathBuf> {
             .unwrap_or_default(),
         current_dir().join("bin/omnimemora"),
         current_dir().join("omnimemora"),
-        root.join("4_core/local-runtime/release/1.0.0-beta.7/omnimemora-darwin-arm64/omnimemora"),
+        root.join("4_core/local-runtime/release/1.0.0-beta.8/omnimemora-darwin-arm64/omnimemora"),
         root.join("tools/omnimemora-runtime"),
     ])
 }
@@ -1168,8 +1172,50 @@ fn detach_agent(agent: String) -> DesktopCommandResult {
     }
 }
 
+fn show_main_window(app_handle: &AppHandle) {
+    if let Some(window) = app_handle.get_webview_window("main") {
+        if let Err(err) = window.show() {
+            eprintln!("failed to show OmniMemora desktop window: {err}");
+        }
+        if let Err(err) = window.set_focus() {
+            eprintln!("failed to focus OmniMemora desktop window: {err}");
+        }
+    }
+}
+
+fn setup_status_bar_icon(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    let show = MenuItem::with_id(app, TRAY_SHOW_ID, "Show OmniMemora", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, TRAY_QUIT_ID, "Quit OmniMemora", true, None::<&str>)?;
+    let menu = Menu::with_items(app, &[&show, &quit])?;
+    let mut tray = TrayIconBuilder::with_id("main")
+        .menu(&menu)
+        .tooltip("OmniMemora")
+        .show_menu_on_left_click(true)
+        .on_menu_event(|app_handle, event| match event.id().as_ref() {
+            TRAY_SHOW_ID => show_main_window(app_handle),
+            TRAY_QUIT_ID => app_handle.exit(0),
+            _ => {}
+        })
+        .on_tray_icon_event(|tray, event| {
+            if let TrayIconEvent::Click {
+                button: MouseButton::Left,
+                button_state: MouseButtonState::Up,
+                ..
+            } = event
+            {
+                show_main_window(tray.app_handle());
+            }
+        });
+    if let Some(icon) = app.default_window_icon().cloned() {
+        tray = tray.icon(icon);
+    }
+    tray.build(app)?;
+    Ok(())
+}
+
 fn main() {
     let app = tauri::Builder::default()
+        .setup(setup_status_bar_icon)
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -1200,14 +1246,7 @@ fn main() {
             ..
         } = event
         {
-            if let Some(window) = app_handle.get_webview_window("main") {
-                if let Err(err) = window.show() {
-                    eprintln!("failed to show OmniMemora desktop window: {err}");
-                }
-                if let Err(err) = window.set_focus() {
-                    eprintln!("failed to focus OmniMemora desktop window: {err}");
-                }
-            }
+            show_main_window(app_handle);
         }
     });
 }

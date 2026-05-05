@@ -16,7 +16,7 @@ import type {
 const PRODUCT_API_BASE = 'http://127.0.0.1:18011';
 
 const DEFAULT_STATUS: DesktopStatus = {
-  app_version: '1.0.0-beta.7',
+  app_version: '1.0.0-beta.8',
   data_dir: '~/.omnimemora/app/current',
   services: [
     {
@@ -50,14 +50,14 @@ const DEFAULT_STATUS: DesktopStatus = {
   updates: [
     {
       layer: 'desktop_shell',
-      current_version: '1.0.0-beta.7',
+      current_version: '1.0.0-beta.8',
       available_version: null,
       status: 'not_checked',
       detail: 'Desktop shell updates are installer-based in this beta.',
     },
     {
       layer: 'local_components',
-      current_version: '1.0.0-beta.7',
+      current_version: '1.0.0-beta.8',
       available_version: null,
       status: 'not_checked',
       detail: 'Local component updates use release manifests.',
