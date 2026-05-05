@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::env;
 use std::fs::{self, File, OpenOptions};
-use std::io::{Read, Write};
+use std::io::{ErrorKind, Read, Write};
 use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -213,15 +213,30 @@ fn http_probe(port: u16, path: &str, expect_json_status: Option<&str>) -> Result
     stream
         .write_all(req.as_bytes())
         .map_err(|err| format!("端口 {port} 请求失败: {err}"))?;
-    let mut response = String::new();
-    stream
-        .read_to_string(&mut response)
-        .map_err(|err| format!("端口 {port} 响应读取失败: {err}"))?;
+    let mut bytes = Vec::new();
+    let mut buffer = [0_u8; 4096];
+    loop {
+        match stream.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(n) => bytes.extend_from_slice(&buffer[..n]),
+            Err(err)
+                if matches!(
+                    err.kind(),
+                    ErrorKind::WouldBlock | ErrorKind::TimedOut | ErrorKind::Interrupted
+                ) && !bytes.is_empty() =>
+            {
+                break;
+            }
+            Err(err) => return Err(format!("端口 {port} 响应读取失败: {err}")),
+        }
+    }
+    let response = String::from_utf8_lossy(&bytes);
     if !response.starts_with("HTTP/1.1 200") && !response.starts_with("HTTP/1.0 200") {
         return Err(format!("端口 {port} HTTP 非 200"));
     }
     if let Some(expected) = expect_json_status {
-        if !response.contains(expected) {
+        let compact = response.split_whitespace().collect::<String>();
+        if !response.contains(expected) && !compact.contains(expected) {
             return Err(format!("端口 {port} 响应不是预期服务"));
         }
     }
