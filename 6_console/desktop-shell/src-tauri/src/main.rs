@@ -10,7 +10,7 @@ use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::{Manager, RunEvent, WindowEvent};
 
-const APP_VERSION: &str = "1.0.0-beta.6";
+const APP_VERSION: &str = "1.0.0-beta.7";
 const SUPPORT_EMAIL: &str = "support@doloclaw.com";
 const RUNTIME_PORT: u16 = 8765;
 const ADAPTER_PORT: u16 = 18011;
@@ -244,6 +244,70 @@ fn http_probe(port: u16, path: &str, expect_json_status: Option<&str>) -> Result
     Ok("本地服务健康。".to_string())
 }
 
+fn curl_probe(port: u16, path: &str, expect_json_status: Option<&str>) -> Result<String, String> {
+    let output = Command::new("curl")
+        .args([
+            "-fsS",
+            "--connect-timeout",
+            "1",
+            "--max-time",
+            "2",
+            &format!("http://127.0.0.1:{port}{path}"),
+        ])
+        .output()
+        .map_err(|err| format!("端口 {port} curl 探测失败: {err}"))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("端口 {port} curl 非 200: {}", stderr.trim()));
+    }
+    if let Some(expected) = expect_json_status {
+        let body = String::from_utf8_lossy(&output.stdout);
+        let compact = body.split_whitespace().collect::<String>();
+        if !body.contains(expected) && !compact.contains(expected) {
+            return Err(format!("端口 {port} curl 响应不是预期服务"));
+        }
+    }
+    Ok("本地服务健康。".to_string())
+}
+
+fn port_owner_pid(port: u16) -> Option<u32> {
+    let output = Command::new("lsof")
+        .args(["-nP", "-iTCP", &format!(":{port}"), "-sTCP:LISTEN", "-t"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .find_map(|line| line.trim().parse::<u32>().ok())
+}
+
+fn process_command(pid: u32) -> Option<String> {
+    let output = Command::new("ps")
+        .args(["-p", &pid.to_string(), "-o", "command="])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let command = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if command.is_empty() {
+        None
+    } else {
+        Some(command)
+    }
+}
+
+fn known_omnimemora_service(name: &str, command: &str) -> bool {
+    match name {
+        "runtime" => command.contains("omnimemora-runtime") && command.contains("serve"),
+        "adapter" => command.contains("_run_adapter.py"),
+        "ui" => command.contains("http.server") && command.contains("5173"),
+        _ => false,
+    }
+}
+
 fn service_probe(
     name: &'static str,
     port: u16,
@@ -252,9 +316,15 @@ fn service_probe(
     state: &PersistedDesktopState,
 ) -> ServiceStatus {
     let managed = managed_process(state, name).filter(|proc| process_alive(proc.pid));
+    let port_pid = port_owner_pid(port);
+    let port_command = port_pid.and_then(process_command);
+    let known_product_process = port_command
+        .as_deref()
+        .map(|command| known_omnimemora_service(name, command))
+        .unwrap_or(false);
     let managed_by_desktop = managed.is_some();
-    let pid = managed.map(|proc| proc.pid);
-    match http_probe(port, path, expected) {
+    let pid = managed.map(|proc| proc.pid).or(port_pid);
+    match http_probe(port, path, expected).or_else(|_| curl_probe(port, path, expected)) {
         Ok(detail) => ServiceStatus {
             name,
             port,
@@ -262,6 +332,8 @@ fn service_probe(
             url: format!("http://127.0.0.1:{port}{path}"),
             detail: if managed_by_desktop {
                 format!("{detail} 由桌面 App 管理。")
+            } else if known_product_process {
+                format!("{detail} 由 OmniMemora 产品进程提供。")
             } else {
                 format!("{detail} 当前进程不是桌面 App 启动的。")
             },
@@ -278,13 +350,22 @@ fn service_probe(
                 name,
                 port,
                 state: if tcp_open {
-                    "blocked".to_string()
+                    if known_product_process {
+                        "unreachable".to_string()
+                    } else {
+                        "blocked".to_string()
+                    }
                 } else {
                     "unreachable".to_string()
                 },
                 url: format!("http://127.0.0.1:{port}{path}"),
                 detail: if tcp_open {
-                    "本地服务入口被其他进程占用；桌面 App 不会强行关闭未知进程。".to_string()
+                    if known_product_process {
+                        "OmniMemora 产品进程已占用入口，但健康检查未通过；可以点击 Restart 修复连接。"
+                            .to_string()
+                    } else {
+                        "本地服务入口被其他进程占用；桌面 App 不会强行关闭未知进程。".to_string()
+                    }
                 } else {
                     let _ = http_err;
                     "服务暂不可用；可以点击 Start 由桌面 App 启动。".to_string()
@@ -300,8 +381,8 @@ fn release_manifest_from_disk() -> Option<Value> {
     let candidates = [
         downloaded_manifest_path(),
         current_dir().join("manifest.json"),
-        repo_root().join("4_core/local-runtime/release/1.0.0-beta.6/latest.json"),
-        repo_root().join("4_core/local-runtime/release/1.0.0-beta.6/1.0.0-beta.6.json"),
+        repo_root().join("4_core/local-runtime/release/1.0.0-beta.7/latest.json"),
+        repo_root().join("4_core/local-runtime/release/1.0.0-beta.7/1.0.0-beta.7.json"),
     ];
     for path in candidates {
         if let Ok(raw) = fs::read_to_string(path) {
@@ -448,7 +529,7 @@ fn runtime_binary() -> Option<PathBuf> {
             .unwrap_or_default(),
         current_dir().join("bin/omnimemora"),
         current_dir().join("omnimemora"),
-        root.join("4_core/local-runtime/release/1.0.0-beta.6/omnimemora-darwin-arm64/omnimemora"),
+        root.join("4_core/local-runtime/release/1.0.0-beta.7/omnimemora-darwin-arm64/omnimemora"),
         root.join("tools/omnimemora-runtime"),
     ])
 }

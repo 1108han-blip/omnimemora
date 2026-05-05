@@ -1,6 +1,6 @@
 [package]
 name = "omnimemora-desktop-shell"
-version = "1.0.0-beta.6"
+version = "1.0.0-beta.7"
 description = "OmniMemora desktop beta shell"
 authors = ["OmniMemora"]
 edition = "2021"

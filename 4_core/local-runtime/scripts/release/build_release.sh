@@ -2,7 +2,7 @@
 # scripts/release/build_release.sh - Build closed beta release archives
 set -euo pipefail
 
-PACKAGE_VERSION=${1:-"1.0.0-beta.6"}
+PACKAGE_VERSION=${1:-"1.0.0-beta.7"}
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REPO_ROOT="$(cd "$ROOT_DIR/../.." && pwd)"
@@ -244,8 +244,8 @@ write_release_manifest() {
     "windows-amd64": "$windows_amd64_sha"
   },
   "download_url": "https://doloclaw.com/download",
-  "release_notes": "Fixes the macOS desktop shell exiting when the main window is closed.",
-  "minimum_supported_desktop_version": "1.0.0-beta.6",
+  "release_notes": "Fixes adapter status showing blocked when the product adapter is already running on port 18011.",
+  "minimum_supported_desktop_version": "1.0.0-beta.7",
   "force_update": false
 }
 EOF
