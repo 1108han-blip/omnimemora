@@ -12,7 +12,7 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, RunEvent, WindowEvent};
 
-const APP_VERSION: &str = "1.0.0-beta.8";
+const APP_VERSION: &str = "1.0.0-beta.9";
 const SUPPORT_EMAIL: &str = "support@doloclaw.com";
 const RUNTIME_PORT: u16 = 8765;
 const ADAPTER_PORT: u16 = 18011;
@@ -385,8 +385,8 @@ fn release_manifest_from_disk() -> Option<Value> {
     let candidates = [
         downloaded_manifest_path(),
         current_dir().join("manifest.json"),
-        repo_root().join("4_core/local-runtime/release/1.0.0-beta.8/latest.json"),
-        repo_root().join("4_core/local-runtime/release/1.0.0-beta.8/1.0.0-beta.8.json"),
+        repo_root().join("4_core/local-runtime/release/1.0.0-beta.9/latest.json"),
+        repo_root().join("4_core/local-runtime/release/1.0.0-beta.9/1.0.0-beta.9.json"),
     ];
     for path in candidates {
         if let Ok(raw) = fs::read_to_string(path) {
@@ -533,7 +533,7 @@ fn runtime_binary() -> Option<PathBuf> {
             .unwrap_or_default(),
         current_dir().join("bin/omnimemora"),
         current_dir().join("omnimemora"),
-        root.join("4_core/local-runtime/release/1.0.0-beta.8/omnimemora-darwin-arm64/omnimemora"),
+        root.join("4_core/local-runtime/release/1.0.0-beta.9/omnimemora-darwin-arm64/omnimemora"),
         root.join("tools/omnimemora-runtime"),
     ])
 }
@@ -1184,6 +1184,12 @@ fn show_main_window(app_handle: &AppHandle) {
 }
 
 fn setup_status_bar_icon(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
+    if let (Some(window), Some(icon)) = (
+        app.get_webview_window("main"),
+        app.default_window_icon().cloned(),
+    ) {
+        window.set_icon(icon.clone())?;
+    }
     let show = MenuItem::with_id(app, TRAY_SHOW_ID, "Show OmniMemora", true, None::<&str>)?;
     let quit = MenuItem::with_id(app, TRAY_QUIT_ID, "Quit OmniMemora", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&show, &quit])?;
