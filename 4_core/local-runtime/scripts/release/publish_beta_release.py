@@ -120,6 +120,8 @@ def upload_artifacts(package_version: str, token_id: str, token_value: str) -> N
 
     upload_names = [
         f"OmniMemora-Desktop-{package_version}-darwin-arm64.dmg",
+        f"OmniMemora-Desktop-{package_version}-darwin-aarch64.app.tar.gz",
+        f"OmniMemora-Desktop-{package_version}-darwin-aarch64.app.tar.gz.sig",
         "omnimemora-darwin-amd64.zip",
         "omnimemora-darwin-arm64.zip",
         "omnimemora-windows-amd64.zip",
@@ -127,6 +129,7 @@ def upload_artifacts(package_version: str, token_id: str, token_value: str) -> N
         "RELEASE_INDEX.txt",
         f"{package_version}.json",
         "latest.json",
+        "desktop-updater/darwin-aarch64.json",
     ]
     time.sleep(2)
     for name in upload_names:
@@ -137,6 +140,8 @@ def upload_artifacts(package_version: str, token_id: str, token_value: str) -> N
             extra = {"ContentType": "text/plain; charset=utf-8"}
         if name.endswith(".json"):
             extra = {"ContentType": "application/json; charset=utf-8"}
+        if name.endswith(".sig"):
+            extra = {"ContentType": "text/plain; charset=utf-8"}
         last_exc = None
         for attempt in range(3):
             try:

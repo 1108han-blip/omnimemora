@@ -21,7 +21,7 @@ const MEDIA_FILES = {
   "omnimemora-promo-guide-poster.png": "omnimemora-promo-guide-poster.png"
 };
 const DOWNLOAD_EVENT_PREFIX = "download:v1:";
-const DOWNLOAD_EVENT_RETENTION_SECONDS = 60 * 60 * 24 * 180;
+const DOWNLOAD_EVENT_RETENTION_SECONDS = 60 * 60 * 24 * 7;
 
 function json(payload, init = {}) {
   return new Response(JSON.stringify(payload), {
