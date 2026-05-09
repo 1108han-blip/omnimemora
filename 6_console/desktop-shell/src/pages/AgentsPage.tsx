@@ -45,6 +45,7 @@ export function AgentsPage() {
   const detachAgent = useDashboardStore((state) => state.detachAgent);
   const enableRouting = useDashboardStore((state) => state.enableRouting);
   const disableRouting = useDashboardStore((state) => state.disableRouting);
+  const repairAgent = useDashboardStore((state) => state.repairAgent);
   const t = copy[language].agents;
   const cards = product?.controls?.agents ?? [];
 
@@ -70,6 +71,7 @@ export function AgentsPage() {
                     <p className="text-xs text-muted">
                       {compactNumber(agent.requests_24h ?? agent.observed_requests_24h)} {t.requests} · {compactNumber(agent.saved_tokens_24h)} {t.saved} · {percent(agent.savings_ratio_24h)}
                     </p>
+                    {agent.drifted && <p className="mt-1 text-xs text-warning">{t.drift}</p>}
                     {!canRoute && <p className="mt-1 text-xs text-warning">{t.blocked}</p>}
                   </div>
                 </div>
@@ -83,6 +85,9 @@ export function AgentsPage() {
                     <Button size="sm" variant="secondary" disabled={busy} onClick={() => void disableRouting(agent.family_id)}>{t.disable}</Button>
                   ) : (
                     <Button size="sm" disabled={busy || !canRoute} onClick={() => void enableRouting(agent.family_id)}>{t.enable}</Button>
+                  )}
+                  {agent.drifted && (
+                    <Button size="sm" variant="secondary" disabled={busy} onClick={() => void repairAgent(agent.family_id)}>{t.repair}</Button>
                   )}
                 </div>
               </div>

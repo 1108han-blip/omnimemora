@@ -241,7 +241,7 @@ export async function fetchRequestEvidence(requestId: string): Promise<RequestEv
   };
 }
 
-async function postAgentControlAction(action: 'install' | 'uninstall' | 'enable' | 'disable', familyId: string): Promise<AgentControlCard> {
+async function postAgentControlAction(action: 'install' | 'uninstall' | 'enable' | 'disable' | 'repair', familyId: string): Promise<AgentControlCard> {
   const response = await fetch(`${PRODUCT_API_BASE}/agents/control/${action}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -275,6 +275,10 @@ export function enableAgentRoute(familyId: string): Promise<AgentControlCard> {
 
 export function disableAgentRoute(familyId: string): Promise<AgentControlCard> {
   return postAgentControlAction('disable', familyId);
+}
+
+export function repairAgentAttach(familyId: string): Promise<AgentControlCard> {
+  return postAgentControlAction('repair', familyId);
 }
 
 export function buildFeedbackMailto(status: DesktopStatus): string {

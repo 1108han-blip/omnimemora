@@ -156,6 +156,8 @@ export interface AgentControlCard {
   savings_ratio_24h?: number;
   last_request_at?: string | null;
   observed_requests_24h?: number;
+  drifted?: boolean;
+  drift_reason?: string | null;
 }
 
 export interface AgentControlResponse {

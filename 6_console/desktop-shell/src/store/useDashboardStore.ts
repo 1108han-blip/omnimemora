@@ -6,6 +6,7 @@ import {
   getDesktopStatus,
   getProductConsoleSnapshot,
   installAgent,
+  repairAgentAttach,
   runDesktopCommand,
   scanAgents,
   uninstallAgent,
@@ -45,6 +46,7 @@ interface DashboardState {
   detachAgent: (familyId: string) => Promise<void>;
   enableRouting: (familyId: string) => Promise<void>;
   disableRouting: (familyId: string) => Promise<void>;
+  repairAgent: (familyId: string) => Promise<void>;
 }
 
 function userFacingRequests(product: ProductConsoleSnapshot | null): RecentRequest[] {
@@ -257,6 +259,21 @@ export const useDashboardStore = create<DashboardState>((set, get) => {
       set({ agentBusy: familyId });
       try {
         const card = await disableAgentRoute(familyId);
+        set((state) => ({
+          product: patchAgentControlCard(state.product, card),
+          lastMessage: card.message || copy[state.language].header.synced,
+        }));
+        await get().refreshReality();
+      } catch (error) {
+        set({ lastMessage: errorMessage(error) });
+      } finally {
+        set({ agentBusy: null });
+      }
+    },
+    repairAgent: async (familyId) => {
+      set({ agentBusy: familyId });
+      try {
+        const card = await repairAgentAttach(familyId);
         set((state) => ({
           product: patchAgentControlCard(state.product, card),
           lastMessage: card.message || copy[state.language].header.synced,

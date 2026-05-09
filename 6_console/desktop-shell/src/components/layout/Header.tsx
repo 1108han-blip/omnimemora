@@ -26,6 +26,7 @@ export function Header() {
           <span className="font-mono text-xs text-muted">v{desktopStatus?.app_version ?? '1.0.0-beta.11'}</span>
         </div>
         <p className="mt-0.5 truncate text-xs text-muted">{lastMessage}</p>
+        <p className="mt-0.5 truncate text-[11px] text-muted">{t.controlsHint}</p>
       </div>
       <div className="flex items-center gap-2">
         <Button variant="secondary" size="sm" disabled={loading} onClick={() => void refreshReality()}><RefreshCw className="h-3.5 w-3.5" />{t.sync}</Button>

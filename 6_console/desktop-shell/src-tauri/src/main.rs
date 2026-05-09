@@ -1058,8 +1058,72 @@ fn stop_all_services() -> Result<String, String> {
     }
     state.processes.clear();
     write_state(&state)?;
+
+    // Also stop launchctl-managed OmniMemora services so Stop has visible effect
+    // even when services were started outside the desktop shell process table.
+    let uid = run_capture(
+        {
+            let mut cmd = Command::new("id");
+            cmd.arg("-u");
+            cmd
+        },
+        "读取用户 uid",
+    )
+    .unwrap_or_default()
+    .trim()
+    .to_string();
+    let launchd_labels = [
+        format!("gui/{uid}/com.omnimemora.runtime"),
+        format!("gui/{uid}/com.omnimemora.adapter"),
+        format!("gui/{uid}/com.omnimemora.dashboard"),
+    ];
+    let mut launchd_stopped = 0usize;
+    let mut launchd_booted_out = 0usize;
+    let mut launchd_killed_by_pid = 0usize;
+    for label in launchd_labels {
+        let mut bootout_cmd = Command::new("launchctl");
+        bootout_cmd.arg("bootout").arg(&label);
+        if bootout_cmd
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+        {
+            launchd_booted_out += 1;
+            launchd_stopped += 1;
+            continue;
+        }
+
+        let mut stop_cmd = Command::new("launchctl");
+        stop_cmd.arg("stop").arg(&label);
+        if stop_cmd.output().map(|o| o.status.success()).unwrap_or(false) {
+            launchd_stopped += 1;
+            continue;
+        }
+
+        // Last-resort fallback: read launchctl pid and kill it directly.
+        let mut print_cmd = Command::new("launchctl");
+        print_cmd.arg("print").arg(&label);
+        if let Ok(output) = print_cmd.output() {
+            if output.status.success() {
+                let text = String::from_utf8_lossy(&output.stdout);
+                for line in text.lines() {
+                    let trimmed = line.trim();
+                    if let Some(pid_str) = trimmed.strip_prefix("pid = ") {
+                        if let Ok(pid) = pid_str.trim().parse::<u32>() {
+                            if kill_process(pid) {
+                                launchd_killed_by_pid += 1;
+                                launchd_stopped += 1;
+                            }
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
     Ok(format!(
-        "已请求停止 {count} 个桌面管理服务；未知外部进程未被停止。"
+        "已请求停止 {count} 个桌面管理进程；launchctl 停止 {launchd_stopped} 个（bootout={launchd_booted_out}, kill={launchd_killed_by_pid}）。"
     ))
 }
 

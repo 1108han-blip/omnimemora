@@ -57,6 +57,7 @@ export function SettingsPage() {
               <Badge tone={service.state === 'healthy' ? 'success' : service.state === 'blocked' ? 'danger' : 'warning'}>{serviceState(service.state)}</Badge>
             </div>
           ))}
+          <p className="text-xs text-muted">{header.controlsHint}</p>
           <div className="flex gap-2 pt-2"><Button onClick={() => void startProduct()}>{header.start}</Button><Button variant="secondary" onClick={() => void restartProduct()}>{header.restart}</Button><Button variant="ghost" onClick={() => void stopProduct()}>{header.stop}</Button></div>
         </CardContent>
       </Card>
