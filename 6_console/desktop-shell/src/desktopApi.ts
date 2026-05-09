@@ -14,6 +14,7 @@ import type {
 } from './types';
 
 const PRODUCT_API_BASE = 'http://127.0.0.1:18011';
+const AGENT_CONTROL_TIMEOUT_MS = 6000;
 
 const DEFAULT_STATUS: DesktopStatus = {
   app_version: '1.0.0-beta.10',
@@ -204,7 +205,7 @@ export async function getProductConsoleSnapshot(): Promise<ProductConsoleSnapsho
     fetchProductJson<CoreCapabilitiesTrendResponse>('/metrics/core_capabilities/trend?tenant=all&days=7'),
     fetchProductJson<RecentRequestsResponse>('/metrics/recent_requests?tenant=all&limit=30&value_qualified_only=false'),
     fetchProductJson<Record<string, unknown>>('/usage/token-savings?tenant=all'),
-    fetchProductJson<AgentControlResponse>('/agents/control'),
+    fetchProductJson<AgentControlResponse>('/agents/control', AGENT_CONTROL_TIMEOUT_MS),
   ]);
 
   const fulfilled = [core, coreTrend, recent, usage, controls].filter((result) => result.status === 'fulfilled');
