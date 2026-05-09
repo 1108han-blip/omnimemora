@@ -787,15 +787,26 @@ promote_ui() {
     }
     log_info "UI build 成功" | log_output
 
-    # 4. bring-up (npm run dev)
+    # 4. bring-up
     log_info "[4/6] 启动 UI 开发服务器 ..." | log_output
-    # 停止现有 UI 进程
-    pkill -f "vite" 2>/dev/null || true
+    # 停止未受 launchd 管理的旧 UI 进程
+    pkill -f "6_console/demo-dashboard/node_modules/vite" 2>/dev/null || true
+    pkill -f "vite.*--port ${UI_PORT}" 2>/dev/null || true
+    pkill -f "http.server ${UI_PORT}.*6_console/demo-dashboard/dist" 2>/dev/null || true
     sleep 1
 
-    # 启动新进程
-    cd "$ui_src"
-    PATH="/usr/local/bin:$PATH" "$NPM_BIN" run dev >"$LOG_DIR/ui_dev.log" 2>&1 &
+    local dashboard_plist="$HOME/Library/LaunchAgents/com.omnimemora.dashboard.plist"
+    local dashboard_label="gui/$(id -u)/com.omnimemora.dashboard"
+    if command -v launchctl >/dev/null 2>&1 && [ -f "$dashboard_plist" ]; then
+        log_info "  使用 launchctl 启动 Dashboard LaunchAgent ..." | log_output
+        if ! launchctl print "$dashboard_label" >/dev/null 2>&1; then
+            launchctl bootstrap "gui/$(id -u)" "$dashboard_plist" >/dev/null 2>&1 || true
+        fi
+        launchctl kickstart -k "$dashboard_label" >/dev/null 2>&1 || true
+    else
+        cd "$ui_src"
+        PATH="/usr/local/bin:$PATH" "$NPM_BIN" run dev -- --host 127.0.0.1 --port "$UI_PORT" >"$LOG_DIR/ui_dev.log" 2>&1 &
+    fi
     sleep 5
 
     # 5. 验证
