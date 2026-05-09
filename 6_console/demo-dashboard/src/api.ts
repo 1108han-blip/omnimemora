@@ -13,7 +13,7 @@ import type {
   CoreCapabilitiesTrendResponse,
 } from './types';
 
-const API_BASE = '';
+const API_BASE = import.meta.env.VITE_OMNIMEMORA_API_BASE || 'http://127.0.0.1:18011';
 const CONTROL_REQUEST_TIMEOUT_MS = 4000;
 
 async function fetchWithTimeout(input: string, timeoutMs: number, init?: RequestInit): Promise<Response> {
