@@ -1144,7 +1144,7 @@ fn check_for_updates() -> DesktopCommandResult {
                 .and_then(Value::as_str)
                 .unwrap_or("unknown");
             let desktop_message = if version_is_newer(version, APP_VERSION) {
-                "桌面 App 有新版可用，可在设置页下载并打开安装器。"
+                "桌面 App 有新版可用；当前构建尚未提供产品级自动更新，不能把打开安装器视为完成更新。"
             } else {
                 "桌面 App 已是当前版本。"
             };
@@ -1175,6 +1175,15 @@ fn install_desktop_update() -> DesktopCommandResult {
         let version = manifest_version(&manifest)?;
         if !version_is_newer(&version, APP_VERSION) {
             return Ok(format!("桌面 App 已是最新版本：{version}。"));
+        }
+        if std::env::var("OMNIMEMORA_ALLOW_MANUAL_DESKTOP_INSTALLER")
+            .map(|value| value == "1")
+            .unwrap_or(false)
+            != true
+        {
+            return Err(format!(
+                "桌面 App {version} 有新版，但当前构建未实现产品级自动更新管理；已阻止仅打开安装器的伪自动更新路径。"
+            ));
         }
         let (package, expected_sha, download_url) =
             desktop_installer_manifest(&manifest, platform)?;

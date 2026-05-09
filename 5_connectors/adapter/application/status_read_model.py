@@ -521,10 +521,18 @@ def derive_observed_client_truth(raw: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def derive_truth_message(card: Dict[str, Any], integration_truth: str, route_truth: str, traffic_truth: str) -> str:
+def derive_truth_message(
+    card: Dict[str, Any],
+    integration_truth: str,
+    route_truth: str,
+    traffic_truth: str,
+    metrics_24h: Optional[Dict[str, Any]] = None,
+) -> str:
     """Build user-facing truth_message from derived states."""
     installed = card.get("installed", False)
     routing_enabled = card.get("routing_enabled", False)
+    metrics_24h = metrics_24h or {}
+    has_24h_value = int(metrics_24h.get("requests_24h") or 0) > 0 or int(metrics_24h.get("saved_tokens_24h") or 0) > 0
 
     if integration_truth == "detached":
         return "未接入 OmniMemora。點擊上方按鈕進行接入。"
@@ -532,7 +540,11 @@ def derive_truth_message(card: Dict[str, Any], integration_truth: str, route_tru
         if traffic_truth == "real_request_observed":
             return "已接入 MCP，的真實工作請求已進入 OmniMemora。"
         if traffic_truth == "internal_only":
+            if has_24h_value:
+                return "已接入 MCP，24 小時內已有真實請求收益；最近 30 分鐘僅看到內部握手。"
             return "已接入 MCP，但當前僅看到內部握手，未證明主對話經 OmniMemora。"
+        if traffic_truth == "no_recent_evidence" and has_24h_value:
+            return "已接入 MCP，24 小時內已有真實請求收益；最近 30 分鐘暫無工作請求。"
         if routing_enabled:
             return "已接入 MCP，路由已開啟，等待真實工作請求。"
         return "已接入 MCP，當前無工作請求。"
@@ -540,7 +552,11 @@ def derive_truth_message(card: Dict[str, Any], integration_truth: str, route_tru
         if traffic_truth == "real_request_observed":
             return "已接入並具備備份還原能力，真實工作請求已進入 OmniMemora。"
         if traffic_truth == "internal_only":
+            if has_24h_value:
+                return "已接入並具備備份還原能力，24 小時內已有真實請求收益；最近 30 分鐘僅看到內部握手。"
             return "已接入並具備備份還原能力，但當前僅看到內部握手。"
+        if traffic_truth == "no_recent_evidence" and has_24h_value:
+            return "已接入並具備備份還原能力，24 小時內已有真實請求收益；最近 30 分鐘暫無工作請求。"
         if routing_enabled:
             return "已接入並具備備份還原能力，路由已開啟，等待真實工作請求。"
         return "已接入並具備備份還原能力，當前無工作請求。"
@@ -811,7 +827,7 @@ async def build_control_cards() -> List[Dict[str, Any]]:
         integration_truth = derive_integration_truth(raw)
         route_truth = derive_route_truth(route_state.routing_enabled(family_id), health_state)
         observed_client_truth = derive_observed_client_truth(raw)
-        truth_message = derive_truth_message(raw, integration_truth, route_truth, traffic_truth)
+        truth_message = derive_truth_message(raw, integration_truth, route_truth, traffic_truth, metrics_24h)
 
         cards.append(
             {

@@ -609,6 +609,26 @@ def test_summary_path_and_legacy_path_key_fields_match(monkeypatch):
         "observed_requests_24h",
     ]:
         assert cards_summary[0][key] == cards_legacy[0][key]
+    assert "24 小時內已有真實請求收益" in cards_summary[0]["truth_message"]
+    assert "最近 30 分鐘僅看到內部握手" in cards_summary[0]["truth_message"]
+
+
+def test_truth_message_preserves_24h_value_when_no_recent_evidence():
+    message = status_read_model.derive_truth_message(
+        {"installed": True, "routing_enabled": True},
+        "attached_with_backup",
+        "on",
+        "no_recent_evidence",
+        {
+            "requests_24h": 12,
+            "saved_tokens_24h": 37792,
+            "savings_ratio_24h": 0.87,
+            "last_request_at": "2026-05-09T03:29:00Z",
+            "observed_requests_24h": 13,
+        },
+    )
+    assert "24 小時內已有真實請求收益" in message
+    assert "最近 30 分鐘暫無工作請求" in message
 
 
 def test_legacy_fallback_records_degraded_reason(monkeypatch):

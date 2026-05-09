@@ -17,10 +17,12 @@ from __future__ import annotations
 
 import copy
 import importlib
+import os
 from typing import Optional
+from urllib.parse import urlparse
 
 import httpx
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from . import agent_routing_state as _route_state
@@ -40,10 +42,68 @@ _DISPLAY_NAMES = {
     "openclaw": "OpenClaw",
 }
 
+_TRUSTED_CONTROL_ORIGINS = {
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    "tauri://localhost",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+}
+
 
 class AgentControlRequest(BaseModel):
     family_id: str
     upstream_truth: Optional[dict] = None
+
+
+def _is_loopback_client(request: Request) -> bool:
+    host = request.client.host if request.client else ""
+    return host == "localhost" or host == "::1" or host.startswith("127.")
+
+
+def _origin_from_referer(referer: str) -> str:
+    if not referer:
+        return ""
+    parsed = urlparse(referer)
+    if not parsed.scheme or not parsed.netloc:
+        return ""
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def _trusted_control_origins() -> set[str]:
+    configured = {
+        origin.strip()
+        for origin in os.getenv("OMNIMEMORA_ALLOWED_CONTROL_ORIGINS", "").split(",")
+        if origin.strip()
+    }
+    return configured or set(_TRUSTED_CONTROL_ORIGINS)
+
+
+def _require_control_action_authorization(request: Request) -> None:
+    expected_token = os.getenv("OMNIMEMORA_INTERNAL_API_TOKEN", "")
+    provided_token = request.headers.get("X-Internal-Token", "")
+    if expected_token and provided_token == expected_token:
+        return
+
+    if not _is_loopback_client(request):
+        raise HTTPException(status_code=403, detail="Control action requires local loopback client.")
+
+    origin = request.headers.get("origin", "")
+    referer_origin = _origin_from_referer(request.headers.get("referer", ""))
+    trusted_origins = _trusted_control_origins()
+    if origin:
+        if origin in trusted_origins:
+            return
+        raise HTTPException(status_code=403, detail="Control action origin is not trusted.")
+    if referer_origin:
+        if referer_origin in trusted_origins:
+            return
+        raise HTTPException(status_code=403, detail="Control action referer is not trusted.")
+
+    # Preserve local CLI/script compatibility while rejecting browser CSRF by origin.
+    if not request.headers.get("sec-fetch-site"):
+        return
+    raise HTTPException(status_code=403, detail="Control action requires trusted local UI or internal token.")
 
 
 async def _runtime_request(method: str, path: str, payload: Optional[dict] = None) -> dict:
@@ -104,11 +164,12 @@ async def get_agents_control():
 
 
 @router.post("/agents/control/rescan")
-async def rescan_agents_control():
+async def rescan_agents_control(request: Request):
     """
     integration_action: rescan agents.
     Reads state before/after to report diff, but does not own read-model.
     """
+    _require_control_action_authorization(request)
     _invalidate_agents_control_snapshot()
     try:
         cards_before = await _srm.build_control_cards()
@@ -152,10 +213,11 @@ async def rescan_agents_control():
 # ============================================================================
 
 @router.post("/agents/control/install")
-async def install_agent_control(request: AgentControlRequest):
+async def install_agent_control(request: AgentControlRequest, http_request: Request):
     """
     integration_action: install an agent.
     """
+    _require_control_action_authorization(http_request)
     _invalidate_agents_control_snapshot()
     # 保存 OpenClaw attach metadata upstream truth snapshot
     if request.family_id == "openclaw" and request.upstream_truth:
@@ -189,12 +251,13 @@ async def install_agent_control(request: AgentControlRequest):
 
 
 @router.post("/agents/control/uninstall")
-async def uninstall_agent_control(request: AgentControlRequest):
+async def uninstall_agent_control(request: AgentControlRequest, http_request: Request):
     """
     integration_action: uninstall an agent.
     Note: routing_state is cleared here as part of the uninstall contract,
     not as a separate routing_action.
     """
+    _require_control_action_authorization(http_request)
     _invalidate_agents_control_snapshot()
     # 清除 OpenClaw attach metadata
     if request.family_id == "openclaw":
@@ -250,10 +313,11 @@ async def uninstall_agent_control(request: AgentControlRequest):
 # ============================================================================
 
 @router.post("/agents/control/enable")
-async def enable_agent_control(request: AgentControlRequest):
+async def enable_agent_control(request: AgentControlRequest, http_request: Request):
     """
     routing_action: enable routing for an installed agent.
     """
+    _require_control_action_authorization(http_request)
     _invalidate_agents_control_snapshot()
     cards = await _srm.build_control_cards()
     card = _find_card(cards, request.family_id)
@@ -275,10 +339,11 @@ async def enable_agent_control(request: AgentControlRequest):
 
 
 @router.post("/agents/control/disable")
-async def disable_agent_control(request: AgentControlRequest):
+async def disable_agent_control(request: AgentControlRequest, http_request: Request):
     """
     routing_action: disable routing for an agent.
     """
+    _require_control_action_authorization(http_request)
     _invalidate_agents_control_snapshot()
     _route_state.set_family_routing_enabled(request.family_id, False)
     refreshed = await _srm.build_control_cards()

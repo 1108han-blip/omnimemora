@@ -238,6 +238,15 @@ def compute_metrics_summary(tenant: str) -> Dict[str, Any]:
     summary_block = _extract_summary_kpi_block(tenant, "metrics_summary_all")
     if summary_block is not None:
         return summary_block
+    if tenant == "all":
+        return {
+            "token_saving_ratio": 0.0,
+            "tokens_saved": 0,
+            "request_count": 0,
+            "avg_context_reduction": 0.0,
+            "degraded": True,
+            "degraded_reason": "summary_unavailable_no_historical_scan",
+        }
     return _compute_metrics_summary_legacy(tenant)
 
 

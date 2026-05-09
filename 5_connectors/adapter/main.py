@@ -134,16 +134,30 @@ class SupportAPIError(Exception):
         super().__init__(payload.get("message") or payload.get("detail") or "support_api_error")
 
 
+_default_cors_origins = [
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+    "tauri://localhost",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+]
+_configured_cors_origins = [
+    origin.strip()
+    for origin in os.getenv("OMNIMEMORA_ALLOWED_CONTROL_ORIGINS", "").split(",")
+    if origin.strip()
+]
+
 app = FastAPI(
     title="Memory Adapter v2.2",
     description="memory backend 中间层：标准化 → 过滤 → 去重 → 限流 → 路由 → 转换",
     version="2.2.0"
 )
 
-# CORS 中间件
+# CORS 中间件：18011 is a local product ingress; do not expose control actions
+# to arbitrary browser origins.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_configured_cors_origins or _default_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

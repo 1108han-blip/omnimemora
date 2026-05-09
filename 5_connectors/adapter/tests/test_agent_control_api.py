@@ -6,6 +6,8 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
+from starlette.requests import Request
+
 agent_control_api = importlib.import_module("5_connectors.adapter.agent_control_api")
 agent_routing_state = importlib.import_module("5_connectors.adapter.agent_routing_state")
 control_snapshot_cache = importlib.import_module("5_connectors.adapter.application.control_snapshot_cache")
@@ -18,6 +20,32 @@ class AgentControlApiTests(unittest.TestCase):
 
     def tearDown(self) -> None:
         agent_control_api._invalidate_agents_control_snapshot()
+
+    def _request(self, *, origin: str = "", client_host: str = "127.0.0.1") -> Request:
+        headers = []
+        if origin:
+            headers.append((b"origin", origin.encode("utf-8")))
+        return Request(
+            {
+                "type": "http",
+                "method": "POST",
+                "path": "/agents/control/disable",
+                "headers": headers,
+                "client": (client_host, 49152),
+            }
+        )
+
+    def test_control_action_rejects_untrusted_browser_origin(self) -> None:
+        with self.assertRaises(Exception) as ctx:
+            agent_control_api._require_control_action_authorization(
+                self._request(origin="https://example.com")
+            )
+        self.assertEqual(getattr(ctx.exception, "status_code", None), 403)
+
+    def test_control_action_allows_trusted_local_origin(self) -> None:
+        agent_control_api._require_control_action_authorization(
+            self._request(origin="http://127.0.0.1:5173")
+        )
 
     def test_get_agents_control_delegates_read_model(self) -> None:
         cards = [
@@ -84,7 +112,8 @@ class AgentControlApiTests(unittest.TestCase):
                 with mock.patch.object(agent_control_api._srm, "build_control_cards", side_effect=fake_build_cards):
                     enabled = asyncio.run(
                         agent_control_api.enable_agent_control(
-                            agent_control_api.AgentControlRequest(family_id="openclaw")
+                            agent_control_api.AgentControlRequest(family_id="openclaw"),
+                            self._request(origin="http://127.0.0.1:5173"),
                         )
                     )
                     self.assertTrue(enabled["routing_enabled"])
@@ -93,7 +122,8 @@ class AgentControlApiTests(unittest.TestCase):
 
                     disabled = asyncio.run(
                         agent_control_api.disable_agent_control(
-                            agent_control_api.AgentControlRequest(family_id="openclaw")
+                            agent_control_api.AgentControlRequest(family_id="openclaw"),
+                            self._request(origin="http://127.0.0.1:5173"),
                         )
                     )
                     self.assertFalse(disabled["routing_enabled"])
@@ -258,7 +288,7 @@ class AgentControlApiTests(unittest.TestCase):
         with mock.patch.object(agent_control_api._srm, "build_control_cards", side_effect=fake_rescan_build_cards):
             with mock.patch.object(agent_control_api._srm, "build_system_status", side_effect=fake_rescan_system_status):
                 with mock.patch.object(agent_control_api, "_runtime_request", side_effect=fake_runtime_request):
-                    _ = asyncio.run(agent_control_api.rescan_agents_control())
+                    _ = asyncio.run(agent_control_api.rescan_agents_control(self._request(origin="http://127.0.0.1:5173")))
 
         after_calls = {"cards": 0, "status": 0}
 
@@ -338,7 +368,8 @@ class AgentControlApiTests(unittest.TestCase):
                 with mock.patch.object(agent_control_api._srm, "build_control_cards", side_effect=disable_build_cards):
                     _ = asyncio.run(
                         agent_control_api.disable_agent_control(
-                            agent_control_api.AgentControlRequest(family_id="openclaw")
+                            agent_control_api.AgentControlRequest(family_id="openclaw"),
+                            self._request(origin="http://127.0.0.1:5173"),
                         )
                     )
 

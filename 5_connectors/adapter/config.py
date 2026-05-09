@@ -232,7 +232,7 @@ class Config(BaseModel):
     memory_backend: MemoryBackendConfig = MemoryBackendConfig()
 
     # Adapter 配置
-    adapter_host: str = "0.0.0.0"
+    adapter_host: str = os.getenv("OMNIMEMORA_ADAPTER_HOST", "127.0.0.1").strip() or "127.0.0.1"
     adapter_port: int = int(os.getenv("PORT", "18011"))
 
     # ========== 超时治理配置 ==========

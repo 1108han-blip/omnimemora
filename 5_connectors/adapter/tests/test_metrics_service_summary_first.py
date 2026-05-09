@@ -115,11 +115,13 @@ def test_metrics_summary_fallback_records_metrics_read_degraded(monkeypatch):
     monkeypatch.setattr(
         metrics_service,
         "_compute_metrics_summary_legacy",
-        lambda _tenant: {"token_saving_ratio": 0.0, "tokens_saved": 0, "request_count": 0, "avg_context_reduction": 0.0},
+        lambda _tenant: (_ for _ in ()).throw(AssertionError("all-tenant summary must not scan legacy meters")),
     )
 
     payload = metrics_service.compute_metrics_summary("all")
     assert payload["request_count"] == 0
+    assert payload["degraded"] is True
+    assert payload["degraded_reason"] == "summary_unavailable_no_historical_scan"
     assert degraded_reasons == ["summary_expired"]
 
 
@@ -237,11 +239,11 @@ def test_summary_fallback_path_uses_resolver_meters(monkeypatch):
     monkeypatch.setattr(
         metrics_service._metrics_read_resolver,
         "resolve_metrics_meters",
-        lambda **_kwargs: Result(),
+        lambda **_kwargs: (_ for _ in ()).throw(AssertionError("all-tenant summary must not scan meters")),
     )
     payload = metrics_service.compute_metrics_summary("all")
-    assert payload["request_count"] == 1
-    assert payload["tokens_saved"] == 30
+    assert payload["request_count"] == 0
+    assert payload["degraded_reason"] == "summary_unavailable_no_historical_scan"
 
 
 def test_system_reminder_only_request_is_wrapper_internal(monkeypatch):
