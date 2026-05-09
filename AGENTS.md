@@ -4,21 +4,30 @@
 
 Before any implementation or reporting work in this repo:
 
-1. Identify the active phase from the latest project handoff / current milestone docs.
-2. Read the working-principles and SOP docs for that active phase.
-3. Do **not** hardcode Phase 3 startup reads when the project has moved to a newer phase.
-4. If experiment data is involved, run:
+1. Identify the active product line from the latest current milestone, release, or cloud-local sync docs.
+2. Treat `7_docs/internal/phase6/plan/README.md` as the current historical index and post-phase6 governance entry unless a newer current milestone doc explicitly supersedes it.
+3. Read only the working-principles / SOP docs relevant to the current product line. For current local/runtime promotion work, use `docs/phase6/PROMOTION_USAGE_GOVERNANCE.md`.
+4. Do not read archived phase folders by default. Only open historical phase documents when the operator explicitly asks for that historical workstream or the current milestone directly references it.
+5. If experiment data is explicitly in scope, run:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\tools\verification\data_governance\run_all.ps1 -RunLabel "session-start" -Tenant all -Salt "<secret-salt>"
 ```
 
-### Phase 3 Compatibility Note
+## Current Product State Rule (Mandatory)
 
-Use the following only when you are explicitly operating on Phase 3 experiment flows:
+OmniMemora is currently a proprietary controlled-beta local-first product, not an archived experiment workspace.
 
-- `7_docs/internal/phase3/WORKING_PRINCIPLES_README.md`
-- `7_docs/internal/phase3/EXPERIMENT_DATA_GOVERNANCE_SOP.md`
+- Product goal: MVP first; token saving first; no complexity expansion.
+- Product surface split:
+  - `5173` = user control and display surface
+  - `18011` = product ingress after explicit user opt-in
+  - `8765` = internal memory plane
+- Distribution path: `https://doloclaw.com/download`.
+- Current release posture: closed beta / controlled beta; source stays private.
+- Any product downloaded to a user's local machine must have app-level automatic update management before normal downloadable release.
+- Manual desktop app replacement is not acceptable as a steady-state product update mechanism.
+- Cloud policy candidates remain candidate-only and must not silently replace local active policy.
 
 ## Data Handling Rule
 
