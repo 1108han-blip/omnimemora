@@ -521,6 +521,22 @@ def derive_observed_client_truth(raw: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def _activity_state_from_metric_and_process(
+    metric: Dict[str, Any],
+    *,
+    process_running: bool,
+) -> Dict[str, Any]:
+    if process_running:
+        return {
+            "active": True,
+            "last_seen_at": datetime.now(timezone.utc).isoformat(),
+        }
+    return {
+        "active": bool(metric.get("active", False)),
+        "last_seen_at": metric.get("last_seen_at"),
+    }
+
+
 def derive_truth_message(
     card: Dict[str, Any],
     integration_truth: str,
@@ -545,6 +561,8 @@ def derive_truth_message(
             return "已接入 MCP，但當前僅看到內部握手，未證明主對話經 OmniMemora。"
         if traffic_truth == "no_recent_evidence" and has_24h_value:
             return "已接入 MCP，24 小時內已有真實請求收益；最近 30 分鐘暫無工作請求。"
+        if card.get("running"):
+            return "已接入 MCP，檢測到客戶端正在運行，等待真實工作請求。"
         if routing_enabled:
             return "已接入 MCP，路由已開啟，等待真實工作請求。"
         return "已接入 MCP，當前無工作請求。"
@@ -557,6 +575,8 @@ def derive_truth_message(
             return "已接入並具備備份還原能力，但當前僅看到內部握手。"
         if traffic_truth == "no_recent_evidence" and has_24h_value:
             return "已接入並具備備份還原能力，24 小時內已有真實請求收益；最近 30 分鐘暫無工作請求。"
+        if card.get("running"):
+            return "已接入並具備備份還原能力，檢測到客戶端正在運行，等待真實工作請求。"
         if routing_enabled:
             return "已接入並具備備份還原能力，路由已開啟，等待真實工作請求。"
         return "已接入並具備備份還原能力，當前無工作請求。"
@@ -827,6 +847,8 @@ async def build_control_cards() -> List[Dict[str, Any]]:
         integration_truth = derive_integration_truth(raw)
         route_truth = derive_route_truth(route_state.routing_enabled(family_id), health_state)
         observed_client_truth = derive_observed_client_truth(raw)
+        process_running = bool(raw.get("running", False))
+        activity_state = _activity_state_from_metric_and_process(metric, process_running=process_running)
         truth_message = derive_truth_message(raw, integration_truth, route_truth, traffic_truth, metrics_24h)
 
         cards.append(
@@ -836,9 +858,10 @@ async def build_control_cards() -> List[Dict[str, Any]]:
                 "installed": bool(raw.get("installed")),
                 "routing_enabled": route_state.routing_enabled(family_id),
                 "detected": bool(raw.get("detected", True)),
-                "active": bool(metric.get("active", False)),
-                "last_seen_at": metric.get("last_seen_at"),
+                "active": activity_state["active"],
+                "last_seen_at": activity_state["last_seen_at"],
                 "health_state": health_state,
+                "process_running": process_running,
                 "backup_available": bool(raw.get("backup_available")),
                 "subagent_count_active": int(metric.get("subagent_count_active", 0)),
                 "subagent_count_total_visible": int(metric.get("subagent_count_total_visible", 0)),

@@ -321,6 +321,71 @@ def test_status_read_model_prefers_fresh_summary_when_available(monkeypatch):
     assert cards[0]["requests_24h"] == 1
 
 
+def test_status_read_model_surfaces_running_client_without_product_traffic(monkeypatch):
+    async def fake_runtime_request(_method, _path, payload=None):
+        return {
+            "agents": [
+                {
+                    "family_id": "claude_code",
+                    "display_name": "Claude Code",
+                    "installed": True,
+                    "running": True,
+                    "backup_available": True,
+                    "detected": True,
+                    "message": "",
+                }
+            ]
+        }
+
+    async def fake_health_state():
+        return "healthy"
+
+    class RouteState:
+        @staticmethod
+        def routing_enabled(_family_id):
+            return True
+
+    class CompileStore:
+        @staticmethod
+        def read_recent_compile_events(limit=5000, window_minutes=30):
+            return []
+
+    monkeypatch.setattr(status_read_model, "_read_family_window_summary", lambda: (None, "none", "summary_missing"))
+    monkeypatch.setattr(status_read_model, "_runtime_request", fake_runtime_request)
+    monkeypatch.setattr(status_read_model, "_runtime_health_state", fake_health_state)
+    monkeypatch.setattr(status_read_model, "build_metrics_index", lambda: {})
+    monkeypatch.setattr(status_read_model, "_get_agent_routing_state", lambda: RouteState())
+    monkeypatch.setattr(status_read_model, "_get_compile_store", lambda: CompileStore())
+    monkeypatch.setattr(status_read_model, "_collect_observed_family_meters", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(
+        status_read_model,
+        "_summarize_family_compile_events",
+        lambda *_args, **_kwargs: {"proxied_requests": 0, "compile_empty": 0, "bypassed": 0, "last_event_ts": None},
+    )
+    monkeypatch.setattr(
+        status_read_model,
+        "compute_family_24h_metrics",
+        lambda *_args, **_kwargs: {
+            "requests_24h": 0,
+            "saved_tokens_24h": 0,
+            "savings_ratio_24h": 0.0,
+            "last_request_at": None,
+            "observed_requests_24h": 0,
+        },
+    )
+    monkeypatch.setattr(status_read_model, "_record_degraded_path", lambda *_args, **_kwargs: None)
+
+    cards = asyncio.run(status_read_model.build_control_cards())
+
+    assert cards[0]["family_id"] == "claude_code"
+    assert cards[0]["process_running"] is True
+    assert cards[0]["active"] is True
+    assert cards[0]["last_seen_at"] is not None
+    assert cards[0]["traffic_truth"] == "no_recent_evidence"
+    assert cards[0]["requests_24h"] == 0
+    assert "等待真實工作請求" in cards[0]["truth_message"]
+
+
 def test_status_read_model_uses_stale_summary_before_legacy_fallback(monkeypatch):
     async def fake_runtime_request(_method, _path, payload=None):
         return {

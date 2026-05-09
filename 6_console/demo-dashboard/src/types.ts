@@ -36,6 +36,7 @@ export interface AgentControlCard {
   active: boolean;
   last_seen_at?: string | null;
   health_state: string;
+  process_running?: boolean;
   backup_available: boolean;
   subagent_count_active: number;
   subagent_count_total_visible: number;

@@ -1,10 +1,11 @@
-import type { RecentRequest } from '../types';
+import type { AgentControlCard, RecentRequest } from '../types';
 import { normalizeFamilyName, isInternalEvent, rankRecentRequests } from '../utils/familyNormalization';
 
 interface LiveRequestFlowProps {
   requests: RecentRequest[];
   onSelect: (request: RecentRequest) => void;
   selectedRequestId?: string | null;
+  runningAgents?: AgentControlCard[];
 }
 
 function requestClassLabel(cls: RecentRequest['request_class']): string {
@@ -19,7 +20,7 @@ function requestClassColor(cls: RecentRequest['request_class']): string {
   return 'text-zinc-400 dark:text-zinc-500';
 }
 
-export function LiveRequestFlow({ requests, onSelect, selectedRequestId = null }: LiveRequestFlowProps) {
+export function LiveRequestFlow({ requests, onSelect, selectedRequestId = null, runningAgents = [] }: LiveRequestFlowProps) {
   // Filter out internal events and normalize agent names
   const userFacingRequests = requests.filter(req => req.request_class !== 'internal' && !isInternalEvent(req.query, req.agent));
   const normalizedRequests = rankRecentRequests(userFacingRequests).map(req => ({
@@ -29,6 +30,24 @@ export function LiveRequestFlow({ requests, onSelect, selectedRequestId = null }
   const displayedRequests = normalizedRequests.slice(0, 10);
 
   if (displayedRequests.length === 0) {
+    const running = runningAgents.filter(agent => agent.process_running);
+    if (running.length > 0) {
+      return (
+        <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6">
+          <div className="text-sm font-medium text-zinc-700 dark:text-zinc-300">Client running, no product request yet</div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {running.map(agent => (
+              <span
+                key={agent.family_id}
+                className="rounded-full border border-zinc-200 bg-zinc-50 px-3 py-1 text-xs text-zinc-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
+              >
+                {normalizeFamilyName(agent.family_id)}
+              </span>
+            ))}
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6">
         <div className="text-sm text-zinc-400">No recent task requests</div>
@@ -40,7 +59,10 @@ export function LiveRequestFlow({ requests, onSelect, selectedRequestId = null }
     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
       <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Live Request Flow</h3>
-        <span className="text-xs text-zinc-400">{displayedRequests.length} user-visible requests</span>
+        <span className="text-xs text-zinc-400">
+          {displayedRequests.length} user-visible requests
+          {runningAgents.some(agent => agent.process_running) ? ` / ${runningAgents.filter(agent => agent.process_running).length} running` : ''}
+        </span>
       </div>
       <div className="divide-y divide-zinc-100 dark:divide-zinc-800 max-h-64 overflow-y-auto">
         {displayedRequests.map((req) => (

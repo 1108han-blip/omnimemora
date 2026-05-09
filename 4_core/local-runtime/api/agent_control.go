@@ -23,6 +23,7 @@ type agentControlStatus struct {
 	DisplayName     string `json:"display_name"`
 	Detected        bool   `json:"detected"`
 	Installed       bool   `json:"installed"`
+	Running         bool   `json:"running"`
 	BackupAvailable bool   `json:"backup_available"`
 	ConfigPath      string `json:"config_path,omitempty"`
 	Message         string `json:"message,omitempty"`
@@ -78,6 +79,7 @@ func buildAgentControlStatuses() []agentControlStatus {
 			DisplayName:     info.Name,
 			Detected:        true,
 			Installed:       attach.IsAttached(info.Type, productPort),
+			Running:         info.Running,
 			BackupAvailable: attach.BackupExists(info.Type),
 			ConfigPath:      configPath,
 		})
@@ -99,6 +101,7 @@ func statusForAgent(agentType attach.AgentType) agentControlStatus {
 		DisplayName:     displayName,
 		Detected:        false,
 		Installed:       attach.IsAttached(agentType, attach.ProductAdapterPort()),
+		Running:         false,
 		BackupAvailable: attach.BackupExists(agentType),
 		ConfigPath:      configPath,
 		Message:         "agent not detected on this machine",

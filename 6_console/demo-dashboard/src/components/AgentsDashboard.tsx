@@ -306,6 +306,7 @@ export function AgentsDashboard({ highlightFamilyId }: AgentsDashboardProps) {
                   <div>installed: <span className="font-mono">{String(card.installed)}</span></div>
                   <div>detected: <span className="font-mono">{String(card.detected)}</span></div>
                   <div>active: <span className="font-mono">{String(card.active)}</span></div>
+                  <div>running: <span className="font-mono">{String(card.process_running ?? false)}</span></div>
                   <div>backup: <span className="font-mono">{String(card.backup_available)}</span></div>
                   <div>health: <span className="font-mono">{card.health_state}</span></div>
                   <div>last_seen: <span className="font-mono">{formatRelativeTime(card.last_seen_at)}</span></div>

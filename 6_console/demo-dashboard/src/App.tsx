@@ -583,7 +583,12 @@ export default function App() {
               <h2 className="text-sm font-semibold text-zinc-500 uppercase tracking-wider mb-3">
                 ③ Live Request Flow
               </h2>
-              <LiveRequestFlow requests={requests} onSelect={handleSelectRequest} selectedRequestId={_selectedRequest?.request_id ?? null} />
+              <LiveRequestFlow
+                requests={requests}
+                runningAgents={agentControls.filter(ctrl => ctrl.process_running)}
+                onSelect={handleSelectRequest}
+                selectedRequestId={_selectedRequest?.request_id ?? null}
+              />
             </section>
 
             <section className="rounded-xl border border-zinc-200 bg-white px-5 py-4 dark:border-zinc-700 dark:bg-zinc-900">

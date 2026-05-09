@@ -14,9 +14,9 @@ import (
 type AgentType string
 
 const (
-	AgentCodex   AgentType = "codex"
-	AgentClaude  AgentType = "claude"
-	AgentCursor  AgentType = "cursor"
+	AgentCodex    AgentType = "codex"
+	AgentClaude   AgentType = "claude"
+	AgentCursor   AgentType = "cursor"
 	AgentOpenClaw AgentType = "openclaw"
 )
 
@@ -53,6 +53,7 @@ func DetectAgents() []AgentInfo {
 // detectCodex detects Codex agent
 func detectCodex() AgentInfo {
 	info := AgentInfo{Type: AgentCodex, Name: "Codex", Installed: false}
+	info.Running = isProcessRunning("codex")
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -77,6 +78,7 @@ func detectCodex() AgentInfo {
 // detectClaude detects Claude Code agent
 func detectClaude() AgentInfo {
 	info := AgentInfo{Type: AgentClaude, Name: "Claude Code", Installed: false}
+	info.Running = isProcessRunning("claude") || isProcessRunning("claude-code") || isProcessRunning("claude_code")
 
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -107,6 +109,7 @@ func detectClaude() AgentInfo {
 // detectCursor detects Cursor AI agent
 func detectCursor() AgentInfo {
 	info := AgentInfo{Type: AgentCursor, Name: "Cursor", Installed: false}
+	info.Running = isProcessRunning("cursor") || isProcessRunning("Cursor")
 
 	home, err := os.UserHomeDir()
 	if err != nil {
