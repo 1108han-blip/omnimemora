@@ -20,6 +20,8 @@ const MEDIA_FILES = {
   "omnimemora-promo-guide.mp4": PROMO_VIDEO_FILENAME,
   "omnimemora-promo-guide-poster.png": "omnimemora-promo-guide-poster.png"
 };
+const DOWNLOAD_EVENT_PREFIX = "download:v1:";
+const DOWNLOAD_EVENT_RETENTION_SECONDS = 60 * 60 * 24 * 180;
 
 function json(payload, init = {}) {
   return new Response(JSON.stringify(payload), {
@@ -30,6 +32,122 @@ function json(payload, init = {}) {
       ...(init.headers || {})
     }
   });
+}
+
+function downloadStatsStore() {
+  return typeof DOWNLOAD_STATS === "undefined" ? null : DOWNLOAD_STATS;
+}
+
+function classifyClient(userAgent) {
+  const value = String(userAgent || "").toLowerCase();
+  if (!value) return "unknown";
+  if (value.includes("bot") || value.includes("spider") || value.includes("crawler")) return "bot";
+  if (value.includes("curl") || value.includes("wget") || value.includes("python") || value.includes("httpie")) return "automation";
+  if (value.includes("mozilla") || value.includes("safari") || value.includes("chrome") || value.includes("firefox")) return "browser";
+  return "unknown";
+}
+
+function trackDownloadAttempt(event, url, key, filename) {
+  const store = downloadStatsStore();
+  if (!store) return;
+  const now = new Date();
+  const date = now.toISOString().slice(0, 10);
+  const id = crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  const userAgent = event.request.headers.get("user-agent") || "";
+  const payload = {
+    schema_version: "omnimemora-download-event-v1",
+    timestamp: now.toISOString(),
+    date,
+    product: "omnimemora",
+    version: PACKAGE_VERSION,
+    file_key: key,
+    filename,
+    path: url.pathname,
+    client_type: classifyClient(userAgent),
+    country: event.request.cf?.country || "unknown"
+  };
+  const eventKey = `${DOWNLOAD_EVENT_PREFIX}${date}:${key}:${id}`;
+  event.waitUntil(
+    store.put(eventKey, JSON.stringify(payload), {
+      expirationTtl: DOWNLOAD_EVENT_RETENTION_SECONDS
+    }).catch(() => undefined)
+  );
+}
+
+function emptyStats(days) {
+  return {
+    schema_version: "omnimemora-download-stats-v1",
+    source: "worker-kv-download-attempts",
+    generated_at: new Date().toISOString(),
+    window_days: days,
+    retention_days: Math.floor(DOWNLOAD_EVENT_RETENTION_SECONDS / 86400),
+    total_attempts: 0,
+    product_file_attempts: 0,
+    desktop_installer_attempts: 0,
+    browser_like_attempts: 0,
+    automation_or_bot_attempts: 0,
+    by_file: {},
+    by_version: {},
+    by_day: {},
+    note: "Counts download redirect attempts at /download/file/...; this does not prove the redirected R2 file was fully downloaded."
+  };
+}
+
+function addStat(bucket, key, amount = 1) {
+  bucket[key] = (bucket[key] || 0) + amount;
+}
+
+async function downloadStatsResponse(url) {
+  const store = downloadStatsStore();
+  if (!store) {
+    return json(
+      {
+        schema_version: "omnimemora-download-stats-v1",
+        status: "not_configured",
+        message: "DOWNLOAD_STATS KV binding is not configured."
+      },
+      { status: 503 }
+    );
+  }
+
+  const requestedDays = Number(url.searchParams.get("days") || "7");
+  const days = Number.isFinite(requestedDays) ? Math.min(30, Math.max(1, Math.floor(requestedDays))) : 7;
+  const since = new Date(Date.now() - days * 86400 * 1000);
+  const stats = emptyStats(days);
+  let cursor;
+  do {
+    const page = await store.list({ prefix: DOWNLOAD_EVENT_PREFIX, cursor });
+    for (const item of page.keys) {
+      const raw = await store.get(item.name);
+      if (!raw) continue;
+      let event;
+      try {
+        event = JSON.parse(raw);
+      } catch {
+        continue;
+      }
+      const timestamp = new Date(event.timestamp);
+      if (!Number.isFinite(timestamp.getTime()) || timestamp < since) continue;
+      stats.total_attempts += 1;
+      if (event.file_key !== "sha256sums" && event.file_key !== "release-index" && event.file_key !== "latest-manifest" && event.file_key !== "version-manifest") {
+        stats.product_file_attempts += 1;
+      }
+      if (event.file_key === "darwin-arm64") {
+        stats.desktop_installer_attempts += 1;
+      }
+      if (event.client_type === "browser") {
+        stats.browser_like_attempts += 1;
+      }
+      if (event.client_type === "automation" || event.client_type === "bot") {
+        stats.automation_or_bot_attempts += 1;
+      }
+      addStat(stats.by_file, event.file_key || "unknown");
+      addStat(stats.by_version, event.version || "unknown");
+      addStat(stats.by_day, event.date || timestamp.toISOString().slice(0, 10));
+    }
+    cursor = page.list_complete ? undefined : page.cursor;
+  } while (cursor);
+  return json(stats);
 }
 
 function htmlResponse(html, init = {}) {
@@ -646,6 +764,7 @@ function healthResponse(url) {
     release_posture: "proprietary-controlled-beta",
     capabilities: {
       download_entry: true,
+      download_stats: Boolean(downloadStatsStore()),
       candidate_pointer_reserved: true,
       candidate_auto_promote: false,
       cloud_compile: false
@@ -676,14 +795,21 @@ function notFoundResponse(url) {
   );
 }
 
-function downloadRedirectResponse(url) {
+function downloadRedirectResponse(event, url) {
   const parts = url.pathname.split("/").filter(Boolean);
   const key = parts[2] || "";
   const filename = DOWNLOAD_FILES[key];
   if (!filename) {
     return notFoundResponse(url);
   }
-  return Response.redirect(`${DOWNLOAD_BASE_URL}/${filename}`, 302);
+  trackDownloadAttempt(event, url, key, filename);
+  return new Response(null, {
+    status: 302,
+    headers: {
+      location: `${DOWNLOAD_BASE_URL}/${filename}`,
+      "cache-control": "no-store"
+    }
+  });
 }
 
 function mediaRedirectResponse(url) {
@@ -929,7 +1055,11 @@ addEventListener("fetch", (event) => {
     return;
   }
   if (url.pathname.startsWith("/download/file/")) {
-    event.respondWith(downloadRedirectResponse(url));
+    event.respondWith(downloadRedirectResponse(event, url));
+    return;
+  }
+  if (url.pathname === "/api/download/stats") {
+    event.respondWith(downloadStatsResponse(url));
     return;
   }
   if (url.pathname.startsWith("/media/")) {

@@ -19,6 +19,7 @@ import requests
 ACCOUNT_ID = os.getenv("CLOUDFLARE_ACCOUNT_ID", "066fdd55ca132844a1a136e3f90ae0aa")
 BUCKET = os.getenv("OMNIMEMORA_RELEASE_BUCKET", "doloclaw-assets-v2")
 WORKER_NAME = os.getenv("OMNIMEMORA_CONTROL_ENTRY_WORKER", "omnimemora-control-entry")
+DOWNLOAD_STATS_KV_TITLE = os.getenv("OMNIMEMORA_DOWNLOAD_STATS_KV", "omnimemora-download-stats")
 SUPPORT_EMAIL = os.getenv("OMNIMEMORA_BETA_SUPPORT_EMAIL", "support@doloclaw.com")
 API_BASE = "https://api.cloudflare.com/client/v4"
 R2_ENDPOINT = f"https://{ACCOUNT_ID}.r2.cloudflarestorage.com"
@@ -89,6 +90,20 @@ def delete_token(token_id: str) -> None:
         print(f"warning: failed to delete temporary token {token_id}: {exc}", file=sys.stderr)
 
 
+def ensure_download_stats_namespace() -> str:
+    namespaces = cf_request("GET", f"/accounts/{ACCOUNT_ID}/storage/kv/namespaces")
+    for namespace in namespaces:
+        if namespace.get("title") == DOWNLOAD_STATS_KV_TITLE:
+            return namespace["id"]
+    created = cf_request(
+        "POST",
+        f"/accounts/{ACCOUNT_ID}/storage/kv/namespaces",
+        data=json.dumps({"title": DOWNLOAD_STATS_KV_TITLE}),
+    )
+    print(f"created kv namespace: {DOWNLOAD_STATS_KV_TITLE}")
+    return created["id"]
+
+
 def upload_artifacts(package_version: str, token_id: str, token_value: str) -> None:
     secret = hashlib.sha256(token_value.encode()).hexdigest()
     client = boto3.client(
@@ -139,6 +154,7 @@ def upload_artifacts(package_version: str, token_id: str, token_value: str) -> N
 
 
 def deploy_worker(package_version: str) -> None:
+    stats_namespace_id = ensure_download_stats_namespace()
     template = WORKER_TEMPLATE.read_text()
     script = (
         template.replace("__PACKAGE_VERSION__", package_version)
@@ -146,7 +162,23 @@ def deploy_worker(package_version: str) -> None:
     )
 
     files = {
-        "metadata": (None, json.dumps({"body_part": "script", "compatibility_date": "2026-04-23"}), "application/json"),
+        "metadata": (
+            None,
+            json.dumps(
+                {
+                    "body_part": "script",
+                    "compatibility_date": "2026-04-23",
+                    "bindings": [
+                        {
+                            "type": "kv_namespace",
+                            "name": "DOWNLOAD_STATS",
+                            "namespace_id": stats_namespace_id,
+                        }
+                    ],
+                }
+            ),
+            "application/json",
+        ),
         "script": ("worker.js", script, "application/javascript"),
     }
     response = requests.put(
