@@ -353,3 +353,28 @@ async def disable_agent_control(request: AgentControlRequest, http_request: Requ
     updated["message"] = "routing disabled"
     _invalidate_agents_control_snapshot()
     return updated
+
+
+@router.post("/agents/control/repair")
+async def repair_agent_control(request: AgentControlRequest, http_request: Request):
+    """
+    integration_action: repair an agent attachment after config drift.
+    Reuses install path to re-apply expected local attach config.
+    """
+    _require_control_action_authorization(http_request)
+    _invalidate_agents_control_snapshot()
+    try:
+        await _runtime_request("POST", "/agents/control/install", {"family_id": request.family_id})
+        cards = await _srm.build_control_cards()
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text
+        raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"runtime repair unavailable: {exc}") from exc
+
+    _invalidate_agents_control_snapshot()
+    card = _find_card(cards, request.family_id)
+    if card is None:
+        raise HTTPException(status_code=404, detail=f"family not found after repair: {request.family_id}")
+    card["message"] = "attachment repaired"
+    return card

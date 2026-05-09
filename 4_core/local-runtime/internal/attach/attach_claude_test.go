@@ -111,3 +111,54 @@ func TestAttachClaudeRemovesStaleProductAnthropicBaseURL(t *testing.T) {
 		t.Fatalf("expected model preserved, got %#v", envCfg["ANTHROPIC_MODEL"])
 	}
 }
+
+func TestIsAttachedClaudeReturnsFalseWhenBaseURLDriftsToDirectUpstream(t *testing.T) {
+	tmpHome := t.TempDir()
+	configPath := filepath.Join(tmpHome, ".claude", "settings.json")
+	t.Setenv("HOME", tmpHome)
+
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+
+	seed := []byte(`{
+  "memory": {
+    "provider": "omnimemora",
+    "endpoint": "http://127.0.0.1:18011"
+  },
+  "env": {
+    "ANTHROPIC_BASE_URL": "https://api.minimaxi.com/anthropic"
+  }
+}`)
+	if err := os.WriteFile(configPath, seed, 0o644); err != nil {
+		t.Fatalf("failed to seed config: %v", err)
+	}
+
+	if IsAttached(AgentClaude, 18011) {
+		t.Fatalf("expected drifted direct base_url to be treated as detached")
+	}
+}
+
+func TestIsAttachedClaudeAllowsAttachedStateWithoutExplicitBaseURL(t *testing.T) {
+	tmpHome := t.TempDir()
+	configPath := filepath.Join(tmpHome, ".claude", "settings.json")
+	t.Setenv("HOME", tmpHome)
+
+	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
+		t.Fatalf("failed to create config dir: %v", err)
+	}
+
+	seed := []byte(`{
+  "memory": {
+    "provider": "omnimemora",
+    "endpoint": "http://127.0.0.1:18011"
+  }
+}`)
+	if err := os.WriteFile(configPath, seed, 0o644); err != nil {
+		t.Fatalf("failed to seed config: %v", err)
+	}
+
+	if !IsAttached(AgentClaude, 18011) {
+		t.Fatalf("expected attached when memory points to omnimemora and no conflicting base_url exists")
+	}
+}

@@ -260,6 +260,14 @@ func IsAttached(agent AgentType, port int) bool {
 		if mem, ok := cfg["memory"]; ok {
 			if memMap, ok := mem.(map[string]interface{}); ok {
 				if provider, ok := memMap["provider"]; ok && provider == "omnimemora" {
+					// Drift guard: third-party edits may repoint Claude LLM traffic directly
+					// upstream while memory still says "omnimemora". Treat that as detached
+					// so UI status can surface "attach no longer effective".
+					if envCfg, ok := cfg["env"].(map[string]interface{}); ok {
+						if baseURL, ok := envCfg["ANTHROPIC_BASE_URL"].(string); ok && strings.TrimSpace(baseURL) != "" && !isProductAdapterBaseURL(baseURL) {
+							return false
+						}
+					}
 					return true
 				}
 			}

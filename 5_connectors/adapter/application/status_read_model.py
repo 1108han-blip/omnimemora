@@ -878,6 +878,8 @@ async def build_control_cards() -> List[Dict[str, Any]]:
                 "traffic_truth": traffic_truth,
                 "observed_client_truth": observed_client_truth,
                 "truth_message": truth_message,
+                "drifted": bool(raw.get("detected", True)) and bool(raw.get("backup_available")) and not bool(raw.get("installed")),
+                "drift_reason": "config_overwritten_after_attach" if (bool(raw.get("detected", True)) and bool(raw.get("backup_available")) and not bool(raw.get("installed"))) else None,
                 # Scope identity fields
                 "identity_scope": "family",
                 "scope_note": _derive_scope_note(family_id),
