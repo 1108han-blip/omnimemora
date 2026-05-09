@@ -77,6 +77,7 @@ from ..trace_context import build_trace_event, get_request_context
 from ..trace_events import append_trace_event
 from ..backends.base import MemoryWriteRequest, MemoryBackend
 from ..backends.factory import create_backend
+from ..task_classifier import classify_task
 
 def _get_compile_orchestrator():
     return __import__("5_connectors.adapter.application.compile_orchestrator", fromlist=["dummy"])
@@ -694,6 +695,8 @@ _HOP_BY_HOP_HEADERS = {
     "trailer",
     "transfer-encoding",
     "upgrade",
+    "content-length",
+    "content-encoding",
 }
 
 
@@ -2014,7 +2017,8 @@ async def _auto_write_internal_work_memory(
             _internal_memory_write_dedup.pop(key, None)
 
     result_summary = _extract_upstream_result_summary(upstream_resp)
-    task_type = str((compile_meta or {}).get("task_type") or _classify_task_type(query) or "continuation")
+    classification = classify_task(query)
+    task_type = str((compile_meta or {}).get("task_type") or classification.task_type or "continuation")
     content = _build_internal_memory_content(
         task_type=task_type,
         user_visible_query=query,

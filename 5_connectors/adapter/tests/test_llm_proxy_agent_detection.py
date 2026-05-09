@@ -66,6 +66,21 @@ class TestLlmProxyAgentDetection(unittest.TestCase):
 
         self.assertEqual(detected, "openclaw")
 
+    def test_safe_passthrough_headers_drops_transport_lengths(self):
+        headers = httpx.Headers(
+            {
+                "content-length": "12",
+                "content-encoding": "gzip",
+                "x-ratelimit-remaining": "99",
+            }
+        )
+
+        forwarded = llm_proxy._safe_passthrough_headers(headers)
+
+        self.assertNotIn("content-length", {key.lower() for key in forwarded})
+        self.assertNotIn("content-encoding", {key.lower() for key in forwarded})
+        self.assertEqual(forwarded["x-ratelimit-remaining"], "99")
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -88,7 +103,14 @@ class TestOpenClawRouteFallback(unittest.IsolatedAsyncioTestCase):
 
         request = _Req()
 
-        async def _fake_compile(payload, agent_id, session_id=None, request_id=None, trace_id=None):
+        async def _fake_compile(
+            payload,
+            agent_id,
+            session_id=None,
+            access_plan=None,
+            request_id=None,
+            trace_id=None,
+        ):
             return payload, {
                 "compile_status": "compile_skipped",
                 "selected_memory_count": 0,
