@@ -993,6 +993,7 @@ function downloadHtml() {
       <h2>Install Steps</h2>
       <ul>
         <li>Download the installer for your platform.</li>
+        <li>On macOS controlled beta builds, use System Settings privacy/security approval if Gatekeeper blocks first launch.</li>
         <li>Open OmniMemora from the desktop app.</li>
         <li>Use the app status screen for startup, repair, update, and feedback.</li>
       </ul>
@@ -1000,7 +1001,8 @@ function downloadHtml() {
       <h2>Known Limits</h2>
       <ul>
         <li>This is a controlled beta installer, not a public production release.</li>
-        <li>The desktop app checks the release manifest, surfaces app updates in-product, verifies installer integrity, and hands installation off to the operating system.</li>
+        <li>macOS beta builds are ad-hoc signed and updater-signed, but not Apple Developer ID notarized; users may need to approve first launch manually.</li>
+        <li>The desktop app checks the release manifest, surfaces app updates in-product, verifies signed updater artifacts, and installs app updates through Tauri updater.</li>
         <li>Cloud policy candidates are visible but are not auto-promoted over local active policy.</li>
         <li>Feedback should include version, system, <code>request_id</code>, <code>error_code</code>, and reproduction steps.</li>
       </ul>

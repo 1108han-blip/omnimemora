@@ -11,8 +11,9 @@ This shell provides the local desktop control entry for service status, explicit
   - runtime: `127.0.0.1:8765`
   - adapter: `127.0.0.1:18011`
   - UI: `127.0.0.1:5173`
-- Start/stop/restart, manifest update, desktop installer handoff, rollback, and agent connect/disconnect commands call the local desktop host.
+- Start/stop/restart, manifest update, signed Tauri desktop updater, rollback, and agent connect/disconnect commands call the local desktop host.
 - Feedback uses `support@doloclaw.com` with version and service state prefilled.
+- macOS controlled beta builds use free ad-hoc app signing plus Tauri updater signing. They are not Apple Developer ID notarized, so first launch may require manual approval in System Settings.
 
 ## Validation
 
@@ -31,4 +32,6 @@ On macOS arm64, `npm run tauri:build` produces:
 
 ```text
 src-tauri/target/release/bundle/dmg/OmniMemora Desktop_1.0.0-beta.11_aarch64.dmg
+src-tauri/target/release/bundle/macos/OmniMemora Desktop.app.tar.gz
+src-tauri/target/release/bundle/macos/OmniMemora Desktop.app.tar.gz.sig
 ```

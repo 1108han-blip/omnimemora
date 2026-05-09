@@ -2,7 +2,8 @@ OMNIMEMORA CONTROLLED BETA KNOWN ISSUES
 Package version: {{PACKAGE_VERSION}}
 
 - This is a controlled desktop beta package, not a production release.
-- Normal downloadable app releases are blocked unless desktop-shell update management is app-level and automatic.
+- macOS builds are ad-hoc signed and updater-signed, but not Apple Developer ID notarized; first launch may require manual System Settings approval.
+- Normal downloadable app releases are blocked unless signed desktop updater artifacts are hosted and verified end-to-end.
 - Local component updates are manifest-based and require explicit user confirmation.
 - Failed component updates must roll back to the previous local component set.
 - Cloud-enhanced candidate source remains optional; local operation is the primary path.
