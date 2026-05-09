@@ -11,6 +11,7 @@ use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+use tauri_plugin_updater::UpdaterExt;
 
 const APP_VERSION: &str = "1.0.0-beta.11";
 const SUPPORT_EMAIL: &str = "support@doloclaw.com";
@@ -525,7 +526,7 @@ fn update_statuses() -> Vec<UpdateLayerStatus> {
             current_version: APP_VERSION.to_string(),
             available_version: available.clone(),
             status: desktop_status.to_string(),
-            detail: "桌面壳会检查线上 release manifest；发现新版本后下载并校验安装器，再交给系统安装。".to_string(),
+            detail: "桌面壳使用 Tauri updater 检查、签名校验、下载并安装桌面 App 更新。".to_string(),
         },
         UpdateLayerStatus {
             layer: "local_components",
@@ -837,46 +838,6 @@ fn manifest_package(manifest: &Value, platform: &str) -> Result<(String, String,
     Ok((package.to_string(), sha.to_string(), url.to_string()))
 }
 
-fn desktop_installer_manifest(
-    manifest: &Value,
-    platform: &str,
-) -> Result<(String, String, String), String> {
-    let entry = manifest
-        .get("desktop_installers")
-        .and_then(|value| value.get(platform))
-        .ok_or_else(|| format!("release manifest 不包含当前平台 {platform} 的桌面安装器。"))?;
-    let package = entry
-        .get("package")
-        .and_then(Value::as_str)
-        .ok_or_else(|| format!("{platform} 桌面安装器 manifest 缺少 package。"))?;
-    let sha = entry
-        .get("sha256")
-        .and_then(Value::as_str)
-        .ok_or_else(|| format!("{platform} 桌面安装器 manifest 缺少 sha256。"))?;
-    let url = entry
-        .get("download_url")
-        .and_then(Value::as_str)
-        .ok_or_else(|| format!("{platform} 桌面安装器 manifest 缺少 download_url。"))?;
-    Ok((package.to_string(), sha.to_string(), url.to_string()))
-}
-
-fn open_installer(path: &Path) -> Result<(), String> {
-    let command = if cfg!(target_os = "macos") {
-        let mut command = Command::new("open");
-        command.arg(path);
-        command
-    } else if cfg!(target_os = "windows") {
-        let mut command = Command::new("cmd");
-        command.args(["/C", "start", ""]).arg(path);
-        command
-    } else {
-        let mut command = Command::new("xdg-open");
-        command.arg(path);
-        command
-    };
-    run_capture(command, "打开桌面安装器").map(|_| ())
-}
-
 fn unpack_zip(zip_path: &Path, dest: &Path) -> Result<(), String> {
     if dest.exists() {
         fs::remove_dir_all(dest)
@@ -1144,7 +1105,7 @@ fn check_for_updates() -> DesktopCommandResult {
                 .and_then(Value::as_str)
                 .unwrap_or("unknown");
             let desktop_message = if version_is_newer(version, APP_VERSION) {
-                "桌面 App 有新版可用；当前构建尚未提供产品级自动更新，不能把打开安装器视为完成更新。"
+                "桌面 App 有新版可用；可使用产品内 updater 下载、签名校验并安装。"
             } else {
                 "桌面 App 已是当前版本。"
             };
@@ -1162,44 +1123,37 @@ fn check_for_updates() -> DesktopCommandResult {
 }
 
 #[tauri::command]
-fn install_desktop_update() -> DesktopCommandResult {
-    let result = (|| -> Result<String, String> {
+async fn install_desktop_update(app: AppHandle) -> DesktopCommandResult {
+    let result = async {
         let platform = platform_id();
         if platform == "unsupported" {
             return Err("当前平台暂未支持桌面 App 自动更新。".to_string());
         }
-        let manifest = fetch_latest_manifest().or_else(|_| {
-            release_manifest_from_disk()
-                .ok_or_else(|| "无法获取线上或本地 release manifest。".to_string())
-        })?;
-        let version = manifest_version(&manifest)?;
-        if !version_is_newer(&version, APP_VERSION) {
-            return Ok(format!("桌面 App 已是最新版本：{version}。"));
-        }
-        if std::env::var("OMNIMEMORA_ALLOW_MANUAL_DESKTOP_INSTALLER")
-            .map(|value| value == "1")
-            .unwrap_or(false)
-            != true
+        let updater = app
+            .updater()
+            .map_err(|err| format!("桌面 App updater 初始化失败：{err}"))?;
+        let Some(update) = updater
+            .check()
+            .await
+            .map_err(|err| format!("桌面 App updater 检查失败：{err}"))?
+        else {
+            return Ok(format!("桌面 App 已是最新版本：{APP_VERSION}。"));
+        };
+        let version = update.version.clone();
+        update
+            .download_and_install(|_, _| {}, || {})
+            .await
+            .map_err(|err| format!("桌面 App updater 安装失败：{err}"))?;
+        eprintln!("OmniMemora desktop update {version} installed; restarting app.");
+        app.restart();
+        #[allow(unreachable_code)]
         {
-            return Err(format!(
-                "桌面 App {version} 有新版，但当前构建未实现产品级自动更新管理；已阻止仅打开安装器的伪自动更新路径。"
-            ));
+            Ok(format!(
+                "桌面 App {version} 已通过 Tauri updater 签名校验并安装。应用将重启以进入新版本；用户 memory 与本地产品数据不会被删除。"
+            ))
         }
-        let (package, expected_sha, download_url) =
-            desktop_installer_manifest(&manifest, platform)?;
-        let installer_path = downloads_dir().join(&package);
-        curl_to_file(&download_url, &installer_path)?;
-        let actual_sha = sha256_file(&installer_path)?;
-        if actual_sha != expected_sha {
-            return Err(format!(
-                "桌面安装器 SHA256 不匹配，已阻止安装。expected={expected_sha} actual={actual_sha}"
-            ));
-        }
-        open_installer(&installer_path)?;
-        Ok(format!(
-            "桌面 App {version} 安装器已下载并通过 SHA256 校验，已交给系统安装器打开。用户 memory 与本地产品数据不会被删除。"
-        ))
-    })();
+    }
+    .await;
 
     match result {
         Ok(message) => command_result(true, message),
@@ -1385,6 +1339,7 @@ fn setup_desktop_shell(app: &mut tauri::App) -> Result<(), Box<dyn std::error::E
 
 fn main() {
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(setup_desktop_shell)
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {

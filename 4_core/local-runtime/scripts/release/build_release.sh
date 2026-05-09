@@ -12,13 +12,17 @@ DOWNLOAD_BASE_URL=${OMNIMEMORA_DOWNLOAD_BASE_URL:-"https://assets.doloclaw.com/o
 PUBLISHED_AT=${OMNIMEMORA_RELEASE_PUBLISHED_AT:-"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"}
 DESKTOP_DMG_SOURCE="$REPO_ROOT/6_console/desktop-shell/src-tauri/target/release/bundle/dmg/OmniMemora Desktop_${PACKAGE_VERSION}_aarch64.dmg"
 DESKTOP_DMG_NAME="OmniMemora-Desktop-${PACKAGE_VERSION}-darwin-arm64.dmg"
+DESKTOP_UPDATER_SOURCE="$REPO_ROOT/6_console/desktop-shell/src-tauri/target/release/bundle/macos/OmniMemora Desktop.app.tar.gz"
+DESKTOP_UPDATER_SIG_SOURCE="$DESKTOP_UPDATER_SOURCE.sig"
+DESKTOP_UPDATER_NAME="OmniMemora-Desktop-${PACKAGE_VERSION}-darwin-aarch64.app.tar.gz"
+DESKTOP_UPDATER_SIG_NAME="$DESKTOP_UPDATER_NAME.sig"
 DESKTOP_AUTO_UPDATE_VERIFIED=${OMNIMEMORA_DESKTOP_AUTO_UPDATE_VERIFIED:-"0"}
 
 echo "Building OmniMemora controlled beta package set: $PACKAGE_VERSION"
 
 if [ "$DESKTOP_AUTO_UPDATE_VERIFIED" != "1" ]; then
     echo "Blocked: local-download products must include verified app-level automatic update before release packaging." >&2
-    echo "Set OMNIMEMORA_DESKTOP_AUTO_UPDATE_VERIFIED=1 only after the desktop app can detect, notify, download, verify, install, and recover from product updates." >&2
+    echo "Set OMNIMEMORA_DESKTOP_AUTO_UPDATE_VERIFIED=1 only after Tauri updater artifacts are signed, hosted, and verified end-to-end." >&2
     exit 1
 fi
 
@@ -176,6 +180,17 @@ else
     echo "Warning: macOS arm64 desktop installer DMG not found: $DESKTOP_DMG_SOURCE" >&2
 fi
 
+require_path "$DESKTOP_UPDATER_SOURCE" "Tauri updater macOS archive is required for app-level automatic updates. Build with TAURI_SIGNING_PRIVATE_KEY and createUpdaterArtifacts=true."
+require_path "$DESKTOP_UPDATER_SIG_SOURCE" "Tauri updater signature is required; unsigned app updates are not allowed."
+cp "$DESKTOP_UPDATER_SOURCE" "$RELEASE_DIR/$DESKTOP_UPDATER_NAME"
+cp "$DESKTOP_UPDATER_SIG_SOURCE" "$RELEASE_DIR/$DESKTOP_UPDATER_SIG_NAME"
+mkdir -p "$RELEASE_DIR/desktop-updater"
+(
+    cd "$RELEASE_DIR"
+    shasum -a 256 "$DESKTOP_UPDATER_NAME" >> SHA256SUMS.txt
+    shasum -a 256 "$DESKTOP_UPDATER_SIG_NAME" >> SHA256SUMS.txt
+)
+
 sha_for() {
     local filename="$1"
     awk -v name="$filename" '$2 == name {print $1}' "$RELEASE_DIR/SHA256SUMS.txt"
@@ -187,11 +202,38 @@ write_release_manifest() {
     local darwin_amd64_sha
     local windows_amd64_sha
     local desktop_dmg_sha
+    local desktop_updater_sha
+    local desktop_updater_sig_sha
 
     darwin_arm64_sha="$(sha_for omnimemora-darwin-arm64.zip)"
     darwin_amd64_sha="$(sha_for omnimemora-darwin-amd64.zip)"
     windows_amd64_sha="$(sha_for omnimemora-windows-amd64.zip)"
     desktop_dmg_sha="$(sha_for "$DESKTOP_DMG_NAME")"
+    desktop_updater_sha="$(sha_for "$DESKTOP_UPDATER_NAME")"
+    desktop_updater_sig_sha="$(sha_for "$DESKTOP_UPDATER_SIG_NAME")"
+    local desktop_updater_signature
+    desktop_updater_signature="$(tr -d '\r\n' < "$RELEASE_DIR/$DESKTOP_UPDATER_SIG_NAME")"
+
+    python3 - "$RELEASE_DIR/desktop-updater/darwin-aarch64.json" "$PACKAGE_VERSION" "$PUBLISHED_AT" "$DOWNLOAD_BASE_URL/$DESKTOP_UPDATER_NAME" "$desktop_updater_signature" <<'PY'
+import json
+import sys
+
+path, version, published_at, url, signature = sys.argv[1:]
+payload = {
+    "version": version,
+    "notes": "OmniMemora Desktop signed app update.",
+    "pub_date": published_at,
+    "platforms": {
+        "darwin-aarch64": {
+            "signature": signature,
+            "url": url,
+        }
+    },
+}
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(payload, fh, ensure_ascii=False, indent=2)
+    fh.write("\n")
+PY
 
     cat > "$manifest_path" <<EOF
 {
@@ -222,6 +264,15 @@ write_release_manifest() {
       "sha256": "$desktop_dmg_sha",
       "download_url": "https://doloclaw.com/download/file/darwin-arm64",
       "validation": "hdiutil imageinfo passed locally"
+    }
+  },
+  "desktop_updater": {
+    "darwin-aarch64": {
+      "package": "$DESKTOP_UPDATER_NAME",
+      "sha256": "$desktop_updater_sha",
+      "signature_sha256": "$desktop_updater_sig_sha",
+      "manifest_url": "https://doloclaw.com/releases/desktop-updater/darwin-aarch64.json",
+      "download_url": "$DOWNLOAD_BASE_URL/$DESKTOP_UPDATER_NAME"
     }
   },
   "components": {

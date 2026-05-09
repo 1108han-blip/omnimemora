@@ -27,7 +27,9 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": [
+      "app",
       "dmg",
       "msi"
     ],
@@ -36,5 +38,16 @@
       "icons/icon.icns",
       "icons/icon.png"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEREQjA0MkJCNEYwOEM4OTIKUldTU3lBaFB1MEt3M2FTeGQ2TDViem8yTUZkYnRVeS90eXQ2Z1EwM1dKaVUrSkVzUEJiMXh5Q2gK",
+      "endpoints": [
+        "https://doloclaw.com/releases/desktop-updater/{{target}}-{{arch}}.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
   }
 }

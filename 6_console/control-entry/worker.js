@@ -834,6 +834,15 @@ function releaseManifestResponse(url) {
   return notFoundResponse(url);
 }
 
+function desktopUpdaterResponse(url) {
+  const parts = url.pathname.split("/").filter(Boolean);
+  const name = parts[2] || "";
+  if (!/^[a-z]+-[A-Za-z0-9_]+\.json$/.test(name)) {
+    return notFoundResponse(url);
+  }
+  return Response.redirect(`${DOWNLOAD_BASE_URL}/desktop-updater/${name}`, 302);
+}
+
 function downloadHtml() {
   const downloads = [
     {
@@ -1064,6 +1073,10 @@ addEventListener("fetch", (event) => {
   }
   if (url.pathname.startsWith("/media/")) {
     event.respondWith(mediaRedirectResponse(url));
+    return;
+  }
+  if (url.pathname.startsWith("/releases/desktop-updater/")) {
+    event.respondWith(desktopUpdaterResponse(url));
     return;
   }
   if (url.pathname.startsWith("/releases/")) {
