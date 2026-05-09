@@ -16,7 +16,7 @@ export const pageMeta: Record<Language, Record<PageKey, [string, string]>> = {
     policies: ['Policies', 'Read-only active policy and candidate promotion boundaries.'],
     'context-debug': ['Context Debug', 'Inspect request evidence from real local traffic.'],
     savings: ['Savings', 'Token and cost savings from recorded product traffic.'],
-    settings: ['Settings', 'Local services, language, and feedback.'],
+    settings: ['Settings', 'Local services, updates, language, and feedback.'],
   },
   zh: {
     overview: ['概览', '产品价值、本地路径健康与 Agent 使用情况。'],
@@ -25,7 +25,7 @@ export const pageMeta: Record<Language, Record<PageKey, [string, string]>> = {
     policies: ['策略', '只读展示本地 active policy 与候选策略边界。'],
     'context-debug': ['上下文调试', '查看真实本地请求的证据。'],
     savings: ['节省', '基于产品流量记录的 token 与成本节省。'],
-    settings: ['设置', '本地服务、语言与反馈。'],
+    settings: ['设置', '本地服务、更新、语言与反馈。'],
   },
 };
 
@@ -164,6 +164,14 @@ export const copy = {
     },
     settings: {
       services: 'Local services',
+      updates: 'Updates',
+      desktopApp: 'Desktop App',
+      localComponents: 'Local Components',
+      cloudPolicy: 'Cloud Policy',
+      checkUpdates: 'Check',
+      installApp: 'Install App',
+      installComponents: 'Install Components',
+      rollback: 'Rollback',
       language: 'Language',
       english: 'English',
       chinese: '中文',
@@ -314,6 +322,14 @@ export const copy = {
     },
     settings: {
       services: '本地服务',
+      updates: '更新',
+      desktopApp: '桌面 App',
+      localComponents: '本地组件',
+      cloudPolicy: '云端策略',
+      checkUpdates: '检查',
+      installApp: '安装 App',
+      installComponents: '安装组件',
+      rollback: '回滚',
       language: '语言',
       english: 'English',
       chinese: '中文',

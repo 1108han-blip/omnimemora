@@ -23,7 +23,7 @@ export function Header() {
         <div className="flex items-center gap-2">
           <Badge tone={product?.online ? 'success' : 'warning'}>{product?.online ? t.online : t.local}</Badge>
           <span className="font-mono text-xs text-muted">{t.services} {healthy}/3</span>
-          <span className="font-mono text-xs text-muted">v{desktopStatus?.app_version ?? '1.0.0-beta.10'}</span>
+          <span className="font-mono text-xs text-muted">v{desktopStatus?.app_version ?? '1.0.0-beta.11'}</span>
         </div>
         <p className="mt-0.5 truncate text-xs text-muted">{lastMessage}</p>
       </div>

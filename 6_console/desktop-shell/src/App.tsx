@@ -29,11 +29,13 @@ export default function App() {
   const page = useDashboardStore((state) => state.page);
   const language = useDashboardStore((state) => state.language);
   const refreshReality = useDashboardStore((state) => state.refreshReality);
+  const checkForUpdates = useDashboardStore((state) => state.checkForUpdates);
   const [title, subtitle] = pageMeta[language][page];
 
   useEffect(() => {
     void refreshReality();
-  }, [refreshReality]);
+    void checkForUpdates();
+  }, [refreshReality, checkForUpdates]);
 
   return (
     <div className="flex h-screen bg-background text-foreground">

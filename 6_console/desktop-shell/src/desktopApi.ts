@@ -17,7 +17,7 @@ const PRODUCT_API_BASE = 'http://127.0.0.1:18011';
 const AGENT_CONTROL_TIMEOUT_MS = 6000;
 
 const DEFAULT_STATUS: DesktopStatus = {
-  app_version: '1.0.0-beta.10',
+  app_version: '1.0.0-beta.11',
   data_dir: '~/.omnimemora/app/current',
   services: [
     {
@@ -51,14 +51,14 @@ const DEFAULT_STATUS: DesktopStatus = {
   updates: [
     {
       layer: 'desktop_shell',
-      current_version: '1.0.0-beta.10',
+      current_version: '1.0.0-beta.11',
       available_version: null,
       status: 'not_checked',
-      detail: 'Desktop shell updates are installer-based in this beta.',
+      detail: 'Desktop shell updates are checked through the official release manifest.',
     },
     {
       layer: 'local_components',
-      current_version: '1.0.0-beta.10',
+      current_version: '1.0.0-beta.11',
       available_version: null,
       status: 'not_checked',
       detail: 'Local component updates use release manifests.',
@@ -90,7 +90,7 @@ export async function getDesktopStatus(): Promise<DesktopStatus> {
   }
 }
 
-export async function runDesktopCommand(command: 'start_services' | 'stop_services' | 'restart_services' | 'check_for_updates' | 'install_update' | 'rollback'): Promise<DesktopCommandResult> {
+export async function runDesktopCommand(command: 'start_services' | 'stop_services' | 'restart_services' | 'check_for_updates' | 'install_desktop_update' | 'install_update' | 'rollback'): Promise<DesktopCommandResult> {
   try {
     return await invokeDesktop<DesktopCommandResult>(command);
   } catch (error) {

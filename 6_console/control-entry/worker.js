@@ -865,7 +865,7 @@ function downloadHtml() {
       <h2>Known Limits</h2>
       <ul>
         <li>This is a controlled beta installer, not a public production release.</li>
-        <li>Desktop-shell replacement is manual in this version; local component updates are manifest-based.</li>
+        <li>The desktop app checks the release manifest, surfaces app updates in-product, verifies installer integrity, and hands installation off to the operating system.</li>
         <li>Cloud policy candidates are visible but are not auto-promoted over local active policy.</li>
         <li>Feedback should include version, system, <code>request_id</code>, <code>error_code</code>, and reproduction steps.</li>
       </ul>

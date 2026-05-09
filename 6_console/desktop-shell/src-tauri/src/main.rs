@@ -12,7 +12,7 @@ use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 
-const APP_VERSION: &str = "1.0.0-beta.10";
+const APP_VERSION: &str = "1.0.0-beta.11";
 const SUPPORT_EMAIL: &str = "support@doloclaw.com";
 const RUNTIME_PORT: u16 = 8765;
 const ADAPTER_PORT: u16 = 18011;
@@ -389,8 +389,8 @@ fn release_manifest_from_disk() -> Option<Value> {
     let candidates = [
         downloaded_manifest_path(),
         current_dir().join("manifest.json"),
-        repo_root().join("4_core/local-runtime/release/1.0.0-beta.10/latest.json"),
-        repo_root().join("4_core/local-runtime/release/1.0.0-beta.10/1.0.0-beta.10.json"),
+        repo_root().join("4_core/local-runtime/release/1.0.0-beta.11/latest.json"),
+        repo_root().join("4_core/local-runtime/release/1.0.0-beta.11/1.0.0-beta.11.json"),
     ];
     for path in candidates {
         if let Ok(raw) = fs::read_to_string(path) {
@@ -412,6 +412,55 @@ fn installed_component_version() -> Option<String> {
                 .and_then(Value::as_str)
                 .map(ToString::to_string)
         })
+}
+
+fn version_number_parts(version: &str) -> Vec<u64> {
+    let mut parts = Vec::new();
+    let mut current = String::new();
+    for ch in version.chars() {
+        if ch.is_ascii_digit() {
+            current.push(ch);
+        } else if !current.is_empty() {
+            if let Ok(value) = current.parse::<u64>() {
+                parts.push(value);
+            }
+            current.clear();
+        }
+    }
+    if !current.is_empty() {
+        if let Ok(value) = current.parse::<u64>() {
+            parts.push(value);
+        }
+    }
+    parts
+}
+
+fn version_is_newer(available: &str, current: &str) -> bool {
+    let available_parts = version_number_parts(available);
+    let current_parts = version_number_parts(current);
+    for idx in 0..available_parts.len().max(current_parts.len()) {
+        let available_part = *available_parts.get(idx).unwrap_or(&0);
+        let current_part = *current_parts.get(idx).unwrap_or(&0);
+        if available_part > current_part {
+            return true;
+        }
+        if available_part < current_part {
+            return false;
+        }
+    }
+    false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::version_is_newer;
+
+    #[test]
+    fn version_comparison_handles_beta_patch_order() {
+        assert!(version_is_newer("1.0.0-beta.11", "1.0.0-beta.10"));
+        assert!(!version_is_newer("1.0.0-beta.10", "1.0.0-beta.11"));
+        assert!(!version_is_newer("1.0.0-beta.11", "1.0.0-beta.11"));
+    }
 }
 
 fn candidate_policy_status() -> (String, Option<String>, String) {
@@ -460,7 +509,12 @@ fn update_statuses() -> Vec<UpdateLayerStatus> {
     let current_components = installed.clone().unwrap_or_else(|| APP_VERSION.to_string());
     let local_status = match &available {
         Some(_) if installed.is_none() => "available",
-        Some(version) if version != APP_VERSION => "available",
+        Some(version) if version_is_newer(version, &current_components) => "available",
+        Some(_) => "current",
+        None => "not_checked",
+    };
+    let desktop_status = match &available {
+        Some(version) if version_is_newer(version, APP_VERSION) => "available",
         Some(_) => "current",
         None => "not_checked",
     };
@@ -470,8 +524,8 @@ fn update_statuses() -> Vec<UpdateLayerStatus> {
             layer: "desktop_shell",
             current_version: APP_VERSION.to_string(),
             available_version: available.clone(),
-            status: "current".to_string(),
-            detail: "桌面壳本体在本 beta 中通过新版安装器更新，不做静默自更新。".to_string(),
+            status: desktop_status.to_string(),
+            detail: "桌面壳会检查线上 release manifest；发现新版本后下载并校验安装器，再交给系统安装。".to_string(),
         },
         UpdateLayerStatus {
             layer: "local_components",
@@ -537,7 +591,7 @@ fn runtime_binary() -> Option<PathBuf> {
             .unwrap_or_default(),
         current_dir().join("bin/omnimemora"),
         current_dir().join("omnimemora"),
-        root.join("4_core/local-runtime/release/1.0.0-beta.10/omnimemora-darwin-arm64/omnimemora"),
+        root.join("4_core/local-runtime/release/1.0.0-beta.11/omnimemora-darwin-arm64/omnimemora"),
         root.join("tools/omnimemora-runtime"),
     ])
 }
@@ -781,6 +835,46 @@ fn manifest_package(manifest: &Value, platform: &str) -> Result<(String, String,
         .and_then(Value::as_str)
         .ok_or_else(|| format!("{platform} manifest 缺少 download_url。"))?;
     Ok((package.to_string(), sha.to_string(), url.to_string()))
+}
+
+fn desktop_installer_manifest(
+    manifest: &Value,
+    platform: &str,
+) -> Result<(String, String, String), String> {
+    let entry = manifest
+        .get("desktop_installers")
+        .and_then(|value| value.get(platform))
+        .ok_or_else(|| format!("release manifest 不包含当前平台 {platform} 的桌面安装器。"))?;
+    let package = entry
+        .get("package")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{platform} 桌面安装器 manifest 缺少 package。"))?;
+    let sha = entry
+        .get("sha256")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{platform} 桌面安装器 manifest 缺少 sha256。"))?;
+    let url = entry
+        .get("download_url")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{platform} 桌面安装器 manifest 缺少 download_url。"))?;
+    Ok((package.to_string(), sha.to_string(), url.to_string()))
+}
+
+fn open_installer(path: &Path) -> Result<(), String> {
+    let command = if cfg!(target_os = "macos") {
+        let mut command = Command::new("open");
+        command.arg(path);
+        command
+    } else if cfg!(target_os = "windows") {
+        let mut command = Command::new("cmd");
+        command.args(["/C", "start", ""]).arg(path);
+        command
+    } else {
+        let mut command = Command::new("xdg-open");
+        command.arg(path);
+        command
+    };
+    run_capture(command, "打开桌面安装器").map(|_| ())
 }
 
 fn unpack_zip(zip_path: &Path, dest: &Path) -> Result<(), String> {
@@ -1049,16 +1143,58 @@ fn check_for_updates() -> DesktopCommandResult {
                 .get("version")
                 .and_then(Value::as_str)
                 .unwrap_or("unknown");
+            let desktop_message = if version_is_newer(version, APP_VERSION) {
+                "桌面 App 有新版可用，可在设置页下载并打开安装器。"
+            } else {
+                "桌面 App 已是当前版本。"
+            };
             let candidate_message = match fetch_cloud_policy_candidate() {
                 Ok(_) => "云端策略候选也已检查；仍保持 candidate-only。",
                 Err(_) => "云端策略候选暂不可用；本地 active policy 未改变。",
             };
             command_result(
                 true,
-                format!("已检查线上 release manifest：{version}。{candidate_message}"),
+                format!("已检查线上 release manifest：{version}。{desktop_message}{candidate_message}"),
             )
         }
         Err(err) => command_result(false, format!("检查更新失败：{err}")),
+    }
+}
+
+#[tauri::command]
+fn install_desktop_update() -> DesktopCommandResult {
+    let result = (|| -> Result<String, String> {
+        let platform = platform_id();
+        if platform == "unsupported" {
+            return Err("当前平台暂未支持桌面 App 自动更新。".to_string());
+        }
+        let manifest = fetch_latest_manifest().or_else(|_| {
+            release_manifest_from_disk()
+                .ok_or_else(|| "无法获取线上或本地 release manifest。".to_string())
+        })?;
+        let version = manifest_version(&manifest)?;
+        if !version_is_newer(&version, APP_VERSION) {
+            return Ok(format!("桌面 App 已是最新版本：{version}。"));
+        }
+        let (package, expected_sha, download_url) =
+            desktop_installer_manifest(&manifest, platform)?;
+        let installer_path = downloads_dir().join(&package);
+        curl_to_file(&download_url, &installer_path)?;
+        let actual_sha = sha256_file(&installer_path)?;
+        if actual_sha != expected_sha {
+            return Err(format!(
+                "桌面安装器 SHA256 不匹配，已阻止安装。expected={expected_sha} actual={actual_sha}"
+            ));
+        }
+        open_installer(&installer_path)?;
+        Ok(format!(
+            "桌面 App {version} 安装器已下载并通过 SHA256 校验，已交给系统安装器打开。用户 memory 与本地产品数据不会被删除。"
+        ))
+    })();
+
+    match result {
+        Ok(message) => command_result(true, message),
+        Err(err) => command_result(false, err),
     }
 }
 
@@ -1075,7 +1211,11 @@ fn install_update() -> DesktopCommandResult {
         })?;
         let version = manifest_version(&manifest)?;
         let installed = installed_component_version();
-        if installed.as_deref() == Some(version.as_str()) {
+        if installed
+            .as_deref()
+            .map(|current| !version_is_newer(&version, current))
+            .unwrap_or(false)
+        {
             return Ok(format!("本地组件已是最新版本：{version}。"));
         }
         let (package, expected_sha, download_url) = manifest_package(&manifest, platform)?;
@@ -1251,6 +1391,7 @@ fn main() {
             stop_services,
             restart_services,
             check_for_updates,
+            install_desktop_update,
             install_update,
             rollback,
             scan_agents,

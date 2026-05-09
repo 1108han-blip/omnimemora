@@ -7,6 +7,9 @@ Highlights
 - Product entry remains local: 5173 control surface, 18011 product ingress, 8765 internal memory plane.
 - Fixes Claude Code route enablement by keeping desktop-managed services on the installed runtime agent mode file.
 - Attached agents repair local product startup before falling back to direct upstream when 18011 is unavailable.
+- Desktop App checks the official release manifest, surfaces new versions in-app, downloads and verifies the installer, then hands off installation to the OS.
+- Agent control refresh waits long enough for the local product control endpoint after a user clicks "Use OmniMemora".
+- Adapter proxy responses strip transport headers that can break streamed client connections.
 - Cloud policy updates remain candidate-only and do not auto-promote over local active policy.
 
 What this beta is for

@@ -1,4 +1,4 @@
-import { Mail } from 'lucide-react';
+import { Download, Mail, RefreshCw, RotateCcw } from 'lucide-react';
 import { buildFeedbackMailto } from '../desktopApi';
 import { Badge } from '../components/ui/badge';
 import { Button } from '../components/ui/button';
@@ -13,6 +13,11 @@ export function SettingsPage() {
   const startProduct = useDashboardStore((state) => state.startProduct);
   const restartProduct = useDashboardStore((state) => state.restartProduct);
   const stopProduct = useDashboardStore((state) => state.stopProduct);
+  const checkForUpdates = useDashboardStore((state) => state.checkForUpdates);
+  const installDesktopUpdate = useDashboardStore((state) => state.installDesktopUpdate);
+  const installComponentUpdate = useDashboardStore((state) => state.installComponentUpdate);
+  const rollbackComponents = useDashboardStore((state) => state.rollbackComponents);
+  const loading = useDashboardStore((state) => state.loading);
   const t = copy[language].settings;
   const header = copy[language].header;
   const serviceName = (name: string) => {
@@ -25,6 +30,17 @@ export function SettingsPage() {
     if (state === 'blocked') return t.stateBlocked;
     if (state === 'unreachable') return t.stateUnreachable;
     return t.stateUnknown;
+  };
+  const updateLabel = (layer: string) => {
+    if (layer === 'desktop_shell') return t.desktopApp;
+    if (layer === 'local_components') return t.localComponents;
+    return t.cloudPolicy;
+  };
+  const updateTone = (state: string) => {
+    if (state === 'current') return 'success' as const;
+    if (state === 'available') return 'warning' as const;
+    if (state === 'blocked') return 'danger' as const;
+    return 'neutral' as const;
   };
 
   return (
@@ -45,6 +61,31 @@ export function SettingsPage() {
         </CardContent>
       </Card>
       <div className="space-y-3">
+        <Card>
+          <CardHeader><CardTitle>{t.updates}</CardTitle></CardHeader>
+          <CardContent className="space-y-2">
+            {(status?.updates ?? []).map((update) => (
+              <div key={update.layer} className="rounded-md border border-border bg-background p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <p className="font-medium text-foreground">{updateLabel(update.layer)}</p>
+                    <p className="font-mono text-xs text-muted">
+                      {update.current_version}{update.available_version ? ` -> ${update.available_version}` : ''}
+                    </p>
+                  </div>
+                  <Badge tone={updateTone(update.status)}>{update.status}</Badge>
+                </div>
+                <p className="mt-2 text-xs text-muted">{update.detail}</p>
+              </div>
+            ))}
+            <div className="grid grid-cols-2 gap-2 pt-2">
+              <Button variant="secondary" disabled={loading} onClick={() => void checkForUpdates()}><RefreshCw className="h-4 w-4" />{t.checkUpdates}</Button>
+              <Button disabled={loading} onClick={() => void installDesktopUpdate()}><Download className="h-4 w-4" />{t.installApp}</Button>
+              <Button variant="secondary" disabled={loading} onClick={() => void installComponentUpdate()}><Download className="h-4 w-4" />{t.installComponents}</Button>
+              <Button variant="ghost" disabled={loading} onClick={() => void rollbackComponents()}><RotateCcw className="h-4 w-4" />{t.rollback}</Button>
+            </div>
+          </CardContent>
+        </Card>
         <Card>
           <CardHeader><CardTitle>{t.language}</CardTitle></CardHeader>
           <CardContent className="grid grid-cols-2 gap-2">

@@ -36,6 +36,10 @@ interface DashboardState {
   startProduct: () => Promise<void>;
   stopProduct: () => Promise<void>;
   restartProduct: () => Promise<void>;
+  checkForUpdates: () => Promise<void>;
+  installDesktopUpdate: () => Promise<void>;
+  installComponentUpdate: () => Promise<void>;
+  rollbackComponents: () => Promise<void>;
   selectRequest: (request: RecentRequest | null) => Promise<void>;
   attachAgent: (familyId: string) => Promise<void>;
   detachAgent: (familyId: string) => Promise<void>;
@@ -134,6 +138,52 @@ export const useDashboardStore = create<DashboardState>((set, get) => {
         const result = await runDesktopCommand('restart_services');
         set({ desktopStatus: result.status, lastMessage: result.message });
         await get().refreshReality();
+      } finally {
+        set({ loading: false });
+      }
+    },
+    checkForUpdates: async () => {
+      try {
+        const result = await runDesktopCommand('check_for_updates');
+        set((state) => ({
+          desktopStatus: result.status,
+          lastMessage: result.ok ? result.message : errorMessage(result.message),
+        }));
+      } catch (error) {
+        set({ lastMessage: errorMessage(error) });
+      }
+    },
+    installDesktopUpdate: async () => {
+      set({ loading: true });
+      try {
+        const result = await runDesktopCommand('install_desktop_update');
+        set({ desktopStatus: result.status, lastMessage: result.message });
+      } catch (error) {
+        set({ lastMessage: errorMessage(error) });
+      } finally {
+        set({ loading: false });
+      }
+    },
+    installComponentUpdate: async () => {
+      set({ loading: true });
+      try {
+        const result = await runDesktopCommand('install_update');
+        set({ desktopStatus: result.status, lastMessage: result.message });
+        await get().refreshReality();
+      } catch (error) {
+        set({ lastMessage: errorMessage(error) });
+      } finally {
+        set({ loading: false });
+      }
+    },
+    rollbackComponents: async () => {
+      set({ loading: true });
+      try {
+        const result = await runDesktopCommand('rollback');
+        set({ desktopStatus: result.status, lastMessage: result.message });
+        await get().refreshReality();
+      } catch (error) {
+        set({ lastMessage: errorMessage(error) });
       } finally {
         set({ loading: false });
       }
