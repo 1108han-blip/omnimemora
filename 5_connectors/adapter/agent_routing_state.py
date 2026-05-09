@@ -46,6 +46,7 @@ def get_agent_modes_cache() -> Tuple[Dict[str, str], str]:
 
 def save_agent_modes(per_agent_modes: Dict[str, str], default_mode: str = "off") -> Tuple[Dict[str, str], str]:
     path = _agent_modes_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
     canonical_dict = {
         resolve_canonical_agent_id(k): v
         for k, v in per_agent_modes.items()

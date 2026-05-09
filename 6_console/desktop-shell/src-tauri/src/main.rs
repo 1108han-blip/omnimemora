@@ -105,8 +105,27 @@ fn current_dir() -> PathBuf {
     app_root().join("current")
 }
 
+fn service_current_dir() -> PathBuf {
+    home_dir()
+        .join(".omnimemora")
+        .join("service")
+        .join("current")
+}
+
+fn component_dir() -> PathBuf {
+    let app_current = current_dir();
+    if app_current.join("manifest.json").exists()
+        || app_current.join("tools/_run_adapter.py").exists()
+        || app_current.join("bin/omnimemora").exists()
+    {
+        app_current
+    } else {
+        service_current_dir()
+    }
+}
+
 fn current_agent_modes_path() -> PathBuf {
-    current_dir().join("5_connectors/adapter/config/agent_modes.json")
+    component_dir().join("5_connectors/adapter/config/agent_modes.json")
 }
 
 fn previous_dir() -> PathBuf {
@@ -526,7 +545,8 @@ fn update_statuses() -> Vec<UpdateLayerStatus> {
             current_version: APP_VERSION.to_string(),
             available_version: available.clone(),
             status: desktop_status.to_string(),
-            detail: "桌面壳使用 Tauri updater 检查、签名校验、下载并安装桌面 App 更新。".to_string(),
+            detail: "桌面壳使用 Tauri updater 检查、签名校验、下载并安装桌面 App 更新。"
+                .to_string(),
         },
         UpdateLayerStatus {
             layer: "local_components",
@@ -586,31 +606,134 @@ fn first_existing(paths: &[PathBuf]) -> Option<PathBuf> {
 
 fn runtime_binary() -> Option<PathBuf> {
     let root = repo_root();
+    let component = component_dir();
+    let service_current = service_current_dir();
     first_existing(&[
         env::var("OMNIMEMORA_RUNTIME_BIN")
             .map(PathBuf::from)
             .unwrap_or_default(),
-        current_dir().join("bin/omnimemora"),
-        current_dir().join("omnimemora"),
+        component.join("bin/omnimemora"),
+        component.join("omnimemora"),
+        service_current.join("tools/omnimemora-runtime"),
+        service_current.join("bin/omnimemora"),
         root.join("4_core/local-runtime/release/1.0.0-beta.11/omnimemora-darwin-arm64/omnimemora"),
+        root.join(
+            "4_core/local-runtime/release/1.0.0-beta.11/omnimemora-darwin-arm64/bin/omnimemora",
+        ),
         root.join("tools/omnimemora-runtime"),
     ])
 }
 
+fn python_can_import(python: &str, modules: &[&str]) -> bool {
+    let script = if modules.is_empty() {
+        "import sys".to_string()
+    } else {
+        format!(
+            "import importlib.util, sys\nmods = {:?}\nsys.exit(0 if all(importlib.util.find_spec(m) for m in mods) else 1)",
+            modules
+        )
+    };
+    Command::new(python)
+        .arg("-c")
+        .arg(script)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn python_bin_with_modules(modules: &[&str]) -> Option<String> {
+    let mut candidates = Vec::new();
+    if let Ok(configured) = env::var("PYTHON_BIN") {
+        candidates.push(configured);
+    }
+    candidates.extend(
+        [
+            "/usr/bin/python3",
+            "/opt/homebrew/bin/python3",
+            "/usr/local/bin/python3",
+            "python3",
+            "python",
+        ]
+        .iter()
+        .map(|item| item.to_string()),
+    );
+
+    let mut deduped = Vec::new();
+    for candidate in candidates {
+        if !candidate.trim().is_empty() && !deduped.contains(&candidate) {
+            deduped.push(candidate);
+        }
+    }
+    deduped
+        .into_iter()
+        .find(|candidate| python_can_import(candidate, modules))
+}
+
 fn python_bin() -> Option<String> {
-    env::var("PYTHON_BIN").ok().or_else(|| {
-        Command::new("which")
-            .arg("python3")
-            .output()
-            .ok()
-            .and_then(|output| {
-                if output.status.success() {
-                    Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
-                } else {
-                    None
-                }
-            })
-    })
+    python_bin_with_modules(&[])
+}
+
+fn adapter_python_bin() -> Option<String> {
+    python_bin_with_modules(&["uvicorn", "fastapi"])
+}
+
+fn launch_agent_path(label: &str) -> PathBuf {
+    home_dir()
+        .join("Library")
+        .join("LaunchAgents")
+        .join(format!("{label}.plist"))
+}
+
+fn launchd_domain() -> Option<String> {
+    run_capture(
+        {
+            let mut cmd = Command::new("id");
+            cmd.arg("-u");
+            cmd
+        },
+        "读取用户 uid",
+    )
+    .ok()
+    .map(|uid| format!("gui/{}", uid.trim()))
+}
+
+fn bootstrap_or_kickstart_launch_agent(label: &str) -> bool {
+    let Some(domain) = launchd_domain() else {
+        return false;
+    };
+    let plist = launch_agent_path(label);
+    if !plist.exists() {
+        return false;
+    }
+    let target = format!("{domain}/{label}");
+    let loaded = Command::new("launchctl")
+        .arg("print")
+        .arg(&target)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false);
+    if !loaded {
+        let _ = Command::new("launchctl")
+            .arg("bootstrap")
+            .arg(&domain)
+            .arg(&plist)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+    Command::new("launchctl")
+        .arg("kickstart")
+        .arg("-k")
+        .arg(&target)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
 }
 
 fn log_file(name: &str, stream: &str) -> Result<File, String> {
@@ -646,6 +769,11 @@ fn start_runtime() -> Result<Option<ManagedProcess>, String> {
     if http_probe(RUNTIME_PORT, "/health", Some("\"status\":")).is_ok() {
         return Ok(None);
     }
+    if bootstrap_or_kickstart_launch_agent("com.omnimemora.runtime")
+        && wait_for_service(RUNTIME_PORT, "/health", Some("\"status\":"))
+    {
+        return Ok(None);
+    }
     let binary = runtime_binary()
         .ok_or_else(|| "找不到 runtime binary。请先生成或安装 runtime 组件。".to_string())?;
     let agent_modes = current_agent_modes_path();
@@ -667,24 +795,39 @@ fn start_adapter() -> Result<Option<ManagedProcess>, String> {
     if http_probe(ADAPTER_PORT, "/health", Some("\"status\":\"healthy\"")).is_ok() {
         return Ok(None);
     }
-    let python = python_bin().ok_or_else(|| "找不到 python3，无法启动 adapter。".to_string())?;
+    if bootstrap_or_kickstart_launch_agent("com.omnimemora.adapter")
+        && wait_for_service(ADAPTER_PORT, "/health", Some("\"status\":\"healthy\""))
+    {
+        return Ok(None);
+    }
+    let python = adapter_python_bin()
+        .ok_or_else(|| "找不到带 uvicorn/fastapi 的 Python，无法启动 adapter。".to_string())?;
     let root = repo_root();
+    let component = component_dir();
+    let service_current = service_current_dir();
     let launcher = first_existing(&[
-        current_dir().join("tools/_run_adapter.py"),
+        component.join("tools/_run_adapter.py"),
+        service_current.join("tools/_run_adapter.py"),
         root.join("tools/_run_adapter.py"),
     ])
     .ok_or_else(|| "找不到 adapter launcher。".to_string())?;
+    let adapter_root = launcher
+        .parent()
+        .and_then(Path::parent)
+        .map(Path::to_path_buf)
+        .unwrap_or_else(|| root.clone());
     let agent_modes = current_agent_modes_path();
     let mut cmd = Command::new(&python);
     cmd.arg(&launcher)
-        .current_dir(&root)
+        .current_dir(&adapter_root)
         .env("PORT", ADAPTER_PORT.to_string())
         .env(
             "MEMORY_BACKEND_URL",
             format!("http://127.0.0.1:{RUNTIME_PORT}"),
         )
         .env("OMNIMEMORA_INTERNAL_API_TOKEN", INTERNAL_TOKEN)
-        .env("OMNIMEMORA_AGENT_MODES_PATH", agent_modes);
+        .env("OMNIMEMORA_AGENT_MODES_PATH", agent_modes)
+        .env("PYTHONPATH", adapter_root);
     spawn_service(
         "adapter",
         cmd,
@@ -698,11 +841,20 @@ fn start_ui() -> Result<Option<ManagedProcess>, String> {
     if http_probe(UI_PORT, "/", None).is_ok() {
         return Ok(None);
     }
+    if bootstrap_or_kickstart_launch_agent("com.omnimemora.dashboard")
+        && wait_for_service(UI_PORT, "/", None)
+    {
+        return Ok(None);
+    }
     let python =
         python_bin().ok_or_else(|| "找不到 python3，无法启动本地 GUI 静态服务。".to_string())?;
     let root = repo_root();
+    let component = component_dir();
+    let service_current = service_current_dir();
     let dist = first_existing(&[
-        current_dir().join("ui/dist"),
+        component.join("ui/dist"),
+        service_current.join("ui/dist"),
+        service_current.join("6_console/demo-dashboard/dist"),
         root.join("6_console/demo-dashboard/dist"),
     ])
     .ok_or_else(|| "找不到 GUI dist。请先构建 6_console/demo-dashboard。".to_string())?;
@@ -1014,26 +1166,33 @@ fn start_all_services() -> Result<String, String> {
     ensure_dirs()?;
     let mut state = prune_dead_processes(read_state());
     let mut started: Vec<ManagedProcess> = Vec::new();
+    let mut failures: Vec<String> = Vec::new();
 
-    if let Some(proc) = start_runtime()? {
-        started.push(proc);
+    match start_runtime() {
+        Ok(Some(proc)) => started.push(proc),
+        Ok(None) => {}
+        Err(err) => failures.push(format!("8765 runtime: {err}")),
     }
     if !wait_for_service(RUNTIME_PORT, "/health", Some("\"status\":")) {
-        return Err("runtime 启动后健康检查未通过。".to_string());
+        failures.push("8765 runtime 健康检查未通过".to_string());
     }
 
-    if let Some(proc) = start_adapter()? {
-        started.push(proc);
+    match start_adapter() {
+        Ok(Some(proc)) => started.push(proc),
+        Ok(None) => {}
+        Err(err) => failures.push(format!("18011 adapter: {err}")),
     }
     if !wait_for_service(ADAPTER_PORT, "/health", Some("\"status\":\"healthy\"")) {
-        return Err("adapter 启动后健康检查未通过。".to_string());
+        failures.push("18011 adapter 健康检查未通过".to_string());
     }
 
-    if let Some(proc) = start_ui()? {
-        started.push(proc);
+    match start_ui() {
+        Ok(Some(proc)) => started.push(proc),
+        Ok(None) => {}
+        Err(err) => failures.push(format!("5173 GUI: {err}")),
     }
     if !wait_for_service(UI_PORT, "/", None) {
-        return Err("GUI 启动后健康检查未通过。".to_string());
+        failures.push("5173 GUI 健康检查未通过".to_string());
     }
 
     for proc in started.iter() {
@@ -1043,6 +1202,9 @@ fn start_all_services() -> Result<String, String> {
         state.processes.push(proc.clone());
     }
     write_state(&state)?;
+    if !failures.is_empty() {
+        return Err(format!("启动未完全成功：{}", failures.join("； ")));
+    }
     if started.is_empty() {
         Ok("所有服务已经健康；桌面 App 未接管外部进程。".to_string())
     } else {
@@ -1095,7 +1257,11 @@ fn stop_all_services() -> Result<String, String> {
 
         let mut stop_cmd = Command::new("launchctl");
         stop_cmd.arg("stop").arg(&label);
-        if stop_cmd.output().map(|o| o.status.success()).unwrap_or(false) {
+        if stop_cmd
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+        {
             launchd_stopped += 1;
             continue;
         }
@@ -1119,6 +1285,23 @@ fn stop_all_services() -> Result<String, String> {
                     }
                 }
             }
+        }
+    }
+
+    for (name, port) in [
+        ("runtime", RUNTIME_PORT),
+        ("adapter", ADAPTER_PORT),
+        ("ui", UI_PORT),
+    ] {
+        let Some(pid) = port_owner_pid(port) else {
+            continue;
+        };
+        let Some(command) = process_command(pid) else {
+            continue;
+        };
+        if known_omnimemora_service(name, &command) && kill_process(pid) {
+            launchd_killed_by_pid += 1;
+            launchd_stopped += 1;
         }
     }
 
@@ -1179,7 +1362,9 @@ fn check_for_updates() -> DesktopCommandResult {
             };
             command_result(
                 true,
-                format!("已检查线上 release manifest：{version}。{desktop_message}{candidate_message}"),
+                format!(
+                    "已检查线上 release manifest：{version}。{desktop_message}{candidate_message}"
+                ),
             )
         }
         Err(err) => command_result(false, format!("检查更新失败：{err}")),
@@ -1368,7 +1553,10 @@ fn ensure_main_window(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Er
 
 fn setup_desktop_shell(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     ensure_main_window(app)?;
-    if let (Some(window), Some(icon)) = (app.get_webview_window("main"), app.default_window_icon().cloned()) {
+    if let (Some(window), Some(icon)) = (
+        app.get_webview_window("main"),
+        app.default_window_icon().cloned(),
+    ) {
         window.set_icon(icon.clone())?;
     }
     show_main_window(app.handle());

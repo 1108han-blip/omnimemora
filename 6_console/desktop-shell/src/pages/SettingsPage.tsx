@@ -31,6 +31,12 @@ export function SettingsPage() {
     if (state === 'unreachable') return t.stateUnreachable;
     return t.stateUnknown;
   };
+  const serviceTone = (state: string) => {
+    if (state === 'healthy') return 'success' as const;
+    if (state === 'blocked') return 'danger' as const;
+    if (state === 'unreachable') return 'warning' as const;
+    return 'neutral' as const;
+  };
   const updateLabel = (layer: string) => {
     if (layer === 'desktop_shell') return t.desktopApp;
     if (layer === 'local_components') return t.localComponents;
@@ -49,12 +55,24 @@ export function SettingsPage() {
         <CardHeader><CardTitle>{t.services}</CardTitle></CardHeader>
         <CardContent className="space-y-2">
           {(status?.services ?? []).map((service) => (
-            <div key={service.name} className="flex items-center justify-between rounded-md border border-border bg-background p-3">
-              <div>
-                <p className="font-medium capitalize text-foreground">{serviceName(service.name)}</p>
-                <p className="text-xs text-muted">{service.detail === 'Waiting for desktop host status.' ? t.waiting : service.detail}</p>
+            <div key={service.name} className="rounded-md border border-border bg-background p-3">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-medium capitalize text-foreground">{serviceName(service.name)}</p>
+                  <p className="font-mono text-xs text-muted">127.0.0.1:{service.port}</p>
+                </div>
+                <Badge tone={serviceTone(service.state)}>{serviceState(service.state)}</Badge>
               </div>
-              <Badge tone={service.state === 'healthy' ? 'success' : service.state === 'blocked' ? 'danger' : 'warning'}>{serviceState(service.state)}</Badge>
+              <div className="mt-2 flex flex-wrap gap-2 text-[11px] leading-5 text-muted">
+                <span className="rounded bg-muted/10 px-2 font-mono">{service.url}</span>
+                <span className="rounded bg-muted/10 px-2">
+                  {t.pid}: {service.pid ?? t.noPid}
+                </span>
+                <span className="rounded bg-muted/10 px-2">
+                  {service.managed_by_desktop ? t.managed : t.localProcess}
+                </span>
+              </div>
+              <p className="mt-2 text-xs text-muted">{service.detail === 'Waiting for desktop host status.' ? t.waiting : service.detail}</p>
             </div>
           ))}
           <p className="text-xs text-muted">{header.controlsHint}</p>
