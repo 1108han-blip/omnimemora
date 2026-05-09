@@ -19,6 +19,20 @@ This package is for controlled user testing only. It is not an open-source relea
 2. Open OmniMemora from the desktop app.
 3. Use the app status screen for startup, repair, updates, and feedback.
 
+## Update policy
+
+All OmniMemora products downloaded to a user's local machine must include app-level automatic update management before they are released as a normal downloadable app.
+
+Required update behavior:
+
+- detect a newer product version.
+- notify the user inside the app.
+- download the update through the official release manifest.
+- verify checksums/signatures before install.
+- install or hand off to the OS installer with clear user consent.
+- recover or roll back if the update fails.
+- keep local user memory and product data intact.
+
 ## Main commands
 
 ```bash
@@ -48,7 +62,7 @@ Support contact: {{SUPPORT_EMAIL}}
 - This is a controlled beta package.
 - No commercial use is permitted.
 - No redistribution is permitted.
-- Desktop-shell replacement is manual in this beta.
+- Desktop-shell replacement must not remain manual for normal downloadable app releases.
 - Local component updates are manifest-based and require user confirmation.
 - Cloud policy candidates require explicit user confirmation before activation.
 

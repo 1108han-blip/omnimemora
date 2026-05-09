@@ -12,8 +12,15 @@ DOWNLOAD_BASE_URL=${OMNIMEMORA_DOWNLOAD_BASE_URL:-"https://assets.doloclaw.com/o
 PUBLISHED_AT=${OMNIMEMORA_RELEASE_PUBLISHED_AT:-"$(date -u +"%Y-%m-%dT%H:%M:%SZ")"}
 DESKTOP_DMG_SOURCE="$REPO_ROOT/6_console/desktop-shell/src-tauri/target/release/bundle/dmg/OmniMemora Desktop_${PACKAGE_VERSION}_aarch64.dmg"
 DESKTOP_DMG_NAME="OmniMemora-Desktop-${PACKAGE_VERSION}-darwin-arm64.dmg"
+DESKTOP_AUTO_UPDATE_VERIFIED=${OMNIMEMORA_DESKTOP_AUTO_UPDATE_VERIFIED:-"0"}
 
 echo "Building OmniMemora controlled beta package set: $PACKAGE_VERSION"
+
+if [ "$DESKTOP_AUTO_UPDATE_VERIFIED" != "1" ]; then
+    echo "Blocked: local-download products must include verified app-level automatic update before release packaging." >&2
+    echo "Set OMNIMEMORA_DESKTOP_AUTO_UPDATE_VERIFIED=1 only after the desktop app can detect, notify, download, verify, install, and recover from product updates." >&2
+    exit 1
+fi
 
 rm -rf "$RELEASE_DIR"
 mkdir -p "$RELEASE_DIR"
@@ -120,7 +127,8 @@ EOF
   "components": {
     "desktop_shell": {
       "version": "$PACKAGE_VERSION",
-      "update_mode": "manual_installer_prompt"
+      "update_mode": "app_level_auto_update_required",
+      "update_contract": "detect_notify_download_verify_install_recover"
     },
     "runtime": {
       "version": "$PACKAGE_VERSION",
@@ -219,7 +227,8 @@ write_release_manifest() {
   "components": {
     "desktop_shell": {
       "framework": "tauri",
-      "update_mode": "manual_installer_prompt"
+      "update_mode": "app_level_auto_update_required",
+      "update_contract": "detect_notify_download_verify_install_recover"
     },
     "runtime": {
       "port": 8765,
@@ -246,6 +255,7 @@ write_release_manifest() {
   "download_url": "https://doloclaw.com/download",
   "release_notes": "Fixes Claude Code route enablement by keeping desktop-managed services on the installed runtime agent mode file.",
   "minimum_supported_desktop_version": "1.0.0-beta.8",
+  "desktop_auto_update_required": true,
   "force_update": false
 }
 EOF

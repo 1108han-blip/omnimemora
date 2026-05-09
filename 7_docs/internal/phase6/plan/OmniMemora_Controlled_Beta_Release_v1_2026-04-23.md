@@ -19,6 +19,17 @@ Each beta package must include:
 - `KNOWN_ISSUES.txt`
 - `VERSION.txt`
 
+## Local App Update Contract
+
+Decision as of 2026-05-09:
+
+- Any OmniMemora product downloaded to a user's local machine must be managed like a normal desktop app.
+- A normal downloadable app release must include app-level automatic update management.
+- Manual desktop-shell replacement is not an acceptable steady-state update mechanism.
+- A release is blocked until the app can detect a newer version, notify the user, download from the official release manifest, verify integrity, install or hand off to the OS installer with consent, recover or roll back on failure, and preserve local user memory/product data.
+- Local component updates may still require explicit user confirmation, but the app must surface the update and guide the user through it.
+- Cloud policy candidates remain candidate-only and must not be silently promoted as part of app update.
+
 Package archives currently produced:
 
 - `omnimemora-darwin-arm64.zip`

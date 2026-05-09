@@ -2,7 +2,7 @@ OMNIMEMORA CONTROLLED BETA KNOWN ISSUES
 Package version: {{PACKAGE_VERSION}}
 
 - This is a controlled desktop beta package, not a production release.
-- Desktop-shell replacement is manual in this beta; the app can point users to a newer installer.
+- Normal downloadable app releases are blocked unless desktop-shell update management is app-level and automatic.
 - Local component updates are manifest-based and require explicit user confirmation.
 - Failed component updates must roll back to the previous local component set.
 - Cloud-enhanced candidate source remains optional; local operation is the primary path.
