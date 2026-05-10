@@ -148,9 +148,12 @@
 | **Cloud-Local Sync Check (2026-04-30)** | **已记录（local healthy; cloud verification blocked by DNS/timeouts; no phase closeout claim）** | [OmniMemora_Cloud_Local_Sync_Check_2026-04-30.md](./OmniMemora_Cloud_Local_Sync_Check_2026-04-30.md) |
 | **Cloudflare Clean Install Closeout** | **已收口 ✓（openviking-site deleted; control-entry reinstalled; candidate pointer reserved）** | [OmniMemora_Cloudflare_Clean_Install_Closeout_2026-04-30.md](./OmniMemora_Cloudflare_Clean_Install_Closeout_2026-04-30.md) |
 | **Cloud Platform Stewardship Rule** | **已固定（Codex cloud authority + project isolation + replace-old-iteration rule）** | [OmniMemora_Cloud_Platform_Stewardship_Rule_2026-04-30.md](./OmniMemora_Cloud_Platform_Stewardship_Rule_2026-04-30.md) |
+| **Desktop GUI + Codex Managed Attach Sync (2026-05-10)** | **已收口 ✓（Desktop app is current control surface; 5173 retired from service controls; Codex attach uses managed profile/launcher）** | [OmniMemora_Desktop_GUI_Codex_Attach_Sync_Closeout_2026-05-10.md](./OmniMemora_Desktop_GUI_Codex_Attach_Sync_Closeout_2026-05-10.md) |
 | Controlled Beta Next Step Engineering Plan | **进行中（historical controlled-beta execution line preserved; active architecture mainline has moved to Data Lifecycle Plane）** | [OmniMemora_Controlled_Beta_Next_Step_Engineering_Plan_2026-04-23.md](./OmniMemora_Controlled_Beta_Next_Step_Engineering_Plan_2026-04-23.md) |
 
 > Cloud Reset `Batch 6.1` is classified as **optional cleanup only** (legacy project physical retire), not a mainline closeout prerequisite.
+
+> 2026-05-10 supersession note: current user control/display is the packaged OmniMemora Desktop app. Historical `5173` records below remain preserved as historical evidence, but `5173` must not be treated as the current desktop GUI dependency or service-control target.
 
 ---
 

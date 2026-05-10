@@ -24,7 +24,8 @@ Current repo version sources observed on 2026-04-30:
 
 OmniMemora is a user-controlled memory optimization layer for AI workflows:
 
-- `5173`: user control and visibility
+- OmniMemora Desktop app: current user control and visibility
+- `5173`: legacy/browser dev surface only
 - `18011`: only product ingress after opt-in
 - `8765`: internal memory plane
 
@@ -52,7 +53,8 @@ Built for practical outcomes: lower cost, faster loops, no extra complexity.
 - 真请求省成本
 - 低延迟稳定运行
 
-架构上坚持三层边界：`5173 控制` / `18011 产品入口` / `8765 内部记忆层`。
+架构上坚持三层边界：`Desktop GUI 控制` / `18011 产品入口` / `8765 内部记忆层`。
+`5173` 仅保留为 legacy/browser dev surface。
 不做静默接管，不做多入口绕行。
 
 如果你在做 AI 产品降本，这条路线可以直接复用。
@@ -66,7 +68,8 @@ OmniMemora MVP is focused on 3 outcomes only:
 - Stable, low-latency operation
 
 Boundary stays explicit:
-`5173 control`, `18011 product ingress`, `8765 internal memory plane`.
+`Desktop GUI control`, `18011 product ingress`, `8765 internal memory plane`.
+`5173` is legacy/browser dev-only.
 
 No silent takeover. No multi-entry bypass.
 
@@ -82,7 +85,8 @@ Use this as a private/proprietary release note draft. If the repository remains 
 
 ### Product boundary
 
-- User control: `:5173`
+- User control: OmniMemora Desktop app
+- Legacy/dev UI: `:5173`
 - Product ingress (opt-in): `:18011`
 - Internal memory plane: `:8765`
 

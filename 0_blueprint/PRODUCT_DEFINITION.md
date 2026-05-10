@@ -214,13 +214,14 @@ Gateway 位於本機應用層，先於用戶系統代理生效。
 
 ### 固定入口口徑
 
-- `:5173` = 用戶控制入口
+- OmniMemora Desktop app = 當前用戶控制與顯示入口
+- `:5173` = legacy/browser dev surface，不是當前桌面 GUI 必需中間層
 - `:18011` = 用戶開啟產品路由後的唯一產品數據入口
 - `:8765` = 內部 memory plane
 
 Data Lifecycle Plane 附加口徑：
 
-- `5173` 只顯示維護狀態並觸發手動維護，不定義生命周期規則。
+- Desktop GUI 只顯示維護狀態並觸發手動維護，不定義生命周期規則；legacy `5173` 不再代表當前控制入口。
 - `18011` 仍是產品數據入口，維護平面不得改寫既有請求協議。
 
 ## 5.1 Agent Identity Mature-State Target
@@ -272,7 +273,7 @@ Data Lifecycle Plane 附加口徑：
 
 - `8765` 是 `agent_id` 語義基準層
 - `18011` 承擔 admission + preservation
-- `5173` 只投影產品真相，不反向定義 identity
+- Desktop GUI 只投影產品真相，不反向定義 identity；legacy `5173` 不反向定義 identity
 - admission 原則：只有穩定、顯式、可復現的 source identity 才能提升為正式 `runtime agent_id`
 - 推斷型 identity 不得直接寫入正式 principal
 
@@ -291,7 +292,7 @@ Data Lifecycle Plane 附加口徑：
 
 補充判準：
 
-> 控制面入口與產品數據入口不可混寫；`5173` 管控制，`18011` 管數據路徑，`8765` 不對用戶暴露為產品入口。
+> 控制面入口與產品數據入口不可混寫；OmniMemora Desktop app 管控制，`18011` 管數據路徑，`8765` 不對用戶暴露為產品入口。`:5173` 僅作 legacy/browser dev surface。
 
 ### 標準入口表達
 

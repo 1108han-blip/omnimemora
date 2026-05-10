@@ -31,7 +31,7 @@ Agent -> Gateway (:18011) -> compile/recall/inject -> Upstream LLM
 - `:5173` is legacy/dev-only and must not be treated as a required desktop GUI dependency.
 - `:18011` remains the only product data entry when routing is enabled.
 - Runtime is internal only.
-- `/metrics/summary` is the only KPI truth surface.
+- `/metrics/core_capabilities` is the current MVP savings truth surface (`real_input_v1`); `/metrics/summary` may return degraded no-historical-scan status.
 - Adapter-to-runtime contract changes must pass contract tests.
 - Agent control lives in the desktop GUI, not in agent self-selection.
 - Agent integration is two-layer:
@@ -75,13 +75,14 @@ Healthy startup means:
 
 | Endpoint | Role |
 |---------|------|
-| `/metrics/summary` | KPI truth |
+| `/metrics/core_capabilities` | Current MVP savings truth (`real_input_v1`) |
+| `/metrics/summary` | Legacy/aggregate summary; may be degraded when historical scans are intentionally skipped |
 | `/proxy/status` | Diagnostics |
 | `/compile/status` | Diagnostics |
 | `/agents/live` | Diagnostics |
 | `/agents/metrics` | Diagnostics |
 
-If KPI and diagnostics disagree, trust `/metrics/summary` first.
+If current MVP savings UI and historical summary disagree, trust `/metrics/core_capabilities` for real-input token savings.
 
 ## Repository Layout
 

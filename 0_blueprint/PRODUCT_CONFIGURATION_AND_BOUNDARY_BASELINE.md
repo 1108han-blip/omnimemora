@@ -31,7 +31,7 @@ OmniMemora 的產品責任不是替用戶重新定義 LLM 配置，而是：
 
 ### 2.4 控制權口徑
 
-> **是否接入 OmniMemora、是否啟用 OmniMemora，控制權只在 `:5173` UI，由用戶決定；不在 agent 自主行為，也不在啟動腳本默認行為。**
+> **是否接入 OmniMemora、是否啟用 OmniMemora，控制權只在 OmniMemora Desktop app，由用戶決定；不在 agent 自主行為，也不在啟動腳本默認行為。`:5173` 僅保留為 legacy/browser dev surface。**
 
 ---
 
@@ -250,10 +250,11 @@ Truth Source Bridge v2 的預設 precedence 順序固定為：
 - 產品核心目標是 **context compile 以節省 token**
 - Agent ID、多租戶、隔離等模組存在的目的，是避免多 Agent / 多實例編譯串線，而不是把產品擴張成獨立記憶平台
 
-### 7.1 5173 的固定定位
+### 7.1 Desktop GUI 與 5173 的固定定位
 
-- `5173` 是父級 agent 控制卡片所在的正式 UI 控制面
-- `5173` 不只是觀測面，也承擔接入與路由控制
+- OmniMemora Desktop app 是當前父級 agent 控制卡片所在的正式 UI 控制面
+- Desktop GUI 不依賴 `5173`，也不應由「啟動服務」啟動 legacy dashboard
+- `5173` 僅作為 legacy/browser dev surface 保留；不得再被視為當前桌面 GUI 的必需中間層
 - 卡片粒度默認保持在父級可管理對象
 - 臨時 subagent 只作為運行態統計與活動信息展示，不默認升級成獨立控制卡片
 
