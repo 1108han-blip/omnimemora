@@ -31,7 +31,7 @@ function hasRealInputSavings(request: RecentRequest, evidence?: RequestEvidence 
 function hasRefinement(request: RecentRequest, evidence?: RequestEvidence | null): boolean {
   const sourceTokens = evidence?.context?.compression?.source_tokens ?? request.compression_source_tokens ?? 0;
   const outputTokens = evidence?.context?.compression?.output_tokens ?? request.compression_output_tokens ?? 0;
-  return hasMemoryHit(request, evidence) && sourceTokens > 0 && outputTokens > 0 && outputTokens < sourceTokens;
+  return sourceTokens > 0 && outputTokens > 0 && outputTokens < sourceTokens;
 }
 
 function decisionTagsFor(request: RecentRequest, evidence?: RequestEvidence | null): DecisionTag[] {

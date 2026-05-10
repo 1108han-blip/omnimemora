@@ -27,7 +27,7 @@ function hasMemoryHit(req: RecentRequest): boolean {
 function hasRefinement(req: RecentRequest): boolean {
   const sourceTokens = req.compression_source_tokens ?? 0;
   const outputTokens = req.compression_output_tokens ?? 0;
-  return hasMemoryHit(req) && sourceTokens > 0 && outputTokens > 0 && outputTokens < sourceTokens;
+  return sourceTokens > 0 && outputTokens > 0 && outputTokens < sourceTokens;
 }
 
 function hasRealInputSavings(req: RecentRequest): boolean {
