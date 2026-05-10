@@ -24,6 +24,7 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import loguru
 from ..config import config
+from ..request_classifier import extract_user_visible_query
 from ..trace_context import build_trace_event
 from ..trace_events import append_trace_event
 
@@ -95,17 +96,23 @@ def _content_to_text(content: Any) -> str:
 
 
 def _extract_query_from_messages(messages: List[Dict[str, Any]]) -> str:
-    """Extract primary query from the last user text block(s)."""
+    """Extract primary user-visible query, skipping trailing control metadata."""
+    fallback = ""
     for msg in reversed(messages):
         role = msg.get("role", "")
         content = _content_to_text(msg.get("content", ""))
         if role == "user" and content:
-            return content
+            fallback = fallback or content
+            visible = extract_user_visible_query(content)
+            if visible:
+                return visible
+    if fallback:
+        return fallback
     # Fallback: first non-empty content
     for msg in messages:
         content = _content_to_text(msg.get("content", ""))
         if content:
-            return content
+            return extract_user_visible_query(content) or content
     return ""
 
 

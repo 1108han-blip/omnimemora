@@ -5,6 +5,8 @@ import httpx
 
 
 llm_proxy = import_module("5_connectors.adapter.llm_proxy")
+compile_orchestrator = import_module("5_connectors.adapter.application.compile_orchestrator")
+gateway_compile = import_module("5_connectors.adapter.application.gateway_compile")
 
 
 class _MockState:
@@ -80,6 +82,23 @@ class TestLlmProxyAgentDetection(unittest.TestCase):
         self.assertNotIn("content-length", {key.lower() for key in forwarded})
         self.assertNotIn("content-encoding", {key.lower() for key in forwarded})
         self.assertEqual(forwarded["x-ratelimit-remaining"], "99")
+
+    def test_openclaw_query_extraction_skips_trailing_control_metadata(self):
+        metadata = """Sender (untrusted metadata):
+```json
+{"label": "openclaw-control-ui", "id": "openclaw-control-ui"}
+```"""
+        task = metadata + "\n\n请阅读 docs/EP04_摄影与镜头语法.md 并补齐视频原稿。"
+        messages = [
+            {"role": "user", "content": [{"type": "text", "text": task}]},
+            {"role": "assistant", "content": [{"type": "text", "text": "我会读取文档。"}]},
+            {"role": "user", "content": [{"type": "text", "text": metadata}]},
+        ]
+
+        expected = "请阅读 docs/EP04_摄影与镜头语法.md 并补齐视频原稿。"
+        self.assertEqual(llm_proxy._extract_user_query(messages), expected)
+        self.assertEqual(gateway_compile._extract_query_from_messages(messages), expected)
+        self.assertEqual(compile_orchestrator._extract_user_query({"messages": messages}), expected)
 
 
 if __name__ == "__main__":

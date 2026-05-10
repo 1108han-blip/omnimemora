@@ -73,6 +73,7 @@ from ..truth_bridge import (
 from ..truth_registry import DEFAULT_TRUTH_REGISTRY
 from ..config import config
 from ..path_registry import classify_path
+from ..request_classifier import extract_user_visible_query
 from ..trace_context import build_trace_event, get_request_context
 from ..trace_events import append_trace_event
 from ..backends.base import MemoryWriteRequest, MemoryBackend
@@ -1855,6 +1856,7 @@ def _collect_text_parts(parts) -> str:
 def _extract_user_query(messages) -> str:
     if not isinstance(messages, list):
         return ""
+    fallback = ""
     for message in reversed(messages):
         if not isinstance(message, dict):
             continue
@@ -1862,8 +1864,11 @@ def _extract_user_query(messages) -> str:
             continue
         content = _collect_text_parts(message.get("content"))
         if content:
-            return content
-    return ""
+            fallback = fallback or content
+            visible = extract_user_visible_query(content)
+            if visible:
+                return visible
+    return fallback
 
 
 def _normalize_memory_query(query: str) -> str:

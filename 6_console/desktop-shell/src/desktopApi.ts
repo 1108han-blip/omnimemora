@@ -196,7 +196,7 @@ export async function getProductConsoleSnapshot(): Promise<ProductConsoleSnapsho
   const [core, coreTrend, recent, usage, controls] = await Promise.allSettled([
     fetchProductJson<CoreCapabilitiesResponse>('/metrics/core_capabilities?tenant=all', PRODUCT_METRICS_TIMEOUT_MS),
     fetchProductJson<CoreCapabilitiesTrendResponse>('/metrics/core_capabilities/trend?tenant=all&days=7', PRODUCT_METRICS_TIMEOUT_MS),
-    fetchProductJson<RecentRequestsResponse>('/metrics/recent_requests?tenant=all&limit=10&per_agent_limit=10&value_qualified_only=false', RECENT_REQUESTS_TIMEOUT_MS),
+    fetchProductJson<RecentRequestsResponse>('/metrics/recent_requests?tenant=all&limit=10&per_agent_limit=10&include_internal=true&value_qualified_only=false', RECENT_REQUESTS_TIMEOUT_MS),
     fetchProductJson<Record<string, unknown>>('/usage/token-savings?tenant=all', PRODUCT_METRICS_TIMEOUT_MS),
     fetchProductJson<AgentControlResponse>('/agents/control', AGENT_CONTROL_TIMEOUT_MS),
   ]);

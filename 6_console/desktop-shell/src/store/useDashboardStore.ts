@@ -49,8 +49,8 @@ interface DashboardState {
   repairAgent: (familyId: string) => Promise<void>;
 }
 
-function userFacingRequests(product: ProductConsoleSnapshot | null): RecentRequest[] {
-  return (product?.recent?.requests ?? []).filter((request) => request.request_class !== 'internal');
+function recentRequests(product: ProductConsoleSnapshot | null): RecentRequest[] {
+  return product?.recent?.requests ?? [];
 }
 
 function patchAgentControlCard(product: ProductConsoleSnapshot | null, card: AgentControlCard): ProductConsoleSnapshot | null {
@@ -102,7 +102,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => {
           getProductConsoleSnapshot(),
           scanAgents(),
         ]);
-        const requests = userFacingRequests(product);
+        const requests = recentRequests(product);
         set((state) => ({
           desktopStatus,
           product,

@@ -47,6 +47,9 @@ def _get_token_accounting():
 def _get_config():
     return __import__("5_connectors.adapter.config", fromlist=["dummy"]).config
 
+def _get_request_classifier():
+    return __import__("5_connectors.adapter.request_classifier", fromlist=["dummy"])
+
 
 async def run_compile_and_resolve(
     payload: dict,
@@ -472,6 +475,7 @@ def _collect_text_parts(parts: object) -> str:
 
 def _extract_user_query(payload: dict) -> str:
     messages = payload.get("messages")
+    fallback = ""
     if isinstance(messages, list):
         for message in reversed(messages):
             if not isinstance(message, dict):
@@ -480,8 +484,13 @@ def _extract_user_query(payload: dict) -> str:
                 continue
             text = _collect_text_parts(message.get("content"))
             if text:
-                return text
+                fallback = fallback or text
+                visible = _get_request_classifier().extract_user_visible_query(text)
+                if visible:
+                    return visible
+        if fallback:
+            return fallback
     raw_input = payload.get("input")
     if isinstance(raw_input, str):
-        return raw_input
+        return _get_request_classifier().extract_user_visible_query(raw_input) or raw_input
     return ""
