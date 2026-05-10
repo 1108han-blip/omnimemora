@@ -60,7 +60,7 @@ wire_api = "responses"
 	}
 }
 
-func TestAttachThenDetachCodexRestoresOriginalConfig(t *testing.T) {
+func TestAttachThenDetachCodexUsesManagedProfileAndPreservesOriginalConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
 
@@ -79,8 +79,54 @@ func TestAttachThenDetachCodexRestoresOriginalConfig(t *testing.T) {
 	if !result.Success {
 		t.Fatalf("attach failed: %s", result.Message)
 	}
-	if !BackupExists(AgentCodex) {
-		t.Fatalf("expected backup to exist after attach")
+
+	afterAttach, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config after attach failed: %v", err)
+	}
+	if string(afterAttach) != original {
+		t.Fatalf("expected official Codex config to remain unchanged, got:\n%s", string(afterAttach))
+	}
+	if BackupExists(AgentCodex) {
+		t.Fatalf("expected no backup for managed-profile attach")
+	}
+
+	managedConfig, err := codexManagedConfigPath()
+	if err != nil {
+		t.Fatalf("managed config path failed: %v", err)
+	}
+	managedRaw, err := os.ReadFile(managedConfig)
+	if err != nil {
+		t.Fatalf("expected managed Codex config to be written: %v", err)
+	}
+	if !strings.Contains(string(managedRaw), `model_provider = "omnimemora"`) {
+		t.Fatalf("expected managed config to contain OmniMemora provider, got:\n%s", string(managedRaw))
+	}
+	if strings.Contains(managedConfig, filepath.Join(tmpDir, ".codex", "config.toml")) {
+		t.Fatalf("managed config must not point at official Codex config: %s", managedConfig)
+	}
+
+	launcherPath, err := codexManagedLauncherPath()
+	if err != nil {
+		t.Fatalf("managed launcher path failed: %v", err)
+	}
+	launcherRaw, err := os.ReadFile(launcherPath)
+	if err != nil {
+		t.Fatalf("expected managed Codex launcher to be written: %v", err)
+	}
+	if !strings.Contains(string(launcherRaw), "exec codex") {
+		t.Fatalf("expected launcher to exec codex, got:\n%s", string(launcherRaw))
+	}
+	markerPath, err := codexManagedMarkerPath()
+	if err != nil {
+		t.Fatalf("managed marker path failed: %v", err)
+	}
+	markerRaw, err := os.ReadFile(markerPath)
+	if err != nil {
+		t.Fatalf("expected managed marker to be written: %v", err)
+	}
+	if !strings.Contains(string(markerRaw), "launcher=") {
+		t.Fatalf("expected marker to include launcher path, got:\n%s", string(markerRaw))
 	}
 
 	if err := DetachCodex(); err != nil {
@@ -97,9 +143,25 @@ func TestAttachThenDetachCodexRestoresOriginalConfig(t *testing.T) {
 	if BackupExists(AgentCodex) {
 		t.Fatalf("expected backup to be removed after restore")
 	}
+	if codexManagedProfileExists() {
+		t.Fatalf("expected managed profile marker to be removed after detach")
+	}
 }
 
-func TestIsAttachedCodexRecognizesProviderConfig(t *testing.T) {
+func TestIsAttachedCodexRecognizesManagedProfile(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	if err := writeManagedCodexProfile(`model = "gpt-5.4"`+"\n", ProductAdapterResponsesEndpoint()); err != nil {
+		t.Fatalf("write managed profile failed: %v", err)
+	}
+
+	if !IsAttached(AgentCodex, 8765) {
+		t.Fatalf("expected managed Codex profile to count as attached")
+	}
+}
+
+func TestIsAttachedCodexStillRecognizesLegacyProviderConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
 

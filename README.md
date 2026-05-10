@@ -35,6 +35,7 @@ Agent -> Gateway (:18011) -> compile/recall/inject -> Upstream LLM
 - Agent integration is two-layer:
   - `使用 OmniMemora`: high-frequency routing switch
   - `接入 OmniMemora`: low-frequency install/uninstall switch
+- Codex `接入 OmniMemora` prepares an OmniMemora-managed profile/launcher and must not rewrite the official `~/.codex/config.toml`; legacy provider rewrites remain removable/restorable only for backward compatibility.
 - When routing is off, requests may still enter `:18011`, but the gateway must stay in transparent passthrough mode.
 - Agent detection must not auto-attach or auto-enable routing.
 - Parent cards are the control granularity; temporary subagents are runtime-visible but not independent control cards.

@@ -247,6 +247,8 @@ async def install_agent_control(request: AgentControlRequest, http_request: Requ
     card = _find_card(cards, request.family_id)
     if not card:
         raise HTTPException(status_code=404, detail=f"family not found after install: {request.family_id}")
+    if request.family_id == "codex_cli":
+        card["message"] = "managed Codex profile prepared; official Codex config was not modified"
     return card
 
 
@@ -376,5 +378,8 @@ async def repair_agent_control(request: AgentControlRequest, http_request: Reque
     card = _find_card(cards, request.family_id)
     if card is None:
         raise HTTPException(status_code=404, detail=f"family not found after repair: {request.family_id}")
-    card["message"] = "attachment repaired"
+    if request.family_id == "codex_cli":
+        card["message"] = "managed Codex profile repaired; official Codex config was not modified"
+    else:
+        card["message"] = "attachment repaired"
     return card

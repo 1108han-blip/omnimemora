@@ -71,6 +71,7 @@ export function AgentsPage() {
                     <p className="text-xs text-muted">
                       {compactNumber(agent.requests_24h ?? agent.observed_requests_24h)} {t.requests} · {compactNumber(agent.saved_tokens_24h)} {t.saved} · {percent(agent.savings_ratio_24h)}
                     </p>
+                    {agent.truth_message && <p className="mt-1 text-xs text-muted">{agent.truth_message}</p>}
                     {agent.drifted && <p className="mt-1 text-xs text-warning">{t.drift}</p>}
                     {!canRoute && <p className="mt-1 text-xs text-warning">{t.blocked}</p>}
                   </div>

@@ -148,9 +148,10 @@ export interface AgentControlCard {
   subagent_count_active: number;
   subagent_count_total_visible: number;
   message?: string;
-  integration_truth?: 'detached' | 'mcp_attached' | 'attached_with_backup';
+  integration_truth?: 'detached' | 'mcp_attached' | 'managed_ready' | 'attached_with_backup';
   route_truth?: 'off' | 'intent_on' | 'effective';
   traffic_truth?: 'no_recent_evidence' | 'internal_only' | 'real_request_observed' | 'compile_empty' | 'bypassed';
+  truth_message?: string;
   requests_24h?: number;
   saved_tokens_24h?: number;
   savings_ratio_24h?: number;

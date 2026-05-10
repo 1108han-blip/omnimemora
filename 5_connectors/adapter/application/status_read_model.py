@@ -289,6 +289,8 @@ def derive_integration_truth(card: Dict[str, Any]) -> str:
     """Derive integration_truth from installed + backup_available."""
     if not card.get("installed", False):
         return "detached"
+    if card.get("family_id") == "codex_cli" and not card.get("backup_available", False):
+        return "managed_ready"
     if card.get("backup_available", False):
         return "attached_with_backup"
     return "mcp_attached"
@@ -566,6 +568,18 @@ def derive_truth_message(
         if routing_enabled:
             return "已接入 MCP，路由已開啟，等待真實工作請求。"
         return "已接入 MCP，當前無工作請求。"
+    if integration_truth == "managed_ready":
+        if traffic_truth == "real_request_observed":
+            return "已準備 OmniMemora 管理入口，真實工作請求已進入 OmniMemora。"
+        if traffic_truth == "internal_only":
+            if has_24h_value:
+                return "已準備 OmniMemora 管理入口，24 小時內已有真實請求收益；最近 30 分鐘僅看到內部握手。"
+            return "已準備 OmniMemora 管理入口，但當前僅看到內部握手。"
+        if traffic_truth == "no_recent_evidence" and has_24h_value:
+            return "已準備 OmniMemora 管理入口，24 小時內已有真實請求收益；最近 30 分鐘暫無工作請求。"
+        if routing_enabled:
+            return "已準備 OmniMemora 管理入口，路由已開啟，等待受管 Codex 工作請求。"
+        return "已準備 OmniMemora 管理入口，原 Codex 配置保持不變。"
     if integration_truth == "attached_with_backup":
         if traffic_truth == "real_request_observed":
             return "已接入並具備備份還原能力，真實工作請求已進入 OmniMemora。"
