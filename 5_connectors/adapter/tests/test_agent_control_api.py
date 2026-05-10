@@ -130,7 +130,7 @@ class AgentControlApiTests(unittest.TestCase):
                     saved = json.loads(path.read_text(encoding="utf-8"))
                     self.assertEqual(saved["per_agent_modes"]["openclaw"], "off")
 
-    def test_disable_codex_removes_managed_profile_via_runtime_uninstall(self) -> None:
+    def test_disable_codex_retains_managed_profile_without_runtime_uninstall(self) -> None:
         with tempfile.TemporaryDirectory(prefix="omnimemora-agent-control-") as tmpdir:
             path = Path(tmpdir) / "agent_modes.json"
             path.write_text(
@@ -178,12 +178,13 @@ class AgentControlApiTests(unittest.TestCase):
 
             self.assertEqual(
                 runtime_calls,
-                [("POST", "/agents/control/uninstall", {"family_id": "codex_cli"})],
+                [],
             )
             saved = json.loads(path.read_text(encoding="utf-8"))
             self.assertEqual(saved["per_agent_modes"]["codex_cli"], "off")
+            self.assertTrue(disabled["installed"])
             self.assertFalse(disabled["routing_enabled"])
-            self.assertIn("official direct route", disabled["message"])
+            self.assertIn("managed profile retained", disabled["message"])
 
     def test_repair_codex_uses_managed_profile_message(self) -> None:
         async def fake_runtime_request(method, path, payload):
