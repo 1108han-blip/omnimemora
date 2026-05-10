@@ -22,14 +22,16 @@ function hasMemoryHit(request: RecentRequest, evidence?: RequestEvidence | null)
   );
 }
 
-function hasTokenSavings(request: RecentRequest, evidence?: RequestEvidence | null): boolean {
-  const savingsRatio = evidence?.context?.savings_ratio ?? request.savings_ratio;
-  const savedTokens = evidence?.context?.saved_tokens ?? request.saved_tokens;
-  return (savedTokens ?? 0) > 0 || (savingsRatio ?? 0) > 0;
+function hasRealInputSavings(request: RecentRequest, evidence?: RequestEvidence | null): boolean {
+  const savedTokens = evidence?.context?.real_input?.saved_tokens ?? request.real_input_saved_tokens ?? 0;
+  const savingsRatio = evidence?.context?.real_input?.savings_ratio ?? request.real_input_savings_ratio ?? 0;
+  return savedTokens > 0 || savingsRatio > 0;
 }
 
 function hasRefinement(request: RecentRequest, evidence?: RequestEvidence | null): boolean {
-  return hasTokenSavings(request, evidence) && hasMemoryHit(request, evidence);
+  const sourceTokens = evidence?.context?.compression?.source_tokens ?? request.compression_source_tokens ?? 0;
+  const outputTokens = evidence?.context?.compression?.output_tokens ?? request.compression_output_tokens ?? 0;
+  return hasMemoryHit(request, evidence) && sourceTokens > 0 && outputTokens > 0 && outputTokens < sourceTokens;
 }
 
 function decisionTagsFor(request: RecentRequest, evidence?: RequestEvidence | null): DecisionTag[] {
@@ -70,28 +72,27 @@ function displayText(request: RecentRequest): string {
 
 function evidenceTokens(evidence: RequestEvidence | null | undefined) {
   if (!evidence?.context) return { before: null, after: null, saving: null };
+  if (evidence.context.real_input) {
+    return {
+      before: evidence.context.real_input.baseline_payload_tokens,
+      after: evidence.context.real_input.forwarded_payload_tokens,
+      saving: evidence.context.real_input.savings_ratio,
+    };
+  }
   return {
-    before: evidence.context.before_tokens,
-    after: evidence.context.after_tokens,
-    saving: evidence.context.savings_ratio,
+    before: null,
+    after: null,
+    saving: null,
   };
 }
 
 function requestTokens(request: RecentRequest, evidence: RequestEvidence | null | undefined) {
   const tokens = evidenceTokens(evidence);
   if (tokens.before != null || tokens.after != null || tokens.saving != null) return tokens;
-  if (request.saved_tokens > 0 && request.savings_ratio > 0) {
-    const before = Math.round(request.saved_tokens / request.savings_ratio);
-    return {
-      before,
-      after: Math.max(0, before - request.saved_tokens),
-      saving: request.savings_ratio,
-    };
-  }
   return {
-    before: null,
-    after: null,
-    saving: request.savings_ratio,
+    before: request.baseline_payload_tokens ?? null,
+    after: request.forwarded_payload_tokens ?? null,
+    saving: request.real_input_savings_ratio ?? null,
   };
 }
 
@@ -123,7 +124,7 @@ export function LiveFlowPage() {
   const selected = requests.find((request) => request.request_id === selectedRequestId) ?? null;
   const selectedEvidence = selected ? evidenceByRequestId[selected.request_id] : null;
   const selectedTokens = selected ? requestTokens(selected, selectedEvidence) : { before: null, after: null, saving: null };
-  const selectedHasSavings = selected ? hasRefinement(selected, selectedEvidence) : false;
+  const selectedHasSavings = selected ? hasRealInputSavings(selected, selectedEvidence) : false;
   const selectedExpanded = selectedHasSavings && selectedTokens.before != null && selectedTokens.after != null && selectedTokens.after > selectedTokens.before;
   const selectedDisplayText = selected
     ? selected.user_visible_query || selected.query || selectedEvidence?.request.query_summary || selected.diagnostic_label || selected.request_id
@@ -158,7 +159,7 @@ export function LiveFlowPage() {
                   const latestEvidence = evidenceByRequestId[group.latest.request_id];
                   const latestTokens = requestTokens(group.latest, latestEvidence);
                   const latestTags = decisionTagsFor(group.latest, latestEvidence);
-                  const latestHasSavings = hasRefinement(group.latest, latestEvidence);
+                  const latestHasSavings = hasRealInputSavings(group.latest, latestEvidence);
                   const rows = groupExpanded ? group.items : [];
                   return (
                     <Fragment key={group.key}>
@@ -173,7 +174,7 @@ export function LiveFlowPage() {
                         <TD className="text-right font-mono text-xs">{latestHasSavings && latestTokens.before != null ? compactNumber(latestTokens.before) : t.notAvailable}</TD>
                         <TD className="text-right font-mono text-xs">{latestHasSavings && latestTokens.after != null ? compactNumber(latestTokens.after) : t.notAvailable}</TD>
                         <TD className={!latestHasSavings ? 'text-right font-mono text-xs text-muted' : latestTokens.before != null && latestTokens.after != null && latestTokens.after > latestTokens.before ? 'text-right font-mono text-xs text-warning' : 'text-right font-mono text-xs text-success'}>
-                          {latestHasSavings ? percent(latestTokens.saving ?? group.latest.savings_ratio, 2) : t.notAvailable}
+                          {latestHasSavings ? percent(latestTokens.saving ?? group.latest.real_input_savings_ratio, 2) : t.notAvailable}
                         </TD>
                       </TR>
                       {rows.map((request) => {
@@ -181,7 +182,7 @@ export function LiveFlowPage() {
                         const evidence = evidenceByRequestId[request.request_id];
                         const tokens = requestTokens(request, evidence);
                         const decisionTags = decisionTagsFor(request, evidence);
-                        const showSavings = hasRefinement(request, evidence);
+                        const showSavings = hasRealInputSavings(request, evidence);
                         return (
                           <TR key={request.request_id} className={expanded ? 'bg-panel/60' : ''} onClick={() => void selectRequest(request)}>
                             <TD className="pl-6">{expanded ? <ChevronDown className="h-3.5 w-3.5 text-muted" /> : <ChevronRight className="h-3.5 w-3.5 text-muted" />}</TD>
@@ -191,7 +192,7 @@ export function LiveFlowPage() {
                             <TD className="text-right font-mono text-xs">{showSavings && tokens.before != null ? compactNumber(tokens.before) : t.notAvailable}</TD>
                             <TD className="text-right font-mono text-xs">{showSavings && tokens.after != null ? compactNumber(tokens.after) : t.notAvailable}</TD>
                             <TD className={!showSavings ? 'text-right font-mono text-xs text-muted' : tokens.before != null && tokens.after != null && tokens.after > tokens.before ? 'text-right font-mono text-xs text-warning' : 'text-right font-mono text-xs text-success'}>
-                              {showSavings ? percent(tokens.saving ?? request.savings_ratio, 2) : t.notAvailable}
+                              {showSavings ? percent(tokens.saving ?? request.real_input_savings_ratio, 2) : t.notAvailable}
                             </TD>
                           </TR>
                         );

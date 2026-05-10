@@ -1399,6 +1399,22 @@ def _build_request_evidence_payload_from_meter(request_id: str, meter: Any) -> D
     after_tokens = meter_dict.get("actual_tokens_estimate", 0)
     saved_tokens = before_tokens - after_tokens
     savings_ratio = meter_dict.get("savings_ratio", 0.0)
+    compression_source_tokens = int(meter_dict.get("compression_source_tokens") or before_tokens or 0)
+    compression_output_tokens = int(meter_dict.get("compression_output_tokens") or after_tokens or 0)
+    compression_saved_tokens = max(0, int(meter_dict.get("compression_saved_tokens") or (compression_source_tokens - compression_output_tokens)))
+    compression_ratio = float(
+        meter_dict.get("compression_ratio")
+        if meter_dict.get("compression_ratio") is not None
+        else ((compression_saved_tokens / compression_source_tokens) if compression_source_tokens > 0 else 0.0)
+    )
+    baseline_payload_tokens = int(meter_dict.get("baseline_payload_tokens") or 0)
+    forwarded_payload_tokens = int(meter_dict.get("forwarded_payload_tokens") or 0)
+    real_input_saved_tokens = int(meter_dict.get("real_input_saved_tokens") or 0)
+    real_input_savings_ratio = float(
+        meter_dict.get("real_input_savings_ratio")
+        if meter_dict.get("real_input_savings_ratio") is not None
+        else ((real_input_saved_tokens / baseline_payload_tokens) if baseline_payload_tokens > 0 else 0.0)
+    )
     candidate_memories = meter_dict.get("candidate_memories", [])
     dropped_memories = meter_dict.get("dropped_memories", [])
     dropped_content_set = {m.get("content", "").strip() for m in dropped_memories}
@@ -1479,6 +1495,22 @@ def _build_request_evidence_payload_from_meter(request_id: str, meter: Any) -> D
             "after_tokens": after_tokens,
             "saved_tokens": max(0, saved_tokens),
             "savings_ratio": savings_ratio,
+            "compression": {
+                "source_tokens": compression_source_tokens,
+                "output_tokens": compression_output_tokens,
+                "saved_tokens": compression_saved_tokens,
+                "ratio": round(compression_ratio, 4),
+            },
+            "real_input": {
+                "baseline_payload_tokens": baseline_payload_tokens,
+                "forwarded_payload_tokens": forwarded_payload_tokens,
+                "saved_tokens": max(0, real_input_saved_tokens),
+                "savings_ratio": round(real_input_savings_ratio, 4),
+                "omni_added_tokens": int(meter_dict.get("omni_added_tokens") or 0),
+                "omni_removed_tokens": int(meter_dict.get("omni_removed_tokens") or 0),
+                "metric_confidence": meter_dict.get("metric_confidence") or "legacy_compression_only",
+                "quality_gate_status": meter_dict.get("quality_gate_status") or "unverified",
+            },
             "selected_memory_count": len(selected_memories),
             "dropped_memory_count": len(dropped_memories),
             "selected_memories": selected_memories,
