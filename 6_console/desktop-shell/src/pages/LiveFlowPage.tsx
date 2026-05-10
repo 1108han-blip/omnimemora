@@ -10,21 +10,23 @@ import { useDashboardStore } from '../store/useDashboardStore';
 import { copy } from '../lib/i18n';
 import type { RecentRequest, RequestEvidence } from '../types';
 
-function decisionFor(request: RecentRequest): 'COMPILED' | 'BYPASS' | 'FALLBACK' {
+function decisionFor(request: RecentRequest): 'COMPILED' | 'BYPASS' | 'NO_VALUE' | 'FALLBACK' {
   if (request.bypass) return 'BYPASS';
   if (request.request_class === 'value_qualified') return 'COMPILED';
+  if (request.request_class === 'task_non_value') return 'NO_VALUE';
   return 'FALLBACK';
 }
 
 function tone(decision: string) {
   if (decision === 'COMPILED') return 'success';
-  if (decision === 'FALLBACK') return 'warning';
+  if (decision === 'FALLBACK' || decision === 'NO_VALUE') return 'warning';
   return 'neutral';
 }
 
-function decisionLabel(decision: 'COMPILED' | 'BYPASS' | 'FALLBACK', t: typeof copy.en.live | typeof copy.zh.live): string {
+function decisionLabel(decision: 'COMPILED' | 'BYPASS' | 'NO_VALUE' | 'FALLBACK', t: typeof copy.en.live | typeof copy.zh.live): string {
   if (decision === 'COMPILED') return t.decisionCompiled;
   if (decision === 'BYPASS') return t.decisionBypass;
+  if (decision === 'NO_VALUE') return t.decisionNoValue;
   return t.decisionFallback;
 }
 
@@ -54,7 +56,8 @@ export function LiveFlowPage() {
   const selected = requests.find((request) => request.request_id === selectedRequestId) ?? null;
   const selectedEvidence = selected ? evidenceByRequestId[selected.request_id] : null;
   const selectedTokens = evidenceTokens(selectedEvidence);
-  const selectedExpanded = selectedTokens.before != null && selectedTokens.after != null && selectedTokens.after > selectedTokens.before;
+  const selectedHasValue = selected?.display_savings_as_value === true;
+  const selectedExpanded = selectedHasValue && selectedTokens.before != null && selectedTokens.after != null && selectedTokens.after > selectedTokens.before;
   const selectedDisplayText = selected
     ? selected.user_visible_query || selected.query || selectedEvidence?.request.query_summary || selected.diagnostic_label || selected.request_id
     : t.notAvailable;
@@ -88,16 +91,17 @@ export function LiveFlowPage() {
                   const evidence = evidenceByRequestId[request.request_id];
                   const tokens = evidenceTokens(evidence);
                   const decision = decisionFor(request);
+                  const showSavings = request.display_savings_as_value === true;
                   return (
                     <TR key={request.request_id} className={expanded ? 'bg-panel/60' : ''} onClick={() => void selectRequest(request)}>
                       <TD>{expanded ? <ChevronDown className="h-3.5 w-3.5 text-muted" /> : <ChevronRight className="h-3.5 w-3.5 text-muted" />}</TD>
                       <TD className="font-mono text-xs text-muted">{timeShort(request.timestamp)}</TD>
                       <TD>{request.agent || 'unknown'}</TD>
                       <TD><Badge tone={tone(decision) as never}>{decisionLabel(decision, t)}</Badge></TD>
-                      <TD className="text-right font-mono text-xs">{tokens.before == null ? t.notAvailable : compactNumber(tokens.before)}</TD>
-                      <TD className="text-right font-mono text-xs">{tokens.after == null ? t.notAvailable : compactNumber(tokens.after)}</TD>
-                      <TD className={tokens.before != null && tokens.after != null && tokens.after > tokens.before ? 'text-right font-mono text-xs text-warning' : 'text-right font-mono text-xs text-success'}>
-                        {tokens.saving == null ? percent(request.savings_ratio) : percent(tokens.saving)}
+                      <TD className="text-right font-mono text-xs">{!showSavings || tokens.before == null ? t.notValue : compactNumber(tokens.before)}</TD>
+                      <TD className="text-right font-mono text-xs">{!showSavings || tokens.after == null ? t.notValue : compactNumber(tokens.after)}</TD>
+                      <TD className={!showSavings ? 'text-right font-mono text-xs text-muted' : tokens.before != null && tokens.after != null && tokens.after > tokens.before ? 'text-right font-mono text-xs text-warning' : 'text-right font-mono text-xs text-success'}>
+                        {!showSavings ? t.notValue : percent(tokens.saving == null ? request.savings_ratio : tokens.saving, 2)}
                       </TD>
                     </TR>
                   );
@@ -118,11 +122,11 @@ export function LiveFlowPage() {
             {selected && selectedEvidence && (
               <>
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-md border border-border bg-background p-2"><p className="text-xs text-muted">{t.before}</p><strong>{compactNumber(selectedTokens.before)}</strong></div>
-                  <div className="rounded-md border border-border bg-background p-2"><p className="text-xs text-muted">{t.after}</p><strong>{compactNumber(selectedTokens.after)}</strong></div>
+                  <div className="rounded-md border border-border bg-background p-2"><p className="text-xs text-muted">{t.before}</p><strong>{selectedHasValue ? compactNumber(selectedTokens.before) : t.notValue}</strong></div>
+                  <div className="rounded-md border border-border bg-background p-2"><p className="text-xs text-muted">{t.after}</p><strong>{selectedHasValue ? compactNumber(selectedTokens.after) : t.notValue}</strong></div>
                   <div className="rounded-md border border-border bg-background p-2">
                     <p className="text-xs text-muted">{selectedExpanded ? t.expandedTokens : t.saving}</p>
-                    <strong className={selectedExpanded ? 'text-warning' : 'text-success'}>{selectedExpanded ? `+${compactNumber((selectedTokens.after ?? 0) - (selectedTokens.before ?? 0))}` : percent(selectedTokens.saving)}</strong>
+                    <strong className={!selectedHasValue ? 'text-muted' : selectedExpanded ? 'text-warning' : 'text-success'}>{!selectedHasValue ? t.notValue : selectedExpanded ? `+${compactNumber((selectedTokens.after ?? 0) - (selectedTokens.before ?? 0))}` : percent(selectedTokens.saving, 2)}</strong>
                   </div>
                 </div>
                 {selectedExpanded && <p className="rounded-md border border-warning/30 bg-warning/10 p-2 text-xs text-warning">{t.expandedDetail}</p>}

@@ -9,10 +9,10 @@ export function compactNumber(value: number | null | undefined) {
   return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(Math.max(0, Math.round(value ?? 0)));
 }
 
-export function percent(value: number | null | undefined) {
+export function percent(value: number | null | undefined, fractionDigits = 0) {
   if (!Number.isFinite(value ?? Number.NaN)) return '0%';
   const normalized = Math.abs(value as number) <= 1 ? (value as number) * 100 : (value as number);
-  return `${Math.round(normalized)}%`;
+  return `${normalized.toFixed(fractionDigits)}%`;
 }
 
 export function timeShort(value: string | null | undefined) {
