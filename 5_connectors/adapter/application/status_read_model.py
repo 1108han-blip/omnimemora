@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import httpx
 
 _DISPLAY_NAMES = {
-    "codex_cli": "Codex",
+    "codex_cli": "Codex CLI",
     "claude_code": "Claude Code",
     "cursor": "Cursor",
     "openclaw": "OpenClaw",

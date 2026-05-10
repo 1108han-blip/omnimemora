@@ -36,7 +36,7 @@ router = APIRouter()
 _AGENTS_CONTROL_CACHE_TTL_SECONDS = float(_snapshot_cache.DEFAULT_TTL_SECONDS)
 
 _DISPLAY_NAMES = {
-    "codex_cli": "Codex",
+    "codex_cli": "Codex CLI",
     "claude_code": "Claude Code",
     "cursor": "Cursor",
     "openclaw": "OpenClaw",

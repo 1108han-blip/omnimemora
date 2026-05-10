@@ -31,7 +31,7 @@ const FAMILY_ID_MAP: Record<string, string> = {
 const FAMILY_NAME_MAP: Record<string, string> = {
   openclaw: 'OpenClaw',
   claude_code: 'Claude Code',
-  codex_cli: 'Codex',
+  codex_cli: 'Codex CLI',
   test: 'Test',
 };
 

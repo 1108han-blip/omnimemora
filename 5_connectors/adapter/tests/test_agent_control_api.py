@@ -155,7 +155,7 @@ class AgentControlApiTests(unittest.TestCase):
                 return [
                     {
                         "family_id": "codex_cli",
-                        "display_name": "Codex",
+                        "display_name": "Codex CLI",
                         "installed": True,
                         "routing_enabled": routing_enabled,
                         "detected": True,
@@ -197,7 +197,7 @@ class AgentControlApiTests(unittest.TestCase):
             return [
                 {
                     "family_id": "codex_cli",
-                    "display_name": "Codex",
+                    "display_name": "Codex CLI",
                     "installed": True,
                     "routing_enabled": False,
                     "detected": True,
