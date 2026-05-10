@@ -1075,16 +1075,27 @@ fn config_contains(path: &Path, needles: &[&str]) -> bool {
     needles.iter().any(|needle| raw.contains(needle))
 }
 
+fn codex_managed_marker_path() -> PathBuf {
+    home_dir()
+        .join(".omnimemora")
+        .join("managed")
+        .join("codex")
+        .join(".omnimemora.attach.marker")
+}
+
 fn agent_attached(agent: &str, path: &Path) -> bool {
     match agent {
-        "codex" => config_contains(
-            path,
-            &[
-                r#"model_provider = "omnimemora""#,
-                "[model_providers.omnimemora]",
-                "[mcp_servers.omnimemora]",
-            ],
-        ),
+        "codex" => {
+            codex_managed_marker_path().exists()
+                || config_contains(
+                    path,
+                    &[
+                        r#"model_provider = "omnimemora""#,
+                        "[model_providers.omnimemora]",
+                        "[mcp_servers.omnimemora]",
+                    ],
+                )
+        }
         "claude" => config_contains(path, &["omnimemora", "http://127.0.0.1:18011"]),
         "openclaw" => config_contains(
             path,
@@ -1106,7 +1117,8 @@ fn agent_status(
     experimental: bool,
 ) -> AgentStatus {
     let config_path = config_path_for_agent(id);
-    let installed = config_path.exists();
+    let codex_managed_ready = id == "codex" && codex_managed_marker_path().exists();
+    let installed = config_path.exists() || codex_managed_ready;
     let running = agent_process_running(running_patterns);
     let attached = installed && agent_attached(id, &config_path);
     let state = if attached {
@@ -1117,7 +1129,11 @@ fn agent_status(
         "not_found"
     };
     let detail = if attached {
-        "已连接到 OmniMemora；重启对应工具后配置生效。"
+        if id == "codex" {
+            "已准备 OmniMemora 管理入口；原 Codex 配置保持不变。"
+        } else {
+            "已连接到 OmniMemora；重启对应工具后配置生效。"
+        }
     } else if installed || running {
         "已发现本机工具，可以从这里连接。"
     } else if experimental {

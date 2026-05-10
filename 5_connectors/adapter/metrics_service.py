@@ -35,6 +35,46 @@ def _clamp_ratio(value: float) -> float:
     return value
 
 
+def _int_metric(meter: Any, name: str) -> int:
+    try:
+        return max(0, int(getattr(meter, name, 0) or 0))
+    except Exception:
+        return 0
+
+
+def _float_metric(meter: Any, name: str) -> float:
+    try:
+        return float(getattr(meter, name, 0.0) or 0.0)
+    except Exception:
+        return 0.0
+
+
+def _compression_source_tokens(meter: Any) -> int:
+    return _int_metric(meter, "compression_source_tokens") or _int_metric(meter, "baseline_tokens_estimate")
+
+
+def _compression_output_tokens(meter: Any) -> int:
+    return _int_metric(meter, "compression_output_tokens") or _int_metric(meter, "actual_tokens_estimate")
+
+
+def _real_input_baseline_tokens(meter: Any) -> int:
+    return _int_metric(meter, "baseline_payload_tokens")
+
+
+def _real_input_forwarded_tokens(meter: Any) -> int:
+    return _int_metric(meter, "forwarded_payload_tokens")
+
+
+def _real_input_saved_tokens(meter: Any) -> int:
+    return _int_metric(meter, "real_input_saved_tokens")
+
+
+def _real_input_savings_ratio(meter: Any) -> float:
+    baseline = _real_input_baseline_tokens(meter)
+    saved = _real_input_saved_tokens(meter)
+    return _clamp_ratio(saved / baseline) if baseline > 0 else 0.0
+
+
 def _get_data_lifecycle_policy():
     return importlib.import_module("5_connectors.adapter.data_lifecycle.policy")
 
@@ -201,6 +241,9 @@ def _extract_summary_kpi_block(tenant: str, key: str) -> Optional[dict[str, Any]
     if not isinstance(block, dict):
         _record_metrics_degraded_path("summary_kpi_block_invalid")
         return None
+    if block.get("metric_contract_version") != "real_input_v1":
+        _record_metrics_degraded_path("summary_kpi_block_legacy_token_contract")
+        return None
     return dict(block)
 
 
@@ -209,24 +252,27 @@ def _compute_metrics_summary_legacy(tenant: str) -> Dict[str, Any]:
 
     if not meters:
         return {
+            "metric_contract_version": "real_input_v1",
             "token_saving_ratio": 0.0,
             "tokens_saved": 0,
             "request_count": 0,
             "avg_context_reduction": 0.0,
         }
 
-    baseline_total = sum(m.baseline_tokens_estimate for m in meters)
-    saved_total = sum(m.saved_tokens_estimate for m in meters)
+    baseline_total = sum(_real_input_baseline_tokens(m) for m in meters)
+    saved_total = sum(_real_input_saved_tokens(m) for m in meters)
     avg_ratio = saved_total / baseline_total if baseline_total > 0 else 0.0
 
     reductions = []
     for m in meters:
-        if m.baseline_tokens_estimate > 0:
-            reduction = (m.baseline_tokens_estimate - m.actual_tokens_estimate) / m.baseline_tokens_estimate
+        compression_source = _compression_source_tokens(m)
+        if compression_source > 0:
+            reduction = (compression_source - _compression_output_tokens(m)) / compression_source
             reductions.append(reduction)
     avg_reduction = sum(reductions) / len(reductions) if reductions else 0.0
 
     return {
+        "metric_contract_version": "real_input_v1",
         "token_saving_ratio": round(avg_ratio, 3),
         "tokens_saved": int(saved_total),
         "request_count": int(len(meters)),
@@ -255,6 +301,7 @@ def get_recent_requests(
     limit: int = 20,
     include_internal: bool = False,
     value_qualified_only: bool = True,
+    per_agent_limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     meters = _collect_meters_24h(tenant)
 
@@ -267,12 +314,29 @@ def get_recent_requests(
     if value_qualified_only:
         sorted_meters = [m for m in sorted_meters if _5_rc.is_value_qualified(m)]
 
-    recent = sorted_meters[:limit]
+    if per_agent_limit and per_agent_limit > 0:
+        agent_counts: Dict[str, int] = {}
+        recent = []
+        for meter in sorted_meters:
+            agent_key = getattr(meter, "agent", None) or "unknown"
+            if agent_counts.get(agent_key, 0) >= per_agent_limit:
+                continue
+            recent.append(meter)
+            agent_counts[agent_key] = agent_counts.get(agent_key, 0) + 1
+    else:
+        recent = sorted_meters[:limit]
 
     recent_payload = []
     for m in recent:
         value_description = _5_rc.describe_request_value(m)
         raw_query = getattr(m, "query", "") or ""
+        real_saved = _real_input_saved_tokens(m)
+        real_baseline = _real_input_baseline_tokens(m)
+        real_forwarded = _real_input_forwarded_tokens(m)
+        compression_source = _compression_source_tokens(m)
+        compression_output = _compression_output_tokens(m)
+        compression_saved = max(0, compression_source - compression_output)
+        compression_ratio = _clamp_ratio(compression_saved / compression_source) if compression_source > 0 else 0.0
         recent_payload.append(
             {
                 "request_id": m.request_id,
@@ -282,6 +346,18 @@ def get_recent_requests(
                 "bypass": m.context_bypass,
                 "saved_tokens": m.saved_tokens_estimate,
                 "savings_ratio": m.savings_ratio,
+                "baseline_payload_tokens": real_baseline,
+                "forwarded_payload_tokens": real_forwarded,
+                "real_input_saved_tokens": real_saved,
+                "real_input_savings_ratio": round(_real_input_savings_ratio(m), 4),
+                "omni_added_tokens": _int_metric(m, "omni_added_tokens"),
+                "omni_removed_tokens": _int_metric(m, "omni_removed_tokens"),
+                "compression_source_tokens": compression_source,
+                "compression_output_tokens": compression_output,
+                "compression_saved_tokens": compression_saved,
+                "compression_ratio": round(compression_ratio, 4),
+                "metric_confidence": getattr(m, "metric_confidence", "legacy_compression_only"),
+                "quality_gate_status": getattr(m, "quality_gate_status", "unverified"),
                 "query": value_description["user_visible_query"][:160],
                 "raw_query": raw_query,
                 "user_visible_query": value_description["user_visible_query"][:240],
@@ -292,7 +368,12 @@ def get_recent_requests(
                 "qualification_reason": value_description["qualification_reason"],
                 "value_paths": value_description["value_paths"],
                 "diagnostic_label": value_description["diagnostic_label"],
-                "display_savings_as_value": value_description["request_class"] == "value_qualified",
+                "display_savings_as_value": value_description["request_class"] == "value_qualified" and real_saved > 0,
+                "family_id": getattr(m, "family_id", None),
+                "instance_id": getattr(m, "instance_id", None),
+                "session_id": getattr(m, "session_id", None),
+                "workspace_id": getattr(m, "workspace_id", None),
+                "raw_agent_id": getattr(m, "raw_agent_id", None),
             }
         )
     return recent_payload
@@ -312,6 +393,7 @@ def _compute_metrics_summary_24h_legacy(tenant: str) -> Dict[str, Any]:
 
     if not meters:
         return {
+            "metric_contract_version": "real_input_v1",
             "token_saving_ratio": 0.0,
             "tokens_saved": 0,
             "request_count": 0,
@@ -319,18 +401,20 @@ def _compute_metrics_summary_24h_legacy(tenant: str) -> Dict[str, Any]:
             "period": "24h",
         }
 
-    baseline_total = sum(m.baseline_tokens_estimate for m in meters)
-    saved_total = sum(m.saved_tokens_estimate for m in meters)
+    baseline_total = sum(_real_input_baseline_tokens(m) for m in meters)
+    saved_total = sum(_real_input_saved_tokens(m) for m in meters)
     avg_ratio = saved_total / baseline_total if baseline_total > 0 else 0.0
 
     reductions = []
     for m in meters:
-        if m.baseline_tokens_estimate > 0:
-            reduction = (m.baseline_tokens_estimate - m.actual_tokens_estimate) / m.baseline_tokens_estimate
+        compression_source = _compression_source_tokens(m)
+        if compression_source > 0:
+            reduction = (compression_source - _compression_output_tokens(m)) / compression_source
             reductions.append(reduction)
     avg_reduction = sum(reductions) / len(reductions) if reductions else 0.0
 
     return {
+        "metric_contract_version": "real_input_v1",
         "token_saving_ratio": round(avg_ratio, 3),
         "tokens_saved": int(saved_total),
         "request_count": int(len(meters)),
@@ -363,6 +447,7 @@ def _compute_core_capabilities_legacy(tenant: str) -> Dict[str, Any]:
     if not value_qualified_meters:
         return {
             "period": "24h",
+            "metric_contract_version": "real_input_v1",
             "observed_request_count": observed_count,
             "non_value_count": task_non_value_count,
             "internal_or_wrapper_count": internal_or_wrapper_count,
@@ -374,19 +459,21 @@ def _compute_core_capabilities_legacy(tenant: str) -> Dict[str, Any]:
             },
         }
 
-    total_baseline = sum(m.baseline_tokens_estimate for m in value_qualified_meters)
-    total_actual = sum(m.actual_tokens_estimate for m in value_qualified_meters)
+    total_baseline = sum(_compression_source_tokens(m) for m in value_qualified_meters)
+    total_actual = sum(_compression_output_tokens(m) for m in value_qualified_meters)
     compression_ratio = _clamp_ratio(1 - (total_actual / total_baseline)) if total_baseline > 0 else 0.0
 
     requests_with_memory = sum(1 for m in value_qualified_meters if (m.packed_memory_count or 0) > 0)
     memory_count_total = sum(m.packed_memory_count or 0 for m in value_qualified_meters)
     memory_enhancement_rate = _clamp_ratio(requests_with_memory / qualified_count) if qualified_count > 0 else 0.0
 
-    saved_total = sum(m.saved_tokens_estimate for m in value_qualified_meters)
-    token_saving_ratio = _clamp_ratio(saved_total / total_baseline) if total_baseline > 0 else 0.0
+    saved_total = sum(_real_input_saved_tokens(m) for m in value_qualified_meters)
+    real_baseline_total = sum(_real_input_baseline_tokens(m) for m in value_qualified_meters)
+    token_saving_ratio = _clamp_ratio(saved_total / real_baseline_total) if real_baseline_total > 0 else 0.0
 
     return {
         "period": "24h",
+        "metric_contract_version": "real_input_v1",
         "observed_request_count": observed_count,
         "non_value_count": task_non_value_count,
         "internal_or_wrapper_count": internal_or_wrapper_count,
@@ -444,6 +531,7 @@ def compute_core_capabilities_trend(tenant: str, days: int = 7) -> Dict[str, Any
             trend.append(
                 {
                     "date": day_str,
+                    "metric_contract_version": "real_input_v1",
                     "observed_request_count": observed_count,
                     "non_value_count": task_non_value_count,
                     "internal_or_wrapper_count": internal_or_wrapper_count,
@@ -455,20 +543,22 @@ def compute_core_capabilities_trend(tenant: str, days: int = 7) -> Dict[str, Any
             )
             continue
 
-        total_baseline = sum(m.baseline_tokens_estimate for m in value_qualified_meters)
-        total_actual = sum(m.actual_tokens_estimate for m in value_qualified_meters)
+        total_baseline = sum(_compression_source_tokens(m) for m in value_qualified_meters)
+        total_actual = sum(_compression_output_tokens(m) for m in value_qualified_meters)
         compression_ratio = _clamp_ratio(1 - (total_actual / total_baseline)) if total_baseline > 0 else 0.0
 
         requests_with_memory = sum(1 for m in value_qualified_meters if (m.packed_memory_count or 0) > 0)
         memory_count_total = sum(m.packed_memory_count or 0 for m in value_qualified_meters)
         memory_enhancement_rate = _clamp_ratio(requests_with_memory / qualified_count) if qualified_count > 0 else 0.0
 
-        saved_total = sum(m.saved_tokens_estimate for m in value_qualified_meters)
-        token_saving_ratio = _clamp_ratio(saved_total / total_baseline) if total_baseline > 0 else 0.0
+        saved_total = sum(_real_input_saved_tokens(m) for m in value_qualified_meters)
+        real_baseline_total = sum(_real_input_baseline_tokens(m) for m in value_qualified_meters)
+        token_saving_ratio = _clamp_ratio(saved_total / real_baseline_total) if real_baseline_total > 0 else 0.0
 
         trend.append(
             {
                 "date": day_str,
+                "metric_contract_version": "real_input_v1",
                 "observed_request_count": observed_count,
                 "non_value_count": task_non_value_count,
                 "internal_or_wrapper_count": internal_or_wrapper_count,

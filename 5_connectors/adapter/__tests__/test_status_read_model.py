@@ -335,6 +335,12 @@ def test_derive_integration_truth_mcp_attached():
     assert srm.derive_integration_truth(card) == "mcp_attached"
 
 
+def test_derive_integration_truth_codex_managed_ready():
+    import adapter.application.status_read_model as srm
+    card = {"family_id": "codex_cli", "installed": True, "backup_available": False}
+    assert srm.derive_integration_truth(card) == "managed_ready"
+
+
 def test_derive_integration_truth_attached_with_backup():
     import adapter.application.status_read_model as srm
     card = {"installed": True, "backup_available": True}

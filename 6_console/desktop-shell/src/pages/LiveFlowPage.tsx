@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Badge } from '../components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
@@ -10,22 +10,60 @@ import { useDashboardStore } from '../store/useDashboardStore';
 import { copy } from '../lib/i18n';
 import type { RecentRequest, RequestEvidence } from '../types';
 
-function decisionFor(request: RecentRequest): 'COMPILED' | 'BYPASS' | 'FALLBACK' {
-  if (request.bypass) return 'BYPASS';
-  if (request.request_class === 'value_qualified') return 'COMPILED';
-  return 'FALLBACK';
+type DecisionTag = 'REFINED' | 'MEMORY' | 'BYPASS' | 'NONE';
+
+function hasMemoryHit(request: RecentRequest, evidence?: RequestEvidence | null): boolean {
+  return (
+    (evidence?.context?.selected_memory_count ?? 0) > 0 ||
+    request.packed_memory_count > 0 ||
+    request.local_cards_used > 0 ||
+    request.remote_used_count > 0 ||
+    request.request_class === 'value_qualified'
+  );
 }
 
-function tone(decision: string) {
-  if (decision === 'COMPILED') return 'success';
-  if (decision === 'FALLBACK') return 'warning';
+function hasRealInputSavings(request: RecentRequest, evidence?: RequestEvidence | null): boolean {
+  const savedTokens = evidence?.context?.real_input?.saved_tokens ?? request.real_input_saved_tokens ?? 0;
+  const savingsRatio = evidence?.context?.real_input?.savings_ratio ?? request.real_input_savings_ratio ?? 0;
+  return savedTokens > 0 || savingsRatio > 0;
+}
+
+function hasRefinement(request: RecentRequest, evidence?: RequestEvidence | null): boolean {
+  const sourceTokens = evidence?.context?.compression?.source_tokens ?? request.compression_source_tokens ?? 0;
+  const outputTokens = evidence?.context?.compression?.output_tokens ?? request.compression_output_tokens ?? 0;
+  return sourceTokens > 0 && outputTokens > 0 && outputTokens < sourceTokens;
+}
+
+function decisionTagsFor(request: RecentRequest, evidence?: RequestEvidence | null): DecisionTag[] {
+  if (request.bypass) return ['BYPASS'];
+  const tags: DecisionTag[] = [];
+  if (hasRefinement(request, evidence)) tags.push('REFINED');
+  if (hasMemoryHit(request, evidence)) tags.push('MEMORY');
+  return tags.length ? tags : ['NONE'];
+}
+
+function tone(decision: DecisionTag) {
+  if (decision === 'MEMORY') return 'success';
+  if (decision === 'REFINED') return 'accent';
+  if (decision === 'BYPASS') return 'neutral';
   return 'neutral';
 }
 
-function decisionLabel(decision: 'COMPILED' | 'BYPASS' | 'FALLBACK', t: typeof copy.en.live | typeof copy.zh.live): string {
-  if (decision === 'COMPILED') return t.decisionCompiled;
+function decisionLabel(decision: DecisionTag, t: typeof copy.en.live | typeof copy.zh.live): string {
+  if (decision === 'MEMORY') return t.decisionMemory;
+  if (decision === 'REFINED') return t.decisionRefined;
   if (decision === 'BYPASS') return t.decisionBypass;
-  return t.decisionFallback;
+  return t.decisionNone;
+}
+
+function DecisionTags({ tags, t }: { tags: DecisionTag[]; t: typeof copy.en.live | typeof copy.zh.live }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {tags.map((tag) => (
+        <Badge key={tag} tone={tone(tag)}>{decisionLabel(tag, t)}</Badge>
+      ))}
+    </div>
+  );
 }
 
 function displayText(request: RecentRequest): string {
@@ -34,26 +72,45 @@ function displayText(request: RecentRequest): string {
 
 function evidenceTokens(evidence: RequestEvidence | null | undefined) {
   if (!evidence?.context) return { before: null, after: null, saving: null };
+  if (evidence.context.real_input) {
+    return {
+      before: evidence.context.real_input.baseline_payload_tokens,
+      after: evidence.context.real_input.forwarded_payload_tokens,
+      saving: evidence.context.real_input.savings_ratio,
+    };
+  }
   return {
-    before: evidence.context.before_tokens,
-    after: evidence.context.after_tokens,
-    saving: evidence.context.savings_ratio,
+    before: null,
+    after: null,
+    saving: null,
   };
 }
 
-function savingDisplay(request: RecentRequest, tokens: ReturnType<typeof evidenceTokens>, t: typeof copy.en.live | typeof copy.zh.live): string {
-  if (tokens.saving == null && request.display_savings_as_value === false) return t.notAvailable;
-  return tokens.saving == null ? percent(request.savings_ratio) : percent(tokens.saving);
+function requestTokens(request: RecentRequest, evidence: RequestEvidence | null | undefined) {
+  const tokens = evidenceTokens(evidence);
+  if (tokens.before != null || tokens.after != null || tokens.saving != null) return tokens;
+  return {
+    before: request.baseline_payload_tokens ?? null,
+    after: request.forwarded_payload_tokens ?? null,
+    saving: request.real_input_savings_ratio ?? null,
+  };
 }
 
-function savingClassName(request: RecentRequest, tokens: ReturnType<typeof evidenceTokens>): string {
-  if (tokens.saving == null && request.display_savings_as_value === false) return 'text-right font-mono text-xs text-muted';
-  return tokens.before != null && tokens.after != null && tokens.after > tokens.before
-    ? 'text-right font-mono text-xs text-warning'
-    : 'text-right font-mono text-xs text-success';
+function instanceKey(request: RecentRequest) {
+  return request.agent || 'unknown';
+}
+
+function groupRequests(requests: RecentRequest[]) {
+  const groups = new Map<string, RecentRequest[]>();
+  for (const request of requests) {
+    const key = instanceKey(request);
+    groups.set(key, [...(groups.get(key) ?? []), request]);
+  }
+  return Array.from(groups.entries()).map(([key, items]) => ({ key, items, latest: items[0] }));
 }
 
 export function LiveFlowPage() {
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const language = useDashboardStore((state) => state.language);
   const product = useDashboardStore((state) => state.product);
   const selectedRequestId = useDashboardStore((state) => state.selectedRequestId);
@@ -64,10 +121,12 @@ export function LiveFlowPage() {
   const t = copy[language].live;
   const requests = useMemo(() => (product?.recent?.requests ?? []).filter((request) => request.request_class !== 'internal'), [product]);
   const recentError = product?.recentError ?? null;
+  const groups = useMemo(() => groupRequests(requests), [requests]);
   const selected = requests.find((request) => request.request_id === selectedRequestId) ?? null;
   const selectedEvidence = selected ? evidenceByRequestId[selected.request_id] : null;
-  const selectedTokens = evidenceTokens(selectedEvidence);
-  const selectedExpanded = selectedTokens.before != null && selectedTokens.after != null && selectedTokens.after > selectedTokens.before;
+  const selectedTokens = selected ? requestTokens(selected, selectedEvidence) : { before: null, after: null, saving: null };
+  const selectedHasSavings = selected ? hasRealInputSavings(selected, selectedEvidence) : false;
+  const selectedExpanded = selectedHasSavings && selectedTokens.before != null && selectedTokens.after != null && selectedTokens.after > selectedTokens.before;
   const selectedDisplayText = selected
     ? selected.user_visible_query || selected.query || selectedEvidence?.request.query_summary || selected.diagnostic_label || selected.request_id
     : t.notAvailable;
@@ -101,23 +160,50 @@ export function LiveFlowPage() {
                 </TR>
               </THead>
               <TBody>
-                {requests.map((request) => {
-                  const expanded = selectedRequestId === request.request_id;
-                  const evidence = evidenceByRequestId[request.request_id];
-                  const tokens = evidenceTokens(evidence);
-                  const decision = decisionFor(request);
+                {groups.map((group) => {
+                  const groupExpanded = expandedGroups[group.key] ?? false;
+                  const latestEvidence = evidenceByRequestId[group.latest.request_id];
+                  const latestTokens = requestTokens(group.latest, latestEvidence);
+                  const latestTags = decisionTagsFor(group.latest, latestEvidence);
+                  const latestHasSavings = hasRealInputSavings(group.latest, latestEvidence);
+                  const rows = groupExpanded ? group.items : [];
                   return (
-                    <TR key={request.request_id} className={expanded ? 'bg-panel/60' : ''} onClick={() => void selectRequest(request)}>
-                      <TD>{expanded ? <ChevronDown className="h-3.5 w-3.5 text-muted" /> : <ChevronRight className="h-3.5 w-3.5 text-muted" />}</TD>
-                      <TD className="font-mono text-xs text-muted">{timeShort(request.timestamp)}</TD>
-                      <TD>{request.agent || 'unknown'}</TD>
-                      <TD><Badge tone={tone(decision) as never}>{decisionLabel(decision, t)}</Badge></TD>
-                      <TD className="text-right font-mono text-xs">{tokens.before == null ? t.notAvailable : compactNumber(tokens.before)}</TD>
-                      <TD className="text-right font-mono text-xs">{tokens.after == null ? t.notAvailable : compactNumber(tokens.after)}</TD>
-                      <TD className={savingClassName(request, tokens)}>
-                        {savingDisplay(request, tokens, t)}
-                      </TD>
-                    </TR>
+                    <Fragment key={group.key}>
+                      <TR key={group.key} className="bg-background/60" onClick={() => setExpandedGroups((current) => ({ ...current, [group.key]: !groupExpanded }))}>
+                        <TD>{groupExpanded ? <ChevronDown className="h-3.5 w-3.5 text-muted" /> : <ChevronRight className="h-3.5 w-3.5 text-muted" />}</TD>
+                        <TD className="font-mono text-xs text-muted">{timeShort(group.latest.timestamp)}</TD>
+                        <TD>
+                          <span>{group.key}</span>
+                          <Badge tone="neutral" className="ml-2">{group.items.length} {t.records}</Badge>
+                        </TD>
+                        <TD><DecisionTags tags={latestTags} t={t} /></TD>
+                        <TD className="text-right font-mono text-xs">{latestHasSavings && latestTokens.before != null ? compactNumber(latestTokens.before) : t.notAvailable}</TD>
+                        <TD className="text-right font-mono text-xs">{latestHasSavings && latestTokens.after != null ? compactNumber(latestTokens.after) : t.notAvailable}</TD>
+                        <TD className={!latestHasSavings ? 'text-right font-mono text-xs text-muted' : latestTokens.before != null && latestTokens.after != null && latestTokens.after > latestTokens.before ? 'text-right font-mono text-xs text-warning' : 'text-right font-mono text-xs text-success'}>
+                          {latestHasSavings ? percent(latestTokens.saving ?? group.latest.real_input_savings_ratio, 2) : t.notAvailable}
+                        </TD>
+                      </TR>
+                      {rows.map((request) => {
+                        const expanded = selectedRequestId === request.request_id;
+                        const evidence = evidenceByRequestId[request.request_id];
+                        const tokens = requestTokens(request, evidence);
+                        const decisionTags = decisionTagsFor(request, evidence);
+                        const showSavings = hasRealInputSavings(request, evidence);
+                        return (
+                          <TR key={request.request_id} className={expanded ? 'bg-panel/60' : ''} onClick={() => void selectRequest(request)}>
+                            <TD className="pl-6">{expanded ? <ChevronDown className="h-3.5 w-3.5 text-muted" /> : <ChevronRight className="h-3.5 w-3.5 text-muted" />}</TD>
+                            <TD className="font-mono text-xs text-muted">{timeShort(request.timestamp)}</TD>
+                            <TD>{request.agent || 'unknown'}</TD>
+                            <TD><DecisionTags tags={decisionTags} t={t} /></TD>
+                            <TD className="text-right font-mono text-xs">{showSavings && tokens.before != null ? compactNumber(tokens.before) : t.notAvailable}</TD>
+                            <TD className="text-right font-mono text-xs">{showSavings && tokens.after != null ? compactNumber(tokens.after) : t.notAvailable}</TD>
+                            <TD className={!showSavings ? 'text-right font-mono text-xs text-muted' : tokens.before != null && tokens.after != null && tokens.after > tokens.before ? 'text-right font-mono text-xs text-warning' : 'text-right font-mono text-xs text-success'}>
+                              {showSavings ? percent(tokens.saving ?? request.real_input_savings_ratio, 2) : t.notAvailable}
+                            </TD>
+                          </TR>
+                        );
+                      })}
+                    </Fragment>
                   );
                 })}
               </TBody>
@@ -136,11 +222,11 @@ export function LiveFlowPage() {
             {selected && selectedEvidence && (
               <>
                 <div className="grid grid-cols-3 gap-2">
-                  <div className="rounded-md border border-border bg-background p-2"><p className="text-xs text-muted">{t.before}</p><strong>{compactNumber(selectedTokens.before)}</strong></div>
-                  <div className="rounded-md border border-border bg-background p-2"><p className="text-xs text-muted">{t.after}</p><strong>{compactNumber(selectedTokens.after)}</strong></div>
+                  <div className="rounded-md border border-border bg-background p-2"><p className="text-xs text-muted">{t.before}</p><strong>{selectedHasSavings ? compactNumber(selectedTokens.before) : t.notAvailable}</strong></div>
+                  <div className="rounded-md border border-border bg-background p-2"><p className="text-xs text-muted">{t.after}</p><strong>{selectedHasSavings ? compactNumber(selectedTokens.after) : t.notAvailable}</strong></div>
                   <div className="rounded-md border border-border bg-background p-2">
                     <p className="text-xs text-muted">{selectedExpanded ? t.expandedTokens : t.saving}</p>
-                    <strong className={selectedExpanded ? 'text-warning' : 'text-success'}>{selectedExpanded ? `+${compactNumber((selectedTokens.after ?? 0) - (selectedTokens.before ?? 0))}` : percent(selectedTokens.saving)}</strong>
+                    <strong className={!selectedHasSavings ? 'text-muted' : selectedExpanded ? 'text-warning' : 'text-success'}>{!selectedHasSavings ? t.notAvailable : selectedExpanded ? `+${compactNumber((selectedTokens.after ?? 0) - (selectedTokens.before ?? 0))}` : percent(selectedTokens.saving, 2)}</strong>
                   </div>
                 </div>
                 {selectedExpanded && <p className="rounded-md border border-warning/30 bg-warning/10 p-2 text-xs text-warning">{t.expandedDetail}</p>}
@@ -154,7 +240,7 @@ export function LiveFlowPage() {
                 </section>
                 <section>
                   <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">{t.reason}</p>
-                  <p className="rounded-md border border-border bg-background p-2 text-sm text-foreground">{selectedEvidence.status.failure_reason || selected.qualification_reason || selected.diagnostic_label || decisionLabel(decisionFor(selected), t)}</p>
+                  <p className="rounded-md border border-border bg-background p-2 text-sm text-foreground">{selectedEvidence.status.failure_reason || selected.qualification_reason || selected.diagnostic_label || decisionTagsFor(selected, selectedEvidence).map((tag) => decisionLabel(tag, t)).join(' / ')}</p>
                 </section>
               </>
             )}

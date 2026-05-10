@@ -1,6 +1,7 @@
 package attach
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -60,7 +61,7 @@ wire_api = "responses"
 	}
 }
 
-func TestAttachThenDetachCodexRestoresOriginalConfig(t *testing.T) {
+func TestAttachThenDetachCodexUsesManagedProfileAndPreservesOriginalConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
 
@@ -79,8 +80,74 @@ func TestAttachThenDetachCodexRestoresOriginalConfig(t *testing.T) {
 	if !result.Success {
 		t.Fatalf("attach failed: %s", result.Message)
 	}
-	if !BackupExists(AgentCodex) {
-		t.Fatalf("expected backup to exist after attach")
+
+	afterAttach, err := os.ReadFile(configPath)
+	if err != nil {
+		t.Fatalf("read config after attach failed: %v", err)
+	}
+	if string(afterAttach) != original {
+		t.Fatalf("expected official Codex config to remain unchanged, got:\n%s", string(afterAttach))
+	}
+	if BackupExists(AgentCodex) {
+		t.Fatalf("expected no backup for managed-profile attach")
+	}
+
+	managedConfig, err := codexManagedConfigPath()
+	if err != nil {
+		t.Fatalf("managed config path failed: %v", err)
+	}
+	managedRaw, err := os.ReadFile(managedConfig)
+	if err != nil {
+		t.Fatalf("expected managed Codex config to be written: %v", err)
+	}
+	if !strings.Contains(string(managedRaw), `model_provider = "omnimemora"`) {
+		t.Fatalf("expected managed config to contain OmniMemora provider, got:\n%s", string(managedRaw))
+	}
+	if strings.Contains(managedConfig, filepath.Join(tmpDir, ".codex", "config.toml")) {
+		t.Fatalf("managed config must not point at official Codex config: %s", managedConfig)
+	}
+
+	launcherPath, err := codexManagedLauncherPath()
+	if err != nil {
+		t.Fatalf("managed launcher path failed: %v", err)
+	}
+	launcherRaw, err := os.ReadFile(launcherPath)
+	if err != nil {
+		t.Fatalf("expected managed Codex launcher to be written: %v", err)
+	}
+	if !strings.Contains(string(launcherRaw), "exec codex") {
+		t.Fatalf("expected launcher to exec codex, got:\n%s", string(launcherRaw))
+	}
+	if !strings.Contains(string(launcherRaw), "export CODEX_HOME=") {
+		t.Fatalf("expected launcher to pin CODEX_HOME, got:\n%s", string(launcherRaw))
+	}
+	desktopLauncherPath, err := codexManagedDesktopLauncherPath()
+	if err != nil {
+		t.Fatalf("managed desktop launcher path failed: %v", err)
+	}
+	desktopLauncherRaw, err := os.ReadFile(desktopLauncherPath)
+	if err != nil {
+		t.Fatalf("expected managed Codex desktop launcher to be written: %v", err)
+	}
+	if !strings.Contains(string(desktopLauncherRaw), "exec codex app") {
+		t.Fatalf("expected desktop launcher to open Codex Desktop, got:\n%s", string(desktopLauncherRaw))
+	}
+	if !strings.Contains(string(desktopLauncherRaw), "export CODEX_HOME=") {
+		t.Fatalf("expected desktop launcher to pin CODEX_HOME, got:\n%s", string(desktopLauncherRaw))
+	}
+	markerPath, err := codexManagedMarkerPath()
+	if err != nil {
+		t.Fatalf("managed marker path failed: %v", err)
+	}
+	markerRaw, err := os.ReadFile(markerPath)
+	if err != nil {
+		t.Fatalf("expected managed marker to be written: %v", err)
+	}
+	if !strings.Contains(string(markerRaw), "launcher=") {
+		t.Fatalf("expected marker to include launcher path, got:\n%s", string(markerRaw))
+	}
+	if !strings.Contains(string(markerRaw), "desktop_launcher=") {
+		t.Fatalf("expected marker to include desktop launcher path, got:\n%s", string(markerRaw))
 	}
 
 	if err := DetachCodex(); err != nil {
@@ -97,9 +164,113 @@ func TestAttachThenDetachCodexRestoresOriginalConfig(t *testing.T) {
 	if BackupExists(AgentCodex) {
 		t.Fatalf("expected backup to be removed after restore")
 	}
+	if codexManagedProfileExists() {
+		t.Fatalf("expected managed profile marker to be removed after detach")
+	}
 }
 
-func TestIsAttachedCodexRecognizesProviderConfig(t *testing.T) {
+func TestSyncManagedCodexGUIStateCopiesOnlyStableGUIState(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	sourceState := map[string]any{
+		"project-order":                                []any{"/workspace/a", "/workspace/b"},
+		"electron-saved-workspace-roots":               []any{"/workspace/a", "/workspace/b"},
+		"active-workspace-roots":                       []any{"/workspace/b"},
+		"electron-workspace-root-labels":               map[string]any{"/workspace/b": "B"},
+		"thread-workspace-root-hints":                  map[string]any{"old-thread": "/workspace/a"},
+		"projectless-thread-ids":                       []any{"old-thread"},
+		"remote-project-connection-backfill-completed": true,
+		"electron-persisted-atom-state": map[string]any{
+			"codexCloudAccess": "enabled_needs_setup",
+			"electron:onboarding-plugin-checklist-active": true,
+			"has-dismissed-skills-apps-tooltip":           true,
+			"sidebar-collapsed-groups":                    map[string]any{"/workspace/a": true},
+			"prompt-history":                              map[string]any{"old-thread": []any{"do not copy"}},
+		},
+	}
+	sourcePath := filepath.Join(tmpDir, ".codex", ".codex-global-state.json")
+	if err := writeJSONForTest(sourcePath, sourceState); err != nil {
+		t.Fatalf("write source state failed: %v", err)
+	}
+
+	managedHome, err := codexManagedHomeDir()
+	if err != nil {
+		t.Fatalf("managed home path failed: %v", err)
+	}
+	targetPath := filepath.Join(managedHome, ".codex", ".codex-global-state.json")
+	targetState := map[string]any{
+		"session-only": "keep",
+		"electron-persisted-atom-state": map[string]any{
+			"prompt-history": map[string]any{"managed-thread": []any{"keep"}},
+		},
+	}
+	if err := writeJSONForTest(targetPath, targetState); err != nil {
+		t.Fatalf("write target state failed: %v", err)
+	}
+
+	if err := syncManagedCodexGUIState(); err != nil {
+		t.Fatalf("sync managed GUI state failed: %v", err)
+	}
+
+	updated, err := readJSONMap(targetPath)
+	if err != nil {
+		t.Fatalf("read updated target state failed: %v", err)
+	}
+	if updated["session-only"] != "keep" {
+		t.Fatalf("expected unmanaged target keys to be preserved, got %#v", updated)
+	}
+	if _, ok := updated["project-order"]; !ok {
+		t.Fatalf("expected project-order to be copied, got %#v", updated)
+	}
+	if _, ok := updated["thread-workspace-root-hints"]; ok {
+		t.Fatalf("expected source thread workspace hints not to be copied, got %#v", updated)
+	}
+	if _, ok := updated["projectless-thread-ids"]; ok {
+		t.Fatalf("expected source projectless thread ids not to be copied, got %#v", updated)
+	}
+
+	atom := nestedStringMap(updated, "electron-persisted-atom-state")
+	if atom["codexCloudAccess"] != "enabled_needs_setup" {
+		t.Fatalf("expected cloud access state to be copied, got %#v", atom)
+	}
+	promptHistory, ok := atom["prompt-history"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected managed prompt history to be preserved, got %#v", atom)
+	}
+	if _, ok := promptHistory["managed-thread"]; !ok {
+		t.Fatalf("expected managed prompt history to remain, got %#v", promptHistory)
+	}
+	if _, ok := promptHistory["old-thread"]; ok {
+		t.Fatalf("expected source prompt history not to be copied, got %#v", promptHistory)
+	}
+}
+
+func writeJSONForTest(path string, payload map[string]any) error {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
+}
+
+func TestIsAttachedCodexRecognizesManagedProfile(t *testing.T) {
+	tmpDir := t.TempDir()
+	t.Setenv("HOME", tmpDir)
+
+	if err := writeManagedCodexProfile(`model = "gpt-5.4"`+"\n", ProductAdapterResponsesEndpoint()); err != nil {
+		t.Fatalf("write managed profile failed: %v", err)
+	}
+
+	if !IsAttached(AgentCodex, 8765) {
+		t.Fatalf("expected managed Codex profile to count as attached")
+	}
+}
+
+func TestIsAttachedCodexStillRecognizesLegacyProviderConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 	t.Setenv("HOME", tmpDir)
 

@@ -100,6 +100,22 @@ class TokenSavingsMeter:
     enforcement_trace: Optional[Dict[str, Any]] = None
     actual_enforcement: Optional[Dict[str, Any]] = None
 
+    # Token accounting split:
+    # compression_* measures context-compaction ability.
+    # real_input_* measures full upstream payload token reduction.
+    baseline_payload_tokens: int = 0
+    forwarded_payload_tokens: int = 0
+    real_input_saved_tokens: int = 0
+    real_input_savings_ratio: float = 0.0
+    omni_added_tokens: int = 0
+    omni_removed_tokens: int = 0
+    compression_source_tokens: int = 0
+    compression_output_tokens: int = 0
+    compression_saved_tokens: int = 0
+    compression_ratio: float = 0.0
+    metric_confidence: str = "legacy_compression_only"
+    quality_gate_status: str = "unverified"
+
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 

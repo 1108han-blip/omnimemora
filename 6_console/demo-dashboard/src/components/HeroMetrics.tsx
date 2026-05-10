@@ -24,7 +24,7 @@ const CARD_CONFIGS: CardConfig[] = [
   { id: 'real_requests', label: 'Real Requests' },
   { id: 'context_compression', label: 'Context Compression' },
   { id: 'memory_enhancement', label: 'Memory Enhancement' },
-  { id: 'token_savings', label: 'Token Savings' },
+  { id: 'token_savings', label: 'Real Input Savings' },
 ];
 
 function formatRatioPct(ratio: number): string {
@@ -90,8 +90,6 @@ function FrontCard({ card, data }: { card: CardConfig; data: CoreCapabilitiesRes
 
   // token_savings
   const c = data.cards.token_savings as TokenSavingsCard;
-  const coverage = (data.cards.real_requests as RealRequestsCard).ratio;
-  const effectiveRatio = c.ratio * coverage;
   return (
     <div className="text-center">
       <div className="text-sm text-zinc-500 dark:text-zinc-400 font-medium">{card.label}</div>
@@ -99,7 +97,7 @@ function FrontCard({ card, data }: { card: CardConfig; data: CoreCapabilitiesRes
         {formatSavedTokens(c.saved_tokens)}
       </div>
       <div className="text-xs text-zinc-400 dark:text-zinc-500 mt-1">
-        {formatRatioPct(effectiveRatio)} of observed requests
+        {formatRatioPct(c.ratio)} full forwarded-payload delta
       </div>
     </div>
   );
@@ -195,11 +193,7 @@ function BackCard({ card, trend }: { card: CardConfig; trend: CoreCapabilitiesTr
   }
 
   // token_savings
-  const rawValues = points.map(p => {
-    const savings = (p.token_savings as TokenSavingsCard).ratio;
-    const coverage = (p.real_requests as RealRequestsCard).ratio;
-    return savings * coverage;
-  });
+  const rawValues = points.map(p => (p.token_savings as TokenSavingsCard).ratio);
   const maxVal = Math.max(...rawValues, 1);
   const total7d = points.reduce((s, pt) => s + ((pt.token_savings as TokenSavingsCard).saved_tokens || 0), 0);
   return (
@@ -207,12 +201,10 @@ function BackCard({ card, trend }: { card: CardConfig; trend: CoreCapabilitiesTr
       <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-1">
         {total7d > 1000 ? `${(total7d / 1000).toFixed(1)}K` : total7d.toLocaleString()} saved (7d)
       </div>
-      <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-1">effective ratio/day (of observed)</div>
+      <div className="text-[10px] text-zinc-400 uppercase tracking-wider mb-1">real input ratio/day</div>
       <div className="flex items-end gap-0.5 h-20 mb-1">
         {points.map((pt) => {
-          const savings = (pt.token_savings as TokenSavingsCard).ratio;
-          const coverage = (pt.real_requests as RealRequestsCard).ratio;
-          const val = savings * coverage;
+          const val = (pt.token_savings as TokenSavingsCard).ratio;
           return (
             <div key={pt.date} className="flex-1 flex flex-col items-center gap-0.5">
               <div className="w-full flex flex-col items-center justify-end h-full">

@@ -121,6 +121,7 @@ attach 不是高頻產品開關，而是低頻接入動作。
 - attach 前必須自動備份原始配置
 - detach / uninstall 時必須恢復備份
 - 不允許只刪除 OmniMemora 片段卻不恢復原始 provider 狀態
+- Codex 例外：默認 attach carrier 必須使用 OmniMemora-managed profile / launcher，不得改寫官方 `~/.codex/config.toml`；因此不需要為新默認流程創建主配置備份，detach 只清理 managed profile。舊版 Codex provider 改寫仍必須可恢復/清理。
 
 ---
 

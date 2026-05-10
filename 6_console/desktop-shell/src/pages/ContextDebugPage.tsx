@@ -10,6 +10,8 @@ export function ContextDebugPage() {
   const t = copy[language].context;
   const live = copy[language].live;
   const evidence = selectedRequestId ? evidenceByRequestId[selectedRequestId] : null;
+  const realInput = evidence?.context.real_input;
+  const hasRealInputSavings = (realInput?.saved_tokens ?? 0) > 0 || (realInput?.savings_ratio ?? 0) > 0;
 
   return (
     <div className="grid grid-cols-[1fr_1fr] gap-3 max-xl:grid-cols-1">
@@ -21,9 +23,9 @@ export function ContextDebugPage() {
           {evidence && (
             <>
               <div className="grid grid-cols-3 gap-2">
-                <div className="rounded-md border border-border bg-background p-2"><p className="text-xs text-muted">{live.before}</p><strong>{compactNumber(evidence.context.before_tokens)}</strong></div>
-                <div className="rounded-md border border-border bg-background p-2"><p className="text-xs text-muted">{live.after}</p><strong>{compactNumber(evidence.context.after_tokens)}</strong></div>
-                <div className="rounded-md border border-border bg-background p-2"><p className="text-xs text-muted">{live.saving}</p><strong className="text-success">{percent(evidence.context.savings_ratio)}</strong></div>
+                <div className="rounded-md border border-border bg-background p-2"><p className="text-xs text-muted">{live.before}</p><strong>{hasRealInputSavings ? compactNumber(realInput?.baseline_payload_tokens) : live.notAvailable}</strong></div>
+                <div className="rounded-md border border-border bg-background p-2"><p className="text-xs text-muted">{live.after}</p><strong>{hasRealInputSavings ? compactNumber(realInput?.forwarded_payload_tokens) : live.notAvailable}</strong></div>
+                <div className="rounded-md border border-border bg-background p-2"><p className="text-xs text-muted">{live.saving}</p><strong className={hasRealInputSavings ? 'text-success' : 'text-muted'}>{hasRealInputSavings ? percent(realInput?.savings_ratio, 2) : live.notAvailable}</strong></div>
               </div>
               <pre className="max-h-72 overflow-auto rounded-md border border-border bg-background p-3 font-mono text-xs text-foreground">{evidence.context.selected_memories.map((memory) => memory.content || memory.abstract || memory.uri).join('\n\n') || live.notAvailable}</pre>
             </>

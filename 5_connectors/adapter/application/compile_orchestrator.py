@@ -41,6 +41,9 @@ def _get_v2_compute():
 def _get_access_plan():
     return __import__("5_connectors.adapter.application.access_plan", fromlist=["dummy"])
 
+def _get_token_accounting():
+    return __import__("5_connectors.adapter.application.token_accounting", fromlist=["dummy"])
+
 def _get_config():
     return __import__("5_connectors.adapter.config", fromlist=["dummy"]).config
 
@@ -305,6 +308,7 @@ async def _run_compile_and_resolve(
         compile_meta=compile_meta,
         truth_contract=truth_contract,
         payload=payload,
+        forwarded_payload=compiled_payload,
         identity_and_plan=identity_and_plan,
     )
 
@@ -345,6 +349,7 @@ def _persist_gateway_meter(
     compile_meta: dict,
     truth_contract: dict,
     payload: dict,
+    forwarded_payload: Optional[dict] = None,
     identity_and_plan: Optional[Dict[str, Any]] = None,
 ) -> None:
     """Persist gateway meter artifact in TokenSavingsMeter-compatible shape."""
@@ -363,6 +368,12 @@ def _persist_gateway_meter(
     actual_chars = max(0, actual_tokens * 4)
     saved_tokens = max(0, baseline_tokens - actual_tokens)
     saved_chars = max(0, baseline_chars - actual_chars)
+    token_accounting = _get_token_accounting().build_token_accounting(
+        original_payload=payload,
+        forwarded_payload=forwarded_payload or payload,
+        compression_source_tokens=baseline_tokens,
+        compression_output_tokens=actual_tokens,
+    )
     tenant = agent_id if agent_id and agent_id != "unknown" else "gateway"
     identity_plan = identity_and_plan or _build_identity_and_plan_from_payload(
         request_id=request_id,
@@ -388,6 +399,18 @@ def _persist_gateway_meter(
             actual_tokens_estimate=actual_tokens,
             saved_tokens_estimate=saved_tokens,
             savings_ratio=round((saved_tokens / baseline_tokens), 3) if baseline_tokens > 0 else 0.0,
+            baseline_payload_tokens=token_accounting["baseline_payload_tokens"],
+            forwarded_payload_tokens=token_accounting["forwarded_payload_tokens"],
+            real_input_saved_tokens=token_accounting["real_input_saved_tokens"],
+            real_input_savings_ratio=token_accounting["real_input_savings_ratio"],
+            omni_added_tokens=token_accounting["omni_added_tokens"],
+            omni_removed_tokens=token_accounting["omni_removed_tokens"],
+            compression_source_tokens=token_accounting["compression_source_tokens"],
+            compression_output_tokens=token_accounting["compression_output_tokens"],
+            compression_saved_tokens=token_accounting["compression_saved_tokens"],
+            compression_ratio=token_accounting["compression_ratio"],
+            metric_confidence=token_accounting["metric_confidence"],
+            quality_gate_status="unverified",
             packed_memory_count=selected_count,
             local_cards_used=selected_count,
             remote_candidates_considered=max(selected_count, 0),

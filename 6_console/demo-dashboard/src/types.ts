@@ -99,6 +99,7 @@ export interface TokenSavingsCard {
 
 export interface CoreCapabilitiesResponse {
   period: '24h';
+  metric_contract_version?: string;
   observed_request_count: number;
   non_value_count: number;
   internal_or_wrapper_count?: number;
@@ -112,6 +113,7 @@ export interface CoreCapabilitiesResponse {
 
 export interface CoreCapabilitiesTrendPoint {
   date: string;
+  metric_contract_version?: string;
   observed_request_count: number;
   non_value_count: number;
   internal_or_wrapper_count?: number;
@@ -178,6 +180,18 @@ export interface RecentRequest {
   bypass: boolean;
   saved_tokens: number;
   savings_ratio: number;
+  baseline_payload_tokens?: number;
+  forwarded_payload_tokens?: number;
+  real_input_saved_tokens?: number;
+  real_input_savings_ratio?: number;
+  omni_added_tokens?: number;
+  omni_removed_tokens?: number;
+  compression_source_tokens?: number;
+  compression_output_tokens?: number;
+  compression_saved_tokens?: number;
+  compression_ratio?: number;
+  metric_confidence?: string;
+  quality_gate_status?: string;
   query: string;
   raw_query?: string;
   user_visible_query?: string;
@@ -252,6 +266,22 @@ export interface RequestEvidenceContext {
   after_tokens: number;
   saved_tokens: number;
   savings_ratio: number;
+  compression?: {
+    source_tokens: number;
+    output_tokens: number;
+    saved_tokens: number;
+    ratio: number;
+  };
+  real_input?: {
+    baseline_payload_tokens: number;
+    forwarded_payload_tokens: number;
+    saved_tokens: number;
+    savings_ratio: number;
+    omni_added_tokens: number;
+    omni_removed_tokens: number;
+    metric_confidence: string;
+    quality_gate_status: string;
+  };
   selected_memory_count: number;
   dropped_memory_count: number;
   selected_memories: MemoryEntry[];

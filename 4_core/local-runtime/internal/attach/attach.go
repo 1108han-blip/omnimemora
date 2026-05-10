@@ -240,14 +240,14 @@ func IsAttached(agent AgentType, port int) bool {
 
 	// Codex uses TOML config — check raw content for MCP block
 	if agent == AgentCodex {
+		if codexManagedProfileExists() {
+			return true
+		}
 		data, err := os.ReadFile(path)
 		if err != nil {
 			return false
 		}
-		content := string(data)
-		return strings.Contains(content, `model_provider = "omnimemora"`) ||
-			strings.Contains(content, "[model_providers.omnimemora]") ||
-			strings.Contains(content, "[mcp_servers.omnimemora]")
+		return codexConfigContainsOmniMemora(string(data))
 	}
 
 	cfg, err := ReadConfig(path)

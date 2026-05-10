@@ -39,8 +39,11 @@ export function ContextComparison({ evidence, loading }: ContextComparisonProps)
   }
 
   const ctx = evidence.context;
-  const savedTokens = ctx.before_tokens - ctx.after_tokens;
-  const savingsPct = ctx.before_tokens > 0 ? Math.round((savedTokens / ctx.before_tokens) * 100) : 0;
+  const compressionBefore = ctx.compression?.source_tokens ?? ctx.before_tokens;
+  const compressionAfter = ctx.compression?.output_tokens ?? ctx.after_tokens;
+  const compressionSaved = Math.max(0, compressionBefore - compressionAfter);
+  const compressionPct = compressionBefore > 0 ? Math.round((compressionSaved / compressionBefore) * 100) : 0;
+  const realInput = ctx.real_input;
 
   // BEFORE: all candidates (selected + dropped)
   const beforeMemories: MemorySummary[] = [
@@ -54,16 +57,21 @@ export function ContextComparison({ evidence, loading }: ContextComparisonProps)
   return (
     <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl overflow-hidden">
       <div className="px-6 py-4 border-b border-zinc-200 dark:border-zinc-700 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Context Before / After</h3>
+        <h3 className="text-sm font-semibold text-zinc-700 dark:text-zinc-300">Context Refinement / Real Input</h3>
         <div className="flex items-center gap-3 text-xs">
           <span className="text-zinc-400">
-            <span className="font-mono text-red-500">{ctx.before_tokens}</span> tokens before
+            <span className="font-mono text-red-500">{compressionBefore}</span> compression source
           </span>
           <span className="text-emerald-500">→</span>
           <span className="text-zinc-400">
-            <span className="font-mono text-emerald-600">{ctx.after_tokens}</span> tokens after
+            <span className="font-mono text-emerald-600">{compressionAfter}</span> output
           </span>
-          <span className="font-semibold text-emerald-600">-{savingsPct}%</span>
+          <span className="font-semibold text-indigo-600">-{compressionPct}% refined</span>
+          {realInput && realInput.saved_tokens > 0 && (
+            <span className="font-semibold text-emerald-600">
+              {realInput.saved_tokens} real input saved
+            </span>
+          )}
         </div>
       </div>
 

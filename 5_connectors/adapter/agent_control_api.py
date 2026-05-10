@@ -36,7 +36,7 @@ router = APIRouter()
 _AGENTS_CONTROL_CACHE_TTL_SECONDS = float(_snapshot_cache.DEFAULT_TTL_SECONDS)
 
 _DISPLAY_NAMES = {
-    "codex_cli": "Codex",
+    "codex_cli": "Codex CLI",
     "claude_code": "Claude Code",
     "cursor": "Cursor",
     "openclaw": "OpenClaw",
@@ -247,6 +247,8 @@ async def install_agent_control(request: AgentControlRequest, http_request: Requ
     card = _find_card(cards, request.family_id)
     if not card:
         raise HTTPException(status_code=404, detail=f"family not found after install: {request.family_id}")
+    if request.family_id == "codex_cli":
+        card["message"] = "managed Codex profile prepared; official Codex config was not modified"
     return card
 
 
@@ -350,7 +352,11 @@ async def disable_agent_control(request: AgentControlRequest, http_request: Requ
     updated = _find_card(refreshed, request.family_id)
     if updated is None:
         raise HTTPException(status_code=404, detail=f"family not found after disable: {request.family_id}")
-    updated["message"] = "routing disabled"
+    if request.family_id == "codex_cli":
+        updated["routing_enabled"] = False
+        updated["message"] = "routing disabled; Codex managed profile retained"
+    else:
+        updated["message"] = "routing disabled"
     _invalidate_agents_control_snapshot()
     return updated
 
@@ -376,5 +382,8 @@ async def repair_agent_control(request: AgentControlRequest, http_request: Reque
     card = _find_card(cards, request.family_id)
     if card is None:
         raise HTTPException(status_code=404, detail=f"family not found after repair: {request.family_id}")
-    card["message"] = "attachment repaired"
+    if request.family_id == "codex_cli":
+        card["message"] = "managed Codex profile repaired; official Codex config was not modified"
+    else:
+        card["message"] = "attachment repaired"
     return card

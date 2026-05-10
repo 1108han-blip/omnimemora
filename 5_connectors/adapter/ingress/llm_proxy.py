@@ -327,6 +327,11 @@ def _routing_enabled_for_agent(agent_id: str) -> bool:
     return _route_state.routing_enabled(agent_id)
 
 
+def _exception_message(exc: BaseException, limit: int = 300) -> str:
+    text = str(exc).strip() or repr(exc)
+    return f"{type(exc).__name__}: {text}"[:limit]
+
+
 async def _compile_or_passthrough_for_route(
     *,
     payload: dict,
@@ -2068,6 +2073,8 @@ def _persist_gateway_meter(
     compile_meta: dict,
     request: Optional[Request] = None,
     body: Optional[dict] = None,
+    original_payload: Optional[dict] = None,
+    forwarded_payload: Optional[dict] = None,
 ) -> None:
     baseline_tokens = int(compile_meta.get("original_token_estimate") or 0)
     actual_tokens = int(compile_meta.get("compiled_token_estimate") or 0)
@@ -2081,6 +2088,14 @@ def _persist_gateway_meter(
     saved_tokens = max(0, baseline_tokens - actual_tokens)
     saved_chars = max(0, baseline_chars - actual_chars)
     packed_count = int(compile_meta.get("selected_memory_count") or 0)
+    token_accounting = importlib.import_module(
+        "5_connectors.adapter.application.token_accounting"
+    ).build_token_accounting(
+        original_payload=original_payload or body,
+        forwarded_payload=forwarded_payload or original_payload or body,
+        compression_source_tokens=baseline_tokens,
+        compression_output_tokens=actual_tokens,
+    )
     tenant = agent_id if agent_id and agent_id != "unknown" else "gateway"
     try:
         access_plan_mod = importlib.import_module("5_connectors.adapter.application.access_plan")
@@ -2136,6 +2151,18 @@ def _persist_gateway_meter(
             actual_tokens_estimate=actual_tokens,
             saved_tokens_estimate=saved_tokens,
             savings_ratio=round((saved_tokens / baseline_tokens), 3) if baseline_tokens > 0 else 0.0,
+            baseline_payload_tokens=token_accounting["baseline_payload_tokens"],
+            forwarded_payload_tokens=token_accounting["forwarded_payload_tokens"],
+            real_input_saved_tokens=token_accounting["real_input_saved_tokens"],
+            real_input_savings_ratio=token_accounting["real_input_savings_ratio"],
+            omni_added_tokens=token_accounting["omni_added_tokens"],
+            omni_removed_tokens=token_accounting["omni_removed_tokens"],
+            compression_source_tokens=token_accounting["compression_source_tokens"],
+            compression_output_tokens=token_accounting["compression_output_tokens"],
+            compression_saved_tokens=token_accounting["compression_saved_tokens"],
+            compression_ratio=token_accounting["compression_ratio"],
+            metric_confidence=token_accounting["metric_confidence"],
+            quality_gate_status="unverified",
             packed_memory_count=packed_count,
             local_cards_used=packed_count,
             remote_candidates_considered=max(packed_count, 0),
@@ -2188,6 +2215,8 @@ def _record_ingress_compile_and_meter(
     query_messages: object,
     request: Optional[Request] = None,
     body: Optional[dict] = None,
+    original_payload: Optional[dict] = None,
+    forwarded_payload: Optional[dict] = None,
 ) -> None:
     """
     D1a: fixed ingress responsibility for compile/meter persistence.
@@ -2209,6 +2238,8 @@ def _record_ingress_compile_and_meter(
         compile_meta=compile_meta,
         request=request,
         body=body,
+        original_payload=original_payload,
+        forwarded_payload=forwarded_payload,
     )
 
 
@@ -3006,18 +3037,20 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
         )
         upstream_model = contract.model_resolved or resolve_anthropic_upstream_model(model, upstream)
         upstream_base = contract.base_url_resolved or upstream["base_url"]
-    _record_ingress_compile_and_meter(
-        request_id=request_id,
-        agent_id=agent_id,
-        ingress_path=route_label,
-        requested_model=model,
-        compile_meta=compile_meta,
-        truth_meta=truth_meta,
-        trace_id=trace_id,
-        query_messages=compiled_body.get("messages"),
-        request=request,
-        body=body,
-    )
+        _record_ingress_compile_and_meter(
+            request_id=request_id,
+            agent_id=agent_id,
+            ingress_path=route_label,
+            requested_model=model,
+            compile_meta=compile_meta,
+            truth_meta=truth_meta,
+            trace_id=trace_id,
+            query_messages=compiled_body.get("messages"),
+            request=request,
+            body=body,
+            original_payload=body,
+            forwarded_payload={**compiled_body, "model": upstream_model},
+        )
 
     _trace_anthropic_payload(
         request_id,
@@ -3765,6 +3798,38 @@ async def proxy_v1_responses(request: Request):
         f"model={requested_model} stream={wants_stream}"
     )
 
+    if agent_id == "codex_cli" and not _routing_enabled_for_agent(agent_id):
+        error_code = "codex_direct_route_requires_restart"
+        message = (
+            "Codex OmniMemora routing is disabled. Restart Codex from the official "
+            "launcher/config so it can use the direct OpenAI route."
+        )
+        loguru.logger.warning(
+            f"[LLM_PROXY/RESPONSES] request_id={request_id} agent={agent_id} "
+            f"route=off action=reject reason={error_code}"
+        )
+        _record_event(
+            agent_id,
+            "proxy_error",
+            request_id,
+            ingress_path,
+            requested_model,
+            "rejected",
+            409,
+            error=f"route_disabled|{error_code}",
+            trace_id=trace_id,
+        )
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": {
+                    "code": error_code,
+                    "message": message,
+                    "type": "omnimemora_route_disabled",
+                }
+            },
+        )
+
     if _should_bypass_codex_gateway(agent_id):
         compiled_body = dict(chat_body)
         compile_meta = _build_codex_bypass_compile_meta()
@@ -3826,6 +3891,7 @@ async def proxy_v1_responses(request: Request):
             },
             compile_enabled=bool(compile_meta),
         )
+        rebuilt_body = _compiled_chat_to_responses_request(body, compiled_body)
         _record_ingress_compile_and_meter(
             request_id=request_id,
             agent_id=agent_id,
@@ -3837,8 +3903,9 @@ async def proxy_v1_responses(request: Request):
             query_messages=chat_body.get("messages"),
             request=request,
             body=body,
+            original_payload=body,
+            forwarded_payload=rebuilt_body,
         )
-        rebuilt_body = _compiled_chat_to_responses_request(body, compiled_body)
         upstream_url = _normalize_responses_upstream_url(contract.base_url_resolved or responses_upstream["base_url"])
         _mark_quota_audit(request, upstream_url=upstream_url, action="proxied")
         headers = {
@@ -3977,7 +4044,7 @@ async def proxy_v1_responses(request: Request):
             )
         except httpx.TimeoutException as e:
             error_type = UPSTREAM_ERROR_TYPES["upstream_timeout"]
-            error_msg = str(e)[:300]
+            error_msg = _exception_message(e)
             _log_upstream_failure(
                 request_id=request_id,
                 upstream_url=upstream_url,
@@ -4002,14 +4069,14 @@ async def proxy_v1_responses(request: Request):
                 trace_id=trace_id,
             )
             error_body = _annotate_upstream_error(
-                raw_body=str(e),
+                raw_body=error_msg,
                 status_code=None,
                 error_type=error_type,
             )
             return JSONResponse(status_code=504, content=error_body)
         except Exception as e:
             error_type = UPSTREAM_ERROR_TYPES["proxy_internal_error"]
-            error_msg = str(e)[:300]
+            error_msg = _exception_message(e)
             _log_upstream_failure(
                 request_id=request_id,
                 upstream_url=upstream_url,
@@ -4034,7 +4101,7 @@ async def proxy_v1_responses(request: Request):
                 trace_id=trace_id,
             )
             error_body = _annotate_upstream_error(
-                raw_body=str(e),
+                raw_body=error_msg,
                 status_code=None,
                 error_type=error_type,
             )
@@ -4085,18 +4152,6 @@ async def proxy_v1_responses(request: Request):
         compile_enabled=bool(compile_meta),
     )
     truth_meta["fallback_reason"] = "responses_upstream_unavailable"
-    _record_ingress_compile_and_meter(
-        request_id=request_id,
-        agent_id=agent_id,
-        ingress_path=ingress_path,
-        requested_model=requested_model,
-        compile_meta=compile_meta,
-        truth_meta=truth_meta,
-        trace_id=trace_id,
-        query_messages=chat_body.get("messages"),
-        request=request,
-        body=body,
-    )
     if config.trace_events_enabled:
         append_trace_event(
             build_trace_event(
@@ -4111,6 +4166,20 @@ async def proxy_v1_responses(request: Request):
         )
     compiled_body["model"] = contract.model_resolved or upstream_model
     compiled_body = _normalize_openai_upstream_payload(compiled_body)
+    _record_ingress_compile_and_meter(
+        request_id=request_id,
+        agent_id=agent_id,
+        ingress_path=ingress_path,
+        requested_model=requested_model,
+        compile_meta=compile_meta,
+        truth_meta=truth_meta,
+        trace_id=trace_id,
+        query_messages=chat_body.get("messages"),
+        request=request,
+        body=body,
+        original_payload=body,
+        forwarded_payload=compiled_body,
+    )
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {api_key_override or upstream['api_key']}",
@@ -4204,7 +4273,7 @@ async def proxy_v1_responses(request: Request):
 
     except httpx.TimeoutException as e:
         error_type = UPSTREAM_ERROR_TYPES["upstream_timeout"]
-        error_msg = str(e)[:300]
+        error_msg = _exception_message(e)
         _log_upstream_failure(
             request_id=request_id,
             upstream_url=upstream_url,
@@ -4229,7 +4298,7 @@ async def proxy_v1_responses(request: Request):
             trace_id=trace_id,
         )
         error_body = _annotate_upstream_error(
-            raw_body=str(e),
+            raw_body=error_msg,
             status_code=None,
             error_type=error_type,
         )
@@ -4237,7 +4306,7 @@ async def proxy_v1_responses(request: Request):
 
     except Exception as e:
         error_type = UPSTREAM_ERROR_TYPES["proxy_internal_error"]
-        error_msg = str(e)[:300]
+        error_msg = _exception_message(e)
         _log_upstream_failure(
             request_id=request_id,
             upstream_url=upstream_url,
@@ -4260,7 +4329,7 @@ async def proxy_v1_responses(request: Request):
             truth_meta=truth_meta,
         )
         error_body = _annotate_upstream_error(
-            raw_body=str(e),
+            raw_body=error_msg,
             status_code=None,
             error_type=error_type,
         )

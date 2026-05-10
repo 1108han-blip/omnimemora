@@ -30,7 +30,7 @@ from typing import Any, Dict, List, Optional, TYPE_CHECKING
 import httpx
 
 _DISPLAY_NAMES = {
-    "codex_cli": "Codex",
+    "codex_cli": "Codex CLI",
     "claude_code": "Claude Code",
     "cursor": "Cursor",
     "openclaw": "OpenClaw",
@@ -289,6 +289,8 @@ def derive_integration_truth(card: Dict[str, Any]) -> str:
     """Derive integration_truth from installed + backup_available."""
     if not card.get("installed", False):
         return "detached"
+    if card.get("family_id") == "codex_cli" and not card.get("backup_available", False):
+        return "managed_ready"
     if card.get("backup_available", False):
         return "attached_with_backup"
     return "mcp_attached"
@@ -566,6 +568,18 @@ def derive_truth_message(
         if routing_enabled:
             return "已接入 MCP，路由已開啟，等待真實工作請求。"
         return "已接入 MCP，當前無工作請求。"
+    if integration_truth == "managed_ready":
+        if traffic_truth == "real_request_observed":
+            return "已準備 OmniMemora 管理入口，真實工作請求已進入 OmniMemora。"
+        if traffic_truth == "internal_only":
+            if has_24h_value:
+                return "已準備 OmniMemora 管理入口，24 小時內已有真實請求收益；最近 30 分鐘僅看到內部握手。"
+            return "已準備 OmniMemora 管理入口，但當前僅看到內部握手。"
+        if traffic_truth == "no_recent_evidence" and has_24h_value:
+            return "已準備 OmniMemora 管理入口，24 小時內已有真實請求收益；最近 30 分鐘暫無工作請求。"
+        if routing_enabled:
+            return "已準備 OmniMemora 管理入口，路由已開啟，等待受管 Codex 工作請求。"
+        return "已準備 OmniMemora 管理入口，原 Codex 配置保持不變。"
     if integration_truth == "attached_with_backup":
         if traffic_truth == "real_request_observed":
             return "已接入並具備備份還原能力，真實工作請求已進入 OmniMemora。"
@@ -854,7 +868,7 @@ async def build_control_cards() -> List[Dict[str, Any]]:
         cards.append(
             {
                 "family_id": family_id,
-                "display_name": raw.get("display_name") or _DISPLAY_NAMES.get(family_id, family_id),
+                "display_name": _DISPLAY_NAMES.get(family_id, raw.get("display_name") or family_id),
                 "installed": bool(raw.get("installed")),
                 "routing_enabled": route_state.routing_enabled(family_id),
                 "detected": bool(raw.get("detected", True)),
@@ -1082,6 +1096,7 @@ def build_recent_requests_payload(
     limit: int = 20,
     include_internal: bool = False,
     value_qualified_only: bool = True,
+    per_agent_limit: Optional[int] = None,
 ) -> Dict[str, Any]:
     metrics_service = __import__("5_connectors.adapter.metrics_service", fromlist=["dummy"])
     requests = metrics_service.get_recent_requests(
@@ -1089,6 +1104,7 @@ def build_recent_requests_payload(
         limit,
         include_internal=include_internal,
         value_qualified_only=value_qualified_only,
+        per_agent_limit=per_agent_limit,
     )
     return {"tenant": tenant, "requests": requests}
 
@@ -1383,6 +1399,22 @@ def _build_request_evidence_payload_from_meter(request_id: str, meter: Any) -> D
     after_tokens = meter_dict.get("actual_tokens_estimate", 0)
     saved_tokens = before_tokens - after_tokens
     savings_ratio = meter_dict.get("savings_ratio", 0.0)
+    compression_source_tokens = int(meter_dict.get("compression_source_tokens") or before_tokens or 0)
+    compression_output_tokens = int(meter_dict.get("compression_output_tokens") or after_tokens or 0)
+    compression_saved_tokens = max(0, int(meter_dict.get("compression_saved_tokens") or (compression_source_tokens - compression_output_tokens)))
+    compression_ratio = float(
+        meter_dict.get("compression_ratio")
+        if meter_dict.get("compression_ratio") is not None
+        else ((compression_saved_tokens / compression_source_tokens) if compression_source_tokens > 0 else 0.0)
+    )
+    baseline_payload_tokens = int(meter_dict.get("baseline_payload_tokens") or 0)
+    forwarded_payload_tokens = int(meter_dict.get("forwarded_payload_tokens") or 0)
+    real_input_saved_tokens = int(meter_dict.get("real_input_saved_tokens") or 0)
+    real_input_savings_ratio = float(
+        meter_dict.get("real_input_savings_ratio")
+        if meter_dict.get("real_input_savings_ratio") is not None
+        else ((real_input_saved_tokens / baseline_payload_tokens) if baseline_payload_tokens > 0 else 0.0)
+    )
     candidate_memories = meter_dict.get("candidate_memories", [])
     dropped_memories = meter_dict.get("dropped_memories", [])
     dropped_content_set = {m.get("content", "").strip() for m in dropped_memories}
@@ -1463,6 +1495,22 @@ def _build_request_evidence_payload_from_meter(request_id: str, meter: Any) -> D
             "after_tokens": after_tokens,
             "saved_tokens": max(0, saved_tokens),
             "savings_ratio": savings_ratio,
+            "compression": {
+                "source_tokens": compression_source_tokens,
+                "output_tokens": compression_output_tokens,
+                "saved_tokens": compression_saved_tokens,
+                "ratio": round(compression_ratio, 4),
+            },
+            "real_input": {
+                "baseline_payload_tokens": baseline_payload_tokens,
+                "forwarded_payload_tokens": forwarded_payload_tokens,
+                "saved_tokens": max(0, real_input_saved_tokens),
+                "savings_ratio": round(real_input_savings_ratio, 4),
+                "omni_added_tokens": int(meter_dict.get("omni_added_tokens") or 0),
+                "omni_removed_tokens": int(meter_dict.get("omni_removed_tokens") or 0),
+                "metric_confidence": meter_dict.get("metric_confidence") or "legacy_compression_only",
+                "quality_gate_status": meter_dict.get("quality_gate_status") or "unverified",
+            },
             "selected_memory_count": len(selected_memories),
             "dropped_memory_count": len(dropped_memories),
             "selected_memories": selected_memories,
@@ -1560,13 +1608,92 @@ def build_request_evidence_payload_resolved(request_id: str) -> Dict[str, Any]:
 def build_agents_live_payload(window_minutes: int = 30) -> Dict[str, Any]:
     agent_metrics = _diag_agent_metrics()
     live = agent_metrics.get_live_agents(window_minutes=window_minutes)
+    live = _merge_live_agents_with_recent_meters(live, window_minutes=window_minutes)
     return {
         "surface_role": "diagnostic",
         "kpi_source": "/metrics/summary",
-        "diagnostic_scope": "agent session snapshots reconstructed from agent_events JSONL",
+        "diagnostic_scope": "agent session snapshots reconstructed from agent_events JSONL and recent meter records",
         "agents": live,
         "count": len(live),
     }
+
+
+def _merge_live_agents_with_recent_meters(live: List[Dict[str, Any]], window_minutes: int = 30) -> List[Dict[str, Any]]:
+    """
+    Agent events are not emitted by every ingress path. Codex Responses traffic
+    persists reliable meter records, so the live read model must include them.
+    """
+    try:
+        metrics_service = __import__("5_connectors.adapter.metrics_service", fromlist=["dummy"])
+        recent = metrics_service.get_recent_requests(
+            "all",
+            limit=1000,
+            include_internal=False,
+            value_qualified_only=False,
+            per_agent_limit=None,
+        )
+    except Exception:
+        recent = []
+
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=max(1, int(window_minutes or 30)))
+    merged: Dict[str, Dict[str, Any]] = {}
+
+    for item in live:
+        agent_id = str(item.get("agent_id") or "unknown")
+        session_id = str(item.get("session_id") or "unknown")
+        merged[f"{agent_id}:{session_id}"] = dict(item)
+
+    for request in recent:
+        timestamp = str(request.get("timestamp") or "")
+        try:
+            request_time = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).astimezone(timezone.utc)
+        except Exception:
+            continue
+        if request_time < cutoff:
+            continue
+
+        agent_id = _normalize_agent_to_family(str(request.get("family_id") or request.get("agent") or "unknown"))
+        session_id = str(request.get("session_id") or "meter")
+        key = f"{agent_id}:{session_id}"
+        entry = merged.get(key)
+        if entry is None:
+            entry = {
+                "agent_id": agent_id,
+                "session_id": session_id,
+                "workspace_id": request.get("workspace_id") or "unknown",
+                "integration_type": "llm_proxy_meter",
+                "mode": "observed",
+                "request_count": 0,
+                "optimized_count": 0,
+                "entry_rate": 0.0,
+                "saved_tokens": 0,
+                "quality_delta_pct": 0.0,
+                "last_seen_at": timestamp,
+            }
+            merged[key] = entry
+
+        entry["request_count"] = int(entry.get("request_count") or 0) + 1
+        if request.get("request_class") == "value_qualified":
+            entry["optimized_count"] = int(entry.get("optimized_count") or 0) + 1
+        entry["saved_tokens"] = int(entry.get("saved_tokens") or 0) + int(request.get("real_input_saved_tokens") or 0)
+
+        current_last = str(entry.get("last_seen_at") or "")
+        try:
+            current_time = datetime.fromisoformat(current_last.replace("Z", "+00:00")).astimezone(timezone.utc)
+        except Exception:
+            current_time = datetime.min.replace(tzinfo=timezone.utc)
+        if request_time > current_time:
+            entry["last_seen_at"] = timestamp
+
+        req_count = int(entry.get("request_count") or 0)
+        opt_count = int(entry.get("optimized_count") or 0)
+        entry["entry_rate"] = round(opt_count / req_count, 3) if req_count > 0 else 0.0
+
+    return sorted(
+        merged.values(),
+        key=lambda item: str(item.get("last_seen_at") or ""),
+        reverse=True,
+    )
 
 
 def build_agent_metrics_payload(agent_id: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:

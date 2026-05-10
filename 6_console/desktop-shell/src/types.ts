@@ -99,6 +99,18 @@ export interface RecentRequest {
   bypass: boolean;
   saved_tokens: number;
   savings_ratio: number;
+  baseline_payload_tokens?: number;
+  forwarded_payload_tokens?: number;
+  real_input_saved_tokens?: number;
+  real_input_savings_ratio?: number;
+  omni_added_tokens?: number;
+  omni_removed_tokens?: number;
+  compression_source_tokens?: number;
+  compression_output_tokens?: number;
+  compression_saved_tokens?: number;
+  compression_ratio?: number;
+  metric_confidence?: string;
+  quality_gate_status?: string;
   query: string;
   raw_query?: string;
   user_visible_query?: string;
@@ -148,9 +160,10 @@ export interface AgentControlCard {
   subagent_count_active: number;
   subagent_count_total_visible: number;
   message?: string;
-  integration_truth?: 'detached' | 'mcp_attached' | 'attached_with_backup';
+  integration_truth?: 'detached' | 'mcp_attached' | 'managed_ready' | 'attached_with_backup';
   route_truth?: 'off' | 'intent_on' | 'effective';
   traffic_truth?: 'no_recent_evidence' | 'internal_only' | 'real_request_observed' | 'compile_empty' | 'bypassed';
+  truth_message?: string;
   requests_24h?: number;
   saved_tokens_24h?: number;
   savings_ratio_24h?: number;
@@ -187,6 +200,22 @@ export interface RequestEvidenceContext {
   after_tokens: number;
   saved_tokens: number;
   savings_ratio: number;
+  compression?: {
+    source_tokens: number;
+    output_tokens: number;
+    saved_tokens: number;
+    ratio: number;
+  };
+  real_input?: {
+    baseline_payload_tokens: number;
+    forwarded_payload_tokens: number;
+    saved_tokens: number;
+    savings_ratio: number;
+    omni_added_tokens: number;
+    omni_removed_tokens: number;
+    metric_confidence: string;
+    quality_gate_status: string;
+  };
   selected_memory_count: number;
   dropped_memory_count: number;
   selected_memories: MemoryEntry[];

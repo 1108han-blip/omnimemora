@@ -380,8 +380,9 @@ func Attach(args []string) error {
 		return nil
 	}
 
-	// Check if already attached
-	if attach.IsAttached(agentType, port) {
+	// Check if already attached. Codex uses a managed profile/launcher, so
+	// re-running attach is a safe repair path for refreshing launcher files.
+	if agentType != attach.AgentCodex && attach.IsAttached(agentType, port) {
 		agentName := attach.GetAgentDisplayName(agentType)
 		fmt.Printf("%s is already configured.\n", agentName)
 		return nil

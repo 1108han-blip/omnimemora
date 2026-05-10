@@ -82,13 +82,15 @@ async def get_recent_requests(
     tenant: str = "default",
     limit: int = 20,
     include_internal: bool = False,
-    value_qualified_only: bool = True,
+    value_qualified_only: bool = False,
+    per_agent_limit: Optional[int] = None,
 ):
     return _srm.build_recent_requests_payload(
         tenant=tenant,
         limit=limit,
         include_internal=include_internal,
         value_qualified_only=value_qualified_only,
+        per_agent_limit=per_agent_limit,
     )
 
 
