@@ -255,6 +255,7 @@ def get_recent_requests(
     limit: int = 20,
     include_internal: bool = False,
     value_qualified_only: bool = True,
+    per_agent_limit: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     meters = _collect_meters_24h(tenant)
 
@@ -267,7 +268,17 @@ def get_recent_requests(
     if value_qualified_only:
         sorted_meters = [m for m in sorted_meters if _5_rc.is_value_qualified(m)]
 
-    recent = sorted_meters[:limit]
+    if per_agent_limit and per_agent_limit > 0:
+        agent_counts: Dict[str, int] = {}
+        recent = []
+        for meter in sorted_meters:
+            agent_key = getattr(meter, "agent", None) or "unknown"
+            if agent_counts.get(agent_key, 0) >= per_agent_limit:
+                continue
+            recent.append(meter)
+            agent_counts[agent_key] = agent_counts.get(agent_key, 0) + 1
+    else:
+        recent = sorted_meters[:limit]
 
     recent_payload = []
     for m in recent:

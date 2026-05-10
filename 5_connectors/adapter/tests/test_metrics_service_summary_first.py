@@ -320,3 +320,48 @@ def test_value_qualified_recent_request_lists_value_paths(monkeypatch):
     assert payload[0]["value_paths"]
     assert "packed_memory" in payload[0]["value_paths"]
     assert payload[0]["display_savings_as_value"] is True
+
+
+def test_recent_requests_can_limit_each_agent(monkeypatch):
+    now = datetime.now(timezone.utc)
+    meters = [
+        Meter(
+            request_id=f"codex-{idx}",
+            timestamp=(now - timedelta(seconds=idx)).isoformat(),
+            query=f"Codex request {idx}",
+            baseline_tokens_estimate=100,
+            actual_tokens_estimate=80,
+            saved_tokens_estimate=20,
+            packed_memory_count=0,
+            local_cards_used=0,
+            remote_used_count=0,
+            agent="codex_cli",
+            savings_ratio=0.2,
+        )
+        for idx in range(3)
+    ] + [
+        Meter(
+            request_id=f"openclaw-{idx}",
+            timestamp=(now - timedelta(seconds=10 + idx)).isoformat(),
+            query=f"OpenClaw request {idx}",
+            baseline_tokens_estimate=100,
+            actual_tokens_estimate=70,
+            saved_tokens_estimate=30,
+            packed_memory_count=0,
+            local_cards_used=0,
+            remote_used_count=0,
+            agent="openclaw",
+            savings_ratio=0.3,
+        )
+        for idx in range(2)
+    ]
+
+    monkeypatch.setattr(metrics_service, "_collect_meters_24h", lambda _tenant: meters)
+    payload = metrics_service.get_recent_requests(
+        "all",
+        limit=10,
+        include_internal=False,
+        value_qualified_only=False,
+        per_agent_limit=1,
+    )
+    assert [entry["request_id"] for entry in payload] == ["codex-0", "openclaw-0"]

@@ -1096,6 +1096,7 @@ def build_recent_requests_payload(
     limit: int = 20,
     include_internal: bool = False,
     value_qualified_only: bool = True,
+    per_agent_limit: Optional[int] = None,
 ) -> Dict[str, Any]:
     metrics_service = __import__("5_connectors.adapter.metrics_service", fromlist=["dummy"])
     requests = metrics_service.get_recent_requests(
@@ -1103,6 +1104,7 @@ def build_recent_requests_payload(
         limit,
         include_internal=include_internal,
         value_qualified_only=value_qualified_only,
+        per_agent_limit=per_agent_limit,
     )
     return {"tenant": tenant, "requests": requests}
 
