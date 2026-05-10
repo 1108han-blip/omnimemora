@@ -1608,13 +1608,92 @@ def build_request_evidence_payload_resolved(request_id: str) -> Dict[str, Any]:
 def build_agents_live_payload(window_minutes: int = 30) -> Dict[str, Any]:
     agent_metrics = _diag_agent_metrics()
     live = agent_metrics.get_live_agents(window_minutes=window_minutes)
+    live = _merge_live_agents_with_recent_meters(live, window_minutes=window_minutes)
     return {
         "surface_role": "diagnostic",
         "kpi_source": "/metrics/summary",
-        "diagnostic_scope": "agent session snapshots reconstructed from agent_events JSONL",
+        "diagnostic_scope": "agent session snapshots reconstructed from agent_events JSONL and recent meter records",
         "agents": live,
         "count": len(live),
     }
+
+
+def _merge_live_agents_with_recent_meters(live: List[Dict[str, Any]], window_minutes: int = 30) -> List[Dict[str, Any]]:
+    """
+    Agent events are not emitted by every ingress path. Codex Responses traffic
+    persists reliable meter records, so the live read model must include them.
+    """
+    try:
+        metrics_service = __import__("5_connectors.adapter.metrics_service", fromlist=["dummy"])
+        recent = metrics_service.get_recent_requests(
+            "all",
+            limit=1000,
+            include_internal=False,
+            value_qualified_only=False,
+            per_agent_limit=None,
+        )
+    except Exception:
+        recent = []
+
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=max(1, int(window_minutes or 30)))
+    merged: Dict[str, Dict[str, Any]] = {}
+
+    for item in live:
+        agent_id = str(item.get("agent_id") or "unknown")
+        session_id = str(item.get("session_id") or "unknown")
+        merged[f"{agent_id}:{session_id}"] = dict(item)
+
+    for request in recent:
+        timestamp = str(request.get("timestamp") or "")
+        try:
+            request_time = datetime.fromisoformat(timestamp.replace("Z", "+00:00")).astimezone(timezone.utc)
+        except Exception:
+            continue
+        if request_time < cutoff:
+            continue
+
+        agent_id = _normalize_agent_to_family(str(request.get("family_id") or request.get("agent") or "unknown"))
+        session_id = str(request.get("session_id") or "meter")
+        key = f"{agent_id}:{session_id}"
+        entry = merged.get(key)
+        if entry is None:
+            entry = {
+                "agent_id": agent_id,
+                "session_id": session_id,
+                "workspace_id": request.get("workspace_id") or "unknown",
+                "integration_type": "llm_proxy_meter",
+                "mode": "observed",
+                "request_count": 0,
+                "optimized_count": 0,
+                "entry_rate": 0.0,
+                "saved_tokens": 0,
+                "quality_delta_pct": 0.0,
+                "last_seen_at": timestamp,
+            }
+            merged[key] = entry
+
+        entry["request_count"] = int(entry.get("request_count") or 0) + 1
+        if request.get("request_class") == "value_qualified":
+            entry["optimized_count"] = int(entry.get("optimized_count") or 0) + 1
+        entry["saved_tokens"] = int(entry.get("saved_tokens") or 0) + int(request.get("real_input_saved_tokens") or 0)
+
+        current_last = str(entry.get("last_seen_at") or "")
+        try:
+            current_time = datetime.fromisoformat(current_last.replace("Z", "+00:00")).astimezone(timezone.utc)
+        except Exception:
+            current_time = datetime.min.replace(tzinfo=timezone.utc)
+        if request_time > current_time:
+            entry["last_seen_at"] = timestamp
+
+        req_count = int(entry.get("request_count") or 0)
+        opt_count = int(entry.get("optimized_count") or 0)
+        entry["entry_rate"] = round(opt_count / req_count, 3) if req_count > 0 else 0.0
+
+    return sorted(
+        merged.values(),
+        key=lambda item: str(item.get("last_seen_at") or ""),
+        reverse=True,
+    )
 
 
 def build_agent_metrics_payload(agent_id: Optional[str] = None, session_id: Optional[str] = None) -> Dict[str, Any]:

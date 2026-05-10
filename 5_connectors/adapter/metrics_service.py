@@ -369,6 +369,11 @@ def get_recent_requests(
                 "value_paths": value_description["value_paths"],
                 "diagnostic_label": value_description["diagnostic_label"],
                 "display_savings_as_value": value_description["request_class"] == "value_qualified" and real_saved > 0,
+                "family_id": getattr(m, "family_id", None),
+                "instance_id": getattr(m, "instance_id", None),
+                "session_id": getattr(m, "session_id", None),
+                "workspace_id": getattr(m, "workspace_id", None),
+                "raw_agent_id": getattr(m, "raw_agent_id", None),
             }
         )
     return recent_payload
