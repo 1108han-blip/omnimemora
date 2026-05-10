@@ -15,6 +15,7 @@ import type {
 
 const PRODUCT_API_BASE = 'http://127.0.0.1:18011';
 const AGENT_CONTROL_TIMEOUT_MS = 6000;
+const RECENT_REQUESTS_TIMEOUT_MS = 6000;
 
 const DEFAULT_STATUS: DesktopStatus = {
   app_version: '1.0.0-beta.12',
@@ -203,13 +204,18 @@ export async function getProductConsoleSnapshot(): Promise<ProductConsoleSnapsho
   const [core, coreTrend, recent, usage, controls] = await Promise.allSettled([
     fetchProductJson<CoreCapabilitiesResponse>('/metrics/core_capabilities?tenant=all'),
     fetchProductJson<CoreCapabilitiesTrendResponse>('/metrics/core_capabilities/trend?tenant=all&days=7'),
-    fetchProductJson<RecentRequestsResponse>('/metrics/recent_requests?tenant=all&limit=30&value_qualified_only=false'),
+    fetchProductJson<RecentRequestsResponse>('/metrics/recent_requests?tenant=all&limit=30&value_qualified_only=false', RECENT_REQUESTS_TIMEOUT_MS),
     fetchProductJson<Record<string, unknown>>('/usage/token-savings?tenant=all'),
     fetchProductJson<AgentControlResponse>('/agents/control', AGENT_CONTROL_TIMEOUT_MS),
   ]);
 
   const fulfilled = [core, coreTrend, recent, usage, controls].filter((result) => result.status === 'fulfilled');
   const firstError = [core, coreTrend, recent, usage, controls].find((result) => result.status === 'rejected');
+  const recentError = recent.status === 'rejected'
+    ? recent.reason instanceof Error
+      ? recent.reason.message
+      : String(recent.reason)
+    : null;
 
   return {
     online: fulfilled.length > 0,
@@ -221,6 +227,7 @@ export async function getProductConsoleSnapshot(): Promise<ProductConsoleSnapsho
             ? firstError.reason.message
             : String(firstError.reason)
           : 'Product console is offline.',
+    recentError,
     core: core.status === 'fulfilled' ? core.value : null,
     coreTrend: coreTrend.status === 'fulfilled' ? coreTrend.value : null,
     recent: recent.status === 'fulfilled' ? recent.value : null,

@@ -249,6 +249,7 @@ export interface RequestEvidence {
 export interface ProductConsoleSnapshot {
   online: boolean;
   error: string | null;
+  recentError: string | null;
   core: CoreCapabilitiesResponse | null;
   coreTrend: CoreCapabilitiesTrendResponse | null;
   recent: RecentRequestsResponse | null;

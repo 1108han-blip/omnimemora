@@ -41,6 +41,18 @@ function evidenceTokens(evidence: RequestEvidence | null | undefined) {
   };
 }
 
+function savingDisplay(request: RecentRequest, tokens: ReturnType<typeof evidenceTokens>, t: typeof copy.en.live | typeof copy.zh.live): string {
+  if (tokens.saving == null && request.display_savings_as_value === false) return t.notAvailable;
+  return tokens.saving == null ? percent(request.savings_ratio) : percent(tokens.saving);
+}
+
+function savingClassName(request: RecentRequest, tokens: ReturnType<typeof evidenceTokens>): string {
+  if (tokens.saving == null && request.display_savings_as_value === false) return 'text-right font-mono text-xs text-muted';
+  return tokens.before != null && tokens.after != null && tokens.after > tokens.before
+    ? 'text-right font-mono text-xs text-warning'
+    : 'text-right font-mono text-xs text-success';
+}
+
 export function LiveFlowPage() {
   const language = useDashboardStore((state) => state.language);
   const product = useDashboardStore((state) => state.product);
@@ -51,6 +63,7 @@ export function LiveFlowPage() {
   const selectRequest = useDashboardStore((state) => state.selectRequest);
   const t = copy[language].live;
   const requests = useMemo(() => (product?.recent?.requests ?? []).filter((request) => request.request_class !== 'internal'), [product]);
+  const recentError = product?.recentError ?? null;
   const selected = requests.find((request) => request.request_id === selectedRequestId) ?? null;
   const selectedEvidence = selected ? evidenceByRequestId[selected.request_id] : null;
   const selectedTokens = evidenceTokens(selectedEvidence);
@@ -67,7 +80,12 @@ export function LiveFlowPage() {
           <Badge tone="accent">{t.evidenceOnly}</Badge>
         </CardHeader>
         <ScrollArea className="h-[calc(100%-45px)]">
-          {!requests.length ? (
+          {recentError ? (
+            <div className="m-4 rounded-md border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
+              <p className="font-medium">{t.recentError}</p>
+              <p className="mt-1 font-mono text-xs">{recentError}</p>
+            </div>
+          ) : !requests.length ? (
             <div className="p-4 text-sm text-muted">{t.noRequests}</div>
           ) : (
             <Table>
@@ -96,8 +114,8 @@ export function LiveFlowPage() {
                       <TD><Badge tone={tone(decision) as never}>{decisionLabel(decision, t)}</Badge></TD>
                       <TD className="text-right font-mono text-xs">{tokens.before == null ? t.notAvailable : compactNumber(tokens.before)}</TD>
                       <TD className="text-right font-mono text-xs">{tokens.after == null ? t.notAvailable : compactNumber(tokens.after)}</TD>
-                      <TD className={tokens.before != null && tokens.after != null && tokens.after > tokens.before ? 'text-right font-mono text-xs text-warning' : 'text-right font-mono text-xs text-success'}>
-                        {tokens.saving == null ? percent(request.savings_ratio) : percent(tokens.saving)}
+                      <TD className={savingClassName(request, tokens)}>
+                        {savingDisplay(request, tokens, t)}
                       </TD>
                     </TR>
                   );

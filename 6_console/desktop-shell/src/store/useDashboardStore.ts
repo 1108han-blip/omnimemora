@@ -108,7 +108,7 @@ export const useDashboardStore = create<DashboardState>((set, get) => {
           product,
           desktopAgents,
           selectedRequestId: state.selectedRequestId && requests.some((request) => request.request_id === state.selectedRequestId) ? state.selectedRequestId : (requests[0]?.request_id ?? null),
-          lastMessage: product.online ? copy[state.language].header.synced : copy[state.language].header.waiting,
+          lastMessage: product.recentError ?? (product.online ? copy[state.language].header.synced : copy[state.language].header.waiting),
         }));
       } finally {
         set({ loading: false });
