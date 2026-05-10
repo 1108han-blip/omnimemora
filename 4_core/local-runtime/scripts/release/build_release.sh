@@ -2,7 +2,7 @@
 # scripts/release/build_release.sh - Build closed beta release archives
 set -euo pipefail
 
-PACKAGE_VERSION=${1:-"1.0.0-beta.12"}
+PACKAGE_VERSION=${1:-"1.0.0-beta.13"}
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REPO_ROOT="$(cd "$ROOT_DIR/../.." && pwd)"
@@ -17,12 +17,15 @@ DESKTOP_UPDATER_SIG_SOURCE="$DESKTOP_UPDATER_SOURCE.sig"
 DESKTOP_UPDATER_NAME="OmniMemora-Desktop-${PACKAGE_VERSION}-darwin-aarch64.app.tar.gz"
 DESKTOP_UPDATER_SIG_NAME="$DESKTOP_UPDATER_NAME.sig"
 DESKTOP_AUTO_UPDATE_VERIFIED=${OMNIMEMORA_DESKTOP_AUTO_UPDATE_VERIFIED:-"0"}
+ALLOW_UNSIGNED_BETA_DESKTOP=${OMNIMEMORA_ALLOW_UNSIGNED_BETA_DESKTOP:-"1"}
+DESKTOP_UPDATER_SIGNED=0
 
 echo "Building OmniMemora controlled beta package set: $PACKAGE_VERSION"
 
-if [ "$DESKTOP_AUTO_UPDATE_VERIFIED" != "1" ]; then
+if [ "$DESKTOP_AUTO_UPDATE_VERIFIED" != "1" ] && [ "$ALLOW_UNSIGNED_BETA_DESKTOP" != "1" ]; then
     echo "Blocked: local-download products must include verified app-level automatic update before release packaging." >&2
     echo "Set OMNIMEMORA_DESKTOP_AUTO_UPDATE_VERIFIED=1 only after Tauri updater artifacts are signed, hosted, and verified end-to-end." >&2
+    echo "For controlled beta manual macOS distribution, set OMNIMEMORA_ALLOW_UNSIGNED_BETA_DESKTOP=1." >&2
     exit 1
 fi
 
@@ -131,8 +134,8 @@ EOF
   "components": {
     "desktop_shell": {
       "version": "$PACKAGE_VERSION",
-      "update_mode": "app_level_auto_update_required",
-      "update_contract": "detect_notify_download_verify_install_recover"
+      "update_mode": "beta_one_click_update",
+      "update_contract": "download_verify_open_dmg_manual_privacy_security_allow"
     },
     "runtime": {
       "version": "$PACKAGE_VERSION",
@@ -180,16 +183,26 @@ else
     echo "Warning: macOS arm64 desktop installer DMG not found: $DESKTOP_DMG_SOURCE" >&2
 fi
 
-require_path "$DESKTOP_UPDATER_SOURCE" "Tauri updater macOS archive is required for app-level automatic updates. Build with TAURI_SIGNING_PRIVATE_KEY and createUpdaterArtifacts=true."
-require_path "$DESKTOP_UPDATER_SIG_SOURCE" "Tauri updater signature is required; unsigned app updates are not allowed."
-cp "$DESKTOP_UPDATER_SOURCE" "$RELEASE_DIR/$DESKTOP_UPDATER_NAME"
-cp "$DESKTOP_UPDATER_SIG_SOURCE" "$RELEASE_DIR/$DESKTOP_UPDATER_SIG_NAME"
-mkdir -p "$RELEASE_DIR/desktop-updater"
-(
-    cd "$RELEASE_DIR"
-    shasum -a 256 "$DESKTOP_UPDATER_NAME" >> SHA256SUMS.txt
-    shasum -a 256 "$DESKTOP_UPDATER_SIG_NAME" >> SHA256SUMS.txt
-)
+if [ -f "$DESKTOP_UPDATER_SOURCE" ]; then
+    cp "$DESKTOP_UPDATER_SOURCE" "$RELEASE_DIR/$DESKTOP_UPDATER_NAME"
+    (
+        cd "$RELEASE_DIR"
+        shasum -a 256 "$DESKTOP_UPDATER_NAME" >> SHA256SUMS.txt
+    )
+    if [ -f "$DESKTOP_UPDATER_SIG_SOURCE" ]; then
+        cp "$DESKTOP_UPDATER_SIG_SOURCE" "$RELEASE_DIR/$DESKTOP_UPDATER_SIG_NAME"
+        mkdir -p "$RELEASE_DIR/desktop-updater"
+        (
+            cd "$RELEASE_DIR"
+            shasum -a 256 "$DESKTOP_UPDATER_SIG_NAME" >> SHA256SUMS.txt
+        )
+        DESKTOP_UPDATER_SIGNED=1
+    else
+        echo "Warning: unsigned controlled-beta desktop package; app-level updater manifest will not be published." >&2
+    fi
+else
+    echo "Warning: Tauri updater archive not found: $DESKTOP_UPDATER_SOURCE" >&2
+fi
 
 sha_for() {
     local filename="$1"
@@ -211,10 +224,13 @@ write_release_manifest() {
     desktop_dmg_sha="$(sha_for "$DESKTOP_DMG_NAME")"
     desktop_updater_sha="$(sha_for "$DESKTOP_UPDATER_NAME")"
     desktop_updater_sig_sha="$(sha_for "$DESKTOP_UPDATER_SIG_NAME")"
-    local desktop_updater_signature
-    desktop_updater_signature="$(tr -d '\r\n' < "$RELEASE_DIR/$DESKTOP_UPDATER_SIG_NAME")"
+    local desktop_updater_json
+    desktop_updater_json="$(mktemp)"
 
-    python3 - "$RELEASE_DIR/desktop-updater/darwin-aarch64.json" "$PACKAGE_VERSION" "$PUBLISHED_AT" "$DOWNLOAD_BASE_URL/$DESKTOP_UPDATER_NAME" "$desktop_updater_signature" <<'PY'
+    if [ "$DESKTOP_UPDATER_SIGNED" = "1" ]; then
+        local desktop_updater_signature
+        desktop_updater_signature="$(tr -d '\r\n' < "$RELEASE_DIR/$DESKTOP_UPDATER_SIG_NAME")"
+        python3 - "$RELEASE_DIR/desktop-updater/darwin-aarch64.json" "$PACKAGE_VERSION" "$PUBLISHED_AT" "$DOWNLOAD_BASE_URL/$DESKTOP_UPDATER_NAME" "$desktop_updater_signature" <<'PY'
 import json
 import sys
 
@@ -234,6 +250,32 @@ with open(path, "w", encoding="utf-8") as fh:
     json.dump(payload, fh, ensure_ascii=False, indent=2)
     fh.write("\n")
 PY
+        cat > "$desktop_updater_json" <<EOF
+{
+    "darwin-aarch64": {
+      "enabled": true,
+      "package": "$DESKTOP_UPDATER_NAME",
+      "sha256": "$desktop_updater_sha",
+      "signature_sha256": "$desktop_updater_sig_sha",
+      "manifest_url": "https://doloclaw.com/releases/desktop-updater/darwin-aarch64.json",
+      "download_url": "$DOWNLOAD_BASE_URL/$DESKTOP_UPDATER_NAME"
+    }
+  }
+EOF
+    else
+        cat > "$desktop_updater_json" <<EOF
+{
+    "darwin-aarch64": {
+      "enabled": true,
+      "package": "$DESKTOP_UPDATER_NAME",
+      "sha256": "$desktop_updater_sha",
+      "mode": "beta_one_click_dmg_fallback",
+      "manual_install_url": "https://doloclaw.com/download/file/darwin-arm64",
+      "reason": "controlled_beta_unsigned_manual_privacy_security_allow"
+    }
+  }
+EOF
+    fi
 
     cat > "$manifest_path" <<EOF
 {
@@ -266,20 +308,12 @@ PY
       "validation": "hdiutil imageinfo passed locally"
     }
   },
-  "desktop_updater": {
-    "darwin-aarch64": {
-      "package": "$DESKTOP_UPDATER_NAME",
-      "sha256": "$desktop_updater_sha",
-      "signature_sha256": "$desktop_updater_sig_sha",
-      "manifest_url": "https://doloclaw.com/releases/desktop-updater/darwin-aarch64.json",
-      "download_url": "$DOWNLOAD_BASE_URL/$DESKTOP_UPDATER_NAME"
-    }
-  },
+  "desktop_updater": $(cat "$desktop_updater_json"),
   "components": {
     "desktop_shell": {
       "framework": "tauri",
-      "update_mode": "app_level_auto_update_required",
-      "update_contract": "detect_notify_download_verify_install_recover"
+      "update_mode": "beta_one_click_update",
+      "update_contract": "download_verify_open_dmg_manual_privacy_security_allow"
     },
     "runtime": {
       "port": 8765,
@@ -307,9 +341,13 @@ PY
   "release_notes": "Adds app-level desktop update management, fixes agent-control refresh after Use OmniMemora, and repairs adapter proxy response handling.",
   "minimum_supported_desktop_version": "1.0.0-beta.8",
   "desktop_auto_update_required": true,
+  "desktop_auto_update_mode": "beta_one_click_download_verify_open_dmg",
+  "desktop_manual_install_required": false,
+  "macos_privacy_security_allow_required": true,
   "force_update": false
 }
 EOF
+    rm -f "$desktop_updater_json"
     cp "$manifest_path" "$RELEASE_DIR/latest.json"
 }
 

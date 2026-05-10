@@ -121,7 +121,6 @@ def upload_artifacts(package_version: str, token_id: str, token_value: str) -> N
     upload_names = [
         f"OmniMemora-Desktop-{package_version}-darwin-arm64.dmg",
         f"OmniMemora-Desktop-{package_version}-darwin-aarch64.app.tar.gz",
-        f"OmniMemora-Desktop-{package_version}-darwin-aarch64.app.tar.gz.sig",
         "omnimemora-darwin-amd64.zip",
         "omnimemora-darwin-arm64.zip",
         "omnimemora-windows-amd64.zip",
@@ -129,8 +128,14 @@ def upload_artifacts(package_version: str, token_id: str, token_value: str) -> N
         "RELEASE_INDEX.txt",
         f"{package_version}.json",
         "latest.json",
+    ]
+    optional_upload_names = [
+        f"OmniMemora-Desktop-{package_version}-darwin-aarch64.app.tar.gz.sig",
         "desktop-updater/darwin-aarch64.json",
     ]
+    upload_names.extend(
+        name for name in optional_upload_names if (release_dir / name).exists()
+    )
     time.sleep(2)
     for name in upload_names:
         source = release_dir / name
@@ -203,7 +208,7 @@ def deploy_worker(package_version: str) -> None:
 
 
 def main() -> None:
-    package_version = sys.argv[1] if len(sys.argv) > 1 else "1.0.0-beta.12"
+    package_version = sys.argv[1] if len(sys.argv) > 1 else "1.0.0-beta.13"
     token_id, token_value = create_r2_upload_token()
     try:
         upload_artifacts(package_version, token_id, token_value)

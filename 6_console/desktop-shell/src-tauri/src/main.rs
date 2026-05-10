@@ -13,7 +13,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_updater::UpdaterExt;
 
-const APP_VERSION: &str = "1.0.0-beta.12";
+const APP_VERSION: &str = "1.0.0-beta.13";
 const SUPPORT_EMAIL: &str = "support@doloclaw.com";
 const RUNTIME_PORT: u16 = 8765;
 const ADAPTER_PORT: u16 = 18011;
@@ -407,8 +407,8 @@ fn release_manifest_from_disk() -> Option<Value> {
     let candidates = [
         downloaded_manifest_path(),
         current_dir().join("manifest.json"),
-        repo_root().join("4_core/local-runtime/release/1.0.0-beta.12/latest.json"),
-        repo_root().join("4_core/local-runtime/release/1.0.0-beta.12/1.0.0-beta.12.json"),
+        repo_root().join("4_core/local-runtime/release/1.0.0-beta.13/latest.json"),
+        repo_root().join("4_core/local-runtime/release/1.0.0-beta.13/1.0.0-beta.13.json"),
     ];
     for path in candidates {
         if let Ok(raw) = fs::read_to_string(path) {
@@ -475,9 +475,9 @@ mod tests {
 
     #[test]
     fn version_comparison_handles_beta_patch_order() {
-        assert!(version_is_newer("1.0.0-beta.12", "1.0.0-beta.10"));
-        assert!(!version_is_newer("1.0.0-beta.10", "1.0.0-beta.12"));
-        assert!(!version_is_newer("1.0.0-beta.12", "1.0.0-beta.12"));
+        assert!(version_is_newer("1.0.0-beta.13", "1.0.0-beta.10"));
+        assert!(!version_is_newer("1.0.0-beta.10", "1.0.0-beta.13"));
+        assert!(!version_is_newer("1.0.0-beta.13", "1.0.0-beta.13"));
     }
 }
 
@@ -613,9 +613,9 @@ fn runtime_binary() -> Option<PathBuf> {
         component.join("omnimemora"),
         service_current.join("tools/omnimemora-runtime"),
         service_current.join("bin/omnimemora"),
-        root.join("4_core/local-runtime/release/1.0.0-beta.12/omnimemora-darwin-arm64/omnimemora"),
+        root.join("4_core/local-runtime/release/1.0.0-beta.13/omnimemora-darwin-arm64/omnimemora"),
         root.join(
-            "4_core/local-runtime/release/1.0.0-beta.12/omnimemora-darwin-arm64/bin/omnimemora",
+            "4_core/local-runtime/release/1.0.0-beta.13/omnimemora-darwin-arm64/bin/omnimemora",
         ),
         root.join("tools/omnimemora-runtime"),
     ])
@@ -937,6 +937,29 @@ fn manifest_package(manifest: &Value, platform: &str) -> Result<(String, String,
         .get("download_url")
         .and_then(Value::as_str)
         .ok_or_else(|| format!("{platform} manifest 缺少 download_url。"))?;
+    Ok((package.to_string(), sha.to_string(), url.to_string()))
+}
+
+fn manifest_desktop_installer(
+    manifest: &Value,
+    platform: &str,
+) -> Result<(String, String, String), String> {
+    let entry = manifest
+        .get("desktop_installers")
+        .and_then(|value| value.get(platform))
+        .ok_or_else(|| format!("release manifest 不包含当前桌面安装包 {platform}。"))?;
+    let package = entry
+        .get("package")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{platform} 桌面安装包缺少 package。"))?;
+    let sha = entry
+        .get("sha256")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{platform} 桌面安装包缺少 sha256。"))?;
+    let url = entry
+        .get("download_url")
+        .and_then(Value::as_str)
+        .ok_or_else(|| format!("{platform} 桌面安装包缺少 download_url。"))?;
     Ok((package.to_string(), sha.to_string(), url.to_string()))
 }
 
@@ -1303,7 +1326,7 @@ fn check_for_updates() -> DesktopCommandResult {
                 .and_then(Value::as_str)
                 .unwrap_or("unknown");
             let desktop_message = if version_is_newer(version, APP_VERSION) {
-                "桌面 App 有新版可用；可使用产品内 updater 下载、签名校验并安装。"
+                "桌面 App 有新版可用；beta 版可一键下载、校验并打开安装包。"
             } else {
                 "桌面 App 已是当前版本。"
             };
@@ -1329,29 +1352,54 @@ async fn install_desktop_update(app: AppHandle) -> DesktopCommandResult {
         if platform == "unsupported" {
             return Err("当前平台暂未支持桌面 App 自动更新。".to_string());
         }
-        let updater = app
-            .updater()
-            .map_err(|err| format!("桌面 App updater 初始化失败：{err}"))?;
-        let Some(update) = updater
-            .check()
-            .await
-            .map_err(|err| format!("桌面 App updater 检查失败：{err}"))?
-        else {
-            return Ok(format!("桌面 App 已是最新版本：{APP_VERSION}。"));
-        };
-        let version = update.version.clone();
-        update
-            .download_and_install(|_, _| {}, || {})
-            .await
-            .map_err(|err| format!("桌面 App updater 安装失败：{err}"))?;
-        eprintln!("OmniMemora desktop update {version} installed; restarting app.");
-        app.restart();
-        #[allow(unreachable_code)]
-        {
-            Ok(format!(
-                "桌面 App {version} 已通过 Tauri updater 签名校验并安装。应用将重启以进入新版本；用户 memory 与本地产品数据不会被删除。"
-            ))
+        if let Ok(updater) = app.updater() {
+            match updater.check().await {
+                Ok(Some(update)) => {
+                    let version = update.version.clone();
+                    update
+                        .download_and_install(|_, _| {}, || {})
+                        .await
+                        .map_err(|err| format!("桌面 App updater 安装失败：{err}"))?;
+                    eprintln!("OmniMemora desktop update {version} installed; restarting app.");
+                    app.restart();
+                    #[allow(unreachable_code)]
+                    {
+                        return Ok(format!(
+                            "桌面 App {version} 已通过 Tauri updater 校验并安装。应用将重启以进入新版本；用户 memory 与本地产品数据不会被删除。"
+                        ));
+                    }
+                }
+                Ok(None) => return Ok(format!("桌面 App 已是最新版本：{APP_VERSION}。")),
+                Err(err) => {
+                    eprintln!("Tauri updater unavailable for beta desktop update: {err}");
+                }
+            }
         }
+
+        let manifest = fetch_latest_manifest().or_else(|_| {
+            release_manifest_from_disk()
+                .ok_or_else(|| "无法获取线上或本地 release manifest。".to_string())
+        })?;
+        let version = manifest_version(&manifest)?;
+        if !version_is_newer(&version, APP_VERSION) {
+            return Ok(format!("桌面 App 已是最新版本：{APP_VERSION}。"));
+        }
+        let (package, expected_sha, download_url) =
+            manifest_desktop_installer(&manifest, "darwin-arm64")?;
+        let dmg_path = downloads_dir().join(&package);
+        curl_to_file(&download_url, &dmg_path)?;
+        let actual_sha = sha256_file(&dmg_path)?;
+        if actual_sha != expected_sha {
+            return Err(format!(
+                "桌面安装包 SHA256 不匹配，已阻止安装。expected={expected_sha} actual={actual_sha}"
+            ));
+        }
+        let mut command = Command::new("open");
+        command.arg(&dmg_path);
+        run_capture(command, "打开桌面安装包")?;
+        Ok(format!(
+            "桌面 App {version} 安装包已下载并通过 SHA256 校验，已打开 DMG。当前 beta 版未做付费 Apple 签名；如 macOS 阻止启动，请在隐私与安全中手工放行。"
+        ))
     }
     .await;
 
@@ -1487,13 +1535,14 @@ fn show_main_window(app_handle: &AppHandle) {
         eprintln!("failed to show OmniMemora desktop app: {err}");
     }
     if app_handle.get_webview_window("main").is_none() {
-        if let Err(err) = WebviewWindowBuilder::new(app_handle, "main", WebviewUrl::App("index.html".into()))
-            .title("OmniMemora Desktop")
-            .inner_size(1120.0, 760.0)
-            .min_inner_size(860.0, 620.0)
-            .resizable(true)
-            .center()
-            .build()
+        if let Err(err) =
+            WebviewWindowBuilder::new(app_handle, "main", WebviewUrl::App("index.html".into()))
+                .title("OmniMemora Desktop")
+                .inner_size(1120.0, 760.0)
+                .min_inner_size(860.0, 620.0)
+                .resizable(true)
+                .center()
+                .build()
         {
             eprintln!("failed to rebuild OmniMemora desktop window: {err}");
         }
