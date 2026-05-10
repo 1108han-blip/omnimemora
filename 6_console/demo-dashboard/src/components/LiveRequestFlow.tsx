@@ -20,6 +20,28 @@ function requestClassColor(cls: RecentRequest['request_class']): string {
   return 'text-zinc-400 dark:text-zinc-500';
 }
 
+function hasMemoryHit(req: RecentRequest): boolean {
+  return (req.packed_memory_count ?? 0) > 0 || (req.local_cards_used ?? 0) > 0 || (req.remote_used_count ?? 0) > 0;
+}
+
+function hasRefinement(req: RecentRequest): boolean {
+  const sourceTokens = req.compression_source_tokens ?? 0;
+  const outputTokens = req.compression_output_tokens ?? 0;
+  return hasMemoryHit(req) && sourceTokens > 0 && outputTokens > 0 && outputTokens < sourceTokens;
+}
+
+function hasRealInputSavings(req: RecentRequest): boolean {
+  return (req.real_input_saved_tokens ?? 0) > 0 || (req.real_input_savings_ratio ?? 0) > 0;
+}
+
+function decisionTags(req: RecentRequest): string[] {
+  if (req.bypass) return ['绕过'];
+  const tags = [];
+  if (hasRefinement(req)) tags.push('精练');
+  if (hasMemoryHit(req)) tags.push('记忆');
+  return tags.length > 0 ? tags : ['无'];
+}
+
 export function LiveRequestFlow({ requests, onSelect, selectedRequestId = null, runningAgents = [] }: LiveRequestFlowProps) {
   // Filter out internal events and normalize agent names
   const userFacingRequests = requests.filter(req => req.request_class !== 'internal' && !isInternalEvent(req.query, req.agent));
@@ -81,6 +103,21 @@ export function LiveRequestFlow({ requests, onSelect, selectedRequestId = null, 
               <span className={valueBadgeClass(req)}>
                 {valueBadgeLabel(req)}
               </span>
+              <span className="flex items-center gap-1">
+                {decisionTags(req).map(tag => (
+                  <span
+                    key={tag}
+                    className={`rounded border px-1.5 py-0.5 text-[10px] ${
+                      tag === '精练' ? 'border-indigo-300 text-indigo-600 dark:border-indigo-700 dark:text-indigo-300' :
+                      tag === '记忆' ? 'border-emerald-300 text-emerald-600 dark:border-emerald-700 dark:text-emerald-300' :
+                      tag === '绕过' ? 'border-amber-300 text-amber-600 dark:border-amber-700 dark:text-amber-300' :
+                      'border-zinc-200 text-zinc-400 dark:border-zinc-700 dark:text-zinc-500'
+                    }`}
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </span>
               <span className="text-zinc-500">{req.packed_memory_count} mems</span>
               <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                 normalizeTaskType(req.task_type) === 'implementation' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' :
@@ -116,18 +153,21 @@ function requestDisplayText(req: RecentRequest): string {
 
 function valueBadgeLabel(req: RecentRequest): string {
   if (req.bypass) return 'bypass';
-  if (req.display_savings_as_value || req.request_class === 'value_qualified') {
-    return `value ${formatRatioPct(req.savings_ratio)}`;
+  if (hasRealInputSavings(req)) {
+    return `real saving ${formatRatioPct(req.real_input_savings_ratio ?? 0)}`;
   }
-  if (req.savings_ratio > 0) return 'diagnostic reduction';
+  if ((req.compression_ratio ?? req.savings_ratio ?? 0) > 0) {
+    return `compression ${formatRatioPct(req.compression_ratio ?? req.savings_ratio)}`;
+  }
   return req.diagnostic_label || 'not helping yet';
 }
 
 function valueBadgeClass(req: RecentRequest): string {
   if (req.bypass) return 'text-amber-600';
-  if (req.display_savings_as_value || req.request_class === 'value_qualified') {
+  if (hasRealInputSavings(req)) {
     return 'text-emerald-600';
   }
+  if ((req.compression_ratio ?? req.savings_ratio ?? 0) > 0) return 'text-indigo-500';
   return 'text-zinc-500';
 }
 

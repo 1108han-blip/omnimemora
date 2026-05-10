@@ -94,14 +94,15 @@ export function extractUserVisibleQuery(query: string): string {
 export function scoreRecentRequest(req: RecentRequest): number {
   const isUnknownAgent = req.agent.toLowerCase() === 'unknown';
   const taskKnown = req.task_type !== 'unknown';
+  const realSavedTokens = req.real_input_saved_tokens ?? 0;
 
   let score = 0;
   if (!req.bypass) score += 1000;
-  if (req.saved_tokens > 0) score += 500;
+  if (realSavedTokens > 0) score += 500;
   if (req.packed_memory_count > 0) score += 250;
   if (!isUnknownAgent) score += 100;
   if (taskKnown) score += 25;
-  score += Math.min(req.saved_tokens, 99);
+  score += Math.min(realSavedTokens, 99);
   return score;
 }
 
@@ -133,12 +134,14 @@ export function normalizeRecentRequestUsageList(requests: RecentRequest[]): Norm
       const existingBaseline = existingSaved > 0 && existingRatio > 0
         ? existingSaved / existingRatio
         : 0;
-      const newBaseline = req.saved_tokens > 0 && req.savings_ratio > 0
-        ? req.saved_tokens / req.savings_ratio
+      const realSaved = req.real_input_saved_tokens ?? 0;
+      const realRatio = req.real_input_savings_ratio ?? 0;
+      const newBaseline = realSaved > 0 && realRatio > 0
+        ? realSaved / realRatio
         : 0;
 
       existing.requests += 1;
-      existing.savedTokens = existingSaved + req.saved_tokens;
+      existing.savedTokens = existingSaved + realSaved;
       const totalBaseline = existingBaseline + newBaseline;
       existing.savingsRatio = totalBaseline > 0 ? existing.savedTokens / totalBaseline : 0;
       if (!existing.lastRequestAt || req.timestamp > existing.lastRequestAt) {
@@ -149,8 +152,8 @@ export function normalizeRecentRequestUsageList(requests: RecentRequest[]): Norm
         family,
         displayName,
         requests: 1,
-        savedTokens: req.saved_tokens,
-        savingsRatio: req.savings_ratio,
+        savedTokens: req.real_input_saved_tokens ?? 0,
+        savingsRatio: req.real_input_savings_ratio ?? 0,
         lastRequestAt: req.timestamp,
       });
     }
