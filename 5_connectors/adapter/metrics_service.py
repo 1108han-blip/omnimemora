@@ -75,6 +75,14 @@ def _real_input_savings_ratio(meter: Any) -> float:
     return _clamp_ratio(saved / baseline) if baseline > 0 else 0.0
 
 
+def _real_input_savings_payload(meters: Iterable[Any]) -> Dict[str, Any]:
+    meter_list = list(meters)
+    saved_total = sum(_real_input_saved_tokens(m) for m in meter_list)
+    real_baseline_total = sum(_real_input_baseline_tokens(m) for m in meter_list)
+    token_saving_ratio = _clamp_ratio(saved_total / real_baseline_total) if real_baseline_total > 0 else 0.0
+    return {"ratio": round(token_saving_ratio, 4), "saved_tokens": saved_total}
+
+
 def _get_data_lifecycle_policy():
     return importlib.import_module("5_connectors.adapter.data_lifecycle.policy")
 
@@ -438,6 +446,8 @@ def _compute_core_capabilities_legacy(tenant: str) -> Dict[str, Any]:
     meters = _collect_meters_24h(tenant)
     observed_meters = _default_overview_meters(meters, include_internal=True, include_task_non_value=True)
     value_qualified_meters = [m for m in observed_meters if _5_rc.is_value_qualified(m)]
+    token_saving_meters = [m for m in observed_meters if not _5_rc.is_internal_request(m)]
+    token_savings = _real_input_savings_payload(token_saving_meters)
     task_non_value_count = sum(1 for m in observed_meters if _5_rc.is_task_non_value(m))
     internal_or_wrapper_count = sum(1 for m in observed_meters if _5_rc.is_internal_request(m))
     observed_count = len(observed_meters)
@@ -455,7 +465,7 @@ def _compute_core_capabilities_legacy(tenant: str) -> Dict[str, Any]:
                 "real_requests": {"count": 0, "ratio": 0.0},
                 "context_compression": {"ratio": 0.0, "baseline_tokens": 0, "actual_tokens": 0},
                 "memory_enhancement": {"rate": 0.0, "memory_count": 0},
-                "token_savings": {"ratio": 0.0, "saved_tokens": 0},
+                "token_savings": token_savings,
             },
         }
 
@@ -466,10 +476,6 @@ def _compute_core_capabilities_legacy(tenant: str) -> Dict[str, Any]:
     requests_with_memory = sum(1 for m in value_qualified_meters if (m.packed_memory_count or 0) > 0)
     memory_count_total = sum(m.packed_memory_count or 0 for m in value_qualified_meters)
     memory_enhancement_rate = _clamp_ratio(requests_with_memory / qualified_count) if qualified_count > 0 else 0.0
-
-    saved_total = sum(_real_input_saved_tokens(m) for m in value_qualified_meters)
-    real_baseline_total = sum(_real_input_baseline_tokens(m) for m in value_qualified_meters)
-    token_saving_ratio = _clamp_ratio(saved_total / real_baseline_total) if real_baseline_total > 0 else 0.0
 
     return {
         "period": "24h",
@@ -485,7 +491,7 @@ def _compute_core_capabilities_legacy(tenant: str) -> Dict[str, Any]:
                 "actual_tokens": total_actual,
             },
             "memory_enhancement": {"rate": round(memory_enhancement_rate, 4), "memory_count": memory_count_total},
-            "token_savings": {"ratio": round(token_saving_ratio, 4), "saved_tokens": saved_total},
+            "token_savings": token_savings,
         },
     }
 
@@ -521,6 +527,8 @@ def compute_core_capabilities_trend(tenant: str, days: int = 7) -> Dict[str, Any
     for day_str in sorted(buckets.keys()):
         day_meters = buckets[day_str]
         value_qualified_meters = [m for m in day_meters if _5_rc.is_value_qualified(m)]
+        token_saving_meters = [m for m in day_meters if not _5_rc.is_internal_request(m)]
+        token_savings = _real_input_savings_payload(token_saving_meters)
         task_non_value_count = sum(1 for m in day_meters if _5_rc.is_task_non_value(m))
         internal_or_wrapper_count = sum(1 for m in day_meters if _5_rc.is_internal_request(m))
         observed_count = len(day_meters)
@@ -538,7 +546,7 @@ def compute_core_capabilities_trend(tenant: str, days: int = 7) -> Dict[str, Any
                     "real_requests": {"count": 0, "ratio": 0.0},
                     "context_compression": {"ratio": 0.0, "baseline_tokens": 0, "actual_tokens": 0},
                     "memory_enhancement": {"rate": 0.0, "memory_count": 0},
-                    "token_savings": {"ratio": 0.0, "saved_tokens": 0},
+                    "token_savings": token_savings,
                 }
             )
             continue
@@ -550,10 +558,6 @@ def compute_core_capabilities_trend(tenant: str, days: int = 7) -> Dict[str, Any
         requests_with_memory = sum(1 for m in value_qualified_meters if (m.packed_memory_count or 0) > 0)
         memory_count_total = sum(m.packed_memory_count or 0 for m in value_qualified_meters)
         memory_enhancement_rate = _clamp_ratio(requests_with_memory / qualified_count) if qualified_count > 0 else 0.0
-
-        saved_total = sum(_real_input_saved_tokens(m) for m in value_qualified_meters)
-        real_baseline_total = sum(_real_input_baseline_tokens(m) for m in value_qualified_meters)
-        token_saving_ratio = _clamp_ratio(saved_total / real_baseline_total) if real_baseline_total > 0 else 0.0
 
         trend.append(
             {
@@ -569,7 +573,7 @@ def compute_core_capabilities_trend(tenant: str, days: int = 7) -> Dict[str, Any
                     "actual_tokens": total_actual,
                 },
                 "memory_enhancement": {"rate": round(memory_enhancement_rate, 4), "memory_count": memory_count_total},
-                "token_savings": {"ratio": round(token_saving_ratio, 4), "saved_tokens": saved_total},
+                "token_savings": token_savings,
             }
         )
 

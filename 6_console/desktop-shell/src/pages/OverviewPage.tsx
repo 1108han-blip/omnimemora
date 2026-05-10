@@ -167,7 +167,7 @@ export function OverviewPage() {
               <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={{ width: 640, height: 260 }}>
                 <LineChart data={trend} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
                   <CartesianGrid stroke="#1F2A37" vertical={false} />
-                  <XAxis dataKey="date" stroke="#8B96A6" fontSize={11} tickLine={false} axisLine={false} />
+                  <XAxis dataKey="date" stroke="#8B96A6" fontSize={11} tickLine={false} axisLine={false} padding={{ left: 12, right: 24 }} />
                   <YAxis stroke="#8B96A6" fontSize={11} tickLine={false} axisLine={false} />
                   <Tooltip content={<ChartTooltip />} />
                   <Line type="monotone" dataKey="saved" stroke="#35D7FF" strokeWidth={2} dot={false} />

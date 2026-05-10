@@ -14,6 +14,7 @@ import type {
 } from './types';
 
 const PRODUCT_API_BASE = 'http://127.0.0.1:18011';
+const PRODUCT_METRICS_TIMEOUT_MS = 6000;
 const AGENT_CONTROL_TIMEOUT_MS = 6000;
 const RECENT_REQUESTS_TIMEOUT_MS = 6000;
 
@@ -202,10 +203,10 @@ function normalizeUsage(raw: Record<string, unknown>): UsageSummary {
 
 export async function getProductConsoleSnapshot(): Promise<ProductConsoleSnapshot> {
   const [core, coreTrend, recent, usage, controls] = await Promise.allSettled([
-    fetchProductJson<CoreCapabilitiesResponse>('/metrics/core_capabilities?tenant=all'),
-    fetchProductJson<CoreCapabilitiesTrendResponse>('/metrics/core_capabilities/trend?tenant=all&days=7'),
+    fetchProductJson<CoreCapabilitiesResponse>('/metrics/core_capabilities?tenant=all', PRODUCT_METRICS_TIMEOUT_MS),
+    fetchProductJson<CoreCapabilitiesTrendResponse>('/metrics/core_capabilities/trend?tenant=all&days=7', PRODUCT_METRICS_TIMEOUT_MS),
     fetchProductJson<RecentRequestsResponse>('/metrics/recent_requests?tenant=all&limit=10&per_agent_limit=10&value_qualified_only=false', RECENT_REQUESTS_TIMEOUT_MS),
-    fetchProductJson<Record<string, unknown>>('/usage/token-savings?tenant=all'),
+    fetchProductJson<Record<string, unknown>>('/usage/token-savings?tenant=all', PRODUCT_METRICS_TIMEOUT_MS),
     fetchProductJson<AgentControlResponse>('/agents/control', AGENT_CONTROL_TIMEOUT_MS),
   ]);
 

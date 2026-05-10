@@ -179,6 +179,10 @@ def test_summary_and_legacy_paths_match_key_kpi_fields(monkeypatch):
             savings_ratio=0.266,
         ),
     ]
+    meters[2].baseline_payload_tokens = 1000
+    meters[2].forwarded_payload_tokens = 750
+    meters[2].real_input_saved_tokens = 250
+    meters[2].real_input_savings_ratio = 0.25
 
     summary_payload = summary_builder.build_family_window_summary(
         meters=meters,
@@ -211,6 +215,8 @@ def test_summary_and_legacy_paths_match_key_kpi_fields(monkeypatch):
     assert summary_all == legacy_all
     assert summary_24h == legacy_24h
     assert summary_core == legacy_core
+    assert summary_core["cards"]["token_savings"]["saved_tokens"] == 250
+    assert summary_core["cards"]["token_savings"]["ratio"] == 0.25
 
 
 def test_summary_fallback_path_uses_resolver_meters(monkeypatch):

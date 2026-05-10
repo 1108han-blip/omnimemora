@@ -10,7 +10,7 @@ export function SavingsPage() {
   const product = useDashboardStore((state) => state.product);
   const t = copy[language].savings;
   const overview = copy[language].overview;
-  const saved = product?.usage?.saved_tokens_total ?? 0;
+  const saved = product?.core?.cards.token_savings.saved_tokens ?? 0;
   const usd = saved * 0.00001;
   const trend = (product?.coreTrend?.trend ?? []).map((point) => ({ day: point.date, tokens: point.token_savings.saved_tokens }));
 
@@ -28,10 +28,10 @@ export function SavingsPage() {
             <ResponsiveContainer width="100%" height="100%" minWidth={1} minHeight={1} initialDimension={{ width: 640, height: 260 }}>
               <AreaChart data={trend} margin={{ left: 0, right: 12, top: 8, bottom: 0 }}>
                 <CartesianGrid stroke="#1F2A37" vertical={false} />
-                <XAxis dataKey="day" stroke="#8B96A6" fontSize={11} tickLine={false} axisLine={false} />
+                <XAxis dataKey="day" stroke="#8B96A6" fontSize={11} tickLine={false} axisLine={false} padding={{ left: 12, right: 24 }} />
                 <YAxis stroke="#8B96A6" fontSize={11} tickLine={false} axisLine={false} />
                 <Tooltip content={<ChartTooltip />} />
-                <Area type="monotone" dataKey="tokens" stroke="#35D7FF" fill="#35D7FF" fillOpacity={0.12} />
+                <Area type="monotone" dataKey="tokens" stroke="#35D7FF" fill="#35D7FF" fillOpacity={0.12} dot={{ r: 3, fill: '#35D7FF', strokeWidth: 0 }} activeDot={{ r: 5 }} />
               </AreaChart>
             </ResponsiveContainer>
           ) : <div className="grid h-full place-items-center text-sm text-muted">{overview.noData}</div>}

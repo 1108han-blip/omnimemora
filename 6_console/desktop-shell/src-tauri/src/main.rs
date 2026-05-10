@@ -1544,7 +1544,29 @@ fn detach_agent(agent: String) -> DesktopCommandResult {
 }
 
 fn show_main_window(app_handle: &AppHandle) {
+    #[cfg(target_os = "macos")]
+    if let Err(err) = app_handle.set_activation_policy(tauri::ActivationPolicy::Regular) {
+        eprintln!("failed to set OmniMemora desktop activation policy: {err}");
+    }
+    if let Err(err) = app_handle.show() {
+        eprintln!("failed to show OmniMemora desktop app: {err}");
+    }
+    if app_handle.get_webview_window("main").is_none() {
+        if let Err(err) = WebviewWindowBuilder::new(app_handle, "main", WebviewUrl::App("index.html".into()))
+            .title("OmniMemora Desktop")
+            .inner_size(1120.0, 760.0)
+            .min_inner_size(860.0, 620.0)
+            .resizable(true)
+            .center()
+            .build()
+        {
+            eprintln!("failed to rebuild OmniMemora desktop window: {err}");
+        }
+    }
     if let Some(window) = app_handle.get_webview_window("main") {
+        if let Err(err) = window.unminimize() {
+            eprintln!("failed to unminimize OmniMemora desktop window: {err}");
+        }
         if let Err(err) = window.show() {
             eprintln!("failed to show OmniMemora desktop window: {err}");
         }

@@ -86,6 +86,14 @@ def _real_input_saved_tokens(meter: Any) -> int:
     return _int_metric(meter, "real_input_saved_tokens")
 
 
+def _real_input_savings_payload(meters: Iterable[Any]) -> dict[str, Any]:
+    meter_list = list(meters)
+    saved_total = sum(_real_input_saved_tokens(m) for m in meter_list)
+    real_baseline_total = sum(_real_input_baseline_tokens(m) for m in meter_list)
+    token_saving_ratio = _clamp_ratio(saved_total / real_baseline_total) if real_baseline_total > 0 else 0.0
+    return {"ratio": round(token_saving_ratio, 4), "saved_tokens": saved_total}
+
+
 def _parse_iso_to_dt(value: Any) -> Optional[datetime]:
     if not isinstance(value, str):
         return None
@@ -190,6 +198,8 @@ def _build_core_capabilities_24h_payload(
 ) -> dict[str, Any]:
     observed_list = list(observed_meters)
     value_qualified_meters = [m for m in observed_list if is_value_qualified(m)]
+    token_saving_meters = [m for m in observed_list if is_value_qualified(m) or is_task_non_value(m)]
+    token_savings = _real_input_savings_payload(token_saving_meters)
     task_non_value_count = sum(1 for m in observed_list if is_task_non_value(m))
     observed_count = len(observed_list)
     internal_or_wrapper_count = max(0, observed_count - task_non_value_count - len(value_qualified_meters))
@@ -207,7 +217,7 @@ def _build_core_capabilities_24h_payload(
                 "real_requests": {"count": 0, "ratio": 0.0},
                 "context_compression": {"ratio": 0.0, "baseline_tokens": 0, "actual_tokens": 0},
                 "memory_enhancement": {"rate": 0.0, "memory_count": 0},
-                "token_savings": {"ratio": 0.0, "saved_tokens": 0},
+                "token_savings": token_savings,
             },
         }
 
@@ -220,10 +230,6 @@ def _build_core_capabilities_24h_payload(
     )
     memory_count_total = sum(int(getattr(m, "packed_memory_count", 0) or 0) for m in value_qualified_meters)
     memory_enhancement_rate = _clamp_ratio(requests_with_memory / qualified_count) if qualified_count > 0 else 0.0
-
-    saved_total = sum(_real_input_saved_tokens(m) for m in value_qualified_meters)
-    real_baseline_total = sum(_real_input_baseline_tokens(m) for m in value_qualified_meters)
-    token_saving_ratio = _clamp_ratio(saved_total / real_baseline_total) if real_baseline_total > 0 else 0.0
 
     return {
         "period": "24h",
@@ -239,7 +245,7 @@ def _build_core_capabilities_24h_payload(
                 "actual_tokens": total_actual,
             },
             "memory_enhancement": {"rate": round(memory_enhancement_rate, 4), "memory_count": memory_count_total},
-            "token_savings": {"ratio": round(token_saving_ratio, 4), "saved_tokens": saved_total},
+            "token_savings": token_savings,
         },
     }
 
