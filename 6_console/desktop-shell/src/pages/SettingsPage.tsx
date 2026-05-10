@@ -23,7 +23,7 @@ export function SettingsPage() {
   const serviceName = (name: string) => {
     if (name === 'runtime') return t.serviceRuntime;
     if (name === 'adapter') return t.serviceAdapter;
-    return t.serviceUi;
+    return name;
   };
   const serviceState = (state: string) => {
     if (state === 'healthy') return t.stateHealthy;

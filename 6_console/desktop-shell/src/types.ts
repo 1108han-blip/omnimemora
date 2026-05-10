@@ -1,4 +1,4 @@
-export type ServiceName = 'runtime' | 'adapter' | 'ui';
+export type ServiceName = 'runtime' | 'adapter';
 export type ServiceState = 'healthy' | 'unreachable' | 'unknown' | 'blocked';
 export type UpdateLayer = 'desktop_shell' | 'local_components' | 'cloud_policy';
 export type AgentId = 'claude' | 'openclaw' | 'codex';

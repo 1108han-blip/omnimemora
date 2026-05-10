@@ -1,12 +1,13 @@
 # OmniMemora
 
-OmniMemora is a local LLM gateway with a UI-controlled agent integration model. `:5173` is the user control entry, and `http://127.0.0.1:18011` is the only product data entry when routing is enabled.
+OmniMemora is a local LLM gateway with a desktop-GUI-controlled agent integration model. The current user control/display surface is the packaged OmniMemora Desktop app. `http://127.0.0.1:18011` is the only product data entry when routing is enabled. `:5173` is a legacy browser dashboard/dev surface and is not required by the desktop GUI.
 
 ## Current Shape
 
 | Surface | Role | Status |
 |--------|------|--------|
-| `:5173` | Dashboard | User control entry |
+| OmniMemora Desktop app | GUI | Current user control/display entry |
+| `:5173` | Legacy dashboard | Dev/legacy only; not required by current desktop GUI |
 | `:18011` | Gateway | Only product data entry when routing is enabled |
 | `:8765` | Go runtime | Internal memory plane |
 
@@ -26,12 +27,13 @@ Agent -> Gateway (:18011) -> compile/recall/inject -> Upstream LLM
 
 ## Frozen Truth
 
-- `:5173` is the only user control entry.
+- OmniMemora Desktop app is the current user control/display entry.
+- `:5173` is legacy/dev-only and must not be treated as a required desktop GUI dependency.
 - `:18011` remains the only product data entry when routing is enabled.
 - Runtime is internal only.
 - `/metrics/summary` is the only KPI truth surface.
 - Adapter-to-runtime contract changes must pass contract tests.
-- Agent control lives in the UI at `:5173`, not in agent self-selection.
+- Agent control lives in the desktop GUI, not in agent self-selection.
 - Agent integration is two-layer:
   - `使用 OmniMemora`: high-frequency routing switch
   - `接入 OmniMemora`: low-frequency install/uninstall switch

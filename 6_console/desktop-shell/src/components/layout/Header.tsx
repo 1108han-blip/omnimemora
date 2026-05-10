@@ -14,7 +14,8 @@ export function Header() {
   const startProduct = useDashboardStore((state) => state.startProduct);
   const restartProduct = useDashboardStore((state) => state.restartProduct);
   const stopProduct = useDashboardStore((state) => state.stopProduct);
-  const healthy = desktopStatus?.services.filter((service) => service.state === 'healthy').length ?? 0;
+  const services = desktopStatus?.services ?? [];
+  const healthy = services.filter((service) => service.state === 'healthy').length;
   const t = copy[language].header;
 
   return (
@@ -22,7 +23,7 @@ export function Header() {
       <div className="min-w-0">
         <div className="flex items-center gap-2">
           <Badge tone={product?.online ? 'success' : 'warning'}>{product?.online ? t.online : t.local}</Badge>
-          <span className="font-mono text-xs text-muted">{t.services} {healthy}/3</span>
+          <span className="font-mono text-xs text-muted">{t.services} {healthy}/{services.length || 2}</span>
           <span className="font-mono text-xs text-muted">v{desktopStatus?.app_version ?? '1.0.0-beta.12'}</span>
         </div>
         <p className="mt-0.5 truncate text-xs text-muted">{lastMessage}</p>

@@ -1,6 +1,6 @@
-# OmniMemora 5173 Control Entry
+# OmniMemora 5173 Legacy Dashboard
 
-This UI is the current user control entry. It consumes control and diagnostic state from `:18011`, but it does not redefine product truth by itself.
+This browser dashboard is a legacy/dev surface. The current user control/display entry is the packaged OmniMemora Desktop app. This legacy dashboard can still consume control and diagnostic state from `:18011` during development, but it is not required by the desktop GUI and must not be treated as product truth by itself.
 
 ## Run
 
@@ -9,7 +9,7 @@ npm install
 npm run dev
 ```
 
-Default UI port is `5173`. API calls are proxied to `http://localhost:18011`.
+Default legacy dashboard port is `5173`. API calls are proxied to `http://localhost:18011`.
 
 To bind the UI to a candidate adapter instance, override the proxy target:
 
@@ -19,7 +19,8 @@ OMNIMEMORA_UI_API_TARGET=http://127.0.0.1:18025 npm run dev
 
 Interpretation rule:
 
-- `5173` is the current user control entry
+- `5173` is a legacy browser dashboard/dev surface
+- OmniMemora Desktop app is the current user control/display entry
 - `18011` remains the only product data entry once product routing is enabled
 - runtime `:8765` remains internal only and is not a user control truth source
 

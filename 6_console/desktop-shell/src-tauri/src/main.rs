@@ -17,7 +17,6 @@ const APP_VERSION: &str = "1.0.0-beta.12";
 const SUPPORT_EMAIL: &str = "support@doloclaw.com";
 const RUNTIME_PORT: u16 = 8765;
 const ADAPTER_PORT: u16 = 18011;
-const UI_PORT: u16 = 5173;
 const INTERNAL_TOKEN: &str = "omnimemora-desktop-beta-local";
 const LATEST_MANIFEST_URL: &str = "https://doloclaw.com/releases/latest.json";
 const CLOUD_POLICY_CANDIDATE_URL: &str =
@@ -331,7 +330,6 @@ fn known_omnimemora_service(name: &str, command: &str) -> bool {
     match name {
         "runtime" => command.contains("omnimemora-runtime") && command.contains("serve"),
         "adapter" => command.contains("_run_adapter.py"),
-        "ui" => command.contains("http.server") && command.contains("5173"),
         _ => false,
     }
 }
@@ -585,7 +583,6 @@ fn desktop_status() -> DesktopStatus {
                 Some("\"status\":\"healthy\""),
                 &state,
             ),
-            service_probe("ui", UI_PORT, "/", None, &state),
         ],
         updates: update_statuses(),
         feedback_email: SUPPORT_EMAIL,
@@ -669,10 +666,6 @@ fn python_bin_with_modules(modules: &[&str]) -> Option<String> {
     deduped
         .into_iter()
         .find(|candidate| python_can_import(candidate, modules))
-}
-
-fn python_bin() -> Option<String> {
-    python_bin_with_modules(&[])
 }
 
 fn adapter_python_bin() -> Option<String> {
@@ -837,49 +830,6 @@ fn start_adapter() -> Result<Option<ManagedProcess>, String> {
     .map(Some)
 }
 
-fn start_ui() -> Result<Option<ManagedProcess>, String> {
-    if http_probe(UI_PORT, "/", None).is_ok() {
-        return Ok(None);
-    }
-    if bootstrap_or_kickstart_launch_agent("com.omnimemora.dashboard")
-        && wait_for_service(UI_PORT, "/", None)
-    {
-        return Ok(None);
-    }
-    let python =
-        python_bin().ok_or_else(|| "找不到 python3，无法启动本地 GUI 静态服务。".to_string())?;
-    let root = repo_root();
-    let component = component_dir();
-    let service_current = service_current_dir();
-    let dist = first_existing(&[
-        component.join("ui/dist"),
-        service_current.join("ui/dist"),
-        service_current.join("6_console/demo-dashboard/dist"),
-        root.join("6_console/demo-dashboard/dist"),
-    ])
-    .ok_or_else(|| "找不到 GUI dist。请先构建 6_console/demo-dashboard。".to_string())?;
-    let mut cmd = Command::new(&python);
-    cmd.args([
-        "-m",
-        "http.server",
-        &UI_PORT.to_string(),
-        "--bind",
-        "127.0.0.1",
-        "--directory",
-    ])
-    .arg(&dist);
-    spawn_service(
-        "ui",
-        cmd,
-        UI_PORT,
-        format!(
-            "{python} -m http.server {UI_PORT} --directory {}",
-            dist.display()
-        ),
-    )
-    .map(Some)
-}
-
 fn wait_for_service(port: u16, path: &str, expected: Option<&str>) -> bool {
     for _ in 0..30 {
         if http_probe(port, path, expected).is_ok() {
@@ -1020,7 +970,6 @@ fn unpacked_component_root(staging: &Path) -> Result<PathBuf, String> {
 fn component_health_ok() -> bool {
     wait_for_service(RUNTIME_PORT, "/health", Some("\"status\":"))
         && wait_for_service(ADAPTER_PORT, "/health", Some("\"status\":\"healthy\""))
-        && wait_for_service(UI_PORT, "/", None)
 }
 
 fn restore_previous_components() -> Result<(), String> {
@@ -1202,15 +1151,6 @@ fn start_all_services() -> Result<String, String> {
         failures.push("18011 adapter 健康检查未通过".to_string());
     }
 
-    match start_ui() {
-        Ok(Some(proc)) => started.push(proc),
-        Ok(None) => {}
-        Err(err) => failures.push(format!("5173 GUI: {err}")),
-    }
-    if !wait_for_service(UI_PORT, "/", None) {
-        failures.push("5173 GUI 健康检查未通过".to_string());
-    }
-
     for proc in started.iter() {
         state
             .processes
@@ -1253,7 +1193,6 @@ fn stop_all_services() -> Result<String, String> {
     let launchd_labels = [
         format!("gui/{uid}/com.omnimemora.runtime"),
         format!("gui/{uid}/com.omnimemora.adapter"),
-        format!("gui/{uid}/com.omnimemora.dashboard"),
     ];
     let mut launchd_stopped = 0usize;
     let mut launchd_booted_out = 0usize;
@@ -1304,11 +1243,7 @@ fn stop_all_services() -> Result<String, String> {
         }
     }
 
-    for (name, port) in [
-        ("runtime", RUNTIME_PORT),
-        ("adapter", ADAPTER_PORT),
-        ("ui", UI_PORT),
-    ] {
+    for (name, port) in [("runtime", RUNTIME_PORT), ("adapter", ADAPTER_PORT)] {
         let Some(pid) = port_owner_pid(port) else {
             continue;
         };

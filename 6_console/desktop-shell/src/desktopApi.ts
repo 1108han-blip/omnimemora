@@ -40,15 +40,6 @@ const DEFAULT_STATUS: DesktopStatus = {
       managed_by_desktop: false,
       pid: null,
     },
-    {
-      name: 'ui',
-      port: 5173,
-      state: 'unknown',
-      url: 'http://127.0.0.1:5173/',
-      detail: 'Waiting for desktop host status.',
-      managed_by_desktop: false,
-      pid: null,
-    },
   ],
   updates: [
     {

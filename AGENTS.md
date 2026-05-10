@@ -20,7 +20,8 @@ OmniMemora is currently a proprietary controlled-beta local-first product, not a
 
 - Product goal: MVP first; token saving first; no complexity expansion.
 - Product surface split:
-  - `5173` = user control and display surface
+  - Desktop GUI = packaged Tauri control/display surface (`tauri://localhost` inside the desktop app)
+  - `5173` = legacy browser dashboard/dev surface; not required by the current desktop GUI and must not be started as a current product dependency
   - `18011` = product ingress after explicit user opt-in
   - `8765` = internal memory plane
 - Distribution path: `https://doloclaw.com/download`.

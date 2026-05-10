@@ -20,10 +20,11 @@
 |------|------|
 | 把 `repo reality` 提升到 `running reality` 的 runtime 变更 | 任何 `4_core/local-runtime` 的改动 |
 | 把 `repo reality` 提升到 `running reality` 的 adapter 变更 | 任何 `5_connectors/adapter` 的改动 |
-| 把 `repo reality` 提升到 `running reality` 的 UI 变更 | 任何 `6_console/demo-dashboard` 的改动 |
+| 把 `repo reality` 提升到 `running reality` 的桌面 GUI 变更 | 任何 `6_console/desktop-shell` 的改动需要重新构建/安装桌面 App |
+| 把 `repo reality` 提升到 `running reality` 的 legacy UI 变更 | `6_console/demo-dashboard` 仅作为 legacy/dev surface；不得作为当前桌面 GUI 依赖启动 |
 | 影响 `8765` 端口当前在线行为的改动 | Runtime health/API 行为变更 |
 | 影响 `18011` 端口当前在线行为的改动 | Adapter API 行为变更 |
-| 影响 `5173` 端口当前在线行为的改动 | UI 路由/组件行为变更 |
+| 影响 `5173` 端口当前在线行为的改动 | legacy dashboard 行为变更；不代表当前桌面 GUI running reality |
 | launchd 服务配置的变更 | `com.omnimemora.*.plist` 相关改动 |
 
 **判断原则**：如果改动会改变**当前运行中服务**的行为，就必须走 promotion。
@@ -109,7 +110,11 @@
 - [ ] launchd plist reality 可查
 - [ ] 进程 reality 存在
 
-**UI（5173）**：
+**Desktop GUI（packaged app）**：
+- [ ] 桌面 App 已重新构建并安装到 `/Applications/OmniMemora Desktop.app`
+- [ ] 桌面 GUI 可打开并能从 `18011` 刷新当前状态
+
+**Legacy UI（5173，仅在显式验证 legacy dashboard 时适用）**：
 - [ ] `curl http://127.0.0.1:5173/` 返回成功
 - [ ] `curl http://127.0.0.1:5173/agents?tenant=all` 返回成功
 
