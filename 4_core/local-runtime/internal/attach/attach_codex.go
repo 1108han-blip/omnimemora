@@ -2,6 +2,7 @@
 package attach
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -116,6 +117,14 @@ func codexManagedLauncherPath() (string, error) {
 	return filepath.Join(dir, "bin", "codex-omnimemora"), nil
 }
 
+func codexManagedDesktopLauncherPath() (string, error) {
+	dir, err := codexManagedDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, "bin", "codex-omnimemora-desktop"), nil
+}
+
 func codexManagedHomeDir() (string, error) {
 	dir, err := codexManagedDir()
 	if err != nil {
@@ -141,6 +150,9 @@ func writeManagedCodexProfile(originalContent string, baseURL string) error {
 	if err := linkManagedCodexAuthStore(); err != nil {
 		return err
 	}
+	if err := syncManagedCodexGUIState(); err != nil {
+		return err
+	}
 	if err := writeManagedCodexLauncher(); err != nil {
 		return err
 	}
@@ -153,7 +165,11 @@ func writeManagedCodexProfile(originalContent string, baseURL string) error {
 	if err != nil {
 		return err
 	}
-	marker := fmt.Sprintf("managed_profile_ready\nlauncher=%s\n", launcherPath)
+	desktopLauncherPath, err := codexManagedDesktopLauncherPath()
+	if err != nil {
+		return err
+	}
+	marker := fmt.Sprintf("managed_profile_ready\nlauncher=%s\ndesktop_launcher=%s\ncodex_home=%s\n", launcherPath, desktopLauncherPath, filepath.Dir(configPath))
 	return os.WriteFile(markerPath, []byte(marker), 0644)
 }
 
@@ -199,10 +215,130 @@ func writeManagedCodexLauncher() error {
 	}
 	script := fmt.Sprintf(`#!/bin/sh
 set -eu
+export CODEX_HOME=%q
 export HOME=%q
 exec codex "$@"
-`, managedHome)
+`, filepath.Join(managedHome, ".codex"), managedHome)
+	if err := os.WriteFile(launcherPath, []byte(script), 0755); err != nil {
+		return err
+	}
+	return writeManagedCodexDesktopLauncher()
+}
+
+func writeManagedCodexDesktopLauncher() error {
+	managedHome, err := codexManagedHomeDir()
+	if err != nil {
+		return err
+	}
+	launcherPath, err := codexManagedDesktopLauncherPath()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(filepath.Dir(launcherPath), 0755); err != nil {
+		return err
+	}
+	script := fmt.Sprintf(`#!/bin/sh
+set -eu
+export CODEX_HOME=%q
+export OMNIMEMORA_CODEX_MANAGED=1
+if [ "$#" -eq 0 ]; then
+  exec codex app "$(pwd)"
+fi
+exec codex app "$@"
+`, filepath.Join(managedHome, ".codex"))
 	return os.WriteFile(launcherPath, []byte(script), 0755)
+}
+
+func syncManagedCodexGUIState() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	sourcePath := filepath.Join(home, ".codex", ".codex-global-state.json")
+	if _, err := os.Stat(sourcePath); os.IsNotExist(err) {
+		return nil
+	}
+	source, err := readJSONMap(sourcePath)
+	if err != nil {
+		return err
+	}
+
+	managedHome, err := codexManagedHomeDir()
+	if err != nil {
+		return err
+	}
+	targetPath := filepath.Join(managedHome, ".codex", ".codex-global-state.json")
+	target := map[string]any{}
+	if existing, err := readJSONMap(targetPath); err == nil {
+		target = existing
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	copyTopLevelKeys(target, source,
+		"project-order",
+		"electron-saved-workspace-roots",
+		"active-workspace-roots",
+		"electron-workspace-root-labels",
+		"remote-project-connection-backfill-completed",
+	)
+
+	sourceAtom := nestedStringMap(source, "electron-persisted-atom-state")
+	targetAtom := nestedStringMap(target, "electron-persisted-atom-state")
+	copyTopLevelKeys(targetAtom, sourceAtom,
+		"codexCloudAccess",
+		"electron:onboarding-plugin-checklist-active",
+		"has-dismissed-skills-apps-tooltip",
+		"seen-model-upgrade-list",
+		"latest-model-seen",
+		"has-opened-plugin-creator-prefill-v1",
+		"has-opened-skill-creator-prefill-v1",
+		"sidebar-collapsed-groups",
+		"sidebar-collapsed-sections-v1",
+		"default-service-tier",
+	)
+	if len(targetAtom) > 0 {
+		target["electron-persisted-atom-state"] = targetAtom
+	}
+
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+		return err
+	}
+	data, err := json.MarshalIndent(target, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(targetPath, append(data, '\n'), 0644)
+}
+
+func readJSONMap(path string) (map[string]any, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var payload map[string]any
+	if err := json.Unmarshal(data, &payload); err != nil {
+		return nil, err
+	}
+	if payload == nil {
+		payload = map[string]any{}
+	}
+	return payload, nil
+}
+
+func copyTopLevelKeys(dst map[string]any, src map[string]any, keys ...string) {
+	for _, key := range keys {
+		if value, ok := src[key]; ok {
+			dst[key] = value
+		}
+	}
+}
+
+func nestedStringMap(payload map[string]any, key string) map[string]any {
+	if value, ok := payload[key].(map[string]any); ok {
+		return value
+	}
+	return map[string]any{}
 }
 
 func removeManagedCodexProfile() (bool, error) {
