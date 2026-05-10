@@ -10,7 +10,17 @@ import { useDashboardStore } from '../store/useDashboardStore';
 import { copy } from '../lib/i18n';
 import type { RecentRequest, RequestEvidence } from '../types';
 
-type Decision = 'MEMORY_HIT' | 'REFINED' | 'BYPASS' | 'NO_MEMORY' | 'FALLBACK';
+type DecisionTag = 'REFINED' | 'MEMORY' | 'BYPASS' | 'NONE';
+
+function hasMemoryHit(request: RecentRequest, evidence?: RequestEvidence | null): boolean {
+  return (
+    (evidence?.context?.selected_memory_count ?? 0) > 0 ||
+    request.packed_memory_count > 0 ||
+    request.local_cards_used > 0 ||
+    request.remote_used_count > 0 ||
+    request.request_class === 'value_qualified'
+  );
+}
 
 function hasTokenSavings(request: RecentRequest, evidence?: RequestEvidence | null): boolean {
   const savingsRatio = evidence?.context?.savings_ratio ?? request.savings_ratio;
@@ -18,27 +28,40 @@ function hasTokenSavings(request: RecentRequest, evidence?: RequestEvidence | nu
   return (savedTokens ?? 0) > 0 || (savingsRatio ?? 0) > 0;
 }
 
-function decisionFor(request: RecentRequest, evidence?: RequestEvidence | null): Decision {
-  if (request.bypass) return 'BYPASS';
-  if (request.request_class === 'value_qualified') return 'MEMORY_HIT';
-  if (request.request_class === 'task_non_value' && hasTokenSavings(request, evidence)) return 'REFINED';
-  if (request.request_class === 'task_non_value') return 'NO_MEMORY';
-  return 'FALLBACK';
+function hasRefinement(request: RecentRequest, evidence?: RequestEvidence | null): boolean {
+  return hasTokenSavings(request, evidence) && hasMemoryHit(request, evidence);
 }
 
-function tone(decision: string) {
-  if (decision === 'MEMORY_HIT') return 'success';
+function decisionTagsFor(request: RecentRequest, evidence?: RequestEvidence | null): DecisionTag[] {
+  if (request.bypass) return ['BYPASS'];
+  const tags: DecisionTag[] = [];
+  if (hasRefinement(request, evidence)) tags.push('REFINED');
+  if (hasMemoryHit(request, evidence)) tags.push('MEMORY');
+  return tags.length ? tags : ['NONE'];
+}
+
+function tone(decision: DecisionTag) {
+  if (decision === 'MEMORY') return 'success';
   if (decision === 'REFINED') return 'accent';
-  if (decision === 'FALLBACK' || decision === 'NO_MEMORY') return 'warning';
+  if (decision === 'BYPASS') return 'neutral';
   return 'neutral';
 }
 
-function decisionLabel(decision: Decision, t: typeof copy.en.live | typeof copy.zh.live): string {
-  if (decision === 'MEMORY_HIT') return t.decisionCompiled;
+function decisionLabel(decision: DecisionTag, t: typeof copy.en.live | typeof copy.zh.live): string {
+  if (decision === 'MEMORY') return t.decisionMemory;
   if (decision === 'REFINED') return t.decisionRefined;
   if (decision === 'BYPASS') return t.decisionBypass;
-  if (decision === 'NO_MEMORY') return t.decisionNoValue;
-  return t.decisionFallback;
+  return t.decisionNone;
+}
+
+function DecisionTags({ tags, t }: { tags: DecisionTag[]; t: typeof copy.en.live | typeof copy.zh.live }) {
+  return (
+    <div className="flex flex-wrap gap-1">
+      {tags.map((tag) => (
+        <Badge key={tag} tone={tone(tag)}>{decisionLabel(tag, t)}</Badge>
+      ))}
+    </div>
+  );
 }
 
 function displayText(request: RecentRequest): string {
@@ -100,7 +123,7 @@ export function LiveFlowPage() {
   const selected = requests.find((request) => request.request_id === selectedRequestId) ?? null;
   const selectedEvidence = selected ? evidenceByRequestId[selected.request_id] : null;
   const selectedTokens = selected ? requestTokens(selected, selectedEvidence) : { before: null, after: null, saving: null };
-  const selectedHasSavings = selected ? hasTokenSavings(selected, selectedEvidence) : false;
+  const selectedHasSavings = selected ? hasRefinement(selected, selectedEvidence) : false;
   const selectedExpanded = selectedHasSavings && selectedTokens.before != null && selectedTokens.after != null && selectedTokens.after > selectedTokens.before;
   const selectedDisplayText = selected
     ? selected.user_visible_query || selected.query || selectedEvidence?.request.query_summary || selected.diagnostic_label || selected.request_id
@@ -134,8 +157,8 @@ export function LiveFlowPage() {
                   const groupExpanded = expandedGroups[group.key] ?? false;
                   const latestEvidence = evidenceByRequestId[group.latest.request_id];
                   const latestTokens = requestTokens(group.latest, latestEvidence);
-                  const latestDecision = decisionFor(group.latest, latestEvidence);
-                  const latestHasSavings = hasTokenSavings(group.latest, latestEvidence);
+                  const latestTags = decisionTagsFor(group.latest, latestEvidence);
+                  const latestHasSavings = hasRefinement(group.latest, latestEvidence);
                   const rows = groupExpanded ? group.items : [];
                   return (
                     <Fragment key={group.key}>
@@ -146,7 +169,7 @@ export function LiveFlowPage() {
                           <span>{group.key}</span>
                           <Badge tone="neutral" className="ml-2">{group.items.length} {t.records}</Badge>
                         </TD>
-                        <TD><Badge tone={tone(latestDecision) as never}>{decisionLabel(latestDecision, t)}</Badge></TD>
+                        <TD><DecisionTags tags={latestTags} t={t} /></TD>
                         <TD className="text-right font-mono text-xs">{latestHasSavings && latestTokens.before != null ? compactNumber(latestTokens.before) : t.notAvailable}</TD>
                         <TD className="text-right font-mono text-xs">{latestHasSavings && latestTokens.after != null ? compactNumber(latestTokens.after) : t.notAvailable}</TD>
                         <TD className={!latestHasSavings ? 'text-right font-mono text-xs text-muted' : latestTokens.before != null && latestTokens.after != null && latestTokens.after > latestTokens.before ? 'text-right font-mono text-xs text-warning' : 'text-right font-mono text-xs text-success'}>
@@ -157,14 +180,14 @@ export function LiveFlowPage() {
                         const expanded = selectedRequestId === request.request_id;
                         const evidence = evidenceByRequestId[request.request_id];
                         const tokens = requestTokens(request, evidence);
-                        const decision = decisionFor(request, evidence);
-                        const showSavings = hasTokenSavings(request, evidence);
+                        const decisionTags = decisionTagsFor(request, evidence);
+                        const showSavings = hasRefinement(request, evidence);
                         return (
                           <TR key={request.request_id} className={expanded ? 'bg-panel/60' : ''} onClick={() => void selectRequest(request)}>
                             <TD className="pl-6">{expanded ? <ChevronDown className="h-3.5 w-3.5 text-muted" /> : <ChevronRight className="h-3.5 w-3.5 text-muted" />}</TD>
                             <TD className="font-mono text-xs text-muted">{timeShort(request.timestamp)}</TD>
                             <TD>{request.agent || 'unknown'}</TD>
-                            <TD><Badge tone={tone(decision) as never}>{decisionLabel(decision, t)}</Badge></TD>
+                            <TD><DecisionTags tags={decisionTags} t={t} /></TD>
                             <TD className="text-right font-mono text-xs">{showSavings && tokens.before != null ? compactNumber(tokens.before) : t.notAvailable}</TD>
                             <TD className="text-right font-mono text-xs">{showSavings && tokens.after != null ? compactNumber(tokens.after) : t.notAvailable}</TD>
                             <TD className={!showSavings ? 'text-right font-mono text-xs text-muted' : tokens.before != null && tokens.after != null && tokens.after > tokens.before ? 'text-right font-mono text-xs text-warning' : 'text-right font-mono text-xs text-success'}>
@@ -210,7 +233,7 @@ export function LiveFlowPage() {
                 </section>
                 <section>
                   <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-muted">{t.reason}</p>
-                  <p className="rounded-md border border-border bg-background p-2 text-sm text-foreground">{selectedEvidence.status.failure_reason || selected.qualification_reason || selected.diagnostic_label || decisionLabel(decisionFor(selected), t)}</p>
+                  <p className="rounded-md border border-border bg-background p-2 text-sm text-foreground">{selectedEvidence.status.failure_reason || selected.qualification_reason || selected.diagnostic_label || decisionTagsFor(selected, selectedEvidence).map((tag) => decisionLabel(tag, t)).join(' / ')}</p>
                 </section>
               </>
             )}
