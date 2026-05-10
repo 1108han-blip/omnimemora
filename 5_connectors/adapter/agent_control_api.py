@@ -347,12 +347,53 @@ async def disable_agent_control(request: AgentControlRequest, http_request: Requ
     """
     _require_control_action_authorization(http_request)
     _invalidate_agents_control_snapshot()
-    _route_state.set_family_routing_enabled(request.family_id, False)
-    refreshed = await _srm.build_control_cards()
+    try:
+        _route_state.set_family_routing_enabled(request.family_id, False)
+        if request.family_id == "codex_cli":
+            # Codex uses an OmniMemora-managed HOME/launcher as its attach carrier.
+            # Disabling Codex must remove that carrier so the next Codex launch
+            # returns to the official ~/.codex path instead of proxy passthrough.
+            await _runtime_request("POST", "/agents/control/uninstall", {"family_id": request.family_id})
+        refreshed = await _srm.build_control_cards()
+    except httpx.HTTPStatusError as exc:
+        detail = exc.response.text
+        raise HTTPException(status_code=exc.response.status_code, detail=detail) from exc
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=503, detail=f"runtime disable unavailable: {exc}") from exc
+
     updated = _find_card(refreshed, request.family_id)
     if updated is None:
+        if request.family_id == "codex_cli":
+            return {
+                "family_id": request.family_id,
+                "display_name": _DISPLAY_NAMES.get(request.family_id, request.family_id),
+                "installed": False,
+                "routing_enabled": False,
+                "detected": False,
+                "active": False,
+                "last_seen_at": None,
+                "health_state": "unreachable",
+                "backup_available": False,
+                "subagent_count_active": 0,
+                "subagent_count_total_visible": 0,
+                "message": "Codex routing disabled and managed profile removed; restart Codex to use the official direct route",
+                "requests_24h": 0,
+                "saved_tokens_24h": 0,
+                "savings_ratio_24h": 0.0,
+                "last_request_at": None,
+                "integration_truth": "detached",
+                "route_truth": "off",
+                "traffic_truth": "no_recent_evidence",
+                "observed_client_truth": {"provider": None, "model": None, "base_url": None, "base_url_class": "unknown"},
+                "truth_message": "Codex 已停用 OmniMemora 托管入口；请重新打开 Codex 以回到官方直连线路。",
+            }
         raise HTTPException(status_code=404, detail=f"family not found after disable: {request.family_id}")
-    updated["message"] = "routing disabled"
+    if request.family_id == "codex_cli":
+        updated["installed"] = False
+        updated["routing_enabled"] = False
+        updated["message"] = "Codex routing disabled and managed profile removed; restart Codex to use the official direct route"
+    else:
+        updated["message"] = "routing disabled"
     _invalidate_agents_control_snapshot()
     return updated
 

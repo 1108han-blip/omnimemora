@@ -13,7 +13,7 @@ const MODE_ACTIONS = {
   install: '接入 OmniMemora',
   uninstall: '恢復原配置',
   enable: '使用 OmniMemora',
-  disable: '停用產品路由',
+  disable: '停用 OmniMemora',
 } as const;
 const AGENTS_POLL_MS = 12000;
 const CONTROL_FAILURE_BACKOFF_BASE_MS = 5000;

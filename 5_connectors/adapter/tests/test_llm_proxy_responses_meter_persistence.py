@@ -1,3 +1,4 @@
+import json
 import unittest
 from importlib import import_module
 from types import SimpleNamespace
@@ -59,6 +60,7 @@ class TestResponsesMeterPersistence(unittest.IsolatedAsyncioTestCase):
         original_record_compile = llm_proxy._record_compile_event
         original_persist_meter = llm_proxy._persist_gateway_meter
         original_record_event = llm_proxy._record_event
+        original_route_enabled = llm_proxy._routing_enabled_for_agent
 
         captured = {"meters": [], "compile_rows": []}
 
@@ -88,7 +90,7 @@ class TestResponsesMeterPersistence(unittest.IsolatedAsyncioTestCase):
         def _fake_record_compile(*args, **kwargs):
             captured["compile_rows"].append({"args": args, "kwargs": kwargs})
 
-        def _fake_persist_meter(*, request_id, agent_id, query, compile_meta, request=None, body=None):
+        def _fake_persist_meter(*, request_id, agent_id, query, compile_meta, request=None, body=None, **kwargs):
             captured["meters"].append(
                 {
                     "request_id": request_id,
@@ -110,6 +112,7 @@ class TestResponsesMeterPersistence(unittest.IsolatedAsyncioTestCase):
             llm_proxy._record_compile_event = _fake_record_compile
             llm_proxy._persist_gateway_meter = _fake_persist_meter
             llm_proxy._record_event = _noop_record_event
+            llm_proxy._routing_enabled_for_agent = lambda agent_id: True
 
             response = await llm_proxy.proxy_v1_responses(request)
         finally:
@@ -119,6 +122,7 @@ class TestResponsesMeterPersistence(unittest.IsolatedAsyncioTestCase):
             llm_proxy._record_compile_event = original_record_compile
             llm_proxy._persist_gateway_meter = original_persist_meter
             llm_proxy._record_event = original_record_event
+            llm_proxy._routing_enabled_for_agent = original_route_enabled
 
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(captured["compile_rows"]), 1)
@@ -128,6 +132,52 @@ class TestResponsesMeterPersistence(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(captured["meters"][0]["compile_meta"]["compile_status"], "compile_success")
         self.assertTrue(captured["meters"][0]["has_request"])
         self.assertEqual(captured["meters"][0]["body_model"], "gpt-5.4")
+
+    async def test_codex_responses_route_off_requires_restart_instead_of_proxying(self):
+        body = {
+            "model": "gpt-5.5",
+            "stream": True,
+            "input": [{"role": "user", "content": [{"type": "input_text", "text": "hello"}]}],
+        }
+
+        class _Req:
+            def __init__(self):
+                self.headers = {
+                    "authorization": "Bearer test-key",
+                    "x-omnimemora-agent": "codex_cli",
+                }
+                self.query_params = {}
+                self.state = SimpleNamespace()
+                self._json = body
+                self.url = SimpleNamespace(path="/v1/responses")
+
+            async def json(self):
+                return self._json
+
+        request = _Req()
+        original_route_enabled = llm_proxy._routing_enabled_for_agent
+        original_compile = llm_proxy._compile_or_passthrough_for_route
+        original_record_event = llm_proxy._record_event
+        compile_called = {"value": False}
+
+        async def _unexpected_compile(*args, **kwargs):
+            compile_called["value"] = True
+            return {}, {}
+
+        try:
+            llm_proxy._routing_enabled_for_agent = lambda agent_id: False
+            llm_proxy._compile_or_passthrough_for_route = _unexpected_compile
+            llm_proxy._record_event = lambda *args, **kwargs: None
+            response = await llm_proxy.proxy_v1_responses(request)
+        finally:
+            llm_proxy._routing_enabled_for_agent = original_route_enabled
+            llm_proxy._compile_or_passthrough_for_route = original_compile
+            llm_proxy._record_event = original_record_event
+
+        self.assertEqual(response.status_code, 409)
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload["error"]["code"], "codex_direct_route_requires_restart")
+        self.assertFalse(compile_called["value"])
 
     async def test_persist_gateway_meter_keeps_legacy_tenant_and_sets_tenant_id(self):
         captured = {"meter": None}

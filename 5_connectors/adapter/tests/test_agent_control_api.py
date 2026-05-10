@@ -130,6 +130,61 @@ class AgentControlApiTests(unittest.TestCase):
                     saved = json.loads(path.read_text(encoding="utf-8"))
                     self.assertEqual(saved["per_agent_modes"]["openclaw"], "off")
 
+    def test_disable_codex_removes_managed_profile_via_runtime_uninstall(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="omnimemora-agent-control-") as tmpdir:
+            path = Path(tmpdir) / "agent_modes.json"
+            path.write_text(
+                json.dumps(
+                    {
+                        "per_agent_modes": {
+                            "codex_cli": "force_if_possible",
+                        },
+                        "default_mode": "off",
+                    }
+                ),
+                encoding="utf-8",
+            )
+            runtime_calls = []
+
+            async def fake_runtime_request(method, path, payload):
+                runtime_calls.append((method, path, payload))
+                return {"ok": True}
+
+            async def fake_build_cards():
+                routing_enabled = agent_routing_state.routing_enabled("codex_cli")
+                return [
+                    {
+                        "family_id": "codex_cli",
+                        "display_name": "Codex",
+                        "installed": True,
+                        "routing_enabled": routing_enabled,
+                        "detected": True,
+                        "active": routing_enabled,
+                        "health_state": "healthy",
+                        "message": "",
+                    }
+                ]
+
+            with mock.patch.object(agent_routing_state, "_agent_modes_path", return_value=path):
+                agent_routing_state.reload_agent_modes()
+                with mock.patch.object(agent_control_api, "_runtime_request", side_effect=fake_runtime_request):
+                    with mock.patch.object(agent_control_api._srm, "build_control_cards", side_effect=fake_build_cards):
+                        disabled = asyncio.run(
+                            agent_control_api.disable_agent_control(
+                                agent_control_api.AgentControlRequest(family_id="codex_cli"),
+                                self._request(origin="http://127.0.0.1:5173"),
+                            )
+                        )
+
+            self.assertEqual(
+                runtime_calls,
+                [("POST", "/agents/control/uninstall", {"family_id": "codex_cli"})],
+            )
+            saved = json.loads(path.read_text(encoding="utf-8"))
+            self.assertEqual(saved["per_agent_modes"]["codex_cli"], "off")
+            self.assertFalse(disabled["routing_enabled"])
+            self.assertIn("official direct route", disabled["message"])
+
     def test_repair_codex_uses_managed_profile_message(self) -> None:
         async def fake_runtime_request(method, path, payload):
             self.assertEqual(method, "POST")

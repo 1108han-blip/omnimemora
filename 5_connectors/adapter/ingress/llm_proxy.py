@@ -327,6 +327,11 @@ def _routing_enabled_for_agent(agent_id: str) -> bool:
     return _route_state.routing_enabled(agent_id)
 
 
+def _exception_message(exc: BaseException, limit: int = 300) -> str:
+    text = str(exc).strip() or repr(exc)
+    return f"{type(exc).__name__}: {text}"[:limit]
+
+
 async def _compile_or_passthrough_for_route(
     *,
     payload: dict,
@@ -3793,6 +3798,38 @@ async def proxy_v1_responses(request: Request):
         f"model={requested_model} stream={wants_stream}"
     )
 
+    if agent_id == "codex_cli" and not _routing_enabled_for_agent(agent_id):
+        error_code = "codex_direct_route_requires_restart"
+        message = (
+            "Codex OmniMemora routing is disabled. Restart Codex from the official "
+            "launcher/config so it can use the direct OpenAI route."
+        )
+        loguru.logger.warning(
+            f"[LLM_PROXY/RESPONSES] request_id={request_id} agent={agent_id} "
+            f"route=off action=reject reason={error_code}"
+        )
+        _record_event(
+            agent_id,
+            "proxy_error",
+            request_id,
+            ingress_path,
+            requested_model,
+            "rejected",
+            409,
+            error=f"route_disabled|{error_code}",
+            trace_id=trace_id,
+        )
+        return JSONResponse(
+            status_code=409,
+            content={
+                "error": {
+                    "code": error_code,
+                    "message": message,
+                    "type": "omnimemora_route_disabled",
+                }
+            },
+        )
+
     if _should_bypass_codex_gateway(agent_id):
         compiled_body = dict(chat_body)
         compile_meta = _build_codex_bypass_compile_meta()
@@ -4007,7 +4044,7 @@ async def proxy_v1_responses(request: Request):
             )
         except httpx.TimeoutException as e:
             error_type = UPSTREAM_ERROR_TYPES["upstream_timeout"]
-            error_msg = str(e)[:300]
+            error_msg = _exception_message(e)
             _log_upstream_failure(
                 request_id=request_id,
                 upstream_url=upstream_url,
@@ -4032,14 +4069,14 @@ async def proxy_v1_responses(request: Request):
                 trace_id=trace_id,
             )
             error_body = _annotate_upstream_error(
-                raw_body=str(e),
+                raw_body=error_msg,
                 status_code=None,
                 error_type=error_type,
             )
             return JSONResponse(status_code=504, content=error_body)
         except Exception as e:
             error_type = UPSTREAM_ERROR_TYPES["proxy_internal_error"]
-            error_msg = str(e)[:300]
+            error_msg = _exception_message(e)
             _log_upstream_failure(
                 request_id=request_id,
                 upstream_url=upstream_url,
@@ -4064,7 +4101,7 @@ async def proxy_v1_responses(request: Request):
                 trace_id=trace_id,
             )
             error_body = _annotate_upstream_error(
-                raw_body=str(e),
+                raw_body=error_msg,
                 status_code=None,
                 error_type=error_type,
             )
@@ -4236,7 +4273,7 @@ async def proxy_v1_responses(request: Request):
 
     except httpx.TimeoutException as e:
         error_type = UPSTREAM_ERROR_TYPES["upstream_timeout"]
-        error_msg = str(e)[:300]
+        error_msg = _exception_message(e)
         _log_upstream_failure(
             request_id=request_id,
             upstream_url=upstream_url,
@@ -4261,7 +4298,7 @@ async def proxy_v1_responses(request: Request):
             trace_id=trace_id,
         )
         error_body = _annotate_upstream_error(
-            raw_body=str(e),
+            raw_body=error_msg,
             status_code=None,
             error_type=error_type,
         )
@@ -4269,7 +4306,7 @@ async def proxy_v1_responses(request: Request):
 
     except Exception as e:
         error_type = UPSTREAM_ERROR_TYPES["proxy_internal_error"]
-        error_msg = str(e)[:300]
+        error_msg = _exception_message(e)
         _log_upstream_failure(
             request_id=request_id,
             upstream_url=upstream_url,
@@ -4292,7 +4329,7 @@ async def proxy_v1_responses(request: Request):
             truth_meta=truth_meta,
         )
         error_body = _annotate_upstream_error(
-            raw_body=str(e),
+            raw_body=error_msg,
             status_code=None,
             error_type=error_type,
         )
