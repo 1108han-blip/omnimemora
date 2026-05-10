@@ -868,7 +868,7 @@ async def build_control_cards() -> List[Dict[str, Any]]:
         cards.append(
             {
                 "family_id": family_id,
-                "display_name": raw.get("display_name") or _DISPLAY_NAMES.get(family_id, family_id),
+                "display_name": _DISPLAY_NAMES.get(family_id, raw.get("display_name") or family_id),
                 "installed": bool(raw.get("installed")),
                 "routing_enabled": route_state.routing_enabled(family_id),
                 "detected": bool(raw.get("detected", True)),
