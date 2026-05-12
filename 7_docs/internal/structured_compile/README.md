@@ -4,7 +4,7 @@
 
 - Created: 2026-05-13
 - Product line: OmniMemora structured context compilation
-- Current status: SC-020 post-release value gate recorded; beta17 OpenClaw and Claude Code running paths both show structured compile success
+- Current status: SC-021 repo candidate adds a local Tool Plane search entry so AI tool traffic can enter OmniMemora before agent reuse
 - Supersedes phase6 as the active engineering line for compile capability work.
 
 ## Product Target
@@ -863,6 +863,39 @@ Decision:
 - SC-020 closes the Claude Code running validation gap for this local beta17 install.
 - Do not expand compressor logic in the next step until real post-release traffic shows whether passthrough coverage or compressor quality is the bottleneck.
 - If the product wants Claude Code route enabled by default for newly downloaded packages, that is a separate release decision because beta17 cloud artifacts were already published with the prior default config.
+
+### SC-021 - Local Tool Plane Search Entry
+
+Goal: start the long-term product path where OmniMemora weakly integrates with agent clients while controlling as much LLM and AI tool traffic as possible.
+
+Status: repo candidate implemented on 2026-05-13. No OpenClaw or Claude Code running configuration was changed in this batch.
+
+Product decision:
+
+- Direct agent-to-CLI tool calls are acceptable only as temporary fallbacks.
+- The target shape is agent -> OmniMemora `18011` tool endpoint -> local provider backend -> structured, capped tool result -> next LLM turn through OmniMemora.
+- Search is the first Tool Plane capability because failed or slow search currently wastes agent-loop time and can inflate later LLM context.
+- Image, video, voice, and vision tool traffic remain out of scope until search proves latency and token-saving value.
+
+Implementation:
+
+- Added `POST /tools/search`.
+- Default provider is local `mmx search query --q <query> --output json`.
+- The endpoint uses bounded query size, bounded result size, command timeout, no shell interpolation, and response-only retention.
+- The endpoint does not write raw search results to product logs, does not mutate user memory, and does not add a scheduler or background worker.
+- Unsupported providers fail closed instead of silently bypassing OmniMemora.
+
+Boundary:
+
+- Existing LLM ingress paths are unchanged.
+- Existing structured compile behavior is unchanged.
+- Existing OpenClaw configuration is unchanged; adapting OpenClaw `web_search` to call OmniMemora is a later running-integration batch.
+- Brave or other fallback search providers are not implemented in this repo candidate.
+
+Exit:
+
+- Repo tests prove route registration, mmx command construction, bounded output, unsupported provider rejection, and bounded backend failure detail.
+- Running reality is not claimed until the adapter is promoted and OpenClaw is configured to call the OmniMemora search endpoint.
 
 ## Success Criteria
 

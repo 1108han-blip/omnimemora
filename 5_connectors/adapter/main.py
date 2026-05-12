@@ -184,8 +184,10 @@ def _register_product_data_path(app: FastAPI) -> None:
     """Register product data path surfaces (ingress + product protocol)."""
     _llm_proxy_mod = importlib.import_module("5_connectors.adapter.llm_proxy")
     _mcp_surface_mod = importlib.import_module("5_connectors.adapter.mcp_surface")
+    _tool_surface_mod = importlib.import_module("5_connectors.adapter.tool_surface")
     app.include_router(_llm_proxy_mod.router, prefix="")
     app.include_router(_mcp_surface_mod.router, prefix="")
+    app.include_router(_tool_surface_mod.router, prefix="")
 
 
 def _register_control_plane(app: FastAPI) -> None:

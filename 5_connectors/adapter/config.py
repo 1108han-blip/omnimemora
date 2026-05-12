@@ -359,6 +359,16 @@ class Config(BaseModel):
         os.getenv("OMNIMEMORA_STRUCTURED_COMPILE_MAX_TOOL_RESULT_CHARS", "1200")
     )
 
+    # Tool plane v1: local search enters through OmniMemora before agent reuse.
+    tool_search_enabled: bool = _env_bool("OMNIMEMORA_TOOL_SEARCH_ENABLED", True)
+    tool_search_default_provider: str = os.getenv(
+        "OMNIMEMORA_TOOL_SEARCH_DEFAULT_PROVIDER",
+        "mmx",
+    ).strip().lower() or "mmx"
+    tool_search_timeout_seconds: float = float(os.getenv("OMNIMEMORA_TOOL_SEARCH_TIMEOUT_SECONDS", "12"))
+    tool_search_max_query_chars: int = int(os.getenv("OMNIMEMORA_TOOL_SEARCH_MAX_QUERY_CHARS", "500"))
+    tool_search_max_result_chars: int = int(os.getenv("OMNIMEMORA_TOOL_SEARCH_MAX_RESULT_CHARS", "6000"))
+
     # Per-agent control modes (loaded from agent_modes.json at startup)
     agent_control: dict = {}  # {agent_id: mode} — filled by main.py from agent_modes.json
 

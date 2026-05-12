@@ -14,6 +14,7 @@ def test_main_registers_expected_router_groups():
     # product data path
     assert "/v1/chat/completions" in route_paths
     assert "/mcp" in route_paths
+    assert "/tools/search" in route_paths
 
     # control plane
     assert "/agents/control" in route_paths
