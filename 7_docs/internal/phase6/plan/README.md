@@ -2,6 +2,18 @@
 
 ## Current Status
 
+## Current Product Compile Target
+
+Added 2026-05-13 after the Claude Code/OpenClaw compile semantics investigation:
+
+- Current highest-value product target: upgrade from narrow memory-context compile to protocol-aware structured context compilation.
+- The next compile line must optimize for real token/cost saving without breaking agent tool workflows.
+- File-count growth is acceptable when it creates focused compiler modules and replaces single-file accumulation.
+- Single-file growth is not acceptable as the default path; keep ingress, orchestration, provider IR, tool graph validation, compression, rebuild, and validation responsibilities separated.
+- Runtime blocking is not acceptable: upstream-critical paths must not depend on LLM summarization, cloud policy fetch, historical file scans, or slow persistence.
+- Strategy policy can control rollout and budgets only after local protocol-preservation invariants exist.
+- This is no longer a Phase6 tail item. Active engineering continues in [Structured Compile Mainline](../../structured_compile/README.md); Phase6 remains the historical governance and promotion index.
+
 ### Sub-Workstreams
 
 | Workstream | Status | 文档位置 |
