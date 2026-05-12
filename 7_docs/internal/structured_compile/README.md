@@ -4,7 +4,7 @@
 
 - Created: 2026-05-13
 - Product line: OmniMemora structured context compilation
-- Current status: SC-015 running value gate recorded; SC-016 through SC-018 repo-validated; SC-019 pending final promotion decision
+- Current status: SC-015 through SC-019 complete; adapter promoted to running reality for structured compile v2
 - Supersedes phase6 as the active engineering line for compile capability work.
 
 ## Product Target
@@ -704,7 +704,7 @@ Repo validation:
 
 Goal: decide whether SC-015 through SC-018 are ready for product promotion, GUI/cloud packaging, or another repo-only iteration.
 
-Status: planned.
+Status: running reality promoted and closed on 2026-05-13.
 
 Implementation:
 
@@ -724,6 +724,68 @@ Repo validation:
 
 - `test_context_compiler_research_adapters.py`: passed with corpus summary coverage.
 - `py_compile`: passed for `research_adapters.py`.
+
+Decision:
+
+- Promote the adapter running surface for local controlled-beta validation.
+- Do not package a new desktop GUI or cloud download bundle in SC-019 because this batch changed adapter structured compile logic and tests only; no desktop GUI code changed.
+- Keep Claude Code running-route validation separate because the SC-015 direct Claude Code request was route-disabled. OpenClaw is the validated running target for this closeout.
+
+Promotion evidence:
+
+- First SC-019 promotion attempt:
+  - command: `OMNIMEMORA_SERVICE_DIR=/Users/sc/.omnimemora/app ./tools/promotion/promotion.sh adapter`
+  - log: `tools/verification/logs/promotion_20260513_055318.log`
+  - result: `promotion_failed`
+  - primary breakpoint: `api_unreachable`
+  - follow-up finding: the adapter became healthy immediately after the script check window, so this was treated as a restart readiness race and not as a code failure.
+- Successful SC-019 promotion:
+  - command: `OMNIMEMORA_SERVICE_DIR=/Users/sc/.omnimemora/app ./tools/promotion/promotion.sh adapter`
+  - log: `tools/verification/logs/promotion_20260513_055342.log`
+  - result: `running_reality_promoted`
+  - repo revision: `629b6bf`
+  - adapter pid changed from `53103` to `54311`
+  - marker: `/Users/sc/.omnimemora/app/current/.omnimemora_promotion_state.json`
+  - primary breakpoint: `none`
+
+Running validation:
+
+- Endpoint timings after successful promotion:
+  - `/health`: `0.004919s` before direct request; `0.327292s` after direct request.
+  - `/metrics/summary?tenant=all`: `0.005813s` after direct request, degraded by design with `summary_unavailable_no_historical_scan`.
+  - `/metrics/core_capabilities?tenant=all`: `0.333600s` before direct request; `0.318298s` after direct request.
+  - `/compile/status?window_minutes=10`: `0.333380s` before direct request; `0.334919s` after direct request.
+- Direct OpenClaw product request:
+  - path: `/llm/v1/messages`
+  - agent: `openclaw`
+  - trace: `sc019-openclaw-structured-compile`
+  - request_id: `b17ba5735944`
+  - upstream response id: `0652d49c0deb2c68e8fe57d649636420`
+  - upstream status: `200`
+  - elapsed time: `15.711414s`
+  - compile_status: `structured_compile_success`
+  - compile_path: `structured_context_compile`
+  - compile_reason: `deterministic_extract_search_result`
+  - original_token_estimate: `2341`
+  - compiled_token_estimate: `594`
+  - compression_ratio: `0.746262281076463`
+  - selected_memory_count: `0`
+  - token_estimator_name: `tiktoken`
+  - token_estimator_confidence: `high`
+- `/compile/status?window_minutes=10` after direct request:
+  - `openclaw.proxied_requests`: `2`
+  - `openclaw.structured_compile_success`: `2`
+  - `openclaw.structured_compile.success_share`: `1.0`
+  - `openclaw.compile_token_savings.saved_token_estimate`: `3494`
+  - `openclaw.compile_token_savings.savings_ratio`: `0.7463`
+
+Product impact:
+
+- File count stayed flat in the implementation batch; the golden corpus was added to an existing test file.
+- Resident background logic stayed flat; no new scheduler, watcher, or background compression worker was added.
+- Runtime hot path remains deterministic parse/compress/validate only; no model inference, model download, external compressor library, network dependency, or cloud policy fetch was added.
+- Internal log retention remains governed by the existing 7-day cap; this batch did not add new retention paths.
+- Product compile behavior remains protocol-aware and local-first for the validated OpenClaw Anthropic-compatible tool path.
 
 ## Success Criteria
 
