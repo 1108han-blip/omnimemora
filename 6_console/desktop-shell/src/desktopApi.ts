@@ -169,45 +169,133 @@ async function fetchProductJson<T>(path: string, timeoutMs = 2200): Promise<T> {
   }
 }
 
-function normalizeUsage(raw: Record<string, unknown>): UsageSummary {
+function emptyUsageSummary(): UsageSummary {
   return {
-    tenant: (raw.tenant as string) ?? 'all',
-    request_count: Number(raw.request_count ?? 0),
-    total_requests: Number(raw.total_requests ?? 0),
-    saved_tokens_total: Number(raw.saved_tokens_total ?? raw.saved_tokens_estimate_total ?? 0),
-    average_savings_ratio: Number(raw.average_savings_ratio ?? 0),
-    last_request_at: (raw.last_request_at as string | null) ?? null,
-    by_agent: Array.isArray(raw.by_agent)
-      ? raw.by_agent.map((entry) => {
-          const item = entry as Record<string, unknown>;
-          return {
-            agent: (item.agent as string) ?? 'unknown',
-            requests: Number(item.requests ?? 0),
-            saved_tokens: Number(item.saved_tokens ?? 0),
-            savings_ratio: Number(item.savings_ratio ?? 0),
-            last_request_at: (item.last_request_at as string | null) ?? null,
-          };
-        })
-      : [],
+    tenant: 'all',
+    request_count: 0,
+    total_requests: 0,
+    saved_tokens_total: 0,
+    average_savings_ratio: 0,
+    last_request_at: null,
+    by_agent: [],
+  };
+}
+
+function realInputSavedTokens(request: RecentRequestsResponse['requests'][number]): number {
+  if (typeof request.real_input_saved_tokens === 'number') return Math.max(0, request.real_input_saved_tokens);
+  if (typeof request.baseline_payload_tokens === 'number' && typeof request.forwarded_payload_tokens === 'number') {
+    return Math.max(0, request.baseline_payload_tokens - request.forwarded_payload_tokens);
+  }
+  return 0;
+}
+
+function realInputBaselineTokens(request: RecentRequestsResponse['requests'][number]): number {
+  return Math.max(0, request.baseline_payload_tokens ?? 0);
+}
+
+function familyIdForRecentRequest(agent: string): string {
+  if (agent === 'openclaw' || agent.startsWith('openclaw-')) return 'openclaw';
+  if (agent === 'claude' || agent === 'claude_code' || agent.startsWith('claude-')) return 'claude_code';
+  if (agent === 'codex' || agent === 'codex_cli' || agent.startsWith('codex-')) return 'codex_cli';
+  return agent || 'unknown';
+}
+
+function latestTimestamp(current: string | null, next: string): string {
+  return current && current > next ? current : next;
+}
+
+function applyRealInputAgentSavings(
+  controls: AgentControlResponse | null,
+  recent: RecentRequestsResponse | null,
+): AgentControlResponse | null {
+  if (!controls) return null;
+
+  const realInputByFamily = new Map<string, { saved: number; baseline: number }>();
+  for (const request of recent?.requests ?? []) {
+    if (request.request_class === 'internal') continue;
+    const familyId = familyIdForRecentRequest(request.agent);
+    const current = realInputByFamily.get(familyId) ?? { saved: 0, baseline: 0 };
+    current.saved += realInputSavedTokens(request);
+    current.baseline += realInputBaselineTokens(request);
+    realInputByFamily.set(familyId, current);
+  }
+
+  return {
+    ...controls,
+    agents: controls.agents.map((agent) => {
+      const realInput = realInputByFamily.get(agent.family_id);
+      const savedTokens = realInput?.saved ?? 0;
+      const savingsRatio = realInput && realInput.baseline > 0 ? savedTokens / realInput.baseline : 0;
+      return {
+        ...agent,
+        saved_tokens_24h: savedTokens,
+        savings_ratio_24h: savingsRatio,
+      };
+    }),
+  };
+}
+
+function buildRealInputUsageSummary(recent: RecentRequestsResponse | null): UsageSummary {
+  if (!recent) return emptyUsageSummary();
+
+  const byAgent = new Map<string, { requests: number; saved: number; baseline: number; lastRequestAt: string | null }>();
+  let savedTotal = 0;
+  let baselineTotal = 0;
+  let requestCount = 0;
+  let lastRequestAt: string | null = null;
+
+  for (const request of recent.requests) {
+    if (request.request_class === 'internal') continue;
+    const agent = familyIdForRecentRequest(request.agent);
+    const saved = realInputSavedTokens(request);
+    const baseline = realInputBaselineTokens(request);
+    const current = byAgent.get(agent) ?? { requests: 0, saved: 0, baseline: 0, lastRequestAt: null };
+    current.requests += 1;
+    current.saved += saved;
+    current.baseline += baseline;
+    current.lastRequestAt = latestTimestamp(current.lastRequestAt, request.timestamp);
+    byAgent.set(agent, current);
+    savedTotal += saved;
+    baselineTotal += baseline;
+    requestCount += 1;
+    lastRequestAt = latestTimestamp(lastRequestAt, request.timestamp);
+  }
+
+  return {
+    tenant: recent.tenant,
+    request_count: requestCount,
+    total_requests: requestCount,
+    saved_tokens_total: savedTotal,
+    average_savings_ratio: baselineTotal > 0 ? savedTotal / baselineTotal : 0,
+    last_request_at: lastRequestAt,
+    by_agent: Array.from(byAgent.entries()).map(([agent, metrics]) => ({
+      agent,
+      requests: metrics.requests,
+      saved_tokens: metrics.saved,
+      savings_ratio: metrics.baseline > 0 ? metrics.saved / metrics.baseline : 0,
+      last_request_at: metrics.lastRequestAt,
+    })),
   };
 }
 
 export async function getProductConsoleSnapshot(): Promise<ProductConsoleSnapshot> {
-  const [core, coreTrend, recent, usage, controls] = await Promise.allSettled([
+  const [core, coreTrend, recent, controls] = await Promise.allSettled([
     fetchProductJson<CoreCapabilitiesResponse>('/metrics/core_capabilities?tenant=all', PRODUCT_METRICS_TIMEOUT_MS),
     fetchProductJson<CoreCapabilitiesTrendResponse>('/metrics/core_capabilities/trend?tenant=all&days=7', PRODUCT_METRICS_TIMEOUT_MS),
-    fetchProductJson<RecentRequestsResponse>('/metrics/recent_requests?tenant=all&limit=10&per_agent_limit=10&include_internal=true&value_qualified_only=false', RECENT_REQUESTS_TIMEOUT_MS),
-    fetchProductJson<Record<string, unknown>>('/usage/token-savings?tenant=all', PRODUCT_METRICS_TIMEOUT_MS),
+    fetchProductJson<RecentRequestsResponse>('/metrics/recent_requests?tenant=all&limit=1000&per_agent_limit=1000&include_internal=true&value_qualified_only=false', RECENT_REQUESTS_TIMEOUT_MS),
     fetchProductJson<AgentControlResponse>('/agents/control', AGENT_CONTROL_TIMEOUT_MS),
   ]);
 
-  const fulfilled = [core, coreTrend, recent, usage, controls].filter((result) => result.status === 'fulfilled');
-  const firstError = [core, coreTrend, recent, usage, controls].find((result) => result.status === 'rejected');
+  const fulfilled = [core, coreTrend, recent, controls].filter((result) => result.status === 'fulfilled');
+  const firstError = [core, coreTrend, recent, controls].find((result) => result.status === 'rejected');
   const recentError = recent.status === 'rejected'
     ? recent.reason instanceof Error
       ? recent.reason.message
       : String(recent.reason)
     : null;
+
+  const recentValue = recent.status === 'fulfilled' ? recent.value : null;
+  const controlsValue = controls.status === 'fulfilled' ? controls.value : null;
 
   return {
     online: fulfilled.length > 0,
@@ -222,9 +310,9 @@ export async function getProductConsoleSnapshot(): Promise<ProductConsoleSnapsho
     recentError,
     core: core.status === 'fulfilled' ? core.value : null,
     coreTrend: coreTrend.status === 'fulfilled' ? coreTrend.value : null,
-    recent: recent.status === 'fulfilled' ? recent.value : null,
-    usage: usage.status === 'fulfilled' ? normalizeUsage(usage.value) : null,
-    controls: controls.status === 'fulfilled' ? controls.value : null,
+    recent: recentValue,
+    usage: buildRealInputUsageSummary(recentValue),
+    controls: applyRealInputAgentSavings(controlsValue, recentValue),
   };
 }
 
