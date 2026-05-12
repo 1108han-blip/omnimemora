@@ -4,7 +4,7 @@
 
 - Created: 2026-05-13
 - Product line: OmniMemora structured context compilation
-- Current status: SC-004 running reality validated
+- Current status: SC-006 running reality validated for provided tool-schema preservation; SC-005 offline research interface implemented in repo reality
 - Supersedes phase6 as the active engineering line for compile capability work.
 
 ## Product Target
@@ -283,7 +283,7 @@ Exit:
 
 Goal: use ACON-style failure analysis without building a training system.
 
-Status: started in repo reality on 2026-05-13 with deterministic tool-schema validation. No failure corpus retention was added.
+Status: running reality validated on 2026-05-13 for deterministic tool-schema validation. No failure corpus retention was added.
 
 Implementation:
 
@@ -298,6 +298,31 @@ Boundary:
 - No raw user memory mutation.
 - No background training.
 - No schema synthesis: absent `tools` remains a provider/client responsibility, while present-but-inconsistent schemas force passthrough.
+
+Running evidence:
+
+- Promotion log: `tools/verification/logs/promotion_20260513_042953.log`
+- Promotion result: `final_status=running_reality_promoted`, `repo_revision=eb62295`, adapter pid changed from `4932` to `9230`.
+- Endpoint timings after promotion, before direct request:
+  - `/health`: `0.018554s`
+  - `/metrics/summary`: `0.023332s`
+  - `/metrics/core_capabilities`: `0.229316s`
+- Direct product request with top-level `tools` schema:
+  - path: `/llm/v1/messages`
+  - agent: `claude_code`
+  - request_id: `c42e8c2ded6f`
+  - trace: `sc006-tool-schema-20260513-0430`
+  - upstream status: `200`
+  - compile_status: `structured_compile_success`
+  - compile_path: `structured_context_compile`
+  - compile_reason: `deterministic_extract`
+  - original_token_estimate: `2697`
+  - compiled_token_estimate: `732`
+  - compression_ratio: `0.728587319243604`
+- Endpoint timings after direct request:
+  - `/health`: `0.014336s`
+  - `/metrics/summary`: `0.00914s`
+  - `/metrics/core_capabilities`: `0.231321s`
 
 ## Success Criteria
 
