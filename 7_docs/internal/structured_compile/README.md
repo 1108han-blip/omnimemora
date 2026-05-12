@@ -4,7 +4,7 @@
 
 - Created: 2026-05-13
 - Product line: OmniMemora structured context compilation
-- Current status: SC-021 repo candidate adds a local Tool Plane search entry so AI tool traffic can enter OmniMemora before agent reuse
+- Current status: SC-023 OpenClaw `web_search` can route through OmniMemora Tool Plane to local `mmx` search
 - Supersedes phase6 as the active engineering line for compile capability work.
 
 ## Product Target
@@ -903,7 +903,7 @@ Exit:
 
 Goal: promote the repo candidate from SC-021 into the current local running adapter and prove the search endpoint is healthy without changing OpenClaw behavior yet.
 
-Status: planned.
+Status: running reality promoted and validated on 2026-05-13.
 
 Required:
 
@@ -919,11 +919,44 @@ Boundary:
 - Do not start `5173`.
 - Do not claim OpenClaw `web_search` is routed through OmniMemora until a separate integration batch proves it.
 
+Evidence:
+
+- Promotion log for initial SC-022 candidate:
+  - `tools/verification/logs/promotion_20260513_065304.log`
+  - repo revision: `8e6a12f`
+  - result: `running_reality_promoted`
+  - adapter pid changed from `64144` to `74856`
+- First running `/tools/search` check returned `503` with `mmx_cli_not_found`.
+  - Cause: launchd adapter environment did not include the interactive shell path where `mmx` is installed.
+  - Fix: repo commit `4ad2479` resolves `mmx` from explicit env, PATH, or common local install paths.
+- Second running `/tools/search` check returned `502` with `env: node: No such file or directory`.
+  - Cause: the `mmx` executable uses `#!/usr/bin/env node`, and launchd adapter PATH did not include the local Node binary path.
+  - Fix: repo commit `3868f55` adds bounded tool-subprocess PATH defaults for common Node/mmx locations.
+- Final promotion log:
+  - `tools/verification/logs/promotion_20260513_065502.log`
+  - repo revision: `3868f55`
+  - result: `running_reality_promoted`
+  - adapter pid changed from `76745` to `78316`
+- Final running validation:
+  - `POST /tools/search`: HTTP `200`, response time `2.039187s`
+  - provider: `mmx`
+  - backend: `mmx_cli`
+  - output format: `json`
+  - returned content was capped to `1200` chars and marked `truncated=true`
+  - OmniMemora endpoint-reported backend elapsed time: `1717.066ms`
+  - `/metrics/core_capabilities?tenant=all`: HTTP `200`, `0.300633s`
+  - `/compile/status?window_minutes=10`: HTTP `200`, `0.297529s`
+
+Conclusion:
+
+- OmniMemora running adapter now exposes a working local Tool Plane search endpoint.
+- SC-022 did not change OpenClaw configuration; OpenClaw routing is covered by SC-023.
+
 ### SC-023 - OpenClaw Search Routing Integration Plan
 
 Goal: decide the smallest weak-intrusion way to make OpenClaw `web_search` call OmniMemora `/tools/search` instead of a direct external provider or direct CLI fallback.
 
-Status: planned.
+Status: implemented and running-local validated on 2026-05-13.
 
 Preferred path:
 
@@ -935,6 +968,59 @@ Exit:
 
 - Record the exact OpenClaw config surface or plugin surface to change.
 - Only proceed to running mutation after the config surface is clear and reversible.
+
+Implementation:
+
+- Added a standalone local OpenClaw plugin candidate:
+  - `5_connectors/omni-tool-plane-openclaw-plugin/`
+  - plugin id: `omnimemora-tool-plane`
+  - web search provider id: `omnimemora`
+  - provider behavior: OpenClaw `web_search` -> OmniMemora `POST /tools/search` -> local `mmx` backend.
+- The plugin is separate from the existing `omnimemora-memory` plugin so search routing does not trigger memory auto-recall or auto-capture behavior.
+- The plugin has no external npm dependency and no credential requirement.
+
+Repo validation:
+
+- `node --test 5_connectors/omni-tool-plane-openclaw-plugin/index.test.mjs`: `3 passed`.
+- `node --test` validates provider registration, successful OmniMemora response normalization, and bounded failed-response payloads.
+
+Running OpenClaw configuration:
+
+- Installed with:
+  - `openclaw plugins install --link /Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/5_connectors/omni-tool-plane-openclaw-plugin`
+- OpenClaw wrote config backups under `~/.openclaw/openclaw.json.bak`.
+- `openclaw plugins inspect omnimemora-tool-plane --json` reported:
+  - `enabled=true`
+  - `status=loaded`
+  - `webSearchProviderIds=["omnimemora"]`
+  - source path under this repo's `5_connectors/omni-tool-plane-openclaw-plugin/index.mjs`
+- OpenClaw config was patched to:
+  - `tools.web.search.provider=omnimemora`
+  - `tools.web.search.timeoutSeconds=12`
+  - `plugins.entries.omnimemora-tool-plane.config.webSearch.baseUrl=http://127.0.0.1:18011`
+  - `plugins.entries.omnimemora-tool-plane.config.webSearch.timeoutSeconds=12`
+  - `plugins.entries.omnimemora-tool-plane.config.webSearch.maxChars=6000`
+- `openclaw config validate`: passed.
+- Gateway log showed config hot reload applied for `plugins.entries.omnimemora-tool-plane.config`, `tools.web.search.provider`, and `tools.web.search.timeoutSeconds`.
+
+Running validation:
+
+- Command:
+  - `openclaw infer web search --provider omnimemora --query 'MiniMax AI official website' --limit 2 --json`
+- Result:
+  - `ok=true`
+  - `capability=web.search`
+  - `provider=omnimemora`
+  - `upstreamProvider=mmx`
+  - `count=2`
+  - provider-reported `tookMs=1161`
+  - returned structured result entries with title, url, description, published, and siteName.
+
+Boundary:
+
+- This proves the OpenClaw web-search capability can route through OmniMemora.
+- It does not yet prove a full OpenClaw agent turn chooses `web_search` and completes inside the 45-second agent deadline.
+- The installed plugin is linked to the repo path, so moving or deleting the repo path would break the OpenClaw plugin until packaged or installed as a copied plugin.
 
 ## Success Criteria
 
