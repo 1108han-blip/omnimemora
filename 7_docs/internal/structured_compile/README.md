@@ -60,6 +60,7 @@ Candidate modules:
 - `compiler.py` - protect, classify, compress, rebuild, and fallback orchestration.
 - `validators.py` - provider schema and graph-preservation checks.
 - `metrics.py` - compile-specific token delta and reason fields.
+- `research_adapters.py` - offline compressor comparison interface.
 
 Existing files should remain thin:
 
@@ -258,6 +259,8 @@ Provider compatibility note:
 
 Goal: evaluate whether LLMLingua-like compression improves deterministic extraction.
 
+Status: implemented in repo reality on 2026-05-13 as an offline adapter interface. No external model, network dependency, or product hot-path import was added.
+
 Boundary:
 
 - Offline or non-critical path first.
@@ -265,9 +268,16 @@ Boundary:
 - Must be behind a separate compressor interface.
 - Must compare against deterministic extractive baseline.
 
+Implementation:
+
+- `TextBlockCompressorAdapter` protocol defines the comparison surface.
+- `DeterministicBaselineAdapter` wraps the current extractive compressor.
+- `compare_text_block_compressors` reports char/token estimates and compression ratio for offline candidates.
+
 Exit:
 
-- Adopt only if it improves token saving without quality or latency regression.
+- Offline adapter interface exists and deterministic baseline comparison is covered by tests.
+- Future non-deterministic or model-based candidates remain research-only until they improve token saving without quality or latency regression.
 
 ### SC-006 - Failure Corpus and Rule Refinement
 
