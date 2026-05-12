@@ -4,7 +4,7 @@
 
 - Created: 2026-05-13
 - Product line: OmniMemora structured context compilation
-- Current status: SC-006 running reality validated for provided tool-schema preservation; SC-005 offline research interface implemented in repo reality
+- Current status: SC-007 product adapter upgraded to warning-clean running reality
 - Supersedes phase6 as the active engineering line for compile capability work.
 
 ## Product Target
@@ -323,6 +323,53 @@ Running evidence:
   - `/health`: `0.014336s`
   - `/metrics/summary`: `0.00914s`
   - `/metrics/core_capabilities`: `0.231321s`
+
+### SC-007 - Warning-Clean Product Upgrade
+
+Goal: remove validation warnings from the structured compile support path and promote the fixed adapter to running reality.
+
+Status: running reality validated on 2026-05-13.
+
+Implementation:
+
+- Fixed `resolve_internal_base_url_sync` so calls from an existing event loop no longer create an unawaited coroutine.
+- Switched backend config extraction to Pydantic v2 `model_dump()` when available.
+- Added the missing `os` import for `BackendConfig` default environment lookup.
+- Kept the fix subtractive in behavior: no new background task, no log-retention expansion, and no user-memory mutation.
+
+Repo validation:
+
+- Targeted warning-as-error check: `30 passed`
+- Adapter and structured compile regression check with warning-as-error: `76 passed`
+- `py_compile`: passed for touched adapter modules.
+- `git diff --check`: passed.
+
+Running evidence:
+
+- Promotion log: `tools/verification/logs/promotion_20260513_043502.log`
+- Promotion result: `final_status=running_reality_promoted`, `repo_revision=ce9b0c7`, adapter pid changed from `9230` to `12078`.
+- Promotion marker: `/Users/sc/.omnimemora/service/current/.omnimemora_promotion_state.json` records `repo_revision=ce9b0c7` and `primary_breakpoint=none`.
+- Runtime fingerprint: `/debug/runtime_fingerprint` reports adapter pid `12078`, service version `2.2.0`, and code source under `/Users/sc/.omnimemora/service/current`.
+- Endpoint timings after promotion, before direct request:
+  - `/health`: `0.013476s`
+  - `/metrics/summary`: `0.022075s`
+  - `/metrics/core_capabilities`: `0.21849s`
+- Direct product request after promotion:
+  - path: `/llm/v1/messages`
+  - agent: `claude_code`
+  - request_id: `509a42f424db`
+  - trace: `sync-warning-fix-structured-compile-20260513-0435`
+  - upstream status: `200`
+  - compile_status: `structured_compile_success`
+  - compile_path: `structured_context_compile`
+  - compile_reason: `deterministic_extract`
+  - original_token_estimate: `2507`
+  - compiled_token_estimate: `726`
+  - compression_ratio: `0.710410849621061`
+- Endpoint timings after direct request:
+  - `/health`: `0.012028s`
+  - `/metrics/summary`: `0.005268s`
+  - `/metrics/core_capabilities`: `0.223232s`
 
 ## Success Criteria
 
