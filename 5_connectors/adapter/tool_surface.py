@@ -37,6 +37,24 @@ def _strip_ansi(text: str) -> str:
     return _ANSI_RE.sub("", text or "")
 
 
+def _tool_subprocess_env() -> dict[str, str]:
+    env = dict(os.environ)
+    common_paths = [
+        os.path.expanduser("~/.local/bin"),
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+    ]
+    existing = env.get("PATH", "")
+    parts = [part for part in existing.split(os.pathsep) if part]
+    for path in reversed(common_paths):
+        if path not in parts:
+            parts.insert(0, path)
+    env["PATH"] = os.pathsep.join(parts)
+    return env
+
+
 def _cap_text(text: str, max_chars: int) -> tuple[str, bool]:
     if len(text) <= max_chars:
         return text, False
@@ -50,6 +68,7 @@ async def _run_command(args: list[str], timeout_seconds: float) -> CommandResult
         *args,
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
+        env=_tool_subprocess_env(),
     )
     try:
         stdout, stderr = await asyncio.wait_for(process.communicate(), timeout=timeout_seconds)

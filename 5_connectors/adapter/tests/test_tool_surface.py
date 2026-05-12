@@ -92,3 +92,14 @@ def test_mmx_executable_resolution_prefers_env(monkeypatch):
     monkeypatch.setenv("OMNIMEMORA_TOOL_SEARCH_MMX_PATH", "/tmp/mmx")
 
     assert tool_surface._resolve_mmx_executable() == "/tmp/mmx"
+
+
+def test_tool_subprocess_env_includes_common_node_paths(monkeypatch):
+    monkeypatch.setenv("PATH", "/custom/bin")
+
+    env = tool_surface._tool_subprocess_env()
+    path_parts = env["PATH"].split(":")
+
+    assert "/usr/local/bin" in path_parts
+    assert "/opt/homebrew/bin" in path_parts
+    assert "/custom/bin" in path_parts
