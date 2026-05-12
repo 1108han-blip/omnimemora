@@ -13,7 +13,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_updater::UpdaterExt;
 
-const APP_VERSION: &str = "1.0.0-beta.13";
+const APP_VERSION: &str = "1.0.0-beta.16";
 const SUPPORT_EMAIL: &str = "support@doloclaw.com";
 const RUNTIME_PORT: u16 = 8765;
 const ADAPTER_PORT: u16 = 18011;
@@ -121,6 +121,10 @@ fn component_dir() -> PathBuf {
     } else {
         service_current_dir()
     }
+}
+
+fn use_legacy_launch_agents() -> bool {
+    component_dir() == service_current_dir()
 }
 
 fn current_agent_modes_path() -> PathBuf {
@@ -407,8 +411,8 @@ fn release_manifest_from_disk() -> Option<Value> {
     let candidates = [
         downloaded_manifest_path(),
         current_dir().join("manifest.json"),
-        repo_root().join("4_core/local-runtime/release/1.0.0-beta.13/latest.json"),
-        repo_root().join("4_core/local-runtime/release/1.0.0-beta.13/1.0.0-beta.13.json"),
+        repo_root().join("4_core/local-runtime/release/1.0.0-beta.16/latest.json"),
+        repo_root().join("4_core/local-runtime/release/1.0.0-beta.16/1.0.0-beta.16.json"),
     ];
     for path in candidates {
         if let Ok(raw) = fs::read_to_string(path) {
@@ -475,9 +479,9 @@ mod tests {
 
     #[test]
     fn version_comparison_handles_beta_patch_order() {
-        assert!(version_is_newer("1.0.0-beta.13", "1.0.0-beta.10"));
-        assert!(!version_is_newer("1.0.0-beta.10", "1.0.0-beta.13"));
-        assert!(!version_is_newer("1.0.0-beta.13", "1.0.0-beta.13"));
+        assert!(version_is_newer("1.0.0-beta.16", "1.0.0-beta.10"));
+        assert!(!version_is_newer("1.0.0-beta.10", "1.0.0-beta.16"));
+        assert!(!version_is_newer("1.0.0-beta.16", "1.0.0-beta.16"));
     }
 }
 
@@ -613,9 +617,9 @@ fn runtime_binary() -> Option<PathBuf> {
         component.join("omnimemora"),
         service_current.join("tools/omnimemora-runtime"),
         service_current.join("bin/omnimemora"),
-        root.join("4_core/local-runtime/release/1.0.0-beta.13/omnimemora-darwin-arm64/omnimemora"),
+        root.join("4_core/local-runtime/release/1.0.0-beta.16/omnimemora-darwin-arm64/omnimemora"),
         root.join(
-            "4_core/local-runtime/release/1.0.0-beta.13/omnimemora-darwin-arm64/bin/omnimemora",
+            "4_core/local-runtime/release/1.0.0-beta.16/omnimemora-darwin-arm64/bin/omnimemora",
         ),
         root.join("tools/omnimemora-runtime"),
     ])
@@ -729,6 +733,113 @@ fn bootstrap_or_kickstart_launch_agent(label: &str) -> bool {
         .unwrap_or(false)
 }
 
+fn plutil_set_json(path: &Path, key: &str, value: &Value) -> bool {
+    let _ = Command::new("plutil")
+        .arg("-remove")
+        .arg(key)
+        .arg(path)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    let Ok(raw) = serde_json::to_string(value) else {
+        return false;
+    };
+    Command::new("plutil")
+        .arg("-insert")
+        .arg(key)
+        .arg("-json")
+        .arg(raw)
+        .arg(path)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn plutil_replace_string(path: &Path, key: &str, value: &str) -> bool {
+    Command::new("plutil")
+        .arg("-replace")
+        .arg(key)
+        .arg("-string")
+        .arg(value)
+        .arg(path)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn plutil_upsert_string(path: &Path, key: &str, value: &str) -> bool {
+    plutil_replace_string(path, key, value)
+        || Command::new("plutil")
+            .arg("-insert")
+            .arg(key)
+            .arg("-string")
+            .arg(value)
+            .arg(path)
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status()
+            .map(|status| status.success())
+            .unwrap_or(false)
+}
+
+fn align_launch_agents_to_current_components() {
+    if use_legacy_launch_agents() {
+        return;
+    }
+    let component = component_dir();
+    let runtime_plist = launch_agent_path("com.omnimemora.runtime");
+    if runtime_plist.exists() {
+        let runtime_args = serde_json::json!([component.join("bin/omnimemora"), "serve"]);
+        let _ = plutil_set_json(&runtime_plist, "ProgramArguments", &runtime_args);
+        let _ = plutil_replace_string(
+            &runtime_plist,
+            "WorkingDirectory",
+            &component.display().to_string(),
+        );
+        let _ = plutil_upsert_string(
+            &runtime_plist,
+            "EnvironmentVariables.OMNIMEMORA_RUNTIME_PORT",
+            "8765",
+        );
+        let _ = plutil_upsert_string(
+            &runtime_plist,
+            "EnvironmentVariables.OMNIMEMORA_ADAPTER_PORT",
+            "18011",
+        );
+    }
+
+    let adapter_plist = launch_agent_path("com.omnimemora.adapter");
+    if adapter_plist.exists() {
+        let python = adapter_python_bin().unwrap_or_else(|| "/usr/bin/python3".to_string());
+        let adapter_args = serde_json::json!([python, component.join("tools/_run_adapter.py")]);
+        let _ = plutil_set_json(&adapter_plist, "ProgramArguments", &adapter_args);
+        let _ = plutil_replace_string(
+            &adapter_plist,
+            "EnvironmentVariables.PYTHONPATH",
+            &component.display().to_string(),
+        );
+        let _ = plutil_replace_string(
+            &adapter_plist,
+            "WorkingDirectory",
+            &component.display().to_string(),
+        );
+        let _ = plutil_upsert_string(
+            &adapter_plist,
+            "EnvironmentVariables.MEMORY_BACKEND_URL",
+            "http://127.0.0.1:8765",
+        );
+        let _ = plutil_upsert_string(
+            &adapter_plist,
+            "EnvironmentVariables.OMNIMEMORA_INTERNAL_API_TOKEN",
+            INTERNAL_TOKEN,
+        );
+    }
+}
+
 fn log_file(name: &str, stream: &str) -> Result<File, String> {
     ensure_dirs()?;
     OpenOptions::new()
@@ -762,7 +873,8 @@ fn start_runtime() -> Result<Option<ManagedProcess>, String> {
     if http_probe(RUNTIME_PORT, "/health", Some("\"status\":")).is_ok() {
         return Ok(None);
     }
-    if bootstrap_or_kickstart_launch_agent("com.omnimemora.runtime")
+    if use_legacy_launch_agents()
+        && bootstrap_or_kickstart_launch_agent("com.omnimemora.runtime")
         && wait_for_service(RUNTIME_PORT, "/health", Some("\"status\":"))
     {
         return Ok(None);
@@ -788,7 +900,8 @@ fn start_adapter() -> Result<Option<ManagedProcess>, String> {
     if http_probe(ADAPTER_PORT, "/health", Some("\"status\":\"healthy\"")).is_ok() {
         return Ok(None);
     }
-    if bootstrap_or_kickstart_launch_agent("com.omnimemora.adapter")
+    if use_legacy_launch_agents()
+        && bootstrap_or_kickstart_launch_agent("com.omnimemora.adapter")
         && wait_for_service(ADAPTER_PORT, "/health", Some("\"status\":\"healthy\""))
     {
         return Ok(None);
@@ -1152,6 +1265,7 @@ fn run_agent_cli(agent: &str, action: &str) -> Result<String, String> {
 
 fn start_all_services() -> Result<String, String> {
     ensure_dirs()?;
+    align_launch_agents_to_current_components();
     let mut state = prune_dead_processes(read_state());
     let mut started: Vec<ManagedProcess> = Vec::new();
     let mut failures: Vec<String> = Vec::new();

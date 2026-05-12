@@ -2,7 +2,7 @@
 # scripts/release/build_release.sh - Build closed beta release archives
 set -euo pipefail
 
-PACKAGE_VERSION=${1:-"1.0.0-beta.13"}
+PACKAGE_VERSION=${1:-"1.0.0-beta.16"}
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REPO_ROOT="$(cd "$ROOT_DIR/../.." && pwd)"
@@ -338,7 +338,7 @@ EOF
     "windows-amd64": "$windows_amd64_sha"
   },
   "download_url": "https://doloclaw.com/download",
-  "release_notes": "Adds app-level desktop update management, fixes agent-control refresh after Use OmniMemora, and repairs adapter proxy response handling.",
+  "release_notes": "Upgrades the product compile path with protocol-preserving structured context compression, OpenClaw latency fixes, and desktop beta version alignment.",
   "minimum_supported_desktop_version": "1.0.0-beta.8",
   "desktop_auto_update_required": true,
   "desktop_auto_update_mode": "beta_one_click_download_verify_open_dmg",
