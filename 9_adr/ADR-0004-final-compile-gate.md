@@ -1,170 +1,109 @@
 ---
 doc_id: ADR-0004-FINAL-COMPILE-GATE
-title: OmniMemora Final Compile Gate — Memory Tool Policy
+title: Historical MCP Context Tool Policy
 owner: platform-team
 reviewers: [arch-lead, qa-lead]
-status: active
-version: 1.0.0
-effective_date: 2026-04-13
-depends_on: [ADR-0001-PRODUCT-BOUNDARY]
-supersedes: []
+status: historical
+version: 2.0.0
+effective_date: 2026-05-12
+depends_on: [ADR-0001-PRODUCT-BOUNDARY, ADR-0003-INTERFACE-ACCESS-PATHS]
+supersedes: [ADR-0004-FINAL-COMPILE-GATE-v1]
 last_verified_commit: ""
 ---
 
-# ADR-0004: Final Compile Gate — OmniMemora Memory Tool Policy
+# ADR-0004: Historical MCP Context Tool Policy
 
-**状态：** Active
-**日期：** 2026-04-13
-**范围：** OmniMemora MCP 工具定义与使用约束
-
----
-
-## 背景
-
-2026-04-13 工程落地明确了 OmniMemora 在 OpenClaw 环境中的角色定位：
-**不是 memory 管理系统，而是 LLM 之前最终编译层（Final Compile Gate）。**
+**状态：** Historical / Superseded
+**日期：** 2026-05-12
+**范围：** 旧 MCP context 工具语境的退休记录
 
 ---
 
-## 一、核心定义
+## 当前结论
 
-### 工具角色分工
+旧的 MCP context 工具策略已不再代表当前产品规范。
 
-| 工具 | 角色 | 说明 |
-|------|------|------|
-| `memory.context` | **FINAL COMPILE TOOL** | 唯一产品能力入口。接收所有来源候选，输出 `packed_context`。**必须经过此工具才能进入 LLM。** |
-| `memory.search` | **CANDIDATE RETRIEVAL TOOL** | 候选检索工具。返回原始结果，不可直接进入 LLM。必须喂给 `memory.context` 做最终编译。 |
-| `memory.write` | **WRITE TOOL** | 写入工具，职责不变。 |
-| `omnimemora_search_memory` | **memory.context 的别名** | 等同 FINAL COMPILE TOOL，同等约束。 |
-| `omnimemora_write_memory` | **memory.write 的别名** | 等同 WRITE TOOL。 |
+当前产品主线固定为：
 
-### 关键原则
-
-> **禁止旁路：native memory / native compiler / session context 的输出不得绕过 `memory.context` 直接进入 LLM prompt。**
-
-```
-允许路径（正确）：
-  native memory ─→ memory.context ─→ packed_context ─→ LLM
-
-禁止路径（错误）：
-  native memory ─────────────────────→ LLM（绕过 Final Compile Gate）
-  memory.search ─────────────────────→ LLM（绕过 Final Compile Gate）
+```text
+Agent request -> OmniMemora product ingress :18011
+              -> internal product memory read/write
+              -> internal context compile
+              -> upstream model provider
 ```
 
----
-
-## 二、Final Compile Gate 数据结构
-
-`memory.context` 输入：
-
-```json
-{
-  "query": "...",
-  "limit": 8,
-  "native_compiled_context": "...",      // 可选：OpenClaw native compiler 输出
-  "current_session_context": "...",      // 可选：当前会话上下文
-  "raw_candidates": [...]                 // 可选：显式候选列表
-}
-```
-
-`memory.context` 输出（通过 MCP 协议）：
-
-```json
-{
-  "request_id": "mcp-xxx",
-  "packed_context": "<relevant-memories>...</relevant-memories>",
-  "selected_memories": [...],
-  "usage": {
-    "saved_tokens_estimate": 89,
-    "savings_ratio": 0.645,
-    "actual_tokens_estimate": 49,
-    "baseline_tokens_estimate": 138
-  },
-  "task_type": "continuation",
-  "context_bypass": false
-}
-```
-
-MCP 返回格式（两个 content block）：
-- Block 0（人类可读摘要）：`OmniMemora: saved N tokens (X% reduction), Y memories selected\n\n{packed_context}`
-- Block 1（机器可解析 JSON）：`{"saved_tokens": N, "ratio": X, "memory_count": Y, "selected_memories": [...]}`
-
-**重要：Block 0 中的 `text` 字段必须是字符串，不得为 dict 或其他结构。**
+`18011` 是 routing enabled 后唯一产品数据入口。MCP 只保留为兼容/诊断接入模块，不是当前产品要求通路。
 
 ---
 
-## 三、多源候选合并逻辑
+## 废弃内容
 
-`engine.optimize_context()` 在过滤前执行三源合并：
+以下旧语义已经退休：
 
-```python
-merged_candidates = candidate_memories[:candidate_limit]
-if native_compiled_context:
-    merged_candidates.append({
-        "content": native_compiled_context,
-        "abstract": "[native-compiled-context]",
-        "category": "native_compiled",
-        "score": 0.8,
-        "_source": "native_compiled",
-    })
-if current_session_context:
-    merged_candidates.append({
-        "content": current_session_context,
-        "abstract": "[current-session-context]",
-        "category": "session",
-        "score": 0.8,
-        "_source": "session",
-    })
-if raw_candidates:
-    for rc in raw_candidates[:candidate_limit]:
-        rc["_source"] = "raw_candidate"
-        merged_candidates.append(rc)
-```
+| 旧对象 | 当前状态 | 当前解释 |
+|--------|----------|----------|
+| `memory.context` | deprecated | 旧 MCP 工具入口；不是产品记忆系统本体，也不是当前产品入口 |
+| `memory.recall` | deprecated | 旧 context 工具别名；不再作为 agent-facing compile path |
+| `omnimemora_search_memory` | deprecated | 旧 search/context 混合别名；不再默认暴露 |
+| `memory.search` | compatibility | 可作为兼容检索工具，但不得要求再交给 context 工具 |
+| `memory.write` | compatibility | 可作为兼容写入工具；产品主链路写入由 `18011` 内部执行 |
 
-合并后统一经过：filter → route/score → reduce redundancy → select → pack → meter
+废弃对象不得再被描述为产品唯一入口，也不得作为 agent 侧 prompt 组装步骤。
 
 ---
 
-## 四、OpenClaw 侧约束
+## 保留内容
 
-OpenClaw Agent 在最终提交给 LLM 前，必须满足：
+本 ADR 不删除产品内部记忆系统。
 
-1. **必须调用 `memory.context`**（或别名 `omnimemora_search_memory`）
-2. **最终 prompt 中只使用 `packed_context`**
-3. **禁止将 `memory.search` 结果直接拼入 LLM prompt**
-4. **禁止将 native memory / native compiler 输出绕过 `memory.context` 直接注入 prompt**
+以下能力仍属于产品内部主线：
 
-验证方法：在 OpenClaw Agent 运行中，检查发送给 LLM 的完整 prompt 是否来自 `memory.context` 返回的 `packed_context` 值，且不包含其他 memory 注入。
+- `/memory/search`
+- `/memory/write`
+- internal `8765` memory plane
+- `4_core.logic.engine.optimize_context()`
+- `18011` ingress 内部的记忆读取、选择、编译和写入流程
+
+这些能力应由 `18011` 内部主动使用，而不是依赖 agent 通过 MCP 工具自行取上下文。
 
 ---
 
-## 五、验证标准（6 条）
+## 兼容策略
+
+MCP surface 可以继续存在，但默认 `tools/list` 不再暴露旧 context 工具。
+
+如果历史客户端直接调用旧 context 工具，Adapter 应返回清晰的 deprecated/error 结果，并且不得返回可直接拼入 prompt 的 `packed_context`。
+
+`/mcp/query` 暂时保留为内部兼容/测试路径。它不是 agent-facing product contract，也不是当前产品主入口。
+
+---
+
+## 验证标准
 
 | # | 标准 | 验证方式 |
-|---|------|---------|
-| 1 | `memory.context` 被调用 | `curl http://127.0.0.1:18011/metrics/summary?tenant=openclaw` 中 `request_count` 持续增长 |
-| 2 | 调用经过 `/mcp/query → engine.optimize_context()` | `/mcp/query` 返回结构化 JSON 含 `packed_context` 和 `usage` |
-| 3 | 最终送给 LLM 的 context 来自 `packed_context` | 需在 OpenClaw Agent 侧验证 prompt 来源 |
-| 4 | `memory.search` 结果不直接进 LLM | 工具描述已标注为 `CANDIDATE RETRIEVAL TOOL` |
-| 5 | MCP 返回格式合规：`content[].text` 为 string | `curl -X POST /messages -d '{"method":"tools/call","params":{"name":"memory.context"}}'` 验证 Block text 类型 |
-| 6 | metrics 持续增长 | `saved_tokens`, `savings_ratio`, `request_count` 在每次请求后更新 |
+|---|------|----------|
+| 1 | MCP `tools/list` 默认不暴露旧 context 工具 | JSON-RPC `tools/list` 检查工具名 |
+| 2 | 直接调用旧 context 工具返回 deprecated/error | JSON-RPC `tools/call` 检查 content block |
+| 3 | 旧 context 工具不返回 `packed_context` | 检查返回 JSON/text 中不存在该字段 |
+| 4 | 产品记忆系统保留 | `/memory/search`、`/memory/write`、`8765`、`optimize_context()` 仍作为内部能力存在 |
+| 5 | 产品主链路仍走 `18011` | LLM 请求 routing enabled 时从 `18011` 进入 |
 
 ---
 
-## 六、相关文档
+## 相关文档
 
-- [ADR-0003-interface-access-paths.md](ADR-0003-interface-access-paths.md) — 多接口单路径架构
+- [ADR-0003-interface-access-paths.md](ADR-0003-interface-access-paths.md) — 多接口单核心架构
 - [ADR-0001-product-boundary-reset.md](ADR-0001-product-boundary-reset.md) — 产品边界定义
-- [4_core/logic/engine.py](../4_core/logic/engine.py) — `OptimizationInput` 定义与 `optimize_context()` 实现
-- [5_connectors/adapter/main.py](../../5_connectors/adapter/main.py) — MCP 端点与工具注册
+- [4_core/logic/engine.py](../4_core/logic/engine.py) — `OptimizationInput` 与 `optimize_context()`
+- [5_connectors/adapter/mcp_surface.py](../../5_connectors/adapter/mcp_surface.py) — MCP compatibility surface
 
 ---
 
-## 七、约束优先级
+## 约束优先级
 
-1. `memory.context` = Final Compile Gate（不可绕过）
-2. `memory.search` = Candidate Retrieval（不可直接进 LLM）
-3. 所有多源候选通过 `engine.optimize_context()` 统一压缩
-4. 输出结构（`packed_context` + `usage`）是产品合约，不可破坏
+1. `18011` 是当前产品数据入口。
+2. 产品记忆读写必须由产品内部链路主动执行。
+3. MCP context 工具不得重新成为 agent-facing compile contract。
+4. 兼容模块不得替代产品主链路。
 
-**违反以上任何一条视为产品级缺陷。**
+违反以上约束视为产品边界缺陷。

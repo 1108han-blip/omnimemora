@@ -99,38 +99,8 @@ def _mcp_tools_payload() -> Dict[str, Any]:
     return {
         "tools": [
             {
-                "name": "memory.context",
-                "description": "FINAL COMPILE TOOL — Must be called before sending to LLM. Merges candidates from native memory, native compiler, and session context. Returns packed_context + token savings. Never bypass this.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "query": {"type": "string"},
-                        "keyword": {"type": "string"},
-                        "limit": {"type": "integer"},
-                        "native_compiled_context": {"type": "string", "description": "OpenClaw native compiler output — treated as one candidate"},
-                        "current_session_context": {"type": "string", "description": "Current session context — treated as one candidate"},
-                        "raw_candidates": {"type": "array", "description": "Explicit candidate list from caller"},
-                    },
-                    "required": ["query"],
-                },
-            },
-            {
-                "name": "omnimemora_search_memory",
-                "description": "[alias for memory.context] FINAL COMPILE — do not use output directly in LLM without going through memory.context first.",
-                "inputSchema": {
-                    "type": "object",
-                    "properties": {
-                        "keyword": {"type": "string"},
-                        "limit": {"type": "integer"},
-                        "native_compiled_context": {"type": "string"},
-                        "current_session_context": {"type": "string"},
-                    },
-                    "required": ["keyword"],
-                },
-            },
-            {
                 "name": "memory.search",
-                "description": "CANDIDATE RETRIEVAL TOOL — Returns raw candidates. Must be fed to memory.context for final compile before LLM. Cannot be used directly as LLM input.",
+                "description": "Compatibility memory search tool. Product request compilation and memory use happen inside the 18011 ingress path.",
                 "inputSchema": {
                     "type": "object",
                     "properties": {
@@ -338,45 +308,23 @@ async def mcp_http_jsonrpc(request: Request):
 
 async def _mcp_call_tool(name: str, args: Dict[str, Any]) -> List[Dict[str, Any]]:
     if name in ("memory.context", "memory.recall", "omnimemora_search_memory"):
-        query = args.get("query") or args.get("keyword", "")
-        limit = int(args.get("limit", 8)) or 8
-
-        async with httpx.AsyncClient(timeout=30.0, trust_env=False) as client:
-            mcp_resp = await client.post(
-                f"{_adapter_http_base}/mcp/query",
-                json={
-                    "query": query[:200],
-                    "keyword": query[:200],
-                    "limit": limit,
-                    "tenant": "openclaw",
-                    "user": "openclaw-user",
-                    "agent": "openclaw-agent",
-                    "native_compiled_context": args.get("native_compiled_context"),
-                    "current_session_context": args.get("current_session_context"),
-                    "raw_candidates": args.get("raw_candidates"),
-                },
-            )
-            if mcp_resp.status_code >= 400:
-                return [{"type": "text", "text": f"error: mcp query failed ({mcp_resp.status_code}) url={_adapter_http_base}/mcp/query"}]
-
-            data = mcp_resp.json()
-            saved = data.get("usage", {}).get("saved_tokens_estimate", 0)
-            ratio = data.get("usage", {}).get("savings_ratio", 0)
-            count = len(data.get("selected_memories", []))
-            packed = data.get("packed_context", "")
-            summary = f"OmniMemora: saved {saved} tokens ({ratio:.0%} reduction), {count} memories selected"
-            if packed:
-                summary += f"\n\n{packed}"
-            meta = {
-                "saved_tokens": saved,
-                "ratio": round(ratio, 3),
-                "memory_count": count,
-                "selected_memories": data.get("selected_memories", []),
-            }
-            return [
-                {"type": "text", "text": summary},
-                {"type": "text", "text": _json.dumps(meta, ensure_ascii=False)},
-            ]
+        meta = {
+            "status": "deprecated",
+            "tool": name,
+            "product_ingress": "http://127.0.0.1:18011",
+        }
+        return [
+            {
+                "type": "text",
+                "text": (
+                    "deprecated: this MCP context tool is no longer an agent-facing "
+                    "compile path. Send model requests through OmniMemora product "
+                    "ingress at http://127.0.0.1:18011; no compiled prompt context "
+                    "is returned from this tool."
+                ),
+            },
+            {"type": "text", "text": _json.dumps(meta, ensure_ascii=False)},
+        ]
 
     if name in ("memory.search",):
         keyword = args.get("keyword", "")

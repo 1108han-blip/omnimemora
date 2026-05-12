@@ -64,7 +64,7 @@ JSONL 文件路径：`~/.omnimemora/adapter/agent_events.jsonl`（可通过 `OMN
 | 4 | UI 可拿到 per-agent 指标 | ✅ |
 | 5 | `force_if_possible` 仅在 adapter 可控范围 | ✅ |
 | 6 | 所有新增能力留在 5_connectors/adapter/ | ✅ |
-| 7 | 工具注册：`memory.context` = FINAL COMPILE，`memory.search` = CANDIDATE | ✅ |
+| 7 | 历史工具注册：context 类 MCP 工具曾用于 Phase 4 试验；当前主线已废弃 | ✅ |
 | 8 | MCP 返回 `content[].text` 为 string | ✅ |
 | 9 | metrics 持续增长 | ✅ |
 | 10 | ADR-0004 Final Compile Gate 已文档化 | ✅ |

@@ -2421,8 +2421,7 @@ async def query_memory_v2(request: MemoryQueryRequest, http_request: Request):
 @app.post("/mcp/query")
 async def mcp_query(request: Request):
     """
-    Internal MCP query endpoint — called by _mcp_call_tool when OpenClaw MCP
-    client calls memory.context / memory.recall.
+    Internal MCP compatibility query endpoint for historical context-tool callers.
     Bypasses resolve_query_access (openclaw tenant is hardcoded).
     Directly calls engine.optimize_context() with openclaw defaults.
     """
