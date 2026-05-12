@@ -13,9 +13,11 @@ Responsibilities:
   - expose fallback modes when compile cannot run
 
 Three modes (no silent pass-through):
-  compile_success  — compile ran OK, upstream receives compiled payload
-  compile_skipped  — known unsupported shape, upstream receives original payload
-  compile_failed   — compile attempted but failed, upstream receives original payload
+  compile_success               — memory-context compile ran OK
+  structured_compile_success    — protocol-aware compile ran OK
+  structured_compile_passthrough — structured compile declined safely
+  compile_skipped               — known unsupported shape, upstream receives original payload
+  compile_failed                — compile attempted but failed, upstream receives original payload
 """
 from __future__ import annotations
 
@@ -165,6 +167,13 @@ def _assess_compile_eligibility(
     if not messages:
         return False, "no_messages"
 
+    # Agent tool loops rely on exact tool_use/tool_result ordering and IDs.
+    # They may not contain user-visible text in the latest tool-result turn, so
+    # detect them before empty-query checks and route to structured compile or
+    # passthrough.
+    if _contains_tool_context(messages):
+        return False, "tool_context_passthrough"
+
     # Empty query = nothing to search for
     if not query:
         return False, "empty_query"
@@ -180,12 +189,6 @@ def _assess_compile_eligibility(
     # Assistant-only continuation = no new context needed
     if all(msg.get("role") in ("assistant", "system") for msg in messages):
         return False, "assistant_only_continuation"
-
-    # Agent tool loops rely on exact tool_use/tool_result ordering and IDs.
-    # Compiling these turns would drop the tool results and make the LLM repeat
-    # searches instead of answering from the retrieved local context.
-    if _contains_tool_context(messages):
-        return False, "tool_context_passthrough"
 
     # Streaming with compile: supported (compile first chunk)
     # Non-streaming: fully supported
@@ -285,6 +288,13 @@ async def run_gateway_compile(
         )
 
     if not normalized["can_compile"]:
+        structured_payload, structured_meta = _maybe_run_structured_compile(
+            payload=payload,
+            normalized=normalized,
+            agent_id=agent_id,
+        )
+        if structured_meta is not None:
+            return structured_payload, structured_meta
         loguru.logger.info(
             f"[GATEWAY_COMPILE] agent={agent_id} compile_skipped "
             f"reason={normalized['skip_reason']}"
@@ -449,6 +459,51 @@ async def run_gateway_compile(
         )
 
     return compiled_payload, compile_meta
+
+
+def _maybe_run_structured_compile(
+    *,
+    payload: dict,
+    normalized: dict,
+    agent_id: str,
+) -> Tuple[Optional[dict], Optional[dict]]:
+    if normalized.get("skip_reason") != "tool_context_passthrough":
+        return None, None
+    if normalized.get("protocol") != "anthropic":
+        return None, None
+    if not getattr(config, "structured_compile_enabled", False):
+        return None, None
+    allowlist = set(getattr(config, "structured_compile_agent_allowlist", []) or [])
+    if agent_id not in allowlist:
+        return None, None
+
+    from .context_compiler.compiler import compile_anthropic_tool_context
+
+    result = compile_anthropic_tool_context(
+        payload,
+        max_tool_result_chars=int(getattr(config, "structured_compile_max_tool_result_chars", 1200) or 1200),
+    )
+    meta = _build_meta(
+        status=result.status,
+        selected_count=0,
+        candidate_count=0,
+        original_tokens=result.original_token_estimate,
+        compiled_tokens=result.compiled_token_estimate,
+        path="structured_context_compile",
+        error=None,
+        reason=result.reason,
+        compression_ratio=result.compression_ratio,
+        task_type=normalized.get("task_type", "continuation"),
+        internal_memory_status="not_applicable_tool_context",
+    )
+    meta["structured_compile_changed_blocks"] = result.changed_blocks
+    meta["structured_compile_issues"] = result.issues
+    loguru.logger.info(
+        f"[GATEWAY_COMPILE] agent={agent_id} {result.status} "
+        f"reason={result.reason} changed_blocks={result.changed_blocks} "
+        f"original={result.original_token_estimate} compiled={result.compiled_token_estimate}"
+    )
+    return result.payload, meta
 
 
 # ============================================================================

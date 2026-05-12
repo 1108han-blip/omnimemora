@@ -364,7 +364,8 @@ def _persist_gateway_meter(
     compile_status = str(compile_meta.get("compile_status") or "compile_skipped")
     selected_count = int(compile_meta.get("selected_memory_count") or 0)
 
-    if actual_tokens <= 0 or compile_status != "compile_success":
+    compile_saved_tokens = compile_status in {"compile_success", "structured_compile_success"}
+    if actual_tokens <= 0 or not compile_saved_tokens:
         actual_tokens = baseline_tokens
 
     baseline_chars = max(len(query), baseline_tokens * 4)
@@ -421,12 +422,12 @@ def _persist_gateway_meter(
             remote_used_count=0,
             skipped_remote_reason=None,
             coverage_satisfied=selected_count > 0,
-            packing_enabled=compile_status == "compile_success",
+            packing_enabled=compile_saved_tokens,
             abstract_preferred=False,
             dedup_applied=True,
             task_type=None,
-            context_bypass=compile_status != "compile_success",
-            bypassed_context_tokens=baseline_tokens if compile_status != "compile_success" else 0,
+            context_bypass=not compile_saved_tokens,
+            bypassed_context_tokens=baseline_tokens if not compile_saved_tokens else 0,
             matched_keywords=[],
             candidate_memories=[],
             dropped_memories=[],

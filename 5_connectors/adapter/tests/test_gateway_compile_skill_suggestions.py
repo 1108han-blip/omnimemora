@@ -4,6 +4,7 @@ import importlib
 
 gateway_compile = importlib.import_module("5_connectors.adapter.application.gateway_compile")
 runtime_bridge = importlib.import_module("5_connectors.adapter.infrastructure.runtime_bridge")
+adapter_config = importlib.import_module("5_connectors.adapter.config").config
 
 
 def test_gateway_compile_meta_includes_skill_suggestions_without_polluting_context():
@@ -227,7 +228,92 @@ def test_gateway_compile_passthrough_for_anthropic_tool_context():
         runtime_bridge.fetch_memory_candidates = old_fetch
         runtime_bridge.execute_runtime_compile = old_execute
 
+    assert compile_meta["compile_status"] == "structured_compile_passthrough"
+    assert compile_meta["compile_reason"] == "no_eligible_tool_result"
+    assert compile_meta["selected_memory_count"] == 0
+    assert compiled_payload == payload
+
+
+def test_gateway_compile_structured_tool_context_compresses_old_result():
+    async def _unexpected_fetch_memory_candidates(**kwargs):
+        raise AssertionError("structured tool context should not search product memory")
+
+    async def _unexpected_execute_runtime_compile(**kwargs):
+        raise AssertionError("structured tool context should not run runtime compile")
+
+    old_fetch = runtime_bridge.fetch_memory_candidates
+    old_execute = runtime_bridge.execute_runtime_compile
+    old_max_chars = adapter_config.structured_compile_max_tool_result_chars
+    runtime_bridge.fetch_memory_candidates = _unexpected_fetch_memory_candidates
+    runtime_bridge.execute_runtime_compile = _unexpected_execute_runtime_compile
+    adapter_config.structured_compile_max_tool_result_chars = 700
+    try:
+        old_output = "\n".join([f"src/module_{i}.py:{i}: repeated search result" for i in range(120)])
+        payload = {
+            "_path": "/llm/v1/messages",
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [{"type": "tool_use", "id": "toolu_old", "name": "Grep", "input": {}}],
+                },
+                {
+                    "role": "user",
+                    "content": [{"type": "tool_result", "tool_use_id": "toolu_old", "content": old_output}],
+                },
+                {
+                    "role": "assistant",
+                    "content": [{"type": "tool_use", "id": "toolu_recent", "name": "Read", "input": {}}],
+                },
+                {
+                    "role": "user",
+                    "content": [{"type": "tool_result", "tool_use_id": "toolu_recent", "content": "latest result"}],
+                },
+            ],
+            "model": "MiniMax-M2.7",
+            "stream": True,
+        }
+        compiled_payload, compile_meta = asyncio.run(
+            gateway_compile.run_gateway_compile(payload=payload, agent_id="claude_code")
+        )
+    finally:
+        runtime_bridge.fetch_memory_candidates = old_fetch
+        runtime_bridge.execute_runtime_compile = old_execute
+        adapter_config.structured_compile_max_tool_result_chars = old_max_chars
+
+    assert compile_meta["compile_status"] == "structured_compile_success"
+    assert compile_meta["compile_path"] == "structured_context_compile"
+    assert compile_meta["selected_memory_count"] == 0
+    assert compile_meta["structured_compile_changed_blocks"] == 1
+    assert compile_meta["compiled_token_estimate"] < compile_meta["original_token_estimate"]
+    assert "original_chars=" in compiled_payload["messages"][1]["content"][0]["content"]
+    assert compiled_payload["messages"][3]["content"][0]["content"] == "latest result"
+
+
+def test_gateway_compile_tool_context_uses_passthrough_when_structured_compile_disabled():
+    old_enabled = adapter_config.structured_compile_enabled
+    adapter_config.structured_compile_enabled = False
+    try:
+        payload = {
+            "_path": "/llm/v1/messages",
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [{"type": "tool_use", "id": "toolu_1", "name": "Grep", "input": {}}],
+                },
+                {
+                    "role": "user",
+                    "content": [{"type": "tool_result", "tool_use_id": "toolu_1", "content": "result"}],
+                },
+            ],
+            "model": "MiniMax-M2.7",
+            "stream": True,
+        }
+        compiled_payload, compile_meta = asyncio.run(
+            gateway_compile.run_gateway_compile(payload=payload, agent_id="claude_code")
+        )
+    finally:
+        adapter_config.structured_compile_enabled = old_enabled
+
     assert compile_meta["compile_status"] == "compile_skipped"
     assert compile_meta["compile_reason"] == "skip_tool_context_passthrough"
-    assert compile_meta["selected_memory_count"] == 0
     assert compiled_payload == payload

@@ -14,6 +14,13 @@ def _env_bool(name: str, default: bool) -> bool:
     return raw.strip().lower() in {"1", "true", "yes", "on"}
 
 
+def _env_csv(name: str, default: list[str]) -> list[str]:
+    raw = os.getenv(name)
+    if raw is None:
+        return list(default)
+    return [item.strip() for item in raw.split(",") if item.strip()]
+
+
 def _prefer_minimax_upstream() -> bool:
     """
     Decide whether Anthropic-compatible upstream should default to MiniMax.
@@ -341,6 +348,16 @@ class Config(BaseModel):
     )
     path_mode: str = os.getenv("OMNIMEMORA_PATH_MODE", "baseline").strip().lower() or "baseline"
     primary_ratio: float = float(os.getenv("OMNIMEMORA_PRIMARY_RATIO", "0.0"))
+
+    # Structured compile v1: local deterministic compiler for provider tool graphs.
+    structured_compile_enabled: bool = _env_bool("OMNIMEMORA_STRUCTURED_COMPILE_ENABLED", True)
+    structured_compile_agent_allowlist: list[str] = _env_csv(
+        "OMNIMEMORA_STRUCTURED_COMPILE_AGENTS",
+        ["claude_code", "openclaw"],
+    )
+    structured_compile_max_tool_result_chars: int = int(
+        os.getenv("OMNIMEMORA_STRUCTURED_COMPILE_MAX_TOOL_RESULT_CHARS", "1200")
+    )
 
     # Per-agent control modes (loaded from agent_modes.json at startup)
     agent_control: dict = {}  # {agent_id: mode} — filled by main.py from agent_modes.json

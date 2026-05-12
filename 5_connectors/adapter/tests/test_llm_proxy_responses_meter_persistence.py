@@ -220,3 +220,35 @@ class TestResponsesMeterPersistence(unittest.IsolatedAsyncioTestCase):
         # New identity semantics projected in dedicated field.
         self.assertEqual(meter_dict["tenant_id"], "tenant-legacy-keep")
         self.assertEqual(meter_dict["access_plan"]["identity"]["tenant_id"], "tenant-legacy-keep")
+
+    async def test_persist_gateway_meter_counts_structured_compile_success_as_savings(self):
+        captured = {"meter": None}
+
+        def _capture_meter(meter):
+            captured["meter"] = meter
+
+        original_store = llm_proxy._meter_store.store_meter
+        llm_proxy._meter_store.store_meter = _capture_meter
+        try:
+            llm_proxy._persist_gateway_meter(
+                request_id="req-structured-meter-llm-proxy-1",
+                agent_id="claude_code",
+                query="tool loop",
+                compile_meta={
+                    "compile_status": "structured_compile_success",
+                    "selected_memory_count": 0,
+                    "original_token_estimate": 120,
+                    "compiled_token_estimate": 80,
+                },
+                body={"messages": [{"role": "user", "content": "tool loop"}]},
+            )
+        finally:
+            llm_proxy._meter_store.store_meter = original_store
+
+        meter = captured["meter"]
+        self.assertIsNotNone(meter)
+        meter_dict = meter.to_dict()
+        self.assertEqual(meter_dict["actual_tokens_estimate"], 80)
+        self.assertEqual(meter_dict["saved_tokens_estimate"], 40)
+        self.assertTrue(meter_dict["packing_enabled"])
+        self.assertFalse(meter_dict["context_bypass"])

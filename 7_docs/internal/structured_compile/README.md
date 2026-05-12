@@ -4,7 +4,7 @@
 
 - Created: 2026-05-13
 - Product line: OmniMemora structured context compilation
-- Current status: SC-001 implemented in repo reality
+- Current status: SC-003 implemented in repo reality; running validation pending
 - Supersedes phase6 as the active engineering line for compile capability work.
 
 ## Product Target
@@ -136,6 +136,8 @@ Exit:
 
 Goal: compress only old or oversized tool-result text while preserving graph structure.
 
+Status: implemented in repo reality on 2026-05-13. The compiler is deterministic, local-only, and does not call an LLM.
+
 Implementation:
 
 - Add deterministic extractive compressors.
@@ -166,11 +168,13 @@ Tests:
 
 Exit:
 
-- Repo fixture shows positive token saving without graph damage.
+- Repo fixture shows positive token saving without graph damage: satisfied by `test_context_compiler_structured_compile.py`.
 
 ### SC-003 - Orchestrator Integration Behind Flag
 
 Goal: integrate structured compiler without changing default product behavior broadly.
+
+Status: implemented in repo reality on 2026-05-13 for Anthropic-compatible Claude Code/OpenClaw tool-context requests.
 
 Implementation:
 
@@ -195,8 +199,9 @@ Tests:
 
 Exit:
 
-- Default behavior remains safe.
-- Enabling the flag affects only the named Anthropic tool path.
+- Default behavior remains safe: unsupported/uncertain tool graphs fall back to passthrough.
+- Enabling the flag affects only the named Anthropic tool path: enforced by `OMNIMEMORA_STRUCTURED_COMPILE_AGENTS` and Anthropic protocol checks.
+- Structured compile success is counted as token saving by gateway meter persistence.
 
 ### SC-004 - Running Validation on Real Agent Requests
 

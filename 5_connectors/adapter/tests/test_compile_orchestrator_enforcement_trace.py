@@ -112,3 +112,39 @@ def test_persist_gateway_meter_keeps_actual_enforcement_trace_separate_from_acce
     assert meter["enforcement_trace"]["actual_enforced_domains"][0]["operation"] == "search"
     assert isinstance(meter.get("actual_enforcement"), dict)
     assert meter["actual_enforcement"]["actual_enforced_domains"][0]["decision"] == "applied"
+
+
+def test_persist_gateway_meter_counts_structured_compile_success_as_savings():
+    capture = _CaptureStore()
+
+    old_get_meter_store = compile_orchestrator._get_meter_store
+    old_get_access_plan = compile_orchestrator._get_access_plan
+    try:
+        compile_orchestrator._get_meter_store = lambda: capture
+        compile_orchestrator._get_access_plan = lambda: _DummyAccessPlan
+
+        compile_orchestrator._persist_gateway_meter(
+            request_id="req-structured-meter-1",
+            agent_id="claude_code",
+            route="/llm/v1/messages",
+            compile_meta={
+                "compile_status": "structured_compile_success",
+                "selected_memory_count": 0,
+                "original_token_estimate": 120,
+                "compiled_token_estimate": 80,
+            },
+            truth_contract={},
+            payload={"messages": [{"role": "user", "content": "hello"}]},
+            forwarded_payload={"messages": [{"role": "user", "content": "hello compact"}]},
+            identity_and_plan=None,
+        )
+    finally:
+        compile_orchestrator._get_meter_store = old_get_meter_store
+        compile_orchestrator._get_access_plan = old_get_access_plan
+
+    assert capture.meter is not None
+    meter = capture.meter.to_dict()
+    assert meter["actual_tokens_estimate"] == 80
+    assert meter["saved_tokens_estimate"] == 40
+    assert meter["packing_enabled"] is True
+    assert meter["context_bypass"] is False
