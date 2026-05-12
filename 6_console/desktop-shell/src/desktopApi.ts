@@ -19,7 +19,7 @@ const AGENT_CONTROL_TIMEOUT_MS = 6000;
 const RECENT_REQUESTS_TIMEOUT_MS = 6000;
 
 const DEFAULT_STATUS: DesktopStatus = {
-  app_version: '1.0.0-beta.16',
+  app_version: '1.0.0-beta.17',
   data_dir: '~/.omnimemora/app/current',
   services: [
     {
@@ -44,14 +44,14 @@ const DEFAULT_STATUS: DesktopStatus = {
   updates: [
     {
       layer: 'desktop_shell',
-      current_version: '1.0.0-beta.16',
+      current_version: '1.0.0-beta.17',
       available_version: null,
       status: 'not_checked',
       detail: 'Desktop shell updates are checked through the official release manifest.',
     },
     {
       layer: 'local_components',
-      current_version: '1.0.0-beta.16',
+      current_version: '1.0.0-beta.17',
       available_version: null,
       status: 'not_checked',
       detail: 'Local component updates use release manifests.',
