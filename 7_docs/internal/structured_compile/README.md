@@ -1022,6 +1022,23 @@ Boundary:
 - It does not yet prove a full OpenClaw agent turn chooses `web_search` and completes inside the 45-second agent deadline.
 - The installed plugin is linked to the repo path, so moving or deleting the repo path would break the OpenClaw plugin until packaged or installed as a copied plugin.
 
+### Daily Evaluation Taxonomy
+
+Goal: keep routine OpenClaw/Claude Code evaluation durable and comparable across sessions instead of relying on operator or agent chat memory.
+
+When a user-visible agent turn appears missing, delayed, or recovered by a later "continue" request, classify the sample before assigning product responsibility:
+
+- `tool_result_recovered_by_session`: a prior run wrote the relevant tool result into the same client session, the final assistant turn timed out or was aborted, and a later continuation succeeded because the client resent the session transcript. This is a positive structured-compile preservation sample when OmniMemora did not break the tool graph.
+- `tool_result_broken_after_compile`: the relevant tool result existed before OmniMemora compile, but the compiled payload prevented the model from continuing correctly. Investigate `tool_use` id preservation, `tool_result.tool_use_id`, role ordering, recent-result protection, and content truncation rules.
+- `ui_missing_but_session_success`: the client session file or trajectory recorded a successful assistant response, but the UI did not show it. Treat this as client display/sync behavior unless separate evidence shows OmniMemora returned an error.
+
+2026-05-13 OpenClaw reference sample:
+
+- User sent `continue` after the previous AI-video-platform request had already produced an `mmx` search tool result but timed out before final assistant output.
+- OpenClaw resent the same session transcript; OmniMemora recorded request `34ee1d8f22e1` with `structured_compile_success`, `packed_memory_count=0`, and no `/tools/search` call for the continuation turn.
+- MiniMax returned `200`, OpenClaw wrote an assistant response with `stopReason=stop`, and the trajectory recorded `finalStatus=success`.
+- Classification: `tool_result_recovered_by_session`, not Omni memory recall and not OpenClaw `memory_search` success.
+
 ## Success Criteria
 
 Repo reality:
