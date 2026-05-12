@@ -100,6 +100,18 @@ class TestResolveInternalBaseUrl:
         assert "127.0.0.1" in resolved_url
         assert resolved_url.startswith("http://")
 
+    def test_sync_wrapper_inside_running_loop_does_not_create_unawaited_coroutine(self):
+        async def _run():
+            return resolve_internal_base_url_sync(
+                "running_loop_service",
+                "http://127.0.0.1:8765",
+            )
+
+        resolved_url, reason = asyncio.run(_run())
+
+        assert resolved_url == "http://127.0.0.1:8765"
+        assert reason == "running_loop_unresolved"
+
     def test_cache_stores_result(self):
         resolve_internal_base_url_sync("cached_svc", "http://127.0.0.1:8765")
         assert "cached_svc" in _internal_endpoint_cache

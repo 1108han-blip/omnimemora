@@ -80,7 +80,7 @@ def is_internal_target(host: str, port: int | None = None) -> bool:
         "host.docker.internal",
     }
     if host_lower in _local_service_hosts:
-        return port is None or port in _INTERNAL_PORTS
+        return True
 
     # If port is a known internal port and host looks like it could be local
     if port in _INTERNAL_PORTS:
@@ -106,6 +106,7 @@ def parse_host_from_url(url: str) -> tuple[str, int | None]:
 
 # ADR-0006 §3.3: 解析结果缓存
 _internal_endpoint_cache: dict[str, tuple[str, float]] = {}  # service_name -> (resolved_url, timestamp)
+_CACHE_TTL_SECONDS = 300.0
 
 
 def _get_loopback_candidates() -> list[str]:
@@ -201,14 +202,12 @@ async def resolve_internal_base_url(
     configured_port = parsed.port or 80
     configured_scheme = parsed.scheme or "http"
 
-    # TTL: 300 seconds
-    cache_ttl = 300.0
     now = time.time()
 
     # Check cache first
     if service_name in _internal_endpoint_cache:
         cached_url, cached_ts = _internal_endpoint_cache[service_name]
-        if now - cached_ts < cache_ttl:
+        if now - cached_ts < _CACHE_TTL_SECONDS:
             return cached_url, "cached"
 
     # Step 1: If configured host is already a loopback, try it first
@@ -254,8 +253,24 @@ def resolve_internal_base_url_sync(
 ) -> tuple[str, str]:
     """
     Synchronous wrapper for resolve_internal_base_url.
-    Uses asyncio.run() — only use in startup/initialization context.
+    Uses asyncio.run() when no event loop is already running.
     """
+    now = time.time()
+    cached = _internal_endpoint_cache.get(service_name)
+    if cached and now - cached[1] < _CACHE_TTL_SECONDS:
+        return cached[0], "cached"
+
+    try:
+        asyncio.get_running_loop()
+    except RuntimeError:
+        pass
+    else:
+        logger.warning(
+            f"[internal_transport] sync resolve for {service_name} called inside running event loop; "
+            f"using configured={configured_url}"
+        )
+        return configured_url, "running_loop_unresolved"
+
     return asyncio.run(
         resolve_internal_base_url(service_name, configured_url, loopback_candidates)
     )

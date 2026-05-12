@@ -1,6 +1,7 @@
 # factory.py
 """Backend Factory - Backend creation and registry"""
 
+import os
 from typing import Dict, Type, Optional, Any
 
 from .base import MemoryBackend, BackendHealth
@@ -67,7 +68,9 @@ def create_backend(config) -> MemoryBackend:
         ValueError: Unknown backend type
     """
     # Handle pydantic model or dict
-    if hasattr(config, 'dict'):
+    if hasattr(config, 'model_dump'):
+        config_dict = config.model_dump()
+    elif hasattr(config, 'dict'):
         config_dict = config.dict()
     elif isinstance(config, dict):
         config_dict = config
