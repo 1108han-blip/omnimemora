@@ -44,6 +44,8 @@ This line should borrow methods, not adopt a full external framework.
 | LLMLingua / LongLLMLingua | Token-importance compression for text blocks | Optional later text-block compressor behind deterministic fallback | Not a whole-payload compiler |
 | Distill MCP / code-context tools | AST/log/diff/search-output compaction patterns | Borrow extractors for code, logs, stack traces, search results | MCP source compression is not transparent ingress compile |
 
+2026-05-13 decision: do not call external compression libraries or model compressors in product work. External projects remain design references only. OmniMemora may keep internal offline evaluation scaffolding, but no external compressor adapter, model download, network dependency, or third-party compression runtime may enter the product path.
+
 ## Architecture Target
 
 Candidate package:
@@ -555,6 +557,98 @@ Boundary:
 
 - No model download, model inference, or network dependency in the hot path.
 - Candidate results are research evidence, not product savings claims.
+
+### SC-015 - Running Value Gate
+
+Goal: prove the repo-validated structured compiler works in the current running product before adding more compile behavior.
+
+Status: planned.
+
+Implementation:
+
+- Promote adapter to running reality through `docs/phase6/PROMOTION_USAGE_GOVERNANCE.md`.
+- Verify `18011 /health`, `/metrics/core_capabilities`, and `/compile/status`.
+- Run direct Anthropic-compatible tool-loop requests through `18011` with provider-valid tool schemas.
+- Record request ids, compile statuses, token estimates, compile distribution, upstream status, and endpoint timings.
+
+Exit:
+
+- Running adapter is on the expected repo revision.
+- At least one structured compile request returns upstream success and positive token saving.
+- `/compile/status` shows structured compile distribution fields from SC-010.
+- No evidence of upstream-critical local blocking regression.
+
+### SC-016 - Golden Fixture Corpus
+
+Goal: create a stable internal fixture corpus for compiler changes.
+
+Status: planned.
+
+Implementation:
+
+- Add anonymized fixtures for search result, file read, log, diff, and test output.
+- Each fixture declares required retention markers and expected output type.
+- Fixture tests validate token reduction, required marker preservation, latest-result protection, and provider graph validity.
+
+Boundary:
+
+- No raw user request content.
+- No external compressor dependency.
+
+### SC-017 - Typed Compressor v2
+
+Goal: improve deterministic typed compressors using the golden fixture corpus.
+
+Status: planned.
+
+Implementation:
+
+- Add per-type retention priorities where current v1 rules are too generic.
+- Keep failure mode as passthrough or no-gain, not forced compression.
+- Preserve latest tool result and provider protocol invariants.
+
+Boundary:
+
+- No LLM summarization.
+- No whole-payload compression.
+
+### SC-018 - Internal Offline Compression Evaluation
+
+Goal: evaluate OmniMemora's own deterministic compressors over the golden corpus without external libraries.
+
+Status: planned.
+
+Implementation:
+
+- Extend offline corpus summaries to include per-label results.
+- Compare internal deterministic compressor variants only.
+- Use results to decide whether a rule should be promoted into SC-017-style production compressors.
+
+Boundary:
+
+- No external compression library.
+- No model inference or model download.
+- No network dependency.
+
+### SC-019 - Promotion Decision and Product Closeout
+
+Goal: decide whether SC-015 through SC-018 are ready for product promotion, GUI/cloud packaging, or another repo-only iteration.
+
+Status: planned.
+
+Implementation:
+
+- Summarize running value gate, fixture corpus coverage, typed compressor behavior, and internal offline evaluation.
+- Decide one of:
+  - promote and package,
+  - keep repo-only and iterate,
+  - pause expansion due to insufficient real token-saving evidence.
+- Record file-count, background-logic, retention, and endpoint-speed impact.
+
+Exit:
+
+- Worktree is clean.
+- Product decision is recorded without mixing repo reality and running reality.
 
 Repo validation:
 
