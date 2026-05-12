@@ -30,6 +30,24 @@ class CompressorComparison:
     compression_ratio: float
 
 
+@dataclass(frozen=True)
+class TextBlockCorpusCase:
+    label: str
+    text: str
+    max_chars: int
+
+
+@dataclass(frozen=True)
+class CompressorCorpusSummary:
+    adapter_name: str
+    case_count: int
+    changed_count: int
+    original_token_estimate: int
+    compressed_token_estimate: int
+    saved_token_estimate: int
+    compression_ratio: float
+
+
 class DeterministicBaselineAdapter:
     name = "deterministic_extract"
 
@@ -63,3 +81,40 @@ def compare_text_block_compressors(
             )
         )
     return results
+
+
+def evaluate_text_block_corpus(
+    cases: Iterable[TextBlockCorpusCase],
+    *,
+    adapters: Iterable[TextBlockCompressorAdapter] = (DeterministicBaselineAdapter(),),
+) -> List[CompressorCorpusSummary]:
+    """Summarize offline candidate performance over anonymized text blocks."""
+    case_list = list(cases)
+    summaries: List[CompressorCorpusSummary] = []
+    for adapter in adapters:
+        changed_count = 0
+        original_total = 0
+        compressed_total = 0
+        for case in case_list:
+            [comparison] = compare_text_block_compressors(
+                case.text,
+                max_chars=case.max_chars,
+                adapters=[adapter],
+            )
+            if comparison.changed:
+                changed_count += 1
+            original_total += comparison.original_token_estimate
+            compressed_total += comparison.compressed_token_estimate
+        saved_total = max(0, original_total - compressed_total)
+        summaries.append(
+            CompressorCorpusSummary(
+                adapter_name=adapter.name,
+                case_count=len(case_list),
+                changed_count=changed_count,
+                original_token_estimate=original_total,
+                compressed_token_estimate=compressed_total,
+                saved_token_estimate=saved_total,
+                compression_ratio=compression_ratio(original_total, compressed_total),
+            )
+        )
+    return summaries

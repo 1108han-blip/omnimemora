@@ -542,16 +542,24 @@ Repo validation:
 
 Goal: evaluate LLMLingua-like or other model-based compressors without slowing upstream-critical requests.
 
+Status: repo reality validated on 2026-05-13. No running promotion was performed in this batch.
+
 Implementation:
 
-- Use the existing offline adapter interface from SC-005.
-- Compare against deterministic baseline on curated anonymized text blocks.
+- Extended the existing offline adapter interface from SC-005.
+- Added `TextBlockCorpusCase` and `evaluate_text_block_corpus` to summarize candidate performance over curated anonymized text blocks.
+- Corpus summaries report case count, changed count, estimated saved tokens, and compression ratio.
 - Promote only deterministic or proven-low-latency improvements into SC-012-style compressors.
 
 Boundary:
 
 - No model download, model inference, or network dependency in the hot path.
 - Candidate results are research evidence, not product savings claims.
+
+Repo validation:
+
+- `test_context_compiler_research_adapters.py`: passed with corpus summary coverage.
+- `py_compile`: passed for `research_adapters.py`.
 
 ## Success Criteria
 
