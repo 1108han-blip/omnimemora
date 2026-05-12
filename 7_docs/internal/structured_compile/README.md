@@ -4,7 +4,7 @@
 
 - Created: 2026-05-13
 - Product line: OmniMemora structured context compilation
-- Current status: SC-003 implemented in repo reality; running validation pending
+- Current status: SC-004 running reality validated
 - Supersedes phase6 as the active engineering line for compile capability work.
 
 ## Product Target
@@ -207,6 +207,8 @@ Exit:
 
 Goal: prove product value on real Claude Code/OpenClaw traffic.
 
+Status: running reality validated on 2026-05-13 for direct Anthropic-compatible product ingress. Real external agent CLI driving was not used for this validation; the request exercised the same `18011` Anthropic path with `agent_id=claude_code`.
+
 Procedure:
 
 - Promote adapter through `docs/phase6/PROMOTION_USAGE_GOVERNANCE.md`.
@@ -222,8 +224,28 @@ Procedure:
 
 Exit:
 
-- At least one real tool-loop request saves tokens and preserves agent continuation.
-- No evidence of upstream-critical blocking regression.
+- At least one tool-loop request saves tokens and preserves agent continuation: satisfied for request `25cf17ffdd32`, trace `sc004-structured-compile-20260513-0420-tools`.
+- No evidence of upstream-critical blocking regression: `/health` stayed healthy and compile evidence shows deterministic structured compile before upstream success.
+
+Evidence:
+
+- Promotion log: `tools/verification/logs/promotion_20260513_041942.log`
+- Promotion result: `final_status=running_reality_promoted`, `repo_revision=f78c406`, adapter pid changed from `89069` to `4932`.
+- Endpoint timings after promotion:
+  - `/health`: `0.002503s` before direct request; `0.002596s` after direct request.
+  - `/metrics/summary`: `0.215501s` before direct request; `0.211036s` after direct request.
+  - `/metrics/core_capabilities`: `0.199998s` before direct request; `0.198119s` after direct request.
+- Direct product request:
+  - path: `/llm/v1/messages`
+  - agent: `claude_code`
+  - request_id: `25cf17ffdd32`
+  - upstream status: `200`
+  - compile_status: `structured_compile_success`
+  - compile_path: `structured_context_compile`
+  - compile_reason: `deterministic_extract`
+  - original_token_estimate: `4031`
+  - compiled_token_estimate: `723`
+  - compression_ratio: `0.8206400396923841`
 
 ### SC-005 - Optional Text-Block Compressor Research Adapter
 
