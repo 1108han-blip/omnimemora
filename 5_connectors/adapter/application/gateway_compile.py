@@ -425,52 +425,36 @@ def _inject_compiled_context(
     """
     Inject compiled context into LLM request payload.
 
-    Strategy: prepend system message with OmniMemora context.
-    This keeps the original user/assistant conversation intact.
+    Strategy: build a compact upstream payload from product-compiled context and
+    the current user-visible query. Do not forward the original message history
+    again; that would stack the raw submission on top of the compiled context.
     """
-    if not packed_context:
-        return _build_original_payload(payload, normalized)
-
-    ctx_msg = {
-        "role": "system",
-        "content": f"[OmniMemora Context]\n{packed_context}",
-    }
-
+    del selected_memories
     protocol = normalized["protocol"]
+    context_block = f"Relevant context:\n{packed_context}" if packed_context else ""
+    user_query = str(normalized.get("query") or "").strip()
+    base_payload = _build_forwardable_payload(payload)
 
     if protocol == "anthropic":
-        # Anthropic /v1/messages expects top-level `system`, not a system-role message.
-        existing_system = payload.get("system")
-        context_block = f"[OmniMemora Context]\n{packed_context}"
+        compiled = {**base_payload, "messages": [{"role": "user", "content": user_query}]}
+        if context_block:
+            compiled["system"] = context_block
+        return compiled
 
-        if isinstance(existing_system, str) and existing_system.strip():
-            system_value = f"{existing_system}\n\n{context_block}"
-        elif isinstance(existing_system, list):
-            system_value = [
-                *existing_system,
-                {"type": "text", "text": context_block},
-            ]
-        else:
-            system_value = context_block
+    messages = []
+    if context_block:
+        messages.append({"role": "system", "content": context_block})
+    messages.append({"role": "user", "content": user_query})
+    return {**base_payload, "messages": messages}
 
-        return {
-            **payload,
-            "system": system_value,
-            "messages": normalized["messages"],
-        }
-    else:
-        # OpenAI /v1/chat/completions: prepend system message
-        # If there's already a system message, append to it
-        messages = normalized["messages"]
-        if messages and messages[0].get("role") == "system":
-            # Append to existing system message
-            existing = messages[0].get("content", "")
-            messages = [
-                {**messages[0], "content": f"{existing}\n\n[OmniMemora Context]\n{packed_context}"}
-            ] + messages[1:]
-        else:
-            messages = [ctx_msg] + messages
-        return {**payload, "messages": messages}
+
+def _build_forwardable_payload(payload: dict) -> dict:
+    """Copy provider-facing fields while dropping internal compile markers."""
+    return {
+        key: value
+        for key, value in payload.items()
+        if key not in {"messages", "system"} and not str(key).startswith("_")
+    }
 
 
 def _build_original_payload(payload: dict, normalized: dict) -> dict:
