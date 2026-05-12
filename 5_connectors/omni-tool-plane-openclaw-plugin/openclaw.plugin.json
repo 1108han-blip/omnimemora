@@ -1,0 +1,47 @@
+{
+  "id": "omnimemora-tool-plane",
+  "enabledByDefault": false,
+  "contracts": {
+    "webSearchProviders": [
+      "omnimemora"
+    ]
+  },
+  "uiHints": {
+    "webSearch.baseUrl": {
+      "label": "OmniMemora Tool Plane URL",
+      "placeholder": "http://127.0.0.1:18011",
+      "help": "Local OmniMemora product ingress used for /tools/search."
+    },
+    "webSearch.timeoutSeconds": {
+      "label": "Search Timeout Seconds",
+      "placeholder": "12",
+      "advanced": true
+    },
+    "webSearch.maxChars": {
+      "label": "Search Result Max Chars",
+      "placeholder": "6000",
+      "advanced": true
+    }
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "webSearch": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "baseUrl": {
+            "type": "string"
+          },
+          "timeoutSeconds": {
+            "type": "number"
+          },
+          "maxChars": {
+            "type": "number"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "name": "@omnimemora/openclaw-tool-plane",
+  "version": "0.1.0",
+  "description": "OpenClaw web_search provider routed through OmniMemora Tool Plane",
+  "type": "module",
+  "openclaw": {
+    "extensions": [
+      "./index.mjs"
+    ]
+  }
+}
