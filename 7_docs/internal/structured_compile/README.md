@@ -4,7 +4,7 @@
 
 - Created: 2026-05-13
 - Product line: OmniMemora structured context compilation
-- Current status: SC-015 through SC-019 complete; adapter promoted to running reality for structured compile v2
+- Current status: SC-020 post-release value gate recorded; beta17 OpenClaw and Claude Code running paths both show structured compile success
 - Supersedes phase6 as the active engineering line for compile capability work.
 
 ## Product Target
@@ -786,6 +786,83 @@ Product impact:
 - Runtime hot path remains deterministic parse/compress/validate only; no model inference, model download, external compressor library, network dependency, or cloud policy fetch was added.
 - Internal log retention remains governed by the existing 7-day cap; this batch did not add new retention paths.
 - Product compile behavior remains protocol-aware and local-first for the validated OpenClaw Anthropic-compatible tool path.
+
+### SC-020 - Beta17 Post-Release Value Gate
+
+Goal: verify beta17 running value after release, close the Claude Code route gap, and decide whether the next action should be more compiler work or coverage/telemetry.
+
+Status: running reality recorded on 2026-05-13.
+
+Scope:
+
+- Running instance: local beta17 install under `/Users/sc/.omnimemora/app/current`, adapter on `18011`, runtime on `8765`.
+- Release surface: beta17 was already published and verified before this gate.
+- No compiler code change, no external compressor, no model inference, no new background task.
+
+Findings:
+
+- OpenClaw was already routing through structured compile after beta17.
+- Claude Code was installed and detected but had `routing_enabled=false`, `route_truth=off`, and prior `compile_path=agent_route_disabled`.
+- The direct cause of the previous Claude Code validation gap was running route configuration, not structured compiler failure.
+- Product control API enable action changed running config from `claude_code=off` to `claude_code=force_if_possible` in `/Users/sc/.omnimemora/app/current/5_connectors/adapter/config/agent_modes.json`.
+
+Claude Code validation:
+
+- Enable action:
+  - path: `POST /agents/control/enable`
+  - body: `{"family_id":"claude_code"}`
+  - result: `routing_enabled=true`, `route_truth=effective`
+- Direct product request:
+  - path: `/llm/v1/messages`
+  - agent: `claude_code`
+  - trace: `sc020-claude-route-verify`
+  - request_id: `4f89619eced0`
+  - upstream response id: `0652d84655614bac004000cec878d3f5`
+  - upstream status: `200`
+  - elapsed time: `11.340619s`
+  - compile_status: `structured_compile_success`
+  - compile_path: `structured_context_compile`
+  - compile_reason: `deterministic_extract_search_result`
+  - original_token_estimate: `2826`
+  - compiled_token_estimate: `634`
+  - compression_ratio: `0.775654635527247`
+  - selected_memory_count: `0`
+  - token_estimator_name: `tiktoken`
+  - token_estimator_confidence: `high`
+
+30-minute running distribution after the Claude route check:
+
+- `claude_code`:
+  - proxied requests: `3`
+  - `structured_compile_success`: `2`
+  - `compile_skipped`: `1` from the pre-enable route-disabled check
+  - `structured_compile.success_share`: `0.6667`
+  - saved token estimate: `4384`
+  - savings ratio: `0.7757`
+- `openclaw`:
+  - proxied requests: `11`
+  - `compile_success`: `2`
+  - `structured_compile_success`: `4`
+  - `structured_compile_passthrough`: `5`
+  - saved token estimate: `6682`
+  - savings ratio across all compile events: `0.0621`
+
+Health and error scan:
+
+- `18011 /health`: HTTP `200`, `status=healthy`.
+- Recent 30-minute logs:
+  - `compile_events`: `14` events, `0` failed statuses, `0` error fields.
+  - `proxy_events`: `16` events, `0` failed statuses, `0` error fields.
+  - `trace_events`: `132` events, `0` failed statuses, `0` error fields.
+- `/agents/control` after enable:
+  - `claude_code`: `routing_enabled=true`, `route_truth=effective`, `traffic_truth=real_request_observed`.
+  - `openclaw`: `routing_enabled=true`, `route_truth=effective`, `traffic_truth=real_request_observed`.
+
+Decision:
+
+- SC-020 closes the Claude Code running validation gap for this local beta17 install.
+- Do not expand compressor logic in the next step until real post-release traffic shows whether passthrough coverage or compressor quality is the bottleneck.
+- If the product wants Claude Code route enabled by default for newly downloaded packages, that is a separate release decision because beta17 cloud artifacts were already published with the prior default config.
 
 ## Success Criteria
 
