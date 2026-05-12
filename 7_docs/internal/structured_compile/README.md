@@ -1065,6 +1065,63 @@ When a user-visible agent turn appears missing, delayed, or recovered by a later
 - MiniMax returned `200`, OpenClaw wrote an assistant response with `stopReason=stop`, and the trajectory recorded `finalStatus=success`.
 - Classification: `tool_result_recovered_by_session`, not Omni memory recall and not OpenClaw `memory_search` success.
 
+### SC-024 - User Pattern Layer Direction Gate
+
+Goal: decide whether OmniMemora should add a user-controlled long-term preference and workflow-pattern layer after the structured compile MVP, without turning internal evaluation logs into hidden behavior tracking.
+
+Status: direction gate opened on 2026-05-13. No product behavior, database schema, GUI, or running configuration change in this record.
+
+Product interpretation:
+
+- Treat high-value user habit data as user-controlled context assets, not surveillance or behavioral telemetry.
+- The product value is continuity and token saving: users should repeat fewer stable constraints, project facts, and collaboration preferences across agents.
+- The AI OS direction is a local context broker that can serve multiple opted-in agents through `:18011`, not a background profile collector.
+- This layer must remain subordinate to the structured compile goal: only inject compact, relevant, protocol-safe context when it improves the current request.
+
+Research inputs to preserve:
+
+- Mem0: structured persistent memory can outperform full-context history while reducing latency and token cost.
+- MemMachine: keep ground-truth conversational episodes separate from derived profile memory to reduce lossy extraction risk.
+- MemX: local-first, explainable retrieval with low-confidence rejection is a better fit than aggressive recall for preference data.
+- Letta and Supermemory: cross-agent continuity is the product direction to study, but OmniMemora should not adopt external hosted memory behavior or hidden telemetry defaults.
+
+Allowed candidate categories:
+
+- `preference`: explicit stable user preferences, such as response language, tone, or collaboration style.
+- `workflow`: repeated operator process constraints, such as baseline-first changes or separate repo/running reality.
+- `project_fact`: stable product or workspace facts that prevent repeated prompt overhead.
+- `correction`: repeated negative feedback that should prevent the agent from taking the same wrong path again.
+
+Hard boundaries:
+
+- Do not build a separate user-habit database in the first candidate phase.
+- Do not infer sensitive identity, health, finance, personal relationship, or location habits from request metadata.
+- Do not use meter, proxy, trace, compile, or tool logs as a hidden profile source.
+- Do not auto-inject unapproved or low-confidence habits into upstream prompts.
+- Do not add external memory, compression, or profiling services.
+- Do not make upstream-critical compile paths depend on model-based habit extraction.
+
+First implementation shape, if approved later:
+
+- Reuse the existing `memory.db` memory record path with stricter metadata instead of adding a new database.
+- Store candidates as normal memories with metadata fields such as `category`, `source_event_id`, `confidence`, `approval_status`, `expires_at`, and `derived_from`.
+- Default new candidates to `candidate` or `needs_review`; only `approved` or explicitly safe project facts may enter compile.
+- Keep extraction off the upstream-critical path; run it after the request, in bounded local background work, or through an explicit operator action.
+- Preserve the source pointer needed to explain why a candidate exists, but avoid storing raw prompt/tool content beyond normal memory policy.
+
+Evaluation gate before code:
+
+- Show that selected patterns reduce repeated prompt tokens on real requests.
+- Show that compile injection stays smaller than the repeated text it replaces.
+- Show that false personalization is rejected or remains unapproved.
+- Show that `/health`, `/metrics/summary`, `/metrics/core_capabilities`, and `/compile/status` remain fast when running validation is in scope.
+- Keep file count flat or justify any added file by replacing old code or preventing single-file growth.
+
+Exit:
+
+- A later SC-025 candidate may implement only candidate extraction and storage metadata.
+- GUI review, automatic approval, new database tables, and cross-device/cloud sync remain out of scope until real token-saving value is proven.
+
 ## Success Criteria
 
 Repo reality:
