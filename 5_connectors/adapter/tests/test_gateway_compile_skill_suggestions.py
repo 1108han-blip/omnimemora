@@ -172,7 +172,62 @@ def test_gateway_compile_uses_compact_payload_without_packed_context():
         runtime_bridge.fetch_memory_candidates = old_fetch
         runtime_bridge.execute_runtime_compile = old_execute
 
-    assert compile_meta["compile_status"] == "compile_success"
-    assert compiled_payload["messages"] == [
-        {"role": "user", "content": "Please answer without context"},
-    ]
+    assert compile_meta["compile_status"] == "compile_skipped"
+    assert compile_meta["compile_reason"] == "no_product_memory_found"
+    assert compile_meta["selected_memory_count"] == 0
+    assert compile_meta["compiled_token_estimate"] == 0
+    assert compiled_payload == payload
+
+
+def test_gateway_compile_passthrough_for_anthropic_tool_context():
+    async def _unexpected_fetch_memory_candidates(**kwargs):
+        raise AssertionError("tool context should not search product memory")
+
+    async def _unexpected_execute_runtime_compile(**kwargs):
+        raise AssertionError("tool context should not run runtime compile")
+
+    old_fetch = runtime_bridge.fetch_memory_candidates
+    old_execute = runtime_bridge.execute_runtime_compile
+    runtime_bridge.fetch_memory_candidates = _unexpected_fetch_memory_candidates
+    runtime_bridge.execute_runtime_compile = _unexpected_execute_runtime_compile
+    try:
+        payload = {
+            "_path": "/llm/v1/messages",
+            "messages": [
+                {"role": "user", "content": "Search this repo and answer"},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {
+                            "type": "tool_use",
+                            "id": "toolu_1",
+                            "name": "Grep",
+                            "input": {"pattern": "gateway_compile"},
+                        }
+                    ],
+                },
+                {
+                    "role": "user",
+                    "content": [
+                        {
+                            "type": "tool_result",
+                            "tool_use_id": "toolu_1",
+                            "content": "gateway_compile.py contains the compile path",
+                        }
+                    ],
+                },
+            ],
+            "model": "MiniMax-M2.7",
+            "stream": True,
+        }
+        compiled_payload, compile_meta = asyncio.run(
+            gateway_compile.run_gateway_compile(payload=payload, agent_id="claude_code")
+        )
+    finally:
+        runtime_bridge.fetch_memory_candidates = old_fetch
+        runtime_bridge.execute_runtime_compile = old_execute
+
+    assert compile_meta["compile_status"] == "compile_skipped"
+    assert compile_meta["compile_reason"] == "skip_tool_context_passthrough"
+    assert compile_meta["selected_memory_count"] == 0
+    assert compiled_payload == payload

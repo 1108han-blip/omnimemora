@@ -95,6 +95,20 @@ def _content_to_text(content: Any) -> str:
     return ""
 
 
+def _contains_tool_context(messages: List[Dict[str, Any]]) -> bool:
+    """Tool-use turns must preserve the original provider message graph."""
+    for msg in messages:
+        role = str(msg.get("role", "") or "").lower()
+        if role == "tool":
+            return True
+        content = msg.get("content")
+        if isinstance(content, list):
+            for part in content:
+                if isinstance(part, dict) and part.get("type") in {"tool_use", "tool_result"}:
+                    return True
+    return False
+
+
 def _extract_query_from_messages(messages: List[Dict[str, Any]]) -> str:
     """Extract primary user-visible query, skipping trailing control metadata."""
     fallback = ""
@@ -166,6 +180,12 @@ def _assess_compile_eligibility(
     # Assistant-only continuation = no new context needed
     if all(msg.get("role") in ("assistant", "system") for msg in messages):
         return False, "assistant_only_continuation"
+
+    # Agent tool loops rely on exact tool_use/tool_result ordering and IDs.
+    # Compiling these turns would drop the tool results and make the LLM repeat
+    # searches instead of answering from the retrieved local context.
+    if _contains_tool_context(messages):
+        return False, "tool_context_passthrough"
 
     # Streaming with compile: supported (compile first chunk)
     # Non-streaming: fully supported
@@ -338,6 +358,10 @@ async def run_gateway_compile(
         }
 
     # Step 4: Determine status and build response
+    selected_memories = compile_result.get("selected_memories", [])
+    packed_context = str(compile_result.get("packed_context", "") or "")
+    has_compiled_context = bool(selected_memories) and bool(packed_context.strip())
+
     if compile_result.get("compile_error"):
         status = "compile_failed"
         compiled_payload = _build_original_payload(payload, normalized)
@@ -345,17 +369,32 @@ async def run_gateway_compile(
             f"[GATEWAY_COMPILE] agent={agent_id} compile_failed "
             f"error={compile_result['compile_error'][:80]}"
         )
+    elif not has_compiled_context:
+        status = "compile_skipped"
+        compiled_payload = _build_original_payload(payload, normalized)
+        compile_result["compiled_token_estimate"] = 0
+        compile_result["saved_token_estimate"] = 0
+        compile_result["compression_ratio"] = 0.0
+        compile_result["compile_reason"] = (
+            "no_product_memory_found"
+            if not candidates
+            else "no_selected_product_memory"
+        )
+        loguru.logger.info(
+            f"[GATEWAY_COMPILE] agent={agent_id} compile_skipped "
+            f"reason={compile_result['compile_reason']} passthrough=true"
+        )
     else:
         status = "compile_success"
         compiled_payload = _inject_compiled_context(
             payload=payload,
             normalized=normalized,
-            packed_context=compile_result.get("packed_context", ""),
-            selected_memories=compile_result.get("selected_memories", []),
+            packed_context=packed_context,
+            selected_memories=selected_memories,
         )
         loguru.logger.info(
             f"[GATEWAY_COMPILE] agent={agent_id} compile_success "
-            f"selected={len(compile_result.get('selected_memories', []))} "
+            f"selected={len(selected_memories)} "
             f"original={compile_result['original_token_estimate']} "
             f"compiled={compile_result['compiled_token_estimate']} "
             f"ratio={compile_result['compression_ratio']:.3f}"
@@ -364,7 +403,7 @@ async def run_gateway_compile(
     # Step 5: Build compile metadata
     compile_meta = _build_meta(
         status=status,
-        selected_count=len(compile_result.get("selected_memories", [])),
+        selected_count=len(selected_memories),
         candidate_count=len(candidates),
         original_tokens=compile_result.get("original_token_estimate", 0),
         compiled_tokens=compile_result.get("compiled_token_estimate", 0),
@@ -381,7 +420,7 @@ async def run_gateway_compile(
         enforcement_trace=enforcement_capture.get("enforcement_trace"),
         internal_memory_status=(
             "used"
-            if len(compile_result.get("selected_memories", [])) > 0
+            if len(selected_memories) > 0
             else (
                 "found_not_selected"
                 if len(candidates) > 0

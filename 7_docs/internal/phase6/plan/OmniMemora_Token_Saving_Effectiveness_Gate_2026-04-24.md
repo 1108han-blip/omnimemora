@@ -21,6 +21,13 @@ Goal:
 - Verify that this does not obviously degrade answer quality.
 - Verify that client flow is not disturbed.
 
+Clarification added 2026-05-13:
+
+- This record validates the then-current memory-context compile path on simple non-Codex request shapes.
+- It does not validate protocol-aware compilation of full agent payload graphs.
+- In particular, it must not be cited as evidence that Claude Code or OpenClaw tool-use continuations can be safely compacted when the request includes `tool_use`, `tool_result`, assistant continuation state, or provider-required tool/result ordering.
+- The intended product direction remains broader structured context compilation, but that requires separate protocol-aware validation and cannot be inferred from this gate.
+
 Included validation objects:
 
 - Claude Code default
@@ -372,6 +379,7 @@ Interpretation:
 - The token saving evidence is explainable from current meter/read-model fields.
 - The compiled context token count is represented by `actual_tokens_estimate` / `request_evidence.context.after_tokens`.
 - The gate does not prove final-answer quality beyond current-request preservation for the selected simple prompts.
+- The gate does not prove safe compilation for agent tool loops or full provider message graphs; any such claim requires a separate tool-protocol fixture and validation record.
 
 Next boundary:
 

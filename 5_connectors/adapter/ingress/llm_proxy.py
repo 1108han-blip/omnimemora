@@ -41,6 +41,7 @@ Anthropic 路徑狀態：
   POST /llm/chat             — OpenClaw 專用（OpenAI 格式）
   POST /llm/anthropic         — Claude Code 專用（Anthropic 格式）
 """
+import asyncio
 import json
 import importlib
 import os
@@ -540,6 +541,10 @@ def _build_passthrough_response(
 
 _BYPASS_PROXY_TRANSFORM = os.getenv("OMNIMEMORA_BYPASS_PROXY_TRANSFORM", "false").strip().lower() == "true"
 _USAGE_TRACE_ENABLED = os.getenv("OMNIMEMORA_PROXY_USAGE_TRACE", "true").strip().lower() == "true"
+_ANTHROPIC_TRUE_STREAMING_OPENCLAW = (
+    os.getenv("OMNIMEMORA_ANTHROPIC_TRUE_STREAMING_OPENCLAW", "true").strip().lower()
+    in {"1", "true", "yes", "on"}
+)
 _HOP_BY_HOP_HEADERS = {
     "connection",
     "keep-alive",
@@ -2260,6 +2265,37 @@ def _record_ingress_compile_and_meter(
     )
 
 
+def _schedule_gateway_meter_persistence(
+    *,
+    request_id: str,
+    agent_id: str,
+    query_messages: object,
+    compile_meta: dict,
+    body: Optional[dict] = None,
+    original_payload: Optional[dict] = None,
+    forwarded_payload: Optional[dict] = None,
+) -> None:
+    kwargs = {
+        "request_id": request_id,
+        "agent_id": agent_id,
+        "query": _extract_user_query(query_messages),
+        "compile_meta": compile_meta,
+        "request": None,
+        "body": body,
+        "original_payload": original_payload,
+        "forwarded_payload": forwarded_payload,
+    }
+
+    async def _run_meter_persistence() -> None:
+        await asyncio.to_thread(_persist_gateway_meter, **kwargs)
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_run_meter_persistence())
+    except RuntimeError:
+        _persist_gateway_meter(**kwargs)
+
+
 def _responses_tools_to_chat_tools(tools) -> list[dict]:
     if not isinstance(tools, list):
         return []
@@ -2864,6 +2900,26 @@ async def _close_streaming_upstream(
         await client.aclose()
 
 
+async def _stream_response_with_finalizer(
+    upstream_resp: httpx.Response,
+    client: httpx.AsyncClient,
+    finalize,
+) -> AsyncIterator[bytes]:
+    """Yield upstream bytes immediately, then run post-stream persistence."""
+    completed = False
+    try:
+        async for chunk in upstream_resp.aiter_bytes():
+            if chunk:
+                yield chunk
+        completed = True
+    finally:
+        try:
+            if completed:
+                await finalize()
+        finally:
+            await _close_streaming_upstream(upstream_resp, client)
+
+
 def _streaming_proxy_response(
     upstream_resp: httpx.Response,
     client: httpx.AsyncClient,
@@ -2971,6 +3027,10 @@ def _build_passthrough_response(
     return response
 
 
+def _use_true_anthropic_streaming(*, agent_id: str, is_streaming: bool) -> bool:
+    return bool(is_streaming and agent_id == "openclaw" and _ANTHROPIC_TRUE_STREAMING_OPENCLAW)
+
+
 # ============================================================================
 # Anthropic-compatible message endpoints
 # ============================================================================
@@ -3054,19 +3114,14 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
         )
         upstream_model = contract.model_resolved or resolve_anthropic_upstream_model(model, upstream)
         upstream_base = contract.base_url_resolved or upstream["base_url"]
-        _record_ingress_compile_and_meter(
+        _record_compile_event(
             request_id=request_id,
             agent_id=agent_id,
-            ingress_path=route_label,
-            requested_model=model,
+            path=route_label,
+            model=model,
             compile_meta=compile_meta,
             truth_meta=truth_meta,
             trace_id=trace_id,
-            query_messages=compiled_body.get("messages"),
-            request=request,
-            body=body,
-            original_payload=body,
-            forwarded_payload={**compiled_body, "model": upstream_model},
         )
 
     _trace_anthropic_payload(
@@ -3077,6 +3132,7 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
     )
 
     compiled_body["model"] = upstream_model
+    forwarded_payload = dict(compiled_body)
     headers = {
         "Content-Type": "application/json",
         "x-api-key": upstream["api_key"],
@@ -3089,6 +3145,136 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
     )
 
     try:
+        if _use_true_anthropic_streaming(agent_id=agent_id, is_streaming=is_streaming):
+            client = httpx.AsyncClient(
+                timeout=httpx.Timeout(upstream["timeout_seconds"], connect=15.0)
+            )
+            try:
+                upstream_resp = await client.send(
+                    client.build_request(
+                        "POST",
+                        f"{upstream_base}/v1/messages",
+                        json=compiled_body,
+                        headers=headers,
+                    ),
+                    stream=True,
+                )
+
+                if upstream_resp.status_code >= 400:
+                    upstream_url = f"{upstream_base}/v1/messages"
+                    status_code = upstream_resp.status_code
+                    error_type = _classify_upstream_error(status_code, None)
+                    raw_body = (await upstream_resp.aread()).decode("utf-8", errors="replace")
+                    error_msg = raw_body[:300]
+                    _log_upstream_failure(
+                        request_id=request_id,
+                        upstream_url=upstream_url,
+                        error_type=error_type,
+                        status_code=status_code,
+                        error_message=error_msg,
+                        agent_id=agent_id,
+                        route=route_label,
+                        model=model,
+                    )
+                    _trace_anthropic_status(
+                        request_id,
+                        "upstream_response",
+                        status_code,
+                        raw_body[:500],
+                    )
+                    _record_event(
+                        agent_id, "proxy_error", request_id, route_label, model,
+                        "failed", status_code,
+                        error=f"{error_type}|{error_msg[:150]}",
+                        truth_meta=truth_meta,
+                        trace_id=trace_id,
+                    )
+                    _record_compile_event(
+                        request_id=request_id,
+                        agent_id=agent_id,
+                        path=route_label,
+                        model=model,
+                        compile_meta=compile_meta,
+                        proxy_status="failed",
+                        proxy_status_code=status_code,
+                        truth_meta=truth_meta,
+                        trace_id=trace_id,
+                    )
+                    await client.aclose()
+                    return JSONResponse(
+                        content=_annotate_upstream_error(
+                            raw_body=raw_body,
+                            status_code=status_code,
+                            error_type=error_type,
+                        ),
+                        status_code=status_code,
+                    )
+
+                _record_event(
+                    agent_id, "proxy_response", request_id, route_label, model,
+                    "success", upstream_resp.status_code,
+                    truth_meta=truth_meta,
+                    trace_id=trace_id,
+                )
+                _trace_anthropic_status(
+                    request_id,
+                    "upstream_response",
+                    upstream_resp.status_code,
+                )
+
+                async def _finalize_anthropic_stream() -> None:
+                    await _auto_write_internal_work_memory(
+                        request_id=request_id,
+                        route_label=route_label,
+                        agent_id=agent_id,
+                        status_code=upstream_resp.status_code,
+                        request_messages=body.get("messages"),
+                        upstream_resp=None,
+                        compile_meta=compile_meta,
+                    )
+                    _record_compile_event(
+                        request_id=request_id,
+                        agent_id=agent_id,
+                        path=route_label,
+                        model=model,
+                        compile_meta=compile_meta,
+                        proxy_status="success",
+                        proxy_status_code=upstream_resp.status_code,
+                        truth_meta=truth_meta,
+                        trace_id=trace_id,
+                    )
+                    _schedule_gateway_meter_persistence(
+                        request_id=request_id,
+                        agent_id=agent_id,
+                        query_messages=compiled_body.get("messages"),
+                        compile_meta=compile_meta,
+                        body=body,
+                        original_payload=body,
+                        forwarded_payload=forwarded_payload,
+                    )
+
+                content_type = upstream_resp.headers.get("content-type") or "text/event-stream"
+                response = StreamingResponse(
+                    _stream_response_with_finalizer(
+                        upstream_resp,
+                        client,
+                        _finalize_anthropic_stream,
+                    ),
+                    media_type=content_type,
+                    status_code=upstream_resp.status_code,
+                )
+                _copy_upstream_headers_to_response(response, upstream_resp.headers)
+                _log_upstream_final_comparison(
+                    request_id=request_id,
+                    route_label=route_label,
+                    upstream_resp=upstream_resp,
+                    final_response=response,
+                )
+                return response
+            except Exception:
+                await client.aclose()
+                raise
+
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(upstream["timeout_seconds"], connect=15.0)
         ) as client:
@@ -3170,6 +3356,15 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
                     truth_meta=truth_meta,
                     trace_id=trace_id,
                 )
+                _schedule_gateway_meter_persistence(
+                    request_id=request_id,
+                    agent_id=agent_id,
+                    query_messages=compiled_body.get("messages"),
+                    compile_meta=compile_meta,
+                    body=body,
+                    original_payload=body,
+                    forwarded_payload=forwarded_payload,
+                )
                 response = StreamingResponse(
                     _stream_response(upstream_resp),
                     media_type="text/event-stream",
@@ -3203,6 +3398,15 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
                     proxy_status_code=upstream_resp.status_code,
                     truth_meta=truth_meta,
                     trace_id=trace_id,
+                )
+                _schedule_gateway_meter_persistence(
+                    request_id=request_id,
+                    agent_id=agent_id,
+                    query_messages=compiled_body.get("messages"),
+                    compile_meta=compile_meta,
+                    body=body,
+                    original_payload=body,
+                    forwarded_payload=forwarded_payload,
                 )
                 return _build_passthrough_response(
                     request_id=request_id,

@@ -151,6 +151,126 @@ if __name__ == "__main__":
 
 
 class TestOpenClawRouteFallback(unittest.IsolatedAsyncioTestCase):
+    async def test_openclaw_anthropic_stream_uses_true_streaming_send(self):
+        body = {
+            "model": "MiniMax-M2.7",
+            "messages": [{"role": "user", "content": "hi"}],
+            "stream": True,
+        }
+
+        class _Req:
+            def __init__(self):
+                self.headers = {"user-agent": "openclaw-control-ui"}
+                self.query_params = {}
+                self.state = SimpleNamespace()
+                self._json = body
+                self.url = SimpleNamespace(path="/llm/v1/messages")
+
+            async def json(self):
+                return self._json
+
+        class _FakeStreamResponse:
+            status_code = 200
+            headers = httpx.Headers({"content-type": "text/event-stream", "x-request-id": "stream-1"})
+
+            async def aiter_bytes(self):
+                yield b"event: message_start\n\n"
+                yield b"data: {\"type\":\"message_delta\"}\n\n"
+
+            async def aclose(self):
+                seen["closed"] = True
+
+        class _FakeClient:
+            def __init__(self, *args, **kwargs):
+                seen["client_created"] = True
+
+            def build_request(self, method, url, json=None, headers=None):
+                seen["method"] = method
+                seen["url"] = url
+                seen["json"] = json
+                return {"method": method, "url": url, "json": json, "headers": headers}
+
+            async def send(self, request, stream=False):
+                seen["send_stream"] = stream
+                return _FakeStreamResponse()
+
+            async def post(self, *args, **kwargs):
+                raise AssertionError("streaming OpenClaw Anthropic path should not use post")
+
+            async def aclose(self):
+                seen["client_closed"] = True
+
+        class _FakeContract:
+            model_resolved = "MiniMax-M2.7"
+            base_url_resolved = "https://example.test/anthropic"
+
+        async def _fake_compile_and_resolve(**kwargs):
+            return kwargs["payload"], {
+                "compile_status": "compile_success",
+                "selected_memory_count": 1,
+                "original_token_estimate": 10,
+                "compiled_token_estimate": 8,
+                "compression_ratio": 0.2,
+                "compile_path": "runtime_compile",
+                "compile_error": None,
+                "compile_reason": "runtime_compile",
+            }, _FakeContract(), {"provider_resolved": "minimax_anthropic_compatible"}
+
+        async def _fake_auto_write(**kwargs):
+            seen["auto_write"] = True
+
+        seen = {}
+        recorded_compile = []
+        recorded_events = []
+        original_client = llm_proxy.httpx.AsyncClient
+        original_route_enabled = llm_proxy._routing_enabled_for_agent
+        original_get_upstream = llm_proxy.get_upstream_for_anthropic
+        original_orchestrator = llm_proxy._get_compile_orchestrator
+        original_auto_write = llm_proxy._auto_write_internal_work_memory
+        original_record_compile = llm_proxy._record_compile_event
+        original_record_event = llm_proxy._record_event
+        original_schedule_meter = llm_proxy._schedule_gateway_meter_persistence
+        original_true_stream_flag = llm_proxy._ANTHROPIC_TRUE_STREAMING_OPENCLAW
+
+        try:
+            llm_proxy.httpx.AsyncClient = _FakeClient
+            llm_proxy._routing_enabled_for_agent = lambda agent_id: True
+            llm_proxy.get_upstream_for_anthropic = lambda model: {
+                "base_url": "https://example.test/anthropic",
+                "api_key": "test-key",
+                "timeout_seconds": 30,
+            }
+            llm_proxy._get_compile_orchestrator = lambda: SimpleNamespace(
+                run_anthropic_compile_and_resolve=_fake_compile_and_resolve
+            )
+            llm_proxy._auto_write_internal_work_memory = _fake_auto_write
+            llm_proxy._record_compile_event = lambda **kwargs: recorded_compile.append(kwargs)
+            llm_proxy._record_event = lambda *args, **kwargs: recorded_events.append((args, kwargs))
+            llm_proxy._schedule_gateway_meter_persistence = lambda **kwargs: seen.setdefault("meter", kwargs)
+            llm_proxy._ANTHROPIC_TRUE_STREAMING_OPENCLAW = True
+
+            response = await llm_proxy.proxy_anthropic_messages_compatible(_Req())
+            chunks = [chunk async for chunk in response.body_iterator]
+        finally:
+            llm_proxy.httpx.AsyncClient = original_client
+            llm_proxy._routing_enabled_for_agent = original_route_enabled
+            llm_proxy.get_upstream_for_anthropic = original_get_upstream
+            llm_proxy._get_compile_orchestrator = original_orchestrator
+            llm_proxy._auto_write_internal_work_memory = original_auto_write
+            llm_proxy._record_compile_event = original_record_compile
+            llm_proxy._record_event = original_record_event
+            llm_proxy._schedule_gateway_meter_persistence = original_schedule_meter
+            llm_proxy._ANTHROPIC_TRUE_STREAMING_OPENCLAW = original_true_stream_flag
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(chunks, [b"event: message_start\n\n", b"data: {\"type\":\"message_delta\"}\n\n"])
+        self.assertTrue(seen["send_stream"])
+        self.assertTrue(seen["closed"])
+        self.assertTrue(seen["client_closed"])
+        self.assertTrue(seen["auto_write"])
+        self.assertIn("meter", seen)
+        self.assertTrue(any(item.get("proxy_status_code") == 200 for item in recorded_compile))
+
     async def test_llm_route_defaults_unknown_agent_to_openclaw(self):
         body = {"model": "gemma4:26b", "messages": [{"role": "user", "content": "hi"}], "stream": False}
 
