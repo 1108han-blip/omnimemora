@@ -471,17 +471,24 @@ Repo validation:
 
 Goal: reduce the gap between current char/3 estimates and provider-visible token accounting.
 
+Status: repo reality validated on 2026-05-13. No running promotion was performed in this batch.
+
 Implementation:
 
-- Add a tokenizer interface under `context_compiler/metrics.py` or a focused sibling module.
-- Prefer provider-native or library-backed tokenizers only when available locally and fast.
-- Fallback remains deterministic char-based estimation.
-- Record estimator name/confidence in compile metadata.
+- Added a tokenizer interface under `context_compiler/metrics.py`.
+- Uses local `tiktoken` when available for the requested model.
+- Fallback is deterministic `mixed_script_heuristic_v1`, which accounts for CJK-heavy text more closely than a single char divisor.
+- Structured compile results and compile events now record `token_estimator_name` and `token_estimator_confidence`.
 
 Boundary:
 
 - No network call in token estimation.
 - No provider-specific routing decision based only on estimated tokens.
+
+Repo validation:
+
+- `test_context_compiler_token_estimates.py`, `test_context_compiler_structured_compile.py`, and `test_llm_proxy_compile_event_persistence.py`: `10 passed`.
+- `py_compile`: passed for `metrics.py`, `compiler.py`, `gateway_compile.py`, and `llm_proxy.py`.
 
 ### SC-012 - Compressor Type Expansion
 

@@ -1483,6 +1483,8 @@ def _record_compile_event(
             "compile_path": compile_meta.get("compile_path", "unknown"),
             "compile_error": compile_meta.get("compile_error"),
             "compile_reason": compile_meta.get("compile_reason", ""),
+            "token_estimator_name": compile_meta.get("token_estimator_name"),
+            "token_estimator_confidence": compile_meta.get("token_estimator_confidence"),
             "candidate_count": int(compile_meta.get("candidate_count") or 0),
             "internal_memory_status": compile_meta.get("internal_memory_status"),
             "internal_memory_write_status": compile_meta.get("internal_memory_write_status"),

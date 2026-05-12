@@ -35,6 +35,8 @@ def test_long_old_tool_result_compresses_and_preserves_graph():
     assert result.status == "structured_compile_success"
     assert result.changed_blocks == 1
     assert result.compiled_token_estimate < result.original_token_estimate
+    assert result.token_estimator_name
+    assert result.token_estimator_confidence in {"medium", "high"}
     old_result = result.payload["messages"][1]["content"][0]
     recent_result = result.payload["messages"][3]["content"][0]
     assert old_result["tool_use_id"] == "toolu_old"

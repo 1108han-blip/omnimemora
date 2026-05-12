@@ -498,6 +498,8 @@ def _maybe_run_structured_compile(
     )
     meta["structured_compile_changed_blocks"] = result.changed_blocks
     meta["structured_compile_issues"] = result.issues
+    meta["token_estimator_name"] = result.token_estimator_name
+    meta["token_estimator_confidence"] = result.token_estimator_confidence
     loguru.logger.info(
         f"[GATEWAY_COMPILE] agent={agent_id} {result.status} "
         f"reason={result.reason} changed_blocks={result.changed_blocks} "

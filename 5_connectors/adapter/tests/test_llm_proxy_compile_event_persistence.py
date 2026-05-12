@@ -30,6 +30,8 @@ def test_record_compile_event_persists_task_type_and_skill_policy_defaults():
         "compile_path": "runtime_compile",
         "compile_error": None,
         "compile_reason": "runtime_compile",
+        "token_estimator_name": "mixed_script_heuristic_v1",
+        "token_estimator_confidence": "medium",
         "skill_suggestions": None,
         "skill_policy_name": None,
         "skill_policy_version": None,
@@ -54,3 +56,5 @@ def test_record_compile_event_persists_task_type_and_skill_policy_defaults():
     assert row["skill_policy_version"] == "static_catalog_v1"
     assert row["skill_policy_source"] == "local_builtin"
     assert row["skill_policy_status"] == "fallback"
+    assert row["token_estimator_name"] == "mixed_script_heuristic_v1"
+    assert row["token_estimator_confidence"] == "medium"

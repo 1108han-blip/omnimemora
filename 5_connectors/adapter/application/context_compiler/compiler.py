@@ -9,7 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from .anthropic_tool_graph import analyze_anthropic_tool_graph
 from .anthropic_tool_schema import analyze_anthropic_tool_schema
 from .compressors import compress_tool_result_text
-from .metrics import compression_ratio, estimate_payload_tokens
+from .metrics import compression_ratio, estimate_payload_tokens_detailed
 from .validators import validate_anthropic_compiled_payload
 
 
@@ -20,6 +20,8 @@ class StructuredCompileResult:
     original_token_estimate: int
     compiled_token_estimate: int
     compression_ratio: float
+    token_estimator_name: str = ""
+    token_estimator_confidence: str = ""
     changed_blocks: int = 0
     reason: str = ""
     issues: List[str] = field(default_factory=list)
@@ -31,25 +33,26 @@ def compile_anthropic_tool_context(
     max_tool_result_chars: int = 1200,
 ) -> StructuredCompileResult:
     """Compile eligible Anthropic tool results while preserving graph structure."""
-    before_tokens = estimate_payload_tokens(payload)
+    before_estimate = estimate_payload_tokens_detailed(payload)
+    before_tokens = before_estimate.tokens
     analysis = analyze_anthropic_tool_graph(payload)
     if not analysis.valid:
-        return _passthrough(payload, before_tokens, "invalid_tool_graph", _issue_codes(analysis.issues))
+        return _passthrough(payload, before_estimate, "invalid_tool_graph", _issue_codes(analysis.issues))
     if not analysis.has_tool_graph:
-        return _passthrough(payload, before_tokens, "no_tool_graph", [])
+        return _passthrough(payload, before_estimate, "no_tool_graph", [])
 
     schema_analysis = analyze_anthropic_tool_schema(payload)
     if not schema_analysis.valid:
         return _passthrough(
             payload,
-            before_tokens,
+            before_estimate,
             "invalid_tool_schema",
             _issue_codes(schema_analysis.issues),
         )
 
     latest_result_location = _latest_tool_result_location(analysis.ir.messages)
     if latest_result_location is None:
-        return _passthrough(payload, before_tokens, "no_tool_result", [])
+        return _passthrough(payload, before_estimate, "no_tool_result", [])
 
     compiled = deepcopy(payload)
     changed_blocks = 0
@@ -77,14 +80,15 @@ def compile_anthropic_tool_context(
             reasons.append(compressed.reason)
 
     if changed_blocks == 0:
-        return _passthrough(payload, before_tokens, "no_eligible_tool_result", [])
+        return _passthrough(payload, before_estimate, "no_eligible_tool_result", [])
 
     if not validate_anthropic_compiled_payload(compiled):
-        return _passthrough(payload, before_tokens, "compiled_payload_invalid", [])
+        return _passthrough(payload, before_estimate, "compiled_payload_invalid", [])
 
-    after_tokens = estimate_payload_tokens(compiled)
+    after_estimate = estimate_payload_tokens_detailed(compiled)
+    after_tokens = after_estimate.tokens
     if after_tokens >= before_tokens:
-        return _passthrough(payload, before_tokens, "no_token_gain", [])
+        return _passthrough(payload, before_estimate, "no_token_gain", [])
 
     return StructuredCompileResult(
         status="structured_compile_success",
@@ -92,6 +96,8 @@ def compile_anthropic_tool_context(
         original_token_estimate=before_tokens,
         compiled_token_estimate=after_tokens,
         compression_ratio=compression_ratio(before_tokens, after_tokens),
+        token_estimator_name=before_estimate.estimator_name,
+        token_estimator_confidence=before_estimate.estimator_confidence,
         changed_blocks=changed_blocks,
         reason=",".join(sorted(set(reasons))) or "deterministic_extract",
     )
@@ -99,16 +105,18 @@ def compile_anthropic_tool_context(
 
 def _passthrough(
     payload: Dict[str, Any],
-    before_tokens: int,
+    before_estimate: Any,
     reason: str,
     issues: List[str],
 ) -> StructuredCompileResult:
     return StructuredCompileResult(
         status="structured_compile_passthrough",
         payload=payload,
-        original_token_estimate=before_tokens,
-        compiled_token_estimate=before_tokens,
+        original_token_estimate=before_estimate.tokens,
+        compiled_token_estimate=before_estimate.tokens,
         compression_ratio=0.0,
+        token_estimator_name=before_estimate.estimator_name,
+        token_estimator_confidence=before_estimate.estimator_confidence,
         changed_blocks=0,
         reason=reason,
         issues=issues,
