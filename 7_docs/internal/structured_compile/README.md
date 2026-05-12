@@ -4,7 +4,7 @@
 
 - Created: 2026-05-13
 - Product line: OmniMemora structured context compilation
-- Current status: SC-010 real compile distribution telemetry repo-validated
+- Current status: SC-010 through SC-014 repo-validated
 - Supersedes phase6 as the active engineering line for compile capability work.
 
 ## Product Target
