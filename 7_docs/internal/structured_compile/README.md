@@ -13,6 +13,8 @@ OmniMemora compile should become a protocol-aware structured context compiler, n
 
 The compiler must reduce real token/cost usage while preserving the provider message graph needed by agent clients such as Claude Code and OpenClaw.
 
+Long-term traffic-control principle: OmniMemora should remain weakly intrusive at the client layer while making the local `18011` product ingress the preferred control point for LLM traffic, AI tool traffic, tool-result shaping, token/cost accounting, and later structured compilation. Direct client-to-provider or client-to-CLI paths are temporary fallbacks, not the target product shape.
+
 ## Current Baseline
 
 - Product framework exists: desktop control/display surface, `18011` ingress, `8765` memory plane, adapter routing, meter/read-model, promotion workflow, and validation records.
@@ -896,6 +898,43 @@ Exit:
 
 - Repo tests prove route registration, mmx command construction, bounded output, unsupported provider rejection, and bounded backend failure detail.
 - Running reality is not claimed until the adapter is promoted and OpenClaw is configured to call the OmniMemora search endpoint.
+
+### SC-022 - Tool Plane Running Promotion
+
+Goal: promote the repo candidate from SC-021 into the current local running adapter and prove the search endpoint is healthy without changing OpenClaw behavior yet.
+
+Status: planned.
+
+Required:
+
+- Promote adapter through `docs/phase6/PROMOTION_USAGE_GOVERNANCE.md`.
+- Verify `18011 /health`.
+- Verify `POST /tools/search` with a low-risk query and bounded timeout.
+- Verify `/metrics/core_capabilities` and `/compile/status` remain responsive.
+- Keep the conclusion scoped to running OmniMemora adapter capability only.
+
+Boundary:
+
+- Do not change OpenClaw configuration in SC-022.
+- Do not start `5173`.
+- Do not claim OpenClaw `web_search` is routed through OmniMemora until a separate integration batch proves it.
+
+### SC-023 - OpenClaw Search Routing Integration Plan
+
+Goal: decide the smallest weak-intrusion way to make OpenClaw `web_search` call OmniMemora `/tools/search` instead of a direct external provider or direct CLI fallback.
+
+Status: planned.
+
+Preferred path:
+
+- Use an OpenClaw-supported provider/plugin/config hook if one exists.
+- If no supported hook exists, keep the current direct fallback and record the missing product integration boundary.
+- Do not patch OpenClaw internals blindly from OmniMemora.
+
+Exit:
+
+- Record the exact OpenClaw config surface or plugin surface to change.
+- Only proceed to running mutation after the config surface is clear and reversible.
 
 ## Success Criteria
 
