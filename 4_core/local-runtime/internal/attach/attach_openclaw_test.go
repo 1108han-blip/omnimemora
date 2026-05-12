@@ -18,9 +18,6 @@ func TestProductAdapterEndpointsDefaultAndOverride(t *testing.T) {
 		if got := ProductAdapterMCPEndpoint(); got != "http://127.0.0.1:18011/mcp" {
 			t.Fatalf("expected default mcp endpoint, got %s", got)
 		}
-		if got := ProductAdapterOpenClawMCPEndpoint(); got != "http://127.0.0.1:18011/sse" {
-			t.Fatalf("expected default OpenClaw mcp endpoint, got %s", got)
-		}
 		if got := ProductAdapterResponsesEndpoint(); got != "http://127.0.0.1:18011/v1" {
 			t.Fatalf("expected default responses endpoint, got %s", got)
 		}
@@ -33,9 +30,6 @@ func TestProductAdapterEndpointsDefaultAndOverride(t *testing.T) {
 		}
 		if got := ProductAdapterMCPEndpoint(); got != "http://127.0.0.1:18041/mcp" {
 			t.Fatalf("expected overridden mcp endpoint, got %s", got)
-		}
-		if got := ProductAdapterOpenClawMCPEndpoint(); got != "http://127.0.0.1:18041/sse" {
-			t.Fatalf("expected overridden OpenClaw mcp endpoint, got %s", got)
 		}
 		if got := ProductAdapterResponsesEndpoint(); got != "http://127.0.0.1:18041/v1" {
 			t.Fatalf("expected overridden responses endpoint, got %s", got)
@@ -69,6 +63,14 @@ func TestAttachOpenClawInheritedMainUpdatesGlobalLayerOnly(t *testing.T) {
 				},
 			},
 		},
+		"mcp": map[string]interface{}{
+			"servers": map[string]interface{}{
+				"omnimemora": map[string]interface{}{
+					"type": "http",
+					"url":  "http://127.0.0.1:18041/sse",
+				},
+			},
+		},
 	}
 	originalAgent := map[string]interface{}{
 		"providers": map[string]interface{}{
@@ -89,15 +91,9 @@ func TestAttachOpenClawInheritedMainUpdatesGlobalLayerOnly(t *testing.T) {
 	updatedGlobal := readJSONFile(t, globalPath)
 	updatedAgent := readJSONFile(t, agentModelsPath)
 
-	if !hasOpenClawMCPAttachment(updatedGlobal, 18041) {
-		t.Fatalf("expected global config to contain omnimemora MCP attachment")
-	}
+	assertNoOpenClawMCPEntry(t, updatedGlobal)
 	if !hasOpenClawAttachMarker(updatedGlobal, 18041) {
 		t.Fatalf("expected global config to contain stable OpenClaw attach marker")
-	}
-	globalMCP := (((updatedGlobal["mcp"].(map[string]interface{}))["servers"].(map[string]interface{}))["omnimemora"].(map[string]interface{}))["url"]
-	if globalMCP != "http://127.0.0.1:18041/sse" {
-		t.Fatalf("expected OpenClaw MCP attachment to use /sse, got %v", globalMCP)
 	}
 
 	globalProviders := openClawGlobalProviders(updatedGlobal)
@@ -115,7 +111,7 @@ func TestAttachOpenClawInheritedMainUpdatesGlobalLayerOnly(t *testing.T) {
 	}
 
 	if !isOpenClawAttached(18041) {
-		t.Fatalf("expected OpenClaw attach detection to require both MCP and effective ingress")
+		t.Fatalf("expected OpenClaw attach detection to require marker and effective ingress")
 	}
 
 	if err := DetachOpenClaw(); err != nil {
@@ -171,15 +167,9 @@ func TestAttachOpenClawAgentOverrideUpdatesAgentLayerOnly(t *testing.T) {
 	updatedGlobal := readJSONFile(t, globalPath)
 	updatedAgent := readJSONFile(t, agentModelsPath)
 
-	if !hasOpenClawMCPAttachment(updatedGlobal, 18041) {
-		t.Fatalf("expected global config to contain omnimemora MCP attachment")
-	}
+	assertNoOpenClawMCPEntry(t, updatedGlobal)
 	if !hasOpenClawAttachMarker(updatedGlobal, 18041) {
 		t.Fatalf("expected global config to contain stable OpenClaw attach marker")
-	}
-	globalMCP := (((updatedGlobal["mcp"].(map[string]interface{}))["servers"].(map[string]interface{}))["omnimemora"].(map[string]interface{}))["url"]
-	if globalMCP != "http://127.0.0.1:18041/sse" {
-		t.Fatalf("expected OpenClaw MCP attachment to use /sse, got %v", globalMCP)
 	}
 
 	globalProviders := openClawGlobalProviders(updatedGlobal)
@@ -211,7 +201,7 @@ func TestAttachOpenClawAgentOverrideUpdatesAgentLayerOnly(t *testing.T) {
 	assertJSONFileEquals(t, agentModelsPath, originalAgent)
 }
 
-func TestIsAttachedOpenClawRequiresMCPAndStableMarker(t *testing.T) {
+func TestIsAttachedOpenClawRequiresProductIngressAndStableMarker(t *testing.T) {
 	tmpHome := t.TempDir()
 	t.Setenv("HOME", tmpHome)
 	t.Setenv("OMNIMEMORA_ADAPTER_PORT", "18041")
@@ -240,21 +230,14 @@ func TestIsAttachedOpenClawRequiresMCPAndStableMarker(t *testing.T) {
 	writeJSONFile(t, agentModelsPath, map[string]interface{}{"providers": map[string]interface{}{}})
 
 	if IsAttached(AgentOpenClaw, 18041) {
-		t.Fatalf("expected attach detection to fail without MCP and marker")
+		t.Fatalf("expected attach detection to fail without marker")
 	}
 
 	globalCfg := readJSONFile(t, globalPath)
-	ensureOpenClawMCPAttachment(globalCfg)
-	writeJSONFile(t, globalPath, globalCfg)
-	if IsAttached(AgentOpenClaw, 18041) {
-		t.Fatalf("expected attach detection to fail when marker is missing")
-	}
-
-	globalCfg = readJSONFile(t, globalPath)
 	ensureOpenClawAttachMarker(globalCfg, "minimax")
 	writeJSONFile(t, globalPath, globalCfg)
 	if !IsAttached(AgentOpenClaw, 18041) {
-		t.Fatalf("expected attach detection to pass when MCP and marker are both present")
+		t.Fatalf("expected attach detection to pass when marker and product ingress are both present")
 	}
 
 	globalCfg = readJSONFile(t, globalPath)
@@ -263,8 +246,27 @@ func TestIsAttachedOpenClawRequiresMCPAndStableMarker(t *testing.T) {
 	minimax["baseUrl"] = "https://api.minimaxi.com/anthropic/v1"
 	globalProviders["minimax"] = minimax
 	writeJSONFile(t, globalPath, globalCfg)
+	if IsAttached(AgentOpenClaw, 18041) {
+		t.Fatalf("expected attach detection to fail when effective provider no longer targets product ingress")
+	}
+
+	minimax["baseUrl"] = "http://127.0.0.1:18041/llm"
+	globalProviders["minimax"] = minimax
+	writeJSONFile(t, globalPath, globalCfg)
 	if !IsAttached(AgentOpenClaw, 18041) {
-		t.Fatalf("expected attach detection to ignore provider baseUrl rewrite")
+		t.Fatalf("expected attach detection to pass again after provider targets product ingress")
+	}
+
+	globalCfg = readJSONFile(t, globalPath)
+	mcp := ensureStringMap(globalCfg, "mcp")
+	servers := ensureStringMap(mcp, "servers")
+	servers["omnimemora"] = map[string]interface{}{
+		"type": "http",
+		"url":  "http://127.0.0.1:18041/sse",
+	}
+	writeJSONFile(t, globalPath, globalCfg)
+	if !IsAttached(AgentOpenClaw, 18041) {
+		t.Fatalf("expected legacy MCP entry to be ignored for product-ingress attach detection")
 	}
 
 	globalCfg = readJSONFile(t, globalPath)
@@ -318,6 +320,21 @@ func readJSONFile(t *testing.T, path string) map[string]interface{} {
 		t.Fatalf("unmarshal %s: %v", path, err)
 	}
 	return value
+}
+
+func assertNoOpenClawMCPEntry(t *testing.T, cfg map[string]interface{}) {
+	t.Helper()
+	mcp, ok := asStringMap(cfg["mcp"])
+	if !ok {
+		return
+	}
+	servers, ok := asStringMap(mcp["servers"])
+	if !ok {
+		return
+	}
+	if _, ok := servers["omnimemora"]; ok {
+		t.Fatalf("expected no omnimemora MCP server config")
+	}
 }
 
 func assertJSONFileEquals(t *testing.T, path string, expected map[string]interface{}) {
@@ -383,11 +400,16 @@ func TestAttachOpenClawSucceedsEvenWhenValidateFails(t *testing.T) {
 	}
 
 	updatedGlobal := readJSONFile(t, globalPath)
-	if !hasOpenClawMCPAttachment(updatedGlobal, 18041) {
-		t.Fatalf("expected global config to contain omnimemora MCP attachment")
-	}
+	assertNoOpenClawMCPEntry(t, updatedGlobal)
 	if !hasOpenClawAttachMarker(updatedGlobal, 18041) {
 		t.Fatalf("expected global config to contain stable OpenClaw attach marker")
+	}
+	resolved, err := loadOpenClawResolvedConfig()
+	if err != nil {
+		t.Fatalf("expected OpenClaw resolved config: %v", err)
+	}
+	if !hasOpenClawEffectiveProductIngress(resolved, 18041) {
+		t.Fatalf("expected effective provider to route via product ingress")
 	}
 
 	if !isOpenClawAttached(18041) {

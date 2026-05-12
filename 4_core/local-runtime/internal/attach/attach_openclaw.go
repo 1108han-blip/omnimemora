@@ -56,7 +56,7 @@ func AttachOpenClaw() *AttachResult {
 		return result
 	}
 
-	ensureOpenClawMCPAttachment(resolved.globalCfg)
+	removeOpenClawMCPAttachment(resolved.globalCfg)
 	ensureOpenClawAttachMarker(resolved.globalCfg, resolved.providerID)
 
 	targetCfg := resolved.globalCfg
@@ -172,20 +172,16 @@ func DetachOpenClaw() error {
 }
 
 func isOpenClawAttached(port int) bool {
-	globalPath, err := GetConfigPath(AgentOpenClaw)
-	if err != nil {
-		return false
-	}
-	globalCfg, err := ReadConfig(globalPath)
+	resolved, err := loadOpenClawResolvedConfig()
 	if err != nil {
 		return false
 	}
 
-	if !hasOpenClawMCPAttachment(globalCfg, port) {
+	if !hasOpenClawAttachMarker(resolved.globalCfg, port) {
 		return false
 	}
 
-	return hasOpenClawAttachMarker(globalCfg, port)
+	return hasOpenClawEffectiveProductIngress(resolved, port)
 }
 
 func loadOpenClawResolvedConfig() (*openClawResolvedConfig, error) {
@@ -277,18 +273,7 @@ func openClawProviderID(model string) string {
 	return strings.TrimSpace(head)
 }
 
-func ensureOpenClawMCPAttachment(cfg map[string]interface{}) {
-	mcp := ensureStringMap(cfg, "mcp")
-	servers := ensureStringMap(mcp, "servers")
-	entry := ensureStringMap(servers, "omnimemora")
-	entry["url"] = ProductAdapterOpenClawMCPEndpoint()
-	entry["type"] = "http"
-	servers["omnimemora"] = entry
-	mcp["servers"] = servers
-	cfg["mcp"] = mcp
-}
-
-func hasOpenClawMCPAttachment(cfg map[string]interface{}, port int) bool {
+func removeOpenClawMCPAttachment(cfg map[string]interface{}) bool {
 	mcp, ok := asStringMap(cfg["mcp"])
 	if !ok {
 		return false
@@ -297,12 +282,21 @@ func hasOpenClawMCPAttachment(cfg map[string]interface{}, port int) bool {
 	if !ok {
 		return false
 	}
-	entry, ok := asStringMap(servers["omnimemora"])
-	if !ok {
+	if _, ok := servers["omnimemora"]; !ok {
 		return false
 	}
-	rawURL, _ := entry["url"].(string)
-	return openClawTargetsProductSSE(rawURL, port)
+	delete(servers, "omnimemora")
+	if len(servers) == 0 {
+		delete(mcp, "servers")
+	} else {
+		mcp["servers"] = servers
+	}
+	if len(mcp) == 0 {
+		delete(cfg, "mcp")
+	} else {
+		cfg["mcp"] = mcp
+	}
+	return true
 }
 
 func openClawMarkerPath() (string, error) {
@@ -323,7 +317,6 @@ func ensureOpenClawAttachMarker(cfg map[string]interface{}, providerID string) {
 		"agent_id":      openClawMainAgentID,
 		"provider_id":   strings.TrimSpace(providerID),
 		"product_entry": ProductAdapterEndpoint(),
-		"mcp_url":       ProductAdapterOpenClawMCPEndpoint(),
 	}
 	data, err := json.MarshalIndent(marker, "", "  ")
 	if err != nil {
@@ -361,8 +354,7 @@ func hasOpenClawAttachMarker(cfg map[string]interface{}, port int) bool {
 	if !openClawTargetsProductIngress(productEntry, port) {
 		return false
 	}
-	mcpURL, _ := marker["mcp_url"].(string)
-	return openClawTargetsProductSSE(mcpURL, port)
+	return true
 }
 
 func removeOpenClawAttachMarker(cfg map[string]interface{}) bool {
@@ -374,25 +366,21 @@ func removeOpenClawAttachMarker(cfg map[string]interface{}) bool {
 	return err == nil || os.IsNotExist(err)
 }
 
-func openClawTargetsProductSSE(raw string, port int) bool {
-	parsed, err := url.Parse(strings.TrimSpace(raw))
-	if err != nil {
-		return false
-	}
-	if parsed.Hostname() != "127.0.0.1" && !strings.EqualFold(parsed.Hostname(), "localhost") {
-		return false
-	}
-	if parsed.Port() != fmt.Sprintf("%d", port) {
-		return false
-	}
-	return strings.TrimRight(parsed.Path, "/") == "/sse"
-}
-
 func openClawEffectiveProviders(resolved *openClawResolvedConfig) map[string]interface{} {
 	if resolved.effectiveLayer == openClawConfigLayerAgent {
 		return openClawAgentProviders(resolved.agentCfg)
 	}
 	return openClawGlobalProviders(resolved.globalCfg)
+}
+
+func hasOpenClawEffectiveProductIngress(resolved *openClawResolvedConfig, port int) bool {
+	providers := openClawEffectiveProviders(resolved)
+	provider, ok := asStringMap(providers[resolved.providerID])
+	if !ok {
+		return false
+	}
+	baseURL, _ := provider["baseUrl"].(string)
+	return openClawTargetsProductIngress(baseURL, port)
 }
 
 func openClawGlobalProviders(cfg map[string]interface{}) map[string]interface{} {
