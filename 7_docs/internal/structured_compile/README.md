@@ -519,16 +519,24 @@ Repo validation:
 
 Goal: learn from full-context-success vs compiled-context-failure cases without retaining raw user content.
 
+Status: repo reality validated on 2026-05-13. No running promotion was performed in this batch.
+
 Implementation:
 
-- Store only anonymized minimal fields when explicitly enabled.
-- Required fields: compile status, reason, issue codes, protocol, agent family, token estimates, and safe classifier labels.
-- No raw user prompt, raw tool output, raw memory content, or provider response body.
+- Added `context_compiler/failure_samples.py`.
+- Store only anonymized minimal fields when explicitly enabled by `OMNIMEMORA_STRUCTURED_COMPILE_FAILURE_SAMPLES`.
+- Stored fields: compile status, reason, issue codes, protocol, agent family, token estimates, estimator metadata, changed block count, and timestamp.
+- No raw user prompt, raw tool output, raw memory content, provider response body, or full request messages.
 
 Boundary:
 
 - Disabled by default.
 - 7-day retention cap applies.
+
+Repo validation:
+
+- `test_context_compiler_failure_samples.py` and `test_gateway_compile_skill_suggestions.py`: `8 passed`.
+- `py_compile`: passed for `failure_samples.py`, `gateway_compile.py`, and the failure sample tests.
 
 ### SC-014 - Offline Candidate Compression Evaluation
 

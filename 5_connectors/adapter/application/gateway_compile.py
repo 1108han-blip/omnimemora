@@ -483,6 +483,24 @@ def _maybe_run_structured_compile(
         payload,
         max_tool_result_chars=int(getattr(config, "structured_compile_max_tool_result_chars", 1200) or 1200),
     )
+    if result.status != "structured_compile_success":
+        try:
+            from .context_compiler.failure_samples import record_failure_sample
+
+            record_failure_sample(
+                status=result.status,
+                reason=result.reason,
+                issues=result.issues,
+                protocol=normalized.get("protocol", "unknown"),
+                agent_family=agent_id,
+                original_token_estimate=result.original_token_estimate,
+                compiled_token_estimate=result.compiled_token_estimate,
+                token_estimator_name=result.token_estimator_name,
+                token_estimator_confidence=result.token_estimator_confidence,
+                changed_blocks=result.changed_blocks,
+            )
+        except Exception:
+            pass
     meta = _build_meta(
         status=result.status,
         selected_count=0,
