@@ -1,7 +1,9 @@
 import unittest
+import gzip
 from importlib import import_module
 from types import SimpleNamespace
 import httpx
+from fastapi.responses import StreamingResponse
 
 
 llm_proxy = import_module("5_connectors.adapter.llm_proxy")
@@ -82,6 +84,49 @@ class TestLlmProxyAgentDetection(unittest.TestCase):
         self.assertNotIn("content-length", {key.lower() for key in forwarded})
         self.assertNotIn("content-encoding", {key.lower() for key in forwarded})
         self.assertEqual(forwarded["x-ratelimit-remaining"], "99")
+
+    def test_streaming_response_header_copy_drops_transport_lengths(self):
+        headers = httpx.Headers(
+            {
+                "content-length": "999",
+                "content-encoding": "gzip",
+                "x-request-id": "upstream-req-1",
+                "x-ratelimit-remaining": "98",
+            }
+        )
+        response = StreamingResponse(iter([b"hello"]), media_type="text/event-stream")
+
+        llm_proxy._copy_upstream_headers_to_response(response, headers)
+
+        forwarded = {key.lower(): value for key, value in response.headers.items()}
+        self.assertNotIn("content-length", forwarded)
+        self.assertNotIn("content-encoding", forwarded)
+        self.assertEqual(response.headers["x-request-id"], "upstream-req-1")
+        self.assertEqual(response.headers["x-ratelimit-remaining"], "98")
+
+    def test_non_streaming_passthrough_recomputes_content_length(self):
+        upstream_resp = httpx.Response(
+            200,
+            content=gzip.compress(b"{}"),
+            headers={
+                "content-type": "application/json",
+                "content-length": "999",
+                "content-encoding": "gzip",
+                "x-request-id": "upstream-req-2",
+            },
+        )
+
+        response = llm_proxy._build_passthrough_response(
+            request_id="req-header-safe",
+            route_label="/llm/v1/messages",
+            upstream_resp=upstream_resp,
+            fallback_media_type="application/json",
+        )
+
+        forwarded = {key.lower(): value for key, value in response.headers.items()}
+        self.assertEqual(forwarded["content-length"], "2")
+        self.assertNotIn("content-encoding", forwarded)
+        self.assertEqual(response.headers["x-request-id"], "upstream-req-2")
 
     def test_openclaw_query_extraction_skips_trailing_control_metadata(self):
         metadata = """Sender (untrusted metadata):

@@ -109,6 +109,7 @@ _OMNI_HOP_BY_HOP_HEADERS = {
     "transfer-encoding",
     "upgrade",
     "content-length",
+    "content-encoding",
 }
 
 _OMNI_COMPARE_HEADERS = {
@@ -212,8 +213,11 @@ _HOP_BY_HOP_RESPONSE_HEADERS = {
     "proxy-authorization",
     "te",
     "trailer",
+    "trailers",
     "transfer-encoding",
     "upgrade",
+    "content-length",
+    "content-encoding",
 }
 
 _DIAGNOSTIC_COMPARE_HEADERS = {
@@ -231,9 +235,11 @@ _HOP_BY_HOP_RESPONSE_HEADERS = {
     "proxy-authorization",
     "te",
     "trailer",
+    "trailers",
     "transfer-encoding",
     "upgrade",
     "content-length",
+    "content-encoding",
 }
 
 BYPASS_PROXY_TRANSFORM = os.getenv("OMNIMEMORA_BYPASS_PROXY_TRANSFORM", "false").lower() == "true"
@@ -245,10 +251,12 @@ _HOP_BY_HOP_HEADERS = {
     "proxy-authenticate",
     "proxy-authorization",
     "te",
+    "trailer",
     "trailers",
     "transfer-encoding",
     "upgrade",
     "content-length",
+    "content-encoding",
 }
 
 
@@ -539,9 +547,11 @@ _HOP_BY_HOP_HEADERS = {
     "proxy-authorization",
     "te",
     "trailer",
+    "trailers",
     "transfer-encoding",
     "upgrade",
     "content-length",
+    "content-encoding",
 }
 
 
@@ -621,9 +631,11 @@ _HOP_BY_HOP_RESPONSE_HEADERS = {
     "proxy-authorization",
     "te",
     "trailer",
+    "trailers",
     "transfer-encoding",
     "upgrade",
     "content-length",
+    "content-encoding",
 }
 
 
