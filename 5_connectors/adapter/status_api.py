@@ -136,9 +136,14 @@ async def compile_status(response: Response, window_minutes: int = 30):
     {
       "claude_code": {
         "proxied_requests": 20,
-        "compile_success": 18,
+        "compile_success": 14,
+        "structured_compile_success": 3,
+        "structured_compile_passthrough": 2,
         "compile_skipped": 1,
-        "compile_failed": 1,
+        "compile_failed": 0,
+        "status_counts": {"compile_success": 14, "structured_compile_success": 3, "structured_compile_passthrough": 2, "compile_skipped": 1},
+        "status_shares": {"compile_success": 0.7, "structured_compile_success": 0.15, "structured_compile_passthrough": 0.1, "compile_skipped": 0.05},
+        "compile_token_savings": {"saved_token_estimate": 4200, "savings_ratio": 0.31},
         "avg_compression_ratio": 0.68,
         "avg_selected_memories": 3.2,
         "last_seen": 1710000000

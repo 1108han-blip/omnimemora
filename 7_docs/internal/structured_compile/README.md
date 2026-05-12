@@ -4,7 +4,7 @@
 
 - Created: 2026-05-13
 - Product line: OmniMemora structured context compilation
-- Current status: SC-009 adapter lifecycle upgraded to warning-clean running reality
+- Current status: SC-010 real compile distribution telemetry repo-validated
 - Supersedes phase6 as the active engineering line for compile capability work.
 
 ## Product Target
@@ -433,6 +433,103 @@ Running evidence:
   - original_token_estimate: `2261`
   - compiled_token_estimate: `720`
   - compression_ratio: `0.6815568332596196`
+
+### SC-010 - Real Compile Distribution Telemetry
+
+Goal: make structured compile coverage measurable on real traffic before expanding compressor scope.
+
+Status: repo reality validated on 2026-05-13. No running promotion was performed in this batch.
+
+Implementation:
+
+- Extend compile telemetry summaries without adding a new hot-path persistence system.
+- Count all compile statuses, including:
+  - `structured_compile_success`
+  - `structured_compile_passthrough`
+  - `compile_success`
+  - `compile_skipped`
+  - `compile_failed`
+- Track request share per status, estimated compile-token savings, and structured compile success/passthrough share.
+- Keep reads bounded to recent compile events; do not scan historical logs.
+- Preserve 7-day internal log retention.
+- Expose the new fields through the existing `/compile/status` diagnostic surface.
+
+Exit:
+
+- `/compile/status` exposes enough distribution data to answer: "how often do real requests actually save tokens?" Satisfied in repo reality.
+- Existing `compile_success`, `compile_skipped`, and `compile_failed` fields remain backward compatible. Satisfied by preserving the old fields and adding separate structured fields.
+- No new background task, no new raw payload retention, and no user-memory mutation. Satisfied by reusing bounded compile event summaries.
+
+Repo validation:
+
+- `test_compile_store_distribution_summary.py`, `test_llm_proxy_compile_event_persistence.py`, and `test_context_compiler_structured_compile.py`: `9 passed`.
+- `test_main_assembly_smoke.py` and `test_compile_orchestrator_enforcement_trace.py`: `9 passed`, with pre-existing `datetime.utcnow()` deprecation warnings only.
+- `py_compile`: passed for `compile_store.py`, `status_api.py`, and the new distribution test.
+- `git diff --check`: passed.
+
+### SC-011 - Provider Token Estimate Upgrade
+
+Goal: reduce the gap between current char/3 estimates and provider-visible token accounting.
+
+Implementation:
+
+- Add a tokenizer interface under `context_compiler/metrics.py` or a focused sibling module.
+- Prefer provider-native or library-backed tokenizers only when available locally and fast.
+- Fallback remains deterministic char-based estimation.
+- Record estimator name/confidence in compile metadata.
+
+Boundary:
+
+- No network call in token estimation.
+- No provider-specific routing decision based only on estimated tokens.
+
+### SC-012 - Compressor Type Expansion
+
+Goal: improve real savings by using specialized deterministic compressors for common agent tool outputs.
+
+Priority types:
+
+- search results
+- file reads
+- logs and stack traces
+- diffs
+- test output
+
+Boundary:
+
+- Compress only payload blocks classified as old or oversized tool results.
+- Preserve latest tool result and all provider protocol fields.
+- Fallback to passthrough on classifier uncertainty.
+
+### SC-013 - Minimal Failure Samples
+
+Goal: learn from full-context-success vs compiled-context-failure cases without retaining raw user content.
+
+Implementation:
+
+- Store only anonymized minimal fields when explicitly enabled.
+- Required fields: compile status, reason, issue codes, protocol, agent family, token estimates, and safe classifier labels.
+- No raw user prompt, raw tool output, raw memory content, or provider response body.
+
+Boundary:
+
+- Disabled by default.
+- 7-day retention cap applies.
+
+### SC-014 - Offline Candidate Compression Evaluation
+
+Goal: evaluate LLMLingua-like or other model-based compressors without slowing upstream-critical requests.
+
+Implementation:
+
+- Use the existing offline adapter interface from SC-005.
+- Compare against deterministic baseline on curated anonymized text blocks.
+- Promote only deterministic or proven-low-latency improvements into SC-012-style compressors.
+
+Boundary:
+
+- No model download, model inference, or network dependency in the hot path.
+- Candidate results are research evidence, not product savings claims.
 
 ## Success Criteria
 

@@ -134,7 +134,55 @@ Roadmap 愿景一致性锚点：
 **收口日期**：2026-04-20（commit `d9959e1`）
 
 > Phase 5 is explicitly optional. The repo defaults to local-first operation. Cloud control enhancements are only pursued when explicitly prioritized.
-> Phase 5 是当前产品的最终阶段；无更高 roadmap 阶段定义时，repo 保持 Phase 5 本地优先运行。
+
+---
+
+## Phase 6（内部治理工作流，已收口）
+
+**目标**：把受控 beta、本地 promotion、运行证据、cloud-local sync、桌面分发表面收口为可操作产品线。
+
+**定位**：Phase 6 是 internal historical workstream，不作为产品价值能力扩张阶段。
+
+**验证**：
+- promotion workflow 和 evidence routing 已收口 ✅
+- desktop beta 受控发布链路已收口 ✅
+- `18011` / `8765` / Desktop GUI 边界已固定 ✅
+- `5173` 已降为 legacy/dev surface ✅
+
+**对应宪法**：
+- Local First
+- Explicit User Control
+- Product Path Truth
+
+**收口日期**：2026-05-13
+
+---
+
+## Phase 7（当前主线）：Structured Compile MVP
+
+**目标**：真正实现 OmniMemora 的协议安全结构化编译能力，在真实 agent 请求中节省 token 和成本，同时保持上游协议语义不变。
+
+**核心验证**：
+- 真实用户请求进入 `:18011` 后可被结构化解析、保护、压缩、重建。
+- tool graph、role 顺序、tool id、tool result 对应关系不被破坏。
+- 结构化编译成功时，`real_input_saved_tokens` 和 compile token delta 均为正。
+- passthrough / skipped / structured_compile_success 的真实流量分布可观测。
+- 编译热路径只使用本地确定性逻辑，不依赖 LLM summarization、云端策略拉取、历史文件扫描或慢持久化。
+
+**第一批能力**：
+- SC-010：真实编译分布统计。
+- SC-011：provider tokenizer 或更接近 provider 的 token 估算。
+- SC-012：按搜索结果、文件读取、日志、diff、测试输出分型压缩。
+- SC-013：匿名最小失败样本机制。
+- SC-014：离线候选压缩评估，LLMLingua 类方法不得进入上游前热路径。
+
+**对应宪法**：
+- Token Savings 是核心产品能力
+- Minimal Exposure to LLM
+- Transparent Forwarding
+- MVP first; token saving first; no complexity expansion
+
+**当前计划入口**：`7_docs/internal/structured_compile/README.md`
 
 ---
 

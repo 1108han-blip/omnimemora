@@ -137,8 +137,13 @@ def summarize_compile_status(window_minutes: int = 30) -> Dict[str, Dict[str, An
             "claude_code": {
                 "proxied_requests": int,
                 "compile_success": int,
+                "structured_compile_success": int,
+                "structured_compile_passthrough": int,
                 "compile_skipped": int,
                 "compile_failed": int,
+                "status_counts": dict,
+                "status_shares": dict,
+                "compile_token_savings": dict,
                 "avg_compression_ratio": float,
                 "avg_selected_memories": float,
                 "last_seen": float | None,
@@ -157,24 +162,46 @@ def summarize_compile_status(window_minutes: int = 30) -> Dict[str, Dict[str, An
             stats[agent] = {
                 "proxied_requests": 0,
                 "compile_success": 0,
+                "structured_compile_success": 0,
+                "structured_compile_passthrough": 0,
                 "compile_skipped": 0,
                 "compile_failed": 0,
+                "status_counts": {},
                 "compression_ratios": [],
                 "selected_counts": [],
+                "original_token_total": 0,
+                "compiled_token_total": 0,
+                "saved_token_total": 0,
                 "last_seen": None,
             }
 
         s = stats[agent]
         s["proxied_requests"] += 1
         status = event.get("compile_status", "")
+        if not status:
+            status = "unknown"
+        s["status_counts"][status] = s["status_counts"].get(status, 0) + 1
         if status == "compile_success":
             s["compile_success"] += 1
+        elif status == "structured_compile_success":
+            s["structured_compile_success"] += 1
+        elif status == "structured_compile_passthrough":
+            s["structured_compile_passthrough"] += 1
         elif status == "compile_skipped":
             s["compile_skipped"] += 1
         elif status == "compile_failed":
             s["compile_failed"] += 1
 
-        ratio = event.get("compression_ratio", 0.0)
+        original_tokens = _safe_int(event.get("original_token_estimate", 0))
+        compiled_tokens = _safe_int(event.get("compiled_token_estimate", 0))
+        if status not in {"compile_success", "structured_compile_success"} or compiled_tokens <= 0:
+            compiled_tokens = original_tokens
+        saved_tokens = max(0, original_tokens - compiled_tokens)
+        s["original_token_total"] += original_tokens
+        s["compiled_token_total"] += compiled_tokens
+        s["saved_token_total"] += saved_tokens
+
+        ratio = _safe_float(event.get("compression_ratio", 0.0))
         if ratio > 0:
             s["compression_ratios"].append(ratio)
 
@@ -191,17 +218,57 @@ def summarize_compile_status(window_minutes: int = 30) -> Dict[str, Dict[str, An
     for agent, s in stats.items():
         ratios = s["compression_ratios"]
         counts = s["selected_counts"]
+        proxied_requests = int(s["proxied_requests"])
+        status_counts = dict(sorted(s["status_counts"].items()))
+        status_shares = {
+            status: round(count / proxied_requests, 4) if proxied_requests > 0 else 0.0
+            for status, count in status_counts.items()
+        }
+        original_total = int(s["original_token_total"])
+        compiled_total = int(s["compiled_token_total"])
+        saved_total = int(s["saved_token_total"])
+        savings_ratio = round(saved_total / original_total, 4) if original_total > 0 else 0.0
         result[agent] = {
-            "proxied_requests": s["proxied_requests"],
+            "proxied_requests": proxied_requests,
             "compile_success": s["compile_success"],
+            "structured_compile_success": s["structured_compile_success"],
+            "structured_compile_passthrough": s["structured_compile_passthrough"],
             "compile_skipped": s["compile_skipped"],
             "compile_failed": s["compile_failed"],
+            "status_counts": status_counts,
+            "status_shares": status_shares,
+            "structured_compile": {
+                "success": s["structured_compile_success"],
+                "passthrough": s["structured_compile_passthrough"],
+                "success_share": status_shares.get("structured_compile_success", 0.0),
+                "passthrough_share": status_shares.get("structured_compile_passthrough", 0.0),
+            },
+            "compile_token_savings": {
+                "original_token_estimate": original_total,
+                "compiled_token_estimate": compiled_total,
+                "saved_token_estimate": saved_total,
+                "savings_ratio": savings_ratio,
+            },
             "avg_compression_ratio": round(sum(ratios) / len(ratios), 3) if ratios else 0.0,
             "avg_selected_memories": round(sum(counts) / len(counts), 1) if counts else 0.0,
             "last_seen": s["last_seen"],
         }
 
     return result
+
+
+def _safe_int(value: Any) -> int:
+    try:
+        return max(0, int(value or 0))
+    except Exception:
+        return 0
+
+
+def _safe_float(value: Any) -> float:
+    try:
+        return max(0.0, float(value or 0.0))
+    except Exception:
+        return 0.0
 
 
 # ============================================================================

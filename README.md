@@ -46,13 +46,14 @@ Agent -> Gateway (:18011) -> compile/recall/inject -> Upstream LLM
 
 ## Current Phase
 
-正式 roadmap phase：**Phase 5（已完成 — 可选）**（见 `0_blueprint/ROADMAP.md`）
+正式 roadmap phase：**Phase 7（当前主线：Structured Compile MVP）**（见 `0_blueprint/ROADMAP.md`）
 
-> **Phase 标签说明**：`7_docs/internal/phase6/` 为 **internal historical workstream**，已于 2026-04-20 收口（5 sublines 全部 PASS）。此 workstream 不改变正式 roadmap phase 编号。
+> **Phase 标签说明**：`7_docs/internal/phase6/` 为 **internal historical workstream**，已收口并保留为治理/发布历史索引。当前产品能力工程入口是 `7_docs/internal/structured_compile/README.md`。
 
 Start here:
 
 - [0_blueprint/ROADMAP.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/ROADMAP.md) — 正式 roadmap SSOT
+- [7_docs/internal/structured_compile/README.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/structured_compile/README.md) — 当前结构化编译主线
 - [0_blueprint/PRODUCT_DEFINITION.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/PRODUCT_DEFINITION.md)
 - [0_blueprint/PRODUCT_CONFIGURATION_AND_BOUNDARY_BASELINE.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/PRODUCT_CONFIGURATION_AND_BOUNDARY_BASELINE.md)
 - [9_adr/ADR-0003-interface-access-paths.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/9_adr/ADR-0003-interface-access-paths.md)
@@ -91,7 +92,7 @@ If current MVP savings UI and historical summary disagree, trust `/metrics/core_
 | `5_connectors/adapter/` | Active gateway and adapter code |
 | `4_core/local-runtime/` | Internal memory plane |
 | `6_console/demo-dashboard/` | Dashboard |
-| `7_docs/internal/phase5/` | Current phase docs index and active plans |
+| `7_docs/internal/structured_compile/` | Current structured compile mainline |
 | `7_docs/internal/phase6/plan/` | Closed phase6 workstream and post-close governance records |
 | `5_connectors/archive/` | Archived connector/plugin experiments |
 
@@ -110,4 +111,4 @@ If current MVP savings UI and historical summary disagree, trust `/metrics/core_
 - [7_docs/internal/phase6/plan/OmniMemora_Cloud_Local_Sync_Check_2026-04-30.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/phase6/plan/OmniMemora_Cloud_Local_Sync_Check_2026-04-30.md) — 云端-本地同步核对记录（2026-04-30）
 - [docs/spec/OMNIMEMORA_MVP_PROMO_2026-04-30.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/docs/spec/OMNIMEMORA_MVP_PROMO_2026-04-30.md) — 闭源受控发布宣传文案草案（MVP）
 
-> **Phase 标签说明**：内部执行阶段标签（如 `internal Phase 6 workstream`）不等同于正式 roadmap phase 改号。若 `ROADMAP.md` 未被正式更新，内部阶段标签只表示执行 workstream，不代表产品阶段编号变更。
+> **Phase 标签说明**：内部执行阶段标签（如 `internal Phase 6 workstream`）只表示执行 workstream。正式产品阶段以 `0_blueprint/ROADMAP.md` 为准。
