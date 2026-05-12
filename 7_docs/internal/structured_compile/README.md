@@ -4,7 +4,7 @@
 
 - Created: 2026-05-13
 - Product line: OmniMemora structured context compilation
-- Current status: SC-010 through SC-014 repo-validated
+- Current status: SC-015 running value gate recorded; SC-016 through SC-018 repo-validated; SC-019 pending final promotion decision
 - Supersedes phase6 as the active engineering line for compile capability work.
 
 ## Product Target
@@ -562,7 +562,7 @@ Boundary:
 
 Goal: prove the repo-validated structured compiler works in the current running product before adding more compile behavior.
 
-Status: planned.
+Status: running reality recorded on 2026-05-13.
 
 Implementation:
 
@@ -578,11 +578,45 @@ Exit:
 - `/compile/status` shows structured compile distribution fields from SC-010.
 - No evidence of upstream-critical local blocking regression.
 
+Evidence:
+
+- Initial promotion attempt with the default service directory failed as designed:
+  - command: `./tools/promotion/promotion.sh adapter`
+  - log: `tools/verification/logs/promotion_20260513_054621.log`
+  - result: `promotion_failed`
+  - primary breakpoint: `code_source_mismatch`
+  - cause: launchd was serving the beta16 app path `/Users/sc/.omnimemora/app/current`, while the default promotion target expected `/Users/sc/.omnimemora/service/current`.
+- Corrected promotion used the current app directory:
+  - command: `OMNIMEMORA_SERVICE_DIR=/Users/sc/.omnimemora/app ./tools/promotion/promotion.sh adapter`
+  - log: `tools/verification/logs/promotion_20260513_054646.log`
+  - result: `running_reality_promoted`
+  - repo revision: `1300365`
+  - marker: `/Users/sc/.omnimemora/app/current/.omnimemora_promotion_state.json`
+  - adapter pid after promotion: `49558`
+  - runtime fingerprint code source: `/Users/sc/.omnimemora/app/current/5_connectors/adapter/...`
+- Direct Claude Code shaped request through `/llm/v1/messages` returned upstream `200` in `2.571518s`, but it is not counted as a structured compile proof because running route state recorded `compile_skipped` with `compile_path=agent_route_disabled`.
+- Running OpenClaw traffic in the 10-minute window after the value gate showed:
+  - proxied requests: `4`
+  - `structured_compile_success`: `4`
+  - structured success share: `1.0`
+  - estimated saved tokens: `1550`
+  - estimated savings ratio: `0.0115`
+  - representative request ids with upstream `200`: `e3eae3da0441`, `c82803fc97ee`, `c2f0e13a40f9`, `76367a75ec33`
+- Endpoint timings sampled during the gate:
+  - `/health`: `0.086409s`
+  - `/metrics/core_capabilities`: `0.729977s`
+  - `/compile/status`: `0.109176s`
+
+Conclusion:
+
+- SC-015 proves current running OpenClaw structured compile can return upstream success with positive deterministic token saving.
+- SC-015 does not prove Claude Code structured compile in running reality because the direct Claude Code request was route-disabled in that running configuration.
+
 ### SC-016 - Golden Fixture Corpus
 
 Goal: create a stable internal fixture corpus for compiler changes.
 
-Status: planned.
+Status: repo reality validated on 2026-05-13.
 
 Implementation:
 
@@ -595,11 +629,21 @@ Boundary:
 - No raw user request content.
 - No external compressor dependency.
 
+Implementation:
+
+- Added anonymized in-test golden fixtures for `search_result`, `file_read`, `log`, `diff`, and `test_output`.
+- Each fixture declares required markers, expected output type, max chars, and a provider-valid tool graph.
+- Fixture coverage validates token reduction, required marker retention, graph preservation, latest-result protection, and top-level tool schema preservation.
+
+Repo validation:
+
+- `test_context_compiler_compressors.py`, `test_context_compiler_structured_compile.py`, and `test_context_compiler_research_adapters.py`: `16 passed`.
+
 ### SC-017 - Typed Compressor v2
 
 Goal: improve deterministic typed compressors using the golden fixture corpus.
 
-Status: planned.
+Status: repo reality validated on 2026-05-13.
 
 Implementation:
 
@@ -612,11 +656,26 @@ Boundary:
 - No LLM summarization.
 - No whole-payload compression.
 
+Implementation:
+
+- Changed typed retention order from generic head-first retention to type-priority-first retention.
+- `search_result` and `log` outputs now sample matching lines across head, middle, and tail instead of taking only the first matching lines.
+- `log` output prioritizes severe lines such as `ERROR`, `WARN`, `timeout`, and `denied`.
+- `diff` output samples diff-matched lines across the file instead of over-retaining early hunks.
+- Failure behavior remains no-gain/passthrough; latest tool result and provider protocol fields remain protected.
+
+Repo validation:
+
+- Structured compiler targeted tests: `16 passed`.
+- Gateway/compile-event/failure-sample regressions: `12 passed`.
+- `py_compile`: passed for touched compressor, research adapter, and tests.
+- `git diff --check`: passed.
+
 ### SC-018 - Internal Offline Compression Evaluation
 
 Goal: evaluate OmniMemora's own deterministic compressors over the golden corpus without external libraries.
 
-Status: planned.
+Status: repo reality validated on 2026-05-13.
 
 Implementation:
 
@@ -629,6 +688,17 @@ Boundary:
 - No external compression library.
 - No model inference or model download.
 - No network dependency.
+
+Implementation:
+
+- Extended offline corpus summaries with per-label case results.
+- Per-label summaries include changed flag, reason, output type, token estimates, saved token estimate, and compression ratio.
+- The evaluation still runs only over internal deterministic adapters.
+
+Repo validation:
+
+- `test_context_compiler_research_adapters.py`: passed with per-label case summary assertions.
+- No product hot-path import of an external compressor or model dependency was added.
 
 ### SC-019 - Promotion Decision and Product Closeout
 

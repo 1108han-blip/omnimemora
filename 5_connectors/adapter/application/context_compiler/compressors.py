@@ -18,6 +18,7 @@ IMPORTANT_LINE_RE = re.compile(
     re.IGNORECASE,
 )
 LOG_LINE_RE = re.compile(r"(\bERROR\b|\bWARN(?:ING)?\b|\bINFO\b|\bDEBUG\b|\bTRACE\b|\d{4}-\d{2}-\d{2}[T ]\d{2}:)", re.IGNORECASE)
+SEVERE_LOG_LINE_RE = re.compile(r"(\bERROR\b|\bWARN(?:ING)?\b|exception|traceback|timeout|denied)", re.IGNORECASE)
 SEARCH_LINE_RE = re.compile(r"([A-Za-z0-9_./-]+\.(py|ts|tsx|js|go|rs|md):\d+|https?://|rg:|grep:)", re.IGNORECASE)
 TEST_LINE_RE = re.compile(
     r"(FAILED|ERROR|AssertionError|Traceback|passed|failed|xfailed|xpassed|collected|"
@@ -110,12 +111,12 @@ def classify_tool_result_text(text: str) -> str:
 
     if diff_hits >= 3:
         return "diff"
+    if log_hits >= max(3, int(len(lines) * 0.25)):
+        return "log"
     if test_hits >= 2:
         return "test_output"
     if search_hits >= max(3, int(len(lines) * 0.25)):
         return "search_result"
-    if log_hits >= max(3, int(len(lines) * 0.25)):
-        return "log"
     if file_read_hits >= 2:
         return "file_read"
     return "generic"
@@ -129,25 +130,48 @@ def _select_lines_by_type(
     important_limit: int,
 ) -> List[str]:
     selected: List[str] = []
-    selected.extend(lines[:head_lines])
 
     if output_type == "diff":
-        selected.extend([line for line in lines if DIFF_LINE_RE.search(line)][: important_limit * 2])
+        selected.extend(_sample_lines([line for line in lines if DIFF_LINE_RE.search(line)], important_limit))
     elif output_type == "test_output":
         selected.extend([line for line in lines if TEST_FAILURE_RE.search(line)][:important_limit])
         selected.extend([line for line in lines if TEST_SUMMARY_RE.search(line)][:important_limit])
         selected.extend([line for line in lines if IMPORTANT_LINE_RE.search(line)][:important_limit])
     elif output_type == "log":
-        selected.extend([line for line in lines if LOG_LINE_RE.search(line) or IMPORTANT_LINE_RE.search(line)][:important_limit])
+        selected.extend([line for line in lines if SEVERE_LOG_LINE_RE.search(line)][:important_limit])
+        selected.extend(
+            _sample_lines(
+                [line for line in lines if LOG_LINE_RE.search(line) or IMPORTANT_LINE_RE.search(line)],
+                important_limit,
+            )
+        )
     elif output_type == "search_result":
-        selected.extend([line for line in lines if SEARCH_LINE_RE.search(line) or IMPORTANT_LINE_RE.search(line)][:important_limit])
+        selected.extend(
+            _sample_lines(
+                [line for line in lines if SEARCH_LINE_RE.search(line) or IMPORTANT_LINE_RE.search(line)],
+                important_limit,
+            )
+        )
     elif output_type == "file_read":
         selected.extend([line for line in lines if FILE_READ_LINE_RE.search(line) or IMPORTANT_LINE_RE.search(line)][:important_limit])
     else:
         selected.extend([line for line in lines if IMPORTANT_LINE_RE.search(line)][:important_limit])
 
+    selected.extend(lines[:head_lines])
     selected.extend(lines[-tail_lines:])
     return selected
+
+
+def _sample_lines(lines: List[str], limit: int) -> List[str]:
+    if limit <= 0 or len(lines) <= limit:
+        return lines
+
+    first_count = max(1, limit // 3)
+    middle_count = max(1, limit // 3)
+    last_count = max(1, limit - first_count - middle_count)
+    middle_start = max(0, (len(lines) // 2) - (middle_count // 2))
+    middle_end = min(len(lines), middle_start + middle_count)
+    return lines[:first_count] + lines[middle_start:middle_end] + lines[-last_count:]
 
 
 def _dedupe_preserve_order(lines: List[str]) -> List[str]:

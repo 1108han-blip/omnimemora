@@ -65,3 +65,6 @@ def test_evaluate_text_block_corpus_summarizes_candidate_savings():
     assert summary.changed_count == 2
     assert summary.saved_token_estimate > 0
     assert summary.compression_ratio > 0
+    assert [case.label for case in summary.case_summaries] == ["search", "log"]
+    assert [case.output_type for case in summary.case_summaries] == ["search_result", "log"]
+    assert all(case.saved_token_estimate > 0 for case in summary.case_summaries)
