@@ -4,7 +4,7 @@
 
 - Created: 2026-05-13
 - Product line: OmniMemora structured context compilation
-- Current status: executable roadmap baseline
+- Current status: SC-001 implemented in repo reality
 - Supersedes phase6 as the active engineering line for compile capability work.
 
 ## Product Target
@@ -108,6 +108,8 @@ Required:
 
 Goal: create the smallest protocol-aware compiler surface without changing running behavior.
 
+Status: implemented in repo reality on 2026-05-13. No orchestrator or running-path integration.
+
 Implementation:
 
 - Add `context_compiler/ir.py`.
@@ -126,8 +128,9 @@ Tests:
 
 Exit:
 
-- No running behavior change.
-- File boundaries proven.
+- No running behavior change: satisfied by design; modules are not imported by `llm_proxy.py`, `compile_orchestrator.py`, or `gateway_compile.py`.
+- File boundaries proven: `ir.py` and `anthropic_tool_graph.py` exist under `context_compiler/`.
+- Tests passed: `test_context_compiler_anthropic_tool_graph.py` covers valid pair, missing id, mismatched id, multiple tool calls, and text-only payload.
 
 ### SC-002 - Deterministic Tool-Result Compression
 
