@@ -371,6 +371,27 @@ Running evidence:
   - `/metrics/summary`: `0.005268s`
   - `/metrics/core_capabilities`: `0.223232s`
 
+### SC-008 - Current Product Surface Regression
+
+Goal: broaden validation after the warning-clean adapter promotion without reopening historical DLP/RES/archive governance tracks.
+
+Status: repo reality validated on 2026-05-13. No running behavior change was introduced.
+
+Scope:
+
+- Included current product paths: access plan, agent control and identity, agent metrics, routing state, structured compile, gateway compile, internal transport, live-flow read model, LLM proxy ingress, diagnostics surface, metrics summary-first, recommendation policy version manager, request evidence skill metadata/suggestions, runtime backend bridge, runtime bridge fallback, Track B status, and usage surface.
+- Excluded historical governance-heavy DLP/RES/archive cleanup tests from this product-upgrade gate.
+
+Fix:
+
+- Updated `test_diagnostics_surface_smoke.py` to match the current summary-first implementation: `/metrics/summary` delegates directly to `metrics_service.compute_metrics_summary`.
+
+Evidence:
+
+- Current product surface regression: `204 passed`.
+- Warning policy for this run elevated `RuntimeWarning` and `PydanticDeprecatedSince20` to errors.
+- Residual warnings were limited to FastAPI `on_event` deprecation messages in `main.py`; they were not changed in this batch because replacing startup/shutdown lifecycle handling is a separate behavior-risking migration.
+
 ## Success Criteria
 
 Repo reality:

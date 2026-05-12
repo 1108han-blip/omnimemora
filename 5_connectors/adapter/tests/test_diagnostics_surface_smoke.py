@@ -42,8 +42,8 @@ class DiagnosticsSurfaceSmokeTests(unittest.TestCase):
     def test_metrics_summary_endpoint_sets_kpi_headers_and_delegates(self):
         response = Response()
         with mock.patch.object(
-            diagnostics_surface._srm,
-            "build_metrics_summary_payload",
+            diagnostics_surface._metrics_service,
+            "compute_metrics_summary",
             return_value={"tenant": "all", "ok": True},
         ) as mocked:
             payload = asyncio.run(diagnostics_surface.get_metrics_summary(response, tenant="all"))
