@@ -4,7 +4,7 @@
 
 - Created: 2026-05-13
 - Product line: OmniMemora structured context compilation
-- Current status: SC-007 product adapter upgraded to warning-clean running reality
+- Current status: SC-009 adapter lifecycle upgraded to warning-clean running reality
 - Supersedes phase6 as the active engineering line for compile capability work.
 
 ## Product Target
@@ -391,6 +391,48 @@ Evidence:
 - Current product surface regression: `204 passed`.
 - Warning policy for this run elevated `RuntimeWarning` and `PydanticDeprecatedSince20` to errors.
 - Residual warnings were limited to FastAPI `on_event` deprecation messages in `main.py`; they were not changed in this batch because replacing startup/shutdown lifecycle handling is a separate behavior-risking migration.
+
+### SC-009 - Adapter Lifespan Migration
+
+Goal: remove FastAPI `on_event` deprecation warnings from the current product adapter while preserving startup/shutdown behavior.
+
+Status: running reality validated on 2026-05-13.
+
+Implementation:
+
+- Replaced `@app.on_event("startup")` and `@app.on_event("shutdown")` registration with a FastAPI `lifespan` context manager.
+- Kept the existing `_startup_data_lifecycle_scheduler` and `_shutdown_data_lifecycle_scheduler` function bodies unchanged.
+- Added no new background task, no new retention behavior, and no user-memory mutation.
+
+Repo validation:
+
+- `test_main_assembly_smoke.py` with `DeprecationWarning` elevated to error: `7 passed`.
+- Current product surface regression with `RuntimeWarning`, `PydanticDeprecatedSince20`, and `DeprecationWarning` elevated to errors: `204 passed`.
+- `py_compile`: passed for `5_connectors/adapter/main.py`.
+- `git diff --check`: passed.
+
+Running evidence:
+
+- Promotion log: `tools/verification/logs/promotion_20260513_044137.log`
+- Promotion result: `final_status=running_reality_promoted`, `repo_revision=5ac3bb1`, adapter pid changed from `12078` to `16053`.
+- Promotion marker: `/Users/sc/.omnimemora/service/current/.omnimemora_promotion_state.json` records `repo_revision=5ac3bb1` and `primary_breakpoint=none`.
+- Endpoint timings after promotion, before direct request:
+  - `/health`: `0.013889s`
+  - `/metrics/summary`: `0.025103s`
+  - `/metrics/core_capabilities`: `0.192821s`
+  - `/debug/runtime_fingerprint`: `0.044616s`, pid `16053`, version `2.2.0`
+- Direct product request after promotion:
+  - path: `/llm/v1/messages`
+  - agent: `claude_code`
+  - request_id: `b4faa3a23120`
+  - trace: `lifespan-upgrade-structured-compile-20260513-0442`
+  - upstream status: `200`
+  - compile_status: `structured_compile_success`
+  - compile_path: `structured_context_compile`
+  - compile_reason: `deterministic_extract`
+  - original_token_estimate: `2261`
+  - compiled_token_estimate: `720`
+  - compression_ratio: `0.6815568332596196`
 
 ## Success Criteria
 
