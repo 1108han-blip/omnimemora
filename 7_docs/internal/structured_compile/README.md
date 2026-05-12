@@ -494,19 +494,26 @@ Repo validation:
 
 Goal: improve real savings by using specialized deterministic compressors for common agent tool outputs.
 
+Status: repo reality validated on 2026-05-13. No running promotion was performed in this batch.
+
 Priority types:
 
-- search results
-- file reads
-- logs and stack traces
-- diffs
-- test output
+- search results: implemented by `search_result` classifier.
+- file reads: implemented by `file_read` classifier.
+- logs and stack traces: implemented by `log` classifier.
+- diffs: implemented by `diff` classifier.
+- test output: implemented by `test_output` classifier, with failure lines prioritized over long pass lists.
 
 Boundary:
 
 - Compress only payload blocks classified as old or oversized tool results.
 - Preserve latest tool result and all provider protocol fields.
 - Fallback to passthrough on classifier uncertainty.
+
+Repo validation:
+
+- `test_context_compiler_compressors.py`, `test_context_compiler_structured_compile.py`, and `test_context_compiler_research_adapters.py`: `13 passed`.
+- `py_compile`: passed for `compressors.py` and the compressor tests.
 
 ### SC-013 - Minimal Failure Samples
 

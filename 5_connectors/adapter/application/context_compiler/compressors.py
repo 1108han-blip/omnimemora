@@ -7,6 +7,8 @@ from dataclasses import dataclass
 from typing import List
 
 
+DIFF_LINE_RE = re.compile(r"^(diff --git|index |@@ |\+\+\+ |--- |\+[^+]|-[^-])")
+FILE_READ_LINE_RE = re.compile(r"^\s*(class |def |async def |function |export |import |from |package |func )")
 IMPORTANT_LINE_RE = re.compile(
     r"("
     r"error|exception|traceback|failed|failure|warning|timeout|denied|"
@@ -15,6 +17,15 @@ IMPORTANT_LINE_RE = re.compile(
     r")",
     re.IGNORECASE,
 )
+LOG_LINE_RE = re.compile(r"(\bERROR\b|\bWARN(?:ING)?\b|\bINFO\b|\bDEBUG\b|\bTRACE\b|\d{4}-\d{2}-\d{2}[T ]\d{2}:)", re.IGNORECASE)
+SEARCH_LINE_RE = re.compile(r"([A-Za-z0-9_./-]+\.(py|ts|tsx|js|go|rs|md):\d+|https?://|rg:|grep:)", re.IGNORECASE)
+TEST_LINE_RE = re.compile(
+    r"(FAILED|ERROR|AssertionError|Traceback|passed|failed|xfailed|xpassed|collected|"
+    r"^=+ .* =+$|^_{3,} .* _{3,}$)",
+    re.IGNORECASE,
+)
+TEST_FAILURE_RE = re.compile(r"(FAILED|ERROR|AssertionError|Traceback)", re.IGNORECASE)
+TEST_SUMMARY_RE = re.compile(r"(passed|failed|xfailed|xpassed|collected|^=+ .* =+$)", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -24,6 +35,7 @@ class CompressionResult:
     original_chars: int
     compressed_chars: int
     reason: str
+    output_type: str = "generic"
 
 
 def compress_tool_result_text(
@@ -44,23 +56,19 @@ def compress_tool_result_text(
             original_chars=original_chars,
             compressed_chars=original_chars,
             reason="under_budget",
+            output_type=classify_tool_result_text(source),
         )
 
     lines = source.splitlines()
+    output_type = classify_tool_result_text(source)
     selected: List[str] = []
 
-    selected.extend(lines[:head_lines])
-
-    important = [line for line in lines if IMPORTANT_LINE_RE.search(line)]
-    for line in important[:important_limit]:
-        selected.append(line)
-
-    selected.extend(lines[-tail_lines:])
+    selected.extend(_select_lines_by_type(lines, output_type, head_lines, tail_lines, important_limit))
     selected = _dedupe_preserve_order(selected)
 
     body = "\n".join(selected).strip()
     marker = (
-        f"[omnimemora structured compile: deterministic tool_result compression; "
+        f"[omnimemora structured compile: deterministic {output_type} compression; "
         f"original_chars={original_chars}; retained_lines={len(selected)}]"
     )
     compressed = f"{marker}\n{body}" if body else marker
@@ -72,6 +80,7 @@ def compress_tool_result_text(
             original_chars=original_chars,
             compressed_chars=original_chars,
             reason="no_gain",
+            output_type=output_type,
         )
 
     if len(compressed) > max_chars:
@@ -82,8 +91,63 @@ def compress_tool_result_text(
         changed=True,
         original_chars=original_chars,
         compressed_chars=len(compressed),
-        reason="deterministic_extract",
+        reason=f"deterministic_extract_{output_type}",
+        output_type=output_type,
     )
+
+
+def classify_tool_result_text(text: str) -> str:
+    source = str(text or "")
+    lines = source.splitlines()
+    if not lines:
+        return "generic"
+
+    diff_hits = sum(1 for line in lines if DIFF_LINE_RE.search(line))
+    test_hits = sum(1 for line in lines if TEST_LINE_RE.search(line))
+    search_hits = sum(1 for line in lines if SEARCH_LINE_RE.search(line))
+    log_hits = sum(1 for line in lines if LOG_LINE_RE.search(line))
+    file_read_hits = sum(1 for line in lines if FILE_READ_LINE_RE.search(line))
+
+    if diff_hits >= 3:
+        return "diff"
+    if test_hits >= 2:
+        return "test_output"
+    if search_hits >= max(3, int(len(lines) * 0.25)):
+        return "search_result"
+    if log_hits >= max(3, int(len(lines) * 0.25)):
+        return "log"
+    if file_read_hits >= 2:
+        return "file_read"
+    return "generic"
+
+
+def _select_lines_by_type(
+    lines: List[str],
+    output_type: str,
+    head_lines: int,
+    tail_lines: int,
+    important_limit: int,
+) -> List[str]:
+    selected: List[str] = []
+    selected.extend(lines[:head_lines])
+
+    if output_type == "diff":
+        selected.extend([line for line in lines if DIFF_LINE_RE.search(line)][: important_limit * 2])
+    elif output_type == "test_output":
+        selected.extend([line for line in lines if TEST_FAILURE_RE.search(line)][:important_limit])
+        selected.extend([line for line in lines if TEST_SUMMARY_RE.search(line)][:important_limit])
+        selected.extend([line for line in lines if IMPORTANT_LINE_RE.search(line)][:important_limit])
+    elif output_type == "log":
+        selected.extend([line for line in lines if LOG_LINE_RE.search(line) or IMPORTANT_LINE_RE.search(line)][:important_limit])
+    elif output_type == "search_result":
+        selected.extend([line for line in lines if SEARCH_LINE_RE.search(line) or IMPORTANT_LINE_RE.search(line)][:important_limit])
+    elif output_type == "file_read":
+        selected.extend([line for line in lines if FILE_READ_LINE_RE.search(line) or IMPORTANT_LINE_RE.search(line)][:important_limit])
+    else:
+        selected.extend([line for line in lines if IMPORTANT_LINE_RE.search(line)][:important_limit])
+
+    selected.extend(lines[-tail_lines:])
+    return selected
 
 
 def _dedupe_preserve_order(lines: List[str]) -> List[str]:
@@ -96,4 +160,3 @@ def _dedupe_preserve_order(lines: List[str]) -> List[str]:
         seen.add(key)
         out.append(line)
     return out
-
