@@ -28,6 +28,7 @@ import re
 import socket
 from pathlib import PurePosixPath
 from collections import deque
+from contextlib import asynccontextmanager
 
 from .config import config
 from .trace_context import REQUEST_HEADER, TRACE_HEADER, build_trace_event, ensure_request_context
@@ -147,10 +148,21 @@ _configured_cors_origins = [
     if origin.strip()
 ]
 
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    await _startup_data_lifecycle_scheduler()
+    try:
+        yield
+    finally:
+        await _shutdown_data_lifecycle_scheduler()
+
+
 app = FastAPI(
     title="Memory Adapter v2.2",
     description="memory backend 中间层：标准化 → 过滤 → 去重 → 限流 → 路由 → 转换",
-    version="2.2.0"
+    version="2.2.0",
+    lifespan=_lifespan,
 )
 
 # CORS 中间件：18011 is a local product ingress; do not expose control actions
@@ -231,7 +243,6 @@ def _skip_default_trace_write(request: Request) -> bool:
     return request_path in _ULTRA_FAST_INTERNAL_GET_PATHS
 
 
-@app.on_event("startup")
 async def _startup_data_lifecycle_scheduler() -> None:
     global _dlp_scheduler
     scheduler_mod = __import__("5_connectors.adapter.data_lifecycle.scheduler", fromlist=["dummy"])
@@ -239,7 +250,6 @@ async def _startup_data_lifecycle_scheduler() -> None:
     _dlp_scheduler.start()
 
 
-@app.on_event("shutdown")
 async def _shutdown_data_lifecycle_scheduler() -> None:
     global _dlp_scheduler
     if _dlp_scheduler is None:
