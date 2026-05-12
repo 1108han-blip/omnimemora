@@ -368,6 +368,7 @@ class Config(BaseModel):
     tool_search_timeout_seconds: float = float(os.getenv("OMNIMEMORA_TOOL_SEARCH_TIMEOUT_SECONDS", "12"))
     tool_search_max_query_chars: int = int(os.getenv("OMNIMEMORA_TOOL_SEARCH_MAX_QUERY_CHARS", "500"))
     tool_search_max_result_chars: int = int(os.getenv("OMNIMEMORA_TOOL_SEARCH_MAX_RESULT_CHARS", "6000"))
+    tool_search_mmx_path: str = os.getenv("OMNIMEMORA_TOOL_SEARCH_MMX_PATH", "")
 
     # Per-agent control modes (loaded from agent_modes.json at startup)
     agent_control: dict = {}  # {agent_id: mode} — filled by main.py from agent_modes.json

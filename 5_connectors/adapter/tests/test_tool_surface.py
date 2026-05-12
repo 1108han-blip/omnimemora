@@ -10,7 +10,8 @@ tool_surface = importlib.import_module("5_connectors.adapter.tool_surface")
 
 def test_mmx_search_success_compacts_json(monkeypatch):
     async def fake_run_command(args, timeout_seconds):
-        assert args[:4] == ["mmx", "search", "query", "--q"]
+        assert args[0] == "mmx"
+        assert args[1:4] == ["search", "query", "--q"]
         assert "--output" in args
         assert "json" in args
         return tool_surface.CommandResult(
@@ -20,6 +21,7 @@ def test_mmx_search_success_compacts_json(monkeypatch):
         )
 
     monkeypatch.setattr(tool_surface, "_run_command", fake_run_command)
+    monkeypatch.setattr(tool_surface, "_resolve_mmx_executable", lambda: "mmx")
     response = asyncio.run(
         tool_surface.search_tool(
             tool_surface.ToolSearchRequest(
@@ -47,6 +49,7 @@ def test_mmx_search_caps_large_output(monkeypatch):
         return tool_surface.CommandResult(returncode=0, stdout="x" * 2000, stderr="")
 
     monkeypatch.setattr(tool_surface, "_run_command", fake_run_command)
+    monkeypatch.setattr(tool_surface, "_resolve_mmx_executable", lambda: "mmx")
     response = asyncio.run(
         tool_surface.search_tool(
             tool_surface.ToolSearchRequest(query="large output", max_chars=300)
@@ -76,9 +79,16 @@ def test_search_backend_failure_is_bounded(monkeypatch):
         return tool_surface.CommandResult(returncode=9, stdout="", stderr="bad" * 1000)
 
     monkeypatch.setattr(tool_surface, "_run_command", fake_run_command)
+    monkeypatch.setattr(tool_surface, "_resolve_mmx_executable", lambda: "mmx")
     with pytest.raises(HTTPException) as exc:
         asyncio.run(tool_surface.search_tool(tool_surface.ToolSearchRequest(query="fail")))
 
     assert exc.value.status_code == 502
     assert exc.value.detail["error"] == "tool_search_backend_failed"
     assert len(exc.value.detail["stderr"]) <= 1000
+
+
+def test_mmx_executable_resolution_prefers_env(monkeypatch):
+    monkeypatch.setenv("OMNIMEMORA_TOOL_SEARCH_MMX_PATH", "/tmp/mmx")
+
+    assert tool_surface._resolve_mmx_executable() == "/tmp/mmx"

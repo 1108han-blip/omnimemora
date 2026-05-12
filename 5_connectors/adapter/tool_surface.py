@@ -1,6 +1,8 @@
 import asyncio
 import json
+import os
 import re
+import shutil
 import time
 from dataclasses import dataclass
 from typing import Any, Optional
@@ -63,8 +65,9 @@ async def _run_command(args: list[str], timeout_seconds: float) -> CommandResult
 
 
 def _build_mmx_search_command(query: str, timeout_seconds: float) -> list[str]:
+    executable = _resolve_mmx_executable()
     return [
-        "mmx",
+        executable,
         "search",
         "query",
         "--q",
@@ -76,6 +79,23 @@ def _build_mmx_search_command(query: str, timeout_seconds: float) -> list[str]:
         "--timeout",
         str(max(1, int(timeout_seconds))),
     ]
+
+
+def _resolve_mmx_executable() -> str:
+    explicit = os.getenv("OMNIMEMORA_TOOL_SEARCH_MMX_PATH", "").strip()
+    if explicit:
+        return explicit
+    found = shutil.which("mmx")
+    if found:
+        return found
+    for candidate in (
+        os.path.expanduser("~/.local/bin/mmx"),
+        "/opt/homebrew/bin/mmx",
+        "/usr/local/bin/mmx",
+    ):
+        if os.path.exists(candidate):
+            return candidate
+    return "mmx"
 
 
 def _normalize_search_output(raw_stdout: str, max_chars: int) -> tuple[str, bool, str]:
