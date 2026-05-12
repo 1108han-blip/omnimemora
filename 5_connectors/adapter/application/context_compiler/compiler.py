@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, List, Optional, Tuple
 
 from .anthropic_tool_graph import analyze_anthropic_tool_graph
+from .anthropic_tool_schema import analyze_anthropic_tool_schema
 from .compressors import compress_tool_result_text
 from .metrics import compression_ratio, estimate_payload_tokens
 from .validators import validate_anthropic_compiled_payload
@@ -36,6 +37,15 @@ def compile_anthropic_tool_context(
         return _passthrough(payload, before_tokens, "invalid_tool_graph", _issue_codes(analysis.issues))
     if not analysis.has_tool_graph:
         return _passthrough(payload, before_tokens, "no_tool_graph", [])
+
+    schema_analysis = analyze_anthropic_tool_schema(payload)
+    if not schema_analysis.valid:
+        return _passthrough(
+            payload,
+            before_tokens,
+            "invalid_tool_schema",
+            _issue_codes(schema_analysis.issues),
+        )
 
     latest_result_location = _latest_tool_result_location(analysis.ir.messages)
     if latest_result_location is None:
@@ -133,4 +143,3 @@ def _tool_result_text(part: Dict[str, Any]) -> Tuple[str, str]:
 
 def _issue_codes(issues: List[Any]) -> List[str]:
     return [str(getattr(issue, "code", "unknown")) for issue in issues]
-

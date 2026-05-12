@@ -54,6 +54,7 @@ Candidate modules:
 
 - `ir.py` - provider payload internal representation.
 - `anthropic_tool_graph.py` - Anthropic tool graph parsing and validation.
+- `anthropic_tool_schema.py` - provided Anthropic tool schema checks.
 - `classifiers.py` - classify blocks as protected, recent, old, compressible, or memory.
 - `compressors.py` - deterministic text block compression.
 - `compiler.py` - protect, classify, compress, rebuild, and fallback orchestration.
@@ -247,6 +248,12 @@ Evidence:
   - compiled_token_estimate: `723`
   - compression_ratio: `0.8206400396923841`
 
+Provider compatibility note:
+
+- The first synthetic direct request omitted the top-level Anthropic `tools` schema and was rejected by the MiniMax Anthropic-compatible upstream, even though the structured compiler preserved the tool graph.
+- The successful direct request included the `tools` schema.
+- Structured compile must preserve provided tool schemas and must not invent missing provider tool definitions.
+
 ### SC-005 - Optional Text-Block Compressor Research Adapter
 
 Goal: evaluate whether LLMLingua-like compression improves deterministic extraction.
@@ -266,17 +273,21 @@ Exit:
 
 Goal: use ACON-style failure analysis without building a training system.
 
+Status: started in repo reality on 2026-05-13 with deterministic tool-schema validation. No failure corpus retention was added.
+
 Implementation:
 
 - Store minimal anonymized failure cases only when operator explicitly enables collection.
 - Compare full-context success vs structured-compiled failure.
 - Add deterministic rules or fixtures from observed failures.
+- Validate provided Anthropic `tools` schemas against `tool_use.name` before rewriting payloads.
 
 Boundary:
 
 - No silent retention expansion.
 - No raw user memory mutation.
 - No background training.
+- No schema synthesis: absent `tools` remains a provider/client responsibility, while present-but-inconsistent schemas force passthrough.
 
 ## Success Criteria
 

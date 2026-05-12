@@ -133,3 +133,65 @@ def test_tool_result_content_list_compresses_to_text_block():
     assert compressed_content[0]["type"] == "text"
     assert "original_chars=" in compressed_content[0]["text"]
 
+
+def test_declared_tool_schema_is_preserved_during_compile():
+    old_output = "\n".join([f"match line {i} src/file.py:{i}" for i in range(100)])
+    tools = [{"name": "grep", "description": "search files"}]
+    payload = {
+        "tools": tools,
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": "toolu_old", "name": "grep", "input": {}}],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": "toolu_old", "content": old_output}],
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": "toolu_recent", "name": "grep", "input": {}}],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": "toolu_recent", "content": "latest"}],
+            },
+        ],
+    }
+
+    result = compiler.compile_anthropic_tool_context(payload, max_tool_result_chars=800)
+
+    assert result.status == "structured_compile_success"
+    assert result.payload["tools"] == tools
+
+
+def test_invalid_declared_tool_schema_falls_back_before_rewrite():
+    old_output = "\n".join([f"match line {i} src/file.py:{i}" for i in range(100)])
+    payload = {
+        "tools": [{"name": "read"}],
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": "toolu_old", "name": "grep", "input": {}}],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": "toolu_old", "content": old_output}],
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": "toolu_recent", "name": "grep", "input": {}}],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": "toolu_recent", "content": "latest"}],
+            },
+        ],
+    }
+
+    result = compiler.compile_anthropic_tool_context(payload, max_tool_result_chars=800)
+
+    assert result.status == "structured_compile_passthrough"
+    assert result.reason == "invalid_tool_schema"
+    assert result.issues == ["undeclared_tool_use_name", "undeclared_tool_use_name"]
+    assert result.payload is payload

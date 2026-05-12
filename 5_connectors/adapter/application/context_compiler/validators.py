@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any, Dict
 
 from .anthropic_tool_graph import analyze_anthropic_tool_graph
+from .anthropic_tool_schema import validate_anthropic_tool_schema
 
 
 def validate_anthropic_payload_shape(payload: Dict[str, Any]) -> bool:
@@ -33,5 +34,8 @@ def validate_anthropic_payload_shape(payload: Dict[str, Any]) -> bool:
 
 
 def validate_anthropic_compiled_payload(payload: Dict[str, Any]) -> bool:
-    return validate_anthropic_payload_shape(payload) and analyze_anthropic_tool_graph(payload).valid
-
+    return (
+        validate_anthropic_payload_shape(payload)
+        and analyze_anthropic_tool_graph(payload).valid
+        and validate_anthropic_tool_schema(payload)
+    )
