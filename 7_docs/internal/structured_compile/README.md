@@ -1016,10 +1016,36 @@ Running validation:
   - provider-reported `tookMs=1161`
   - returned structured result entries with title, url, description, published, and siteName.
 
+Full agent-turn validation:
+
+- Command:
+  - `openclaw agent --agent main --message "验证 OmniMemora Tool Plane：请必须调用 web_search 搜索 'MiniMax AI official website'，然后只用一句中文说明官网域名是什么。不要执行 shell、不要使用浏览器。" --thinking off --json --timeout 120`
+- Result:
+  - OpenClaw run id: `4fe32259-1bfe-44b9-8946-c7ed93ba2f73`
+  - OpenClaw session id: `28499d9e-81aa-4896-a845-ae495d47314a`
+  - command status: `ok`
+  - command duration: `35897ms`
+  - OpenClaw `toolSummary`: one call to `web_search`, zero failures
+  - OpenClaw tool result provider: `omnimemora`
+  - OpenClaw tool result upstream provider: `mmx`
+  - OpenClaw tool result `tookMs`: `3166`
+  - final assistant text: `MiniMax 官网域名为 **chat.minimax.io**。`
+  - final stop reason: `stop`
+  - trajectory status: `success`, `timedOut=false`, `timedOutDuringToolExecution=false`
+- OmniMemora LLM ingress records for the same turn:
+  - `23820fba86e3`: OpenClaw first Anthropic-compatible request, upstream `200`, final `200`
+  - `e44f4b2c0c26`: OpenClaw post-tool Anthropic-compatible request, upstream `200`, final `200`
+  - `/compile/status?window_minutes=10`: OpenClaw `structured_compile_success=4`, `success_share=1.0`
+- Endpoint health after validation:
+  - `POST /tools/search` direct check with trace `sc023-final-health-check`: HTTP `200`, provider `mmx`, backend `mmx_cli`, response time `1.130922s`
+  - `/metrics/core_capabilities?tenant=all`: HTTP `200`, response time `0.363399s`
+  - `/compile/status?window_minutes=10`: HTTP `200`, response time `0.371622s`
+
 Boundary:
 
 - This proves the OpenClaw web-search capability can route through OmniMemora.
-- It does not yet prove a full OpenClaw agent turn chooses `web_search` and completes inside the 45-second agent deadline.
+- The full agent-turn sample proves one forced-search OpenClaw agent turn can choose `web_search`, route through OmniMemora, and complete inside the 45-second agent deadline.
+- It does not yet prove unforced daily prompts always choose `web_search` or that all longer search tasks complete inside the deadline.
 - The installed plugin is linked to the repo path, so moving or deleting the repo path would break the OpenClaw plugin until packaged or installed as a copied plugin.
 
 ### Daily Evaluation Taxonomy
