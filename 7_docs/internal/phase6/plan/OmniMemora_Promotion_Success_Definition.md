@@ -9,6 +9,8 @@ effective_date: 2026-04-20
 
 # OmniMemora Promotion Success Definition
 
+> **2026-05-10 supersession**: 当前用户控制/展示面是 OmniMemora Desktop app。`5173` 仅 legacy/dev；下文 UI-only 中的 `5173` 检查仅适用于显式 legacy dashboard 验证任务。
+
 本文檔定義 `running_reality_promoted` 的正式標準，用於判斷 promotion 是否成功。
 
 ---
@@ -52,10 +54,9 @@ effective_date: 2026-04-20
 |--------|------|
 | 環境正確 | `PATH=/usr/local/bin:$PATH` |
 | npm build 成功 | `npm run build` 在 `6_console/demo-dashboard` 目錄執行成功 |
-| 端口在線 | `5173` 可訪問 |
-| 根路徑可訪問 | `http://127.0.0.1:5173/` 返回 200 |
-| Agents 頁面可訪問 | `http://127.0.0.1:5173/agents?tenant=all` 返回 200 |
-| 基本對位成立 | UI 與 `18011 /agents/control` 數據基本對位 |
+| Desktop GUI 可用 | packaged Desktop app 可打开并能从 `18011` 刷新状态 |
+| 基本對位成立 | Desktop GUI 與 `18011 /agents/control` 數據基本對位 |
+| Legacy 校驗（可選） | 僅在 legacy dashboard 任務中檢查 `5173` root/agents 可訪問 |
 
 **結論關鍵字：** `ui:promoted`
 
@@ -135,7 +136,7 @@ log_file: <path>
 |--------|----------|-------------|
 | `runtime` | build + sync + reload + health | - |
 | `adapter` | file_sync + restart + API | plist reality |
-| `ui` | build + bringup + root + agents + alignment | - |
+| `ui` | build + desktop-gui-availability + alignment | legacy-5173 可選校驗 |
 | `runtime+adapter` | runtime 全過 + adapter 全過 | plist reality |
 | `adapter+ui` | adapter 全過 + ui 全過 | plist reality |
 | `runtime+adapter+ui` | runtime 全過 + adapter 全過 + ui 全過 | plist reality |

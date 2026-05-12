@@ -1,5 +1,7 @@
 # OmniMemora Cloudflare Clean Install Closeout (2026-04-30)
 
+> **2026-05-10 supersession**: 本记录中的 `5173` 可达性为历史本地非干扰检查。当前产品口径以 OmniMemora Desktop app 为控制/展示面，`5173` 为 legacy/dev。
+
 ## Scope
 
 - Project: OmniMemora only.

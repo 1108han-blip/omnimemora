@@ -10,6 +10,8 @@ previous_failed_validation_record: cb737e8
 
 # OmniMemora AccessPlan Actual Enforcement Running Revalidation (2026-04-24)
 
+> **2026-05-10 supersession**: 文中 `5173` 可达性属于历史验证证据，不代表当前产品依赖。当前用户控制/展示面为 OmniMemora Desktop app。
+
 ## Scope
 
 This batch is running-reality revalidation only.

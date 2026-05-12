@@ -9,6 +9,8 @@ effective_date: 2026-04-20
 
 # OmniMemora Promotion Evidence Routing
 
+> **2026-05-10 supersession**: 当前用户控制/展示面是 OmniMemora Desktop app。`5173` 仅为 legacy/dev dashboard；本文件中 `5173` 校验条目用于历史阶段回放，不再作为当前产品默认依赖。
+
 本文檔定義 promotion 結果的正式路由規則，確保每次 `running_reality_promoted` 都有統一的落點、統一的聲明條件、統一的 phase 回填方式。
 
 ---
@@ -69,8 +71,8 @@ effective_date: 2026-04-20
 | 結構化日誌已生成 | `promotion_*.log` 存在於 `tools/verification/logs/` |
 | runtime health 通過 | `http://127.0.0.1:8765/health = 200` |
 | adapter health 通過 | `http://127.0.0.1:18011/health = 200` |
-| UI 可訪問 | `http://127.0.0.1:5173/ = 200` |
-| UI 與 adapter 基本對位成立 | `5173` 與 `18011/agents/control` 數據基本對位 |
+| Desktop GUI 可用 | packaged Desktop app 可打开并能从 `18011` 刷新状态 |
+| UI 與 adapter 基本對位成立 | Desktop GUI 與 `18011/agents/control` 數據基本對位 |
 | primary breakpoint | 必須為 `none` |
 | warning 狀態 | 若存在 warning，必須在契約中已被定義為**非阻塞 warning** |
 

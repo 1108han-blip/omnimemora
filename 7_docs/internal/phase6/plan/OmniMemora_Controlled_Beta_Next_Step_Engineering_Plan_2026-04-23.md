@@ -15,6 +15,8 @@ last_verified_commit: ""
 
 # OmniMemora Controlled Beta Next Step Engineering Plan
 
+> **2026-05-10 supersession**: 当前用户控制/展示面已切换为 OmniMemora Desktop app。本文中涉及 `5173` 的表述属于当时执行语境或 legacy/dev 面说明，不代表当前产品依赖。
+
 **Status:** active  
 **Type:** roadmap 外受控 beta + 本机 truth 修补执行线  
 **Goal:** 把“轻量对外试用”与“本机直接反馈链修顺”收敛为一条可连续执行的工程主线  
@@ -50,7 +52,7 @@ last_verified_commit: ""
 
 ### 2.1 本批必须坚持
 
-- `5173` 仍是用户控制入口
+- 用户控制入口以 OmniMemora Desktop app 为准；`5173` 仅保留为 legacy/dev dashboard
 - `18011` 仍是唯一产品数据入口
 - `8765` 仍是内部 memory plane
 - 对外分发仍只使用 `https://doloclaw.com/download`
@@ -77,7 +79,7 @@ last_verified_commit: ""
 每个批次都必须分别记录：
 
 - `repo reality`: 代码与文档是否完成
-- `running reality`: `5173 / 18011 / 8765` 与下载页当前在线行为是否完成
+- `running reality`: 以 Desktop app + `18011` + `8765` 与下载页当前在线行为为主；`5173` 仅在 legacy 验证任务中检查
 - `user-path reality`: 真实用户或本机真实客户端是否能完成下载、接入、发请求、反馈
 
 不得把代码阅读结论和 running reality 混写成一个“已完成”判断。

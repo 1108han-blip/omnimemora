@@ -1,5 +1,7 @@
 # OmniMemora Cloud Reset Batch 6 Control Project Cutover (2026-04-23)
 
+> **2026-05-10 supersession**: 本记录中的 `5173` 可达性为历史非回归证据。当前产品口径为 Desktop app 控制/展示面；`5173` 仅 legacy/dev。
+
 ## Scope
 - Batch type: replacement control-entry establishment + official domain rebind
 - In-scope:

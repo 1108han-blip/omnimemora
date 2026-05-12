@@ -1,5 +1,7 @@
 # OmniMemora D1 Non-Codex Closeout Note (2026-04-24)
 
+> **2026-05-10 supersession**: 本记录中的 `5173` 健康性属于历史证据快照。当前产品口径为 Desktop app 控制/展示面；`5173` 仅 legacy/dev 使用。
+
 ## Scope
 - Batch scope: D1 closeout (non-Codex only)
 - Included: Claude default, Claude `cc-haha`, OpenClaw

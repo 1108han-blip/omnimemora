@@ -1,5 +1,7 @@
 # OmniMemora Cloud Reset Batch 5 Cutover Execution (2026-04-23)
 
+> **2026-05-10 supersession**: 本记录中的 `5173` 可达性为历史非回归快照。当前产品口径为 Desktop app 控制/展示面；`5173` 非默认依赖。
+
 ## Scope
 - Batch type: cutover execution (cloud asset rationalization only)
 - In-scope:

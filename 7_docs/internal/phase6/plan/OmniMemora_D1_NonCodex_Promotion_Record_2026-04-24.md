@@ -1,5 +1,7 @@
 # OmniMemora D1 Non-Codex Promotion Record (2026-04-24)
 
+> **2026-05-10 supersession**: 本记录中的 `5173` 可达性属于当时 running reality 证据。当前产品口径为 Desktop app 控制/展示面；`5173` 不再是默认依赖。
+
 ## Scope
 - Batch scope: D1 closeout (non-Codex gate only)
 - Promotion target: `adapter+ui`

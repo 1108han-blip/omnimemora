@@ -9,6 +9,8 @@ effective_date: 2026-04-20
 
 # OmniMemora Promotion Adoption Runbook
 
+> **2026-05-10 supersession**: 当前用户控制/展示面是 OmniMemora Desktop app。`5173` 仅 legacy/dev；本 runbook 中 `5173` 检查仅用于显式 legacy dashboard 任务。
+
 ## 1. 入口命令
 
 ```bash
@@ -74,8 +76,11 @@ curl -sf http://127.0.0.1:8765/health && echo "runtime:OK"
 # Adapter
 curl -sf http://127.0.0.1:18011/health && echo "adapter:OK"
 
-# UI
-curl -sf http://127.0.0.1:5173/ && echo "ui:OK"
+# Desktop GUI（当前默认）
+echo "Desktop app should be openable and able to refresh data from 18011"
+
+# Legacy UI（仅在显式 legacy dashboard 验证任务中执行）
+curl -sf http://127.0.0.1:5173/ && echo "legacy-ui:OK"
 ```
 
 ### Launchd 檢查
@@ -156,8 +161,9 @@ pgrep -f "vite"
 **evidence**:
 - Runtime health: <curl result>
 - Adapter health: <curl result>
-- UI root: <curl result>
-- UI agents: <curl result>
+- Desktop app refresh from 18011: <pass|fail>
+- Legacy UI root (optional): <curl result|skipped>
+- Legacy UI agents (optional): <curl result|skipped>
 
 **primary_breakpoint**: <none|build|file_sync|reload|health_check|ui_bringup|ui_alignment|prerequisite_failed|unknown>
 **next_steps**: <if any>
@@ -181,7 +187,7 @@ pgrep -f "vite"
 
 ### UI 對位失敗
 
-**現象：** UI 可訪問但 `/agents?tenant=all` 與 adapter API 不對位
+**現象：** Desktop app（或 legacy UI）顯示與 adapter API 不對位
 
 **處理：**
 1. 檢查 adapter `/agents/control` 響應

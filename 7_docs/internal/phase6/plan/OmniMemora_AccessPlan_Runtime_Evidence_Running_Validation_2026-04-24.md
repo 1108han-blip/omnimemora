@@ -10,6 +10,8 @@ docs_sync_commit: a1eedbb
 
 # OmniMemora AccessPlan Runtime Evidence Running Validation (2026-04-24)
 
+> **2026-05-10 supersession**: 文中 `5173` 可达性仅表示历史验证时的运行证据。当前产品口径为 Desktop app 控制/展示面，`5173` 仅 legacy/dev。
+
 ## 1. Scope
 
 Validation scope is running reality only, non-Codex targets only:

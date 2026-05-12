@@ -1,5 +1,7 @@
 # OmniMemora D1 OpenClaw Minimal Fix Record (2026-04-24)
 
+> **2026-05-10 supersession**: 本记录中的 `5173` 健康检查属于当时验证链。当前产品口径为 Desktop app 控制/展示面；`5173` 不作为默认依赖。
+
 ## Scope
 - Batch: OpenClaw D1 minimal fix
 - Fixed chain only: control read-model observed-request truth

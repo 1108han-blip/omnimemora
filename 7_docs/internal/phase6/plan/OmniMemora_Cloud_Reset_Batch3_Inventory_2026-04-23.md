@@ -1,5 +1,7 @@
 # OmniMemora Cloud Reset Batch 3 Inventory (2026-04-23)
 
+> **2026-05-10 supersession**: 本文件涉及 `5173` 的本地拓扑描述属于当时 inventory 语境。当前产品口径为 Desktop app 控制/展示面；`5173` 仅 legacy/dev。
+
 ## Scope
 - Batch type: inventory-only (no create/update/delete on cloud resources)
 - Goal: align cloud running reality with post-Batch1/Batch2 repo boundary

@@ -1,6 +1,8 @@
 # Promotion Workflow Usage Governance
 
 > **状态**: ✅ 已收口（2026-04-20 通过 adapter-only 真实场景验证）
+>
+> **2026-05-10 supersession**: 当前用户控制/展示面是 OmniMemora Desktop app。`5173` 仅为 legacy/dev dashboard；仅在显式 legacy 验证任务中检查，不再作为当前产品默认验收依赖。
 
 ## 概述
 
@@ -114,7 +116,7 @@
 - [ ] 桌面 App 已重新构建并安装到 `/Applications/OmniMemora Desktop.app`
 - [ ] 桌面 GUI 可打开并能从 `18011` 刷新当前状态
 
-**Legacy UI（5173，仅在显式验证 legacy dashboard 时适用）**：
+**Legacy UI（5173，仅在显式验证 legacy dashboard 时适用，默认可跳过）**：
 - [ ] `curl http://127.0.0.1:5173/` 返回成功
 - [ ] `curl http://127.0.0.1:5173/agents?tenant=all` 返回成功
 
