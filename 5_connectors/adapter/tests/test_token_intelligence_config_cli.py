@@ -93,7 +93,7 @@ def test_cli_init_and_version(tmp_path, capsys):
     assert config_path.exists()
 
     assert cli.main(["version"]) == 0
-    assert capsys.readouterr().out.strip() == "0.1.0-dev"
+    assert capsys.readouterr().out.strip() == "0.1.0-beta.1"
 
 
 def test_cli_proxy_status_reports_unreachable_for_stopped_proxy(tmp_path, capsys):

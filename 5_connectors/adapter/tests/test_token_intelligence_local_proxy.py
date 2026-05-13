@@ -46,7 +46,7 @@ def test_local_proxy_health_and_version_routes():
     assert health["status"] == "ok"
     assert health["service"] == "omni-token-audit-local-proxy"
     assert health["mode"] == "candidate_local_proxy"
-    assert version["version"] == "0.1.0-dev"
+    assert version["version"] == "0.1.0-beta.1"
 
 
 def test_chat_completions_forwards_body_to_configured_upstream():
@@ -500,9 +500,9 @@ def test_update_check_reads_release_metadata_without_download(tmp_path):
 
     assert status == 200
     assert payload["status"] == "ok"
-    assert payload["current_version"] == "0.1.0-dev"
+    assert payload["current_version"] == "0.1.0-beta.1"
     assert payload["latest_version"] == "0.1.0-beta.1"
-    assert payload["update_available"] is True
+    assert payload["update_available"] is False
     assert payload["unsigned_beta"] is True
     assert "Privacy & Security" in payload["gatekeeper_note"]
     assert "download_url" not in payload

@@ -45,7 +45,7 @@ def _initialize_payload() -> dict[str, Any]:
         "capabilities": {"tools": {}},
         "serverInfo": {
             "name": "omnimemora-token-intelligence-lite",
-            "version": "0.1.0-dev",
+            "version": "0.1.0-beta.1",
         },
     }
 

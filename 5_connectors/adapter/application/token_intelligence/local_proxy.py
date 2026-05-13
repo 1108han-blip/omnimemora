@@ -34,7 +34,7 @@ from .usage_normalizer import (
 )
 from .waste_detectors import detect_openai_compatible_waste
 
-VERSION = "0.1.0-dev"
+VERSION = "0.1.0-beta.1"
 SERVICE_NAME = "omni-token-audit-local-proxy"
 DEFAULT_UPDATE_METADATA_URL = "https://doloclaw.com/releases/token-intelligence/latest.json"
 

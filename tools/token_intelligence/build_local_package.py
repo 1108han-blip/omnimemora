@@ -17,7 +17,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MODULE_DIR = REPO_ROOT / "5_connectors" / "adapter" / "application" / "token_intelligence"
 DEFAULT_OUTPUT_DIR = Path(tempfile.gettempdir()) / "omnimemora-token-intelligence-build"
-DEFAULT_VERSION = "0.1.0-dev"
+DEFAULT_VERSION = "0.1.0-beta.1"
 DEFAULT_CHANNEL = "beta"
 PRODUCT = "omnimemora-token-intelligence"
 

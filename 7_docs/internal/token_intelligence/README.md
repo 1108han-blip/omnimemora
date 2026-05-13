@@ -33,6 +33,7 @@
 - 2026-05-13: TI-012 repo-only reported cost ingestion added. The candidate proxy records provider/relay-reported cost fields with pricing version when present, but does not infer cost from a local price table yet.
 - 2026-05-13: TI-013 repo-only workflow ROI tags added. The candidate proxy can store explicit opt-in agent/project/workflow headers and summarize top token/cost consumers by those tags without inferring user profiles.
 - 2026-05-13: TI-014 repo-only MCP top requests tool added. The local MCP companion can expose bounded top request summaries to opted-in agents without becoming a capture or memory-write path.
+- 2026-05-13: TI-015 repo-only beta version alignment completed. CLI, local proxy, MCP server info, and local package builder now report `0.1.0-beta.1` consistently.
 
 ## Product Target
 
@@ -467,6 +468,26 @@ Current behavior:
 - `tools/call` for `token_intelligence.top_requests` returns the same bounded schema as `/audit/reports/top-requests`;
 - the tool reads at most 1000 recent local ledger rows;
 - no request capture, memory write, compile routing, profile inference, or `18011` MCP behavior is changed.
+
+### TI-015 - Beta Version Alignment
+
+Status: repo implementation completed on 2026-05-13 for the local Token Intelligence candidate package.
+
+Keep package metadata, CLI output, proxy version, and MCP server info aligned.
+
+Exit:
+
+- the local package default version matches the candidate runtime version;
+- update checks do not report a false update when metadata points to the same beta;
+- version changes remain repo-only until a separate publish step is approved.
+
+Current behavior:
+
+- `omni-token-audit version` reports `0.1.0-beta.1`;
+- `/version`, `/health`, and `/updates/check` use the same runtime version;
+- MCP `initialize` reports `0.1.0-beta.1`;
+- `tools/token_intelligence/build_local_package.py` defaults to `0.1.0-beta.1`;
+- no cloud upload, desktop GUI promotion, or `18011` runtime replacement is performed by this alignment step.
 
 ## Validation Requirements
 
