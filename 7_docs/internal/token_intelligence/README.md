@@ -28,6 +28,7 @@
 - 2026-05-13: TI-007 repo-only actual savings proof calculator added. The candidate proxy exposes a stateless `/audit/reports/actual-savings/proof` endpoint that compares recommended, baseline, and actual tokens without modifying structured compile or storing proof rows.
 - 2026-05-13: TI-008 repo-only local MCP companion added inside the candidate local proxy. `/mcp` exposes read-only `token_intelligence.summary` and `token_intelligence.potential_savings` tools for opted-in agents; it does not capture requests, write memory, or replace the primary proxy path.
 - 2026-05-13: TI-009 repo-only usage reconciliation added. Audit events, receipts, and summaries now compare reported total tokens against local estimates and label normal, warning, unexplained, estimated-only, or not-applicable cases without treating deltas as fraud evidence.
+- 2026-05-13: TI-010 repo-only CLI report surface added. `omni-token-audit report summary` and `omni-token-audit report potential-savings` read bounded local audit data and print metadata-only JSON without starting the proxy or scanning large history.
 
 ## Product Target
 
@@ -362,6 +363,26 @@ Current behavior:
 - statuses are `normal`, `warning`, `unexplained_delta`, `estimated_only`, or `not_applicable`;
 - reconciliation stores only numeric counts, status, source, and confidence;
 - raw prompt, response, tool output, and hidden-context assumptions are not stored or inferred.
+
+### TI-010 - CLI Report Surface
+
+Status: repo implementation completed on 2026-05-13 for local metadata-only reports.
+
+Expose the first report surface without requiring GUI, cloud, or running promotion.
+
+Exit:
+
+- local users can inspect recent audit summaries from CLI;
+- potential savings are visible without starting the proxy;
+- report commands remain bounded and metadata-only.
+
+Current behavior:
+
+- `omni-token-audit report summary --limit <n>` prints bounded audit summary JSON;
+- `omni-token-audit report potential-savings --limit <n>` prints potential savings report JSON;
+- optional `--db <path>` supports explicit local ledger selection for verification and support;
+- report output uses the same summary/report builders as the candidate local proxy;
+- raw prompt, response, and tool output are not printed.
 
 ## Validation Requirements
 

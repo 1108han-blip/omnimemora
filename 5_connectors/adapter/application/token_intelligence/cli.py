@@ -11,9 +11,10 @@ from pathlib import Path
 from typing import Optional
 
 from .config import default_config_path, load_config, write_default_config
-from .ledger import get_audit_event
+from .ledger import get_audit_event, summarize_recent_events
 from .local_proxy import VERSION, check_update_metadata, serve_forever
 from .receipts import build_receipt
+from .reports import build_potential_savings_report
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -71,6 +72,20 @@ def _build_parser() -> argparse.ArgumentParser:
     check_parser = update_subparsers.add_parser("check", help="check product-owned release metadata")
     check_parser.add_argument("--config", default="", help="config path")
     check_parser.set_defaults(func=_cmd_update_check)
+
+    report_parser = subparsers.add_parser("report", help="read local audit reports")
+    report_subparsers = report_parser.add_subparsers(dest="report_command")
+    report_parser.set_defaults(func=_cmd_help)
+
+    summary_parser = report_subparsers.add_parser("summary", help="print bounded audit summary")
+    summary_parser.add_argument("--limit", default="1000", help="recent event limit, max 1000")
+    summary_parser.add_argument("--db", default="", help="optional audit sqlite path")
+    summary_parser.set_defaults(func=_cmd_report_summary)
+
+    savings_parser = report_subparsers.add_parser("potential-savings", help="print potential savings report")
+    savings_parser.add_argument("--limit", default="1000", help="recent event limit, max 1000")
+    savings_parser.add_argument("--db", default="", help="optional audit sqlite path")
+    savings_parser.set_defaults(func=_cmd_report_potential_savings)
 
     return parser
 
@@ -149,8 +164,32 @@ def _cmd_update_check(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_report_summary(args: argparse.Namespace) -> int:
+    payload = summarize_recent_events(path=_str_arg(args.db), limit=_limit_arg(args.limit))
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
+def _cmd_report_potential_savings(args: argparse.Namespace) -> int:
+    summary = summarize_recent_events(path=_str_arg(args.db), limit=_limit_arg(args.limit))
+    payload = build_potential_savings_report(summary)
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
 def _path_arg(value: str) -> Optional[Path]:
     return Path(value).expanduser() if value else None
+
+
+def _str_arg(value: str) -> Optional[str]:
+    return str(Path(value).expanduser()) if value else None
+
+
+def _limit_arg(value: str) -> int:
+    try:
+        return max(1, min(int(value), 1000))
+    except Exception:
+        return 1000
 
 
 if __name__ == "__main__":

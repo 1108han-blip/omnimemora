@@ -172,6 +172,50 @@ def test_cli_update_check_reads_metadata_without_download(tmp_path, capsys):
     assert "download_url" not in result
 
 
+def test_cli_report_summary_and_potential_savings_are_metadata_only(tmp_path, capsys):
+    sqlite_path = tmp_path / "audit.sqlite3"
+    secret_prompt = "SECRET_REPORT_PROMPT_NOT_IN_CLI"
+    usage = token_intelligence.normalize_openai_compatible_usage(
+        {"usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}},
+        usage_source="relay_reported",
+    )
+    event = token_intelligence.build_audit_event(
+        request_id="req-report",
+        request_payload={"messages": [{"role": "user", "content": secret_prompt}]},
+        response_payload={"id": "req-report"},
+        upstream_base_url="https://relay.example/v1",
+        provider="local_proxy",
+        model_requested="relay-model",
+        usage=usage,
+        opportunities=[
+            {
+                "detector_id": "duplicate_context_v1",
+                "category": "duplicate_context",
+                "reason_code": "repeated_message_content",
+                "token_estimate": 12,
+                "potential_saving_tokens": 12,
+                "item_count": 1,
+                "severity": "medium",
+                "source": "local_estimated",
+                "confidence": "compatible_estimate",
+            }
+        ],
+    )
+    token_intelligence.record_audit_event(event, path=str(sqlite_path))
+
+    assert cli.main(["report", "summary", "--db", str(sqlite_path), "--limit", "5000"]) == 0
+    summary = json.loads(capsys.readouterr().out)
+    assert summary["window"] == {"bounded": True, "limit": 1000}
+    assert summary["event_count"] == 1
+    assert secret_prompt not in json.dumps(summary, sort_keys=True)
+
+    assert cli.main(["report", "potential-savings", "--db", str(sqlite_path)]) == 0
+    report = json.loads(capsys.readouterr().out)
+    assert report["potential_saving_tokens"] == 12
+    assert report["top_opportunities"][0]["category"] == "duplicate_context"
+    assert secret_prompt not in json.dumps(report, sort_keys=True)
+
+
 def test_local_package_builder_outputs_checksum_metadata_and_launcher(tmp_path):
     script = REPO_ROOT / "tools" / "token_intelligence" / "build_local_package.py"
 
