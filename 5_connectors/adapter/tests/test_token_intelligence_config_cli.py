@@ -136,22 +136,27 @@ def test_cli_init_and_version(tmp_path, capsys):
 def test_cli_proxy_status_reports_unreachable_for_stopped_proxy(tmp_path, capsys):
     config_path = tmp_path / "config.json"
     token_intelligence.write_default_config(config_path)
+    config_payload = json.loads(config_path.read_text(encoding="utf-8"))
+    config_payload["server"]["port"] = _free_port()
+    config_path.write_text(json.dumps(config_payload), encoding="utf-8")
+    expected_health_url = f"http://127.0.0.1:{config_payload['server']['port']}/health"
 
     assert cli.main(["proxy", "status", "--config", str(config_path)]) == 1
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "unreachable"
-    assert payload["url"] == "http://127.0.0.1:18081/health"
+    assert payload["url"] == expected_health_url
 
 
 def test_cli_doctor_attach_and_detach_are_profile_only(tmp_path, monkeypatch, capsys):
     config_path = tmp_path / "config.json"
     attach_dir = tmp_path / "agents"
+    proxy_port = _free_port()
     monkeypatch.setenv("OMNI_AUDIT_UPSTREAM_API_KEY", "secret-value-not-written")
     monkeypatch.setenv("OMNIMEMORA_TOKEN_INTELLIGENCE_ATTACH_DIR", str(attach_dir))
     config_path.write_text(
         json.dumps(
             {
-                "server": {"host": "127.0.0.1", "port": 18081},
+                "server": {"host": "127.0.0.1", "port": proxy_port},
                 "upstream": {
                     "base_url": "https://relay.example/v1",
                     "api_key_env": "OMNI_AUDIT_UPSTREAM_API_KEY",
@@ -185,12 +190,12 @@ def test_cli_doctor_attach_and_detach_are_profile_only(tmp_path, monkeypatch, ca
     written = json.loads(profile_path.read_text(encoding="utf-8"))
     assert profile["status"] == "profile_written"
     assert profile["agent_config_mutated"] is False
-    assert profile["proxy_base_url"] == "http://127.0.0.1:18081/v1"
+    assert profile["proxy_base_url"] == f"http://127.0.0.1:{proxy_port}/v1"
     assert profile["launcher"]["script_path"] == str(launcher_path)
     assert written["client_headers"] == {"x-omni-agent-id": "openclaw"}
     assert env_path.exists()
     assert launcher_path.exists()
-    assert "OPENAI_BASE_URL='http://127.0.0.1:18081/v1'" in env_path.read_text(encoding="utf-8")
+    assert f"OPENAI_BASE_URL='http://127.0.0.1:{proxy_port}/v1'" in env_path.read_text(encoding="utf-8")
     assert "secret-value-not-written" not in json.dumps(written, sort_keys=True)
     assert "secret-value-not-written" not in env_path.read_text(encoding="utf-8")
 
@@ -843,7 +848,7 @@ def _wait_for_health(url: str, process: subprocess.Popen[str]) -> None:
     raise AssertionError(f"proxy health did not become ready: {last_error}")
 
 
-def _post_real_client_json(url: str, payload: dict, *, headers: dict[str, str] | None = None):
+def _post_real_client_json(url: str, payload: dict, *, headers=None):
     request_headers = {"content-type": "application/json"}
     if headers:
         request_headers.update(headers)

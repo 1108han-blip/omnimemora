@@ -128,7 +128,7 @@ This is an unsigned controlled-beta local proxy package.
 Source code is not included in this package.
 
 What it does:
-  - runs a localhost OpenAI-compatible audit proxy
+  - runs a localhost OpenAI/Anthropic-compatible audit proxy
   - forwards requests to your configured upstream provider or relay
   - records token-flow receipts without storing raw prompts by default
   - labels reported token usage separately from local estimates
@@ -154,6 +154,8 @@ Quickstart:
 Point a compatible client at:
   OPENAI_BASE_URL=http://127.0.0.1:18081/v1
   OPENAI_API_KEY can be any placeholder accepted by your client
+  ANTHROPIC_BASE_URL=http://127.0.0.1:18081
+  ANTHROPIC_AUTH_TOKEN can be any placeholder accepted by your client
 
 Optional attach helper:
   ./omni-token-audit attach openclaw --with-launcher

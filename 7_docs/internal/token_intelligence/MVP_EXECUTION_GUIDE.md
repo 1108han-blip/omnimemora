@@ -82,11 +82,19 @@ full OmniMemora integration for optimization and desktop control
 
 The standalone entrypoint is only a distribution shape. Product truth stays in OmniMemora logic.
 
+Boundary clarification:
+
+- OmniMemora is an agent path and optimization layer; it should not be described as owning an upstream model.
+- OpenClaw and Claude Code currently use Anthropic-compatible MiniMax M2.7 paths when routed through OmniMemora.
+- `gemma4:26b` is a local Ollama model option on this machine, not current OmniMemora upstream truth.
+- A `/v1/models` compatibility response is not proof of actual agent model selection, upstream health, or product routing truth.
+
 ## MVP Scope
 
 Included:
 
 - OpenAI-compatible `POST /v1/chat/completions` proxy.
+- Anthropic-compatible non-streaming `POST /v1/messages` proxy.
 - Non-streaming first; streaming follows after receipt semantics are stable.
 - Configurable upstream base URL and API key reference.
 - Response `usage` extraction.
@@ -104,7 +112,7 @@ Deferred:
 - Cloud-hosted audit SaaS.
 - Browser extension capture.
 - Full OpenAI Responses API coverage.
-- Anthropic-native `/v1/messages` beyond later compatibility work.
+- Anthropic streaming and tool-loop semantic hardening for Claude Code and OpenClaw.
 - Multi-tenant team billing.
 - Automatic optimization.
 - User behavior analytics beyond token/workflow ROI and optional cost interpretation.

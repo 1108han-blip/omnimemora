@@ -6,7 +6,7 @@ Date: 2026-05-13
 
 TI-001 turns Token Intelligence Lite from a repo-only core into a usable local audit entrypoint.
 
-The first engineering goal is not a general gateway. It is a proprietary local CLI/local-proxy download that lets a user point an OpenAI-compatible client at OmniMemora, forward the request to the user's configured upstream, and receive an audit receipt without storing raw prompt content by default.
+The first engineering goal is not a general gateway. It is a proprietary local CLI/local-proxy download that lets a user point an OpenAI-compatible or Anthropic-compatible client at OmniMemora, forward the request to the user's configured upstream, and receive an audit receipt without storing raw prompt content by default.
 
 ## Current Baseline
 
@@ -30,6 +30,7 @@ Initial user flow:
 AI client / relay user
         ↓
 http://127.0.0.1:<token-audit-port>/v1/chat/completions
+http://127.0.0.1:<token-audit-port>/v1/messages
         ↓
 OmniMemora Token Intelligence local proxy
         ↓
@@ -59,7 +60,7 @@ TI-001 must not:
 - add cloud-hosted audit storage;
 - require a browser extension;
 - store raw prompt, full tool output, or full provider response by default;
-- support Anthropic-native or streaming before non-streaming receipt semantics pass;
+- support streaming before non-streaming receipt semantics pass;
 - become user profiling or hidden behavior telemetry.
 
 ## CLI Contract
@@ -158,6 +159,7 @@ MVP routes:
 GET  /health
 GET  /version
 POST /v1/chat/completions
+POST /v1/messages
 GET  /audit/events/<audit_id>
 GET  /audit/events/<audit_id>/receipt
 GET  /audit/summary
@@ -167,6 +169,7 @@ GET  /updates/check
 Route semantics:
 
 - `/v1/chat/completions` forwards to `<upstream.base_url>/chat/completions`.
+- `/v1/messages` forwards to `<upstream.base_url>/v1/messages`, or to `<upstream.base_url>/messages` when the configured base already ends in `/v1`.
 - Non-streaming only in TI-001.
 - Response body and status should match upstream unless the local proxy itself fails before upstream is called.
 - Audit receipt creation happens after upstream response parsing and must not mutate the user-visible response.

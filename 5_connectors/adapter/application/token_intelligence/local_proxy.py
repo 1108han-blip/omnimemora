@@ -1,4 +1,4 @@
-"""Local OpenAI-compatible proxy skeleton for Token Intelligence Lite."""
+"""Local OpenAI/Anthropic-compatible proxy for Token Intelligence Lite."""
 
 from __future__ import annotations
 
@@ -27,8 +27,10 @@ from .reports import build_potential_savings_report
 from .receipts import build_receipt
 from .savings_proof import build_actual_savings_proof
 from .usage_normalizer import (
+    estimate_anthropic_compatible_output_tokens,
     estimate_openai_compatible_input_tokens,
     estimate_openai_compatible_output_tokens,
+    normalize_anthropic_compatible_usage,
     normalize_openai_compatible_cost,
     normalize_openai_compatible_usage,
 )
@@ -130,20 +132,31 @@ def _make_handler(config: LocalProxyConfig) -> type[BaseHTTPRequestHandler]:
             if self.path == "/audit/reports/actual-savings/proof":
                 _handle_actual_savings_proof(self)
                 return
-            if self.path != "/v1/chat/completions":
+            if self.path not in {"/v1/chat/completions", "/v1/messages"}:
                 _send_json(self, 404, {"error": "not_found", "path": self.path})
                 return
             content_length = int(self.headers.get("content-length") or "0")
             body = self.rfile.read(content_length)
             started = time.monotonic()
-            status_code, response_headers, response_body = _forward_chat_completion(
-                config,
-                body,
-                content_type=self.headers.get("content-type", "application/json"),
-            )
+            if self.path == "/v1/messages":
+                status_code, response_headers, response_body = _forward_anthropic_messages(
+                    config,
+                    body,
+                    request_headers=self.headers,
+                    content_type=self.headers.get("content-type", "application/json"),
+                )
+                audit_route = "/v1/messages"
+            else:
+                status_code, response_headers, response_body = _forward_chat_completion(
+                    config,
+                    body,
+                    content_type=self.headers.get("content-type", "application/json"),
+                )
+                audit_route = "/v1/chat/completions"
             elapsed_ms = int((time.monotonic() - started) * 1000)
             audit_id, audit_error = _record_proxy_audit_event(
                 config,
+                route=audit_route,
                 request_body=body,
                 response_body=response_body,
                 status_code=status_code,
@@ -219,12 +232,67 @@ def _forward_chat_completion(
                     "message": str(exc),
                 }
             ),
+    )
+
+
+def _forward_anthropic_messages(
+    config: LocalProxyConfig,
+    body: bytes,
+    *,
+    request_headers: Any,
+    content_type: str,
+) -> tuple[int, dict[str, str], bytes]:
+    target = _join_anthropic_messages_path(config.upstream_base_url)
+    headers = _anthropic_forward_headers(config, request_headers, content_type=content_type)
+    request = urllib.request.Request(
+        target,
+        data=body,
+        headers=headers,
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=config.upstream_timeout_seconds) as response:
+            response_body = response.read()
+            return int(response.status), _lower_headers(response.headers.items()), response_body
+    except urllib.error.HTTPError as exc:
+        response_body = exc.read()
+        return int(exc.code), _lower_headers(exc.headers.items()), response_body
+    except Exception as exc:
+        return (
+            502,
+            {"content-type": "application/json"},
+            _json_bytes(
+                {
+                    "error": "upstream_request_failed",
+                    "message": str(exc),
+                }
+            ),
         )
 
 
 def _join_upstream_path(base_url: str, path: str) -> str:
     normalized_base = base_url.rstrip("/") + "/"
     return urljoin(normalized_base, path)
+
+
+def _join_anthropic_messages_path(base_url: str) -> str:
+    normalized = base_url.rstrip("/")
+    if normalized.endswith("/v1"):
+        return normalized + "/messages"
+    return normalized + "/v1/messages"
+
+
+def _anthropic_forward_headers(config: LocalProxyConfig, request_headers: Any, *, content_type: str) -> dict[str, str]:
+    headers = {
+        "content-type": content_type,
+        "anthropic-version": _request_header(request_headers, "anthropic-version") or "2023-06-01",
+    }
+    beta = _request_header(request_headers, "anthropic-beta")
+    if beta:
+        headers["anthropic-beta"] = beta
+    if config.upstream_api_key:
+        headers["x-api-key"] = config.upstream_api_key
+    return headers
 
 
 def _send_audit_summary(handler: BaseHTTPRequestHandler, config: LocalProxyConfig, raw_path: str) -> None:
@@ -712,6 +780,7 @@ def _platform_payload(payload: dict[str, Any]) -> dict[str, Any]:
 def _record_proxy_audit_event(
     config: LocalProxyConfig,
     *,
+    route: str,
     request_body: bytes,
     response_body: bytes,
     status_code: int,
@@ -723,13 +792,22 @@ def _record_proxy_audit_event(
     try:
         request_payload = _json_payload(request_body)
         response_payload = _json_payload(response_body)
-        usage = normalize_openai_compatible_usage(
-            response_payload if isinstance(response_payload, dict) else {},
-            usage_source="relay_reported",
-            local_input_estimate=estimate_openai_compatible_input_tokens(request_payload),
-            local_output_estimate=estimate_openai_compatible_output_tokens(response_payload),
-            local_estimate_confidence="compatible_estimate",
-        )
+        if route == "/v1/messages":
+            usage = normalize_anthropic_compatible_usage(
+                response_payload if isinstance(response_payload, dict) else {},
+                usage_source="relay_reported",
+                local_input_estimate=estimate_openai_compatible_input_tokens(request_payload),
+                local_output_estimate=estimate_anthropic_compatible_output_tokens(response_payload),
+                local_estimate_confidence="compatible_estimate",
+            )
+        else:
+            usage = normalize_openai_compatible_usage(
+                response_payload if isinstance(response_payload, dict) else {},
+                usage_source="relay_reported",
+                local_input_estimate=estimate_openai_compatible_input_tokens(request_payload),
+                local_output_estimate=estimate_openai_compatible_output_tokens(response_payload),
+                local_estimate_confidence="compatible_estimate",
+            )
         cost = normalize_openai_compatible_cost(
             response_payload if isinstance(response_payload, dict) else {},
             cost_source="relay_reported",
@@ -751,7 +829,8 @@ def _record_proxy_audit_event(
             latency_ms=latency_ms,
             status_code=status_code,
             metadata={
-                "route": "/v1/chat/completions",
+                "route": route,
+                "wire_protocol": "anthropic_messages" if route == "/v1/messages" else "chat_completions",
                 "proxy_mode": "candidate_local_proxy",
                 **_workflow_metadata(request_headers),
             },
@@ -780,6 +859,11 @@ def _workflow_metadata(headers: Any) -> dict[str, str]:
         if isinstance(value, str) and value.strip():
             metadata[key] = value.strip()[:120]
     return metadata
+
+
+def _request_header(headers: Any, name: str) -> str:
+    value = headers.get(name) if hasattr(headers, "get") else None
+    return value.strip() if isinstance(value, str) and value.strip() else ""
 
 
 def _json_payload(body: bytes) -> Any:

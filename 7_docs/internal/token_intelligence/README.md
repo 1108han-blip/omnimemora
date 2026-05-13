@@ -51,6 +51,8 @@
 - 2026-05-13: TI-027 DoloToken brand-sync release completed. DoloToken `0.1.0-beta.2` artifacts were uploaded to R2, the control-entry Worker was redeployed, live `/download` now lists the DoloToken CLI beta, and remote package SHA/version were verified.
 - 2026-05-13: Current-version product scope recorded. DoloToken can audit relay/middleman token usage and can become a unified token-flow meter for LLM requests that pass through it, but it must label provider-reported, relay-reported, local-estimated, and rough-estimated counts separately and must not claim local estimates as provider billing truth.
 - 2026-05-13: TI-028 repo-only local report page added. The DoloToken proxy now serves a no-code browser report at `/report`, backed by existing metadata-only audit summary, top-request, and potential-savings APIs.
+- 2026-05-13: Product path clarification recorded. OmniMemora is an agent path and optimization layer, not an upstream model owner. OpenClaw and Claude Code currently use Anthropic-compatible MiniMax M2.7 paths when routed; `gemma4:26b` is a local Ollama model option and must not be documented as the current OmniMemora upstream.
+- 2026-05-13: TI-029 repo-only Anthropic non-streaming audit path added. The DoloToken local proxy now accepts `POST /v1/messages`, forwards to the configured Anthropic-compatible upstream without request-body rewrite, forwards `anthropic-version`, uses `x-api-key` from the configured upstream key, and records metadata-only token receipts from Anthropic `usage` fields. Streaming, tool-loop semantic hardening, and provider tokenizer/count APIs remain follow-up work.
 
 ## Naming
 
@@ -100,7 +102,7 @@ Money is a secondary convenience layer. Users can calculate money themselves fro
 
 ## Current Version Scope
 
-This version can be used to audit token usage through relays, middlemen, and OpenAI-compatible LLM clients when their requests are routed through DoloToken.
+This version can be used to audit token usage through relays, middlemen, OpenAI-compatible `/v1/chat/completions` clients, and non-streaming Anthropic-compatible `/v1/messages` clients when their requests are routed through DoloToken.
 
 Product claim:
 
@@ -113,9 +115,13 @@ Product claim:
 Product boundary:
 
 - DoloToken does not directly measure requests that do not pass through it.
+- The current local proxy captures non-streaming Anthropic-compatible `/v1/messages` requests, including compatible Claude Code/OpenClaw-style traffic when those clients are pointed at DoloToken.
+- OmniMemora must be described as the agent path and optimization layer, not as the owner of an upstream model.
+- OpenClaw and Claude Code currently use Anthropic-compatible MiniMax M2.7 paths when routed. `gemma4:26b` is a local Ollama model option on this machine, not current OmniMemora upstream truth.
+- `/v1/models` compatibility output must not be treated as proof of actual agent model selection or upstream health.
 - Local estimates must not be presented as provider billing truth.
 - Difference analysis must be neutral. It can identify unexplained deltas and possible causes, but it must not accuse a relay or provider without independent evidence.
-- Native Anthropic `/v1/messages`, OpenAI Responses API, streaming receipt semantics, provider tokenizer/count APIs, and richer multimodal/reasoning/cache normalization remain follow-up protocol adapters.
+- OpenAI Responses API, streaming receipt semantics, provider tokenizer/count APIs, and richer multimodal/reasoning/cache normalization remain follow-up protocol adapters.
 - Hidden provider-side context, server tools, reasoning tokens, cache rules, multimodal tokens, and relay pricing rules may limit local-only accuracy.
 
 ## Product Shape
@@ -257,13 +263,19 @@ Large files are not allowed as a product strategy. If a file grows, split it int
 
 ### TI-001 - Local Proxy Audit Entry
 
-Create the lightest local entrypoint for OpenAI-compatible and Anthropic-compatible requests.
+Create the lightest local entrypoint for OpenAI-compatible and Anthropic-compatible requests first.
 
 Exit:
 
 - user can point a client or middleman base URL at Omni Token Intelligence Lite;
 - requests pass through without semantic rewrite;
 - audit records are created without raw prompt storage by default.
+
+Boundary:
+
+- current implementation covers non-streaming `/v1/chat/completions` and `/v1/messages`;
+- Anthropic-compatible Claude Code and OpenClaw traffic can be captured when pointed at DoloToken;
+- streaming and tool-loop semantic hardening must preserve native Anthropic message/tool semantics instead of forcing those clients into an OpenAI-shaped abstraction.
 
 ### TI-002 - Provider-Aligned Counting
 

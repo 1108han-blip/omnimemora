@@ -22,6 +22,8 @@ class _FakeUpstreamHandler(BaseHTTPRequestHandler):
         self.server.state["last_path"] = self.path
         self.server.state["last_body"] = body
         self.server.state["last_authorization"] = self.headers.get("authorization")
+        self.server.state["last_x_api_key"] = self.headers.get("x-api-key")
+        self.server.state["last_anthropic_version"] = self.headers.get("anthropic-version")
         self.server.state["last_content_type"] = self.headers.get("content-type")
 
         response_body = self.server.state.get("response_body", b"{}")
@@ -195,6 +197,86 @@ def test_chat_completions_records_audit_without_raw_prompt(tmp_path):
     serialized_api_payloads = json.dumps([receipt, event, summary, top_requests], sort_keys=True)
     assert secret_prompt not in serialized_api_payloads
     assert secret_response not in serialized_api_payloads
+
+
+def test_anthropic_messages_forwards_and_records_audit_without_raw_content(tmp_path):
+    sqlite_path = tmp_path / "audit.sqlite3"
+    secret_prompt = "SECRET_ANTHROPIC_PROMPT_NOT_IN_LEDGER"
+    secret_response = "SECRET_ANTHROPIC_RESPONSE_NOT_IN_LEDGER"
+    upstream_body = {
+        "id": "msg_test_123",
+        "type": "message",
+        "role": "assistant",
+        "model": "MiniMax-M2.7",
+        "content": [{"type": "text", "text": secret_response}],
+        "usage": {
+            "input_tokens": 11,
+            "output_tokens": 7,
+            "cache_creation_input_tokens": 3,
+            "cache_read_input_tokens": 2,
+        },
+    }
+    upstream = _start_fake_upstream(response_body=_json_bytes(upstream_body))
+    proxy = _start_proxy(
+        _base_url(upstream),
+        upstream_api_key="anthropic-secret",
+        audit_db_path=str(sqlite_path),
+        audit_enabled=True,
+    )
+    request_body = {
+        "model": "MiniMax-M2.7",
+        "max_tokens": 16,
+        "messages": [{"role": "user", "content": secret_prompt}],
+    }
+    try:
+        status, body, headers = _post_json_with_headers(
+            f"{_base_url(proxy)}/v1/messages",
+            request_body,
+            headers={
+                "anthropic-version": "2023-06-01",
+                "x-omni-agent-id": "openclaw",
+            },
+        )
+        audit_id = headers["x-omni-token-audit-id"]
+        receipt_status, receipt = _get_json_with_status(f"{_base_url(proxy)}/audit/events/{audit_id}/receipt")
+        event_status, event = _get_json_with_status(f"{_base_url(proxy)}/audit/events/{audit_id}")
+        summary_status, summary = _get_json_with_status(f"{_base_url(proxy)}/audit/summary?limit=10")
+    finally:
+        _stop_server(proxy)
+        _stop_server(upstream)
+
+    assert status == 200
+    assert json.loads(body) == upstream_body
+    assert upstream.state["last_path"] == "/v1/messages"
+    assert json.loads(upstream.state["last_body"]) == request_body
+    assert upstream.state["last_authorization"] is None
+    assert upstream.state["last_x_api_key"] == "anthropic-secret"
+    assert upstream.state["last_anthropic_version"] == "2023-06-01"
+    assert receipt_status == 200
+    assert event_status == 200
+    assert summary_status == 200
+    assert receipt["usage"]["source"] == "relay_reported"
+    assert receipt["usage"]["confidence"] == "official_usage"
+    assert receipt["usage"]["input_tokens"] == 11
+    assert receipt["usage"]["output_tokens"] == 7
+    assert receipt["usage"]["cache_write_tokens"] == 3
+    assert receipt["usage"]["cached_input_tokens"] == 2
+    assert receipt["usage"]["total_tokens"] == 23
+    assert event["metadata"]["route"] == "/v1/messages"
+    assert event["metadata"]["wire_protocol"] == "anthropic_messages"
+    assert event["metadata"]["agent_id"] == "openclaw"
+    assert summary["event_count"] == 1
+    assert summary["usage"]["total_tokens"] == 23
+    assert summary["top_agents"][0]["agent_id"] == "openclaw"
+    with sqlite3.connect(str(sqlite_path)) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT * FROM audit_events LIMIT 1").fetchone()
+    assert row["request_id"] == "msg_test_123"
+    assert row["model_requested"] == "MiniMax-M2.7"
+    assert row["model_reported"] == "MiniMax-M2.7"
+    serialized = json.dumps([dict(row), receipt, event, summary], sort_keys=True)
+    assert secret_prompt not in serialized
+    assert secret_response not in serialized
 
 
 def test_audit_write_failure_is_fail_open(tmp_path):

@@ -57,6 +57,57 @@ def normalize_openai_compatible_usage(
     )
 
 
+def normalize_anthropic_compatible_usage(
+    response_payload: Dict[str, Any],
+    *,
+    local_input_estimate: Optional[int] = None,
+    local_output_estimate: Optional[int] = None,
+    usage_source: str = "provider_reported",
+    local_estimate_confidence: str = "compatible_estimate",
+) -> NormalizedUsage:
+    """Normalize Anthropic Messages usage fields.
+
+    Anthropic-compatible providers usually return `input_tokens` and
+    `output_tokens`, with optional cache read/write token fields. When usage is
+    absent, this returns an explicitly estimated usage object.
+    """
+    raw_usage = response_payload.get("usage") if isinstance(response_payload, dict) else None
+    if not isinstance(raw_usage, dict):
+        input_estimate = _safe_int(local_input_estimate)
+        output_estimate = _safe_int(local_output_estimate)
+        total = _sum_optional(input_estimate, output_estimate)
+        return NormalizedUsage(
+            input_tokens=input_estimate,
+            output_tokens=output_estimate,
+            total_tokens=total,
+            source="local_estimated",
+            confidence=local_estimate_confidence if total is not None else "rough_estimate",
+            raw_usage_present=False,
+        )
+
+    input_tokens = _safe_int(raw_usage.get("input_tokens"))
+    output_tokens = _safe_int(raw_usage.get("output_tokens"))
+    cache_read_tokens = _first_int(raw_usage.get("cache_read_input_tokens"), raw_usage.get("cached_input_tokens"))
+    cache_write_tokens = _first_int(
+        raw_usage.get("cache_creation_input_tokens"),
+        raw_usage.get("cache_write_input_tokens"),
+        raw_usage.get("cache_write_tokens"),
+    )
+    return NormalizedUsage(
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        total_tokens=_first_int(
+            raw_usage.get("total_tokens"),
+            _sum_optional(input_tokens, output_tokens, cache_read_tokens, cache_write_tokens),
+        ),
+        cached_input_tokens=cache_read_tokens,
+        cache_write_tokens=cache_write_tokens,
+        source=usage_source,
+        confidence="official_usage",
+        raw_usage_present=True,
+    )
+
+
 def estimate_openai_compatible_input_tokens(payload: Any) -> Optional[int]:
     if not isinstance(payload, dict):
         return None
@@ -73,6 +124,15 @@ def estimate_openai_compatible_output_tokens(payload: Any) -> Optional[int]:
     if output is not None:
         return _estimate_payload_tokens({"output": output})
     return None
+
+
+def estimate_anthropic_compatible_output_tokens(payload: Any) -> Optional[int]:
+    if not isinstance(payload, dict):
+        return None
+    content = payload.get("content")
+    if content is not None:
+        return _estimate_payload_tokens({"content": content})
+    return estimate_openai_compatible_output_tokens(payload)
 
 
 def normalize_openai_compatible_cost(
