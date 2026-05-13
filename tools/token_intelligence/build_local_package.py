@@ -54,17 +54,16 @@ def main() -> int:
     _write_json(metadata_path, metadata)
     _write_release_layout(release_dir, zip_path, digest, metadata, version)
 
-    print(
-        json.dumps(
-            {
-                "zip": str(zip_path),
-                "sha256": digest,
-                "metadata": str(metadata_path),
-                "release_dir": str(release_dir),
-            },
-            sort_keys=True,
-        )
-    )
+    payload = {
+        "zip": str(zip_path),
+        "sha256": digest,
+        "metadata": str(metadata_path),
+        "release_dir": str(release_dir),
+    }
+    if args.dry_run_publish_plan:
+        payload["publish_plan"] = _dry_run_publish_plan(release_dir, version)
+
+    print(json.dumps(payload, sort_keys=True))
     return 0
 
 
@@ -73,6 +72,11 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--output-dir", default=str(DEFAULT_OUTPUT_DIR))
     parser.add_argument("--version", default=DEFAULT_VERSION)
     parser.add_argument("--channel", default=DEFAULT_CHANNEL)
+    parser.add_argument(
+        "--dry-run-publish-plan",
+        action="store_true",
+        help="print the future R2/Worker publication plan without uploading or deploying",
+    )
     return parser
 
 
@@ -175,6 +179,49 @@ def _write_release_layout(
     _write_text(release_dir / "SHA256SUMS.txt", f"{digest}  {zip_path.name}\n")
     _write_json(release_dir / "latest.json", metadata)
     _write_json(release_dir / f"{version}.json", metadata)
+
+
+def _dry_run_publish_plan(release_dir: Path, version: str) -> dict[str, object]:
+    upload_files = []
+    for path in sorted(release_dir.iterdir()):
+        if not path.is_file():
+            continue
+        upload_files.append(
+            {
+                "path": str(path),
+                "r2_key": f"omnimemora/token-intelligence/{version}/{path.name}",
+                "content_type": _content_type(path.name),
+                "sha256": _sha256(path),
+                "bytes": path.stat().st_size,
+            }
+        )
+    return {
+        "dry_run": True,
+        "mutates_cloud": False,
+        "product": PRODUCT,
+        "version": version,
+        "release_dir": str(release_dir),
+        "r2_bucket_env": "OMNIMEMORA_RELEASE_BUCKET",
+        "r2_prefix": f"omnimemora/token-intelligence/{version}/",
+        "worker_name_env": "OMNIMEMORA_CONTROL_ENTRY_WORKER",
+        "worker_expected_token_intelligence_version": version,
+        "worker_routes": {
+            "download": f"/download/file/token-intelligence/omni-token-audit-{version}-local.zip",
+            "latest_manifest": "/releases/token-intelligence/latest.json",
+            "version_manifest": f"/releases/token-intelligence/{version}.json",
+        },
+        "upload_files": upload_files,
+    }
+
+
+def _content_type(name: str) -> str:
+    if name.endswith(".json"):
+        return "application/json; charset=utf-8"
+    if name.endswith(".txt"):
+        return "text/plain; charset=utf-8"
+    if name.endswith(".zip"):
+        return "application/zip"
+    return "application/octet-stream"
 
 
 def _zip_dir(source_dir: Path, zip_path: Path) -> None:

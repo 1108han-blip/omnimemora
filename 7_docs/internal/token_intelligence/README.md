@@ -43,6 +43,7 @@
 - 2026-05-13: TI-021 repo-only beta package quickstart prepared. The package README now states local proxy purpose, config steps, compatible client base URL, optional attach helper, report commands, update check, checksum verification, private-source boundary, and unsigned Gatekeeper note.
 - 2026-05-13: TI-022 repo-only cloud route candidate prepared. Current live `doloclaw.com` Token Intelligence paths were confirmed 404, then the Worker template gained candidate redirects for Token Intelligence package downloads and release metadata, with local route tests only and no cloud deployment.
 - 2026-05-13: TI-023 repo-only local release layout added. The package builder now emits a local R2-preview directory with zip, `SHA256SUMS.txt`, `latest.json`, and versioned manifest, and tests verify SHA/metadata consistency before any upload.
+- 2026-05-13: TI-024 repo-only dry-run publish plan added. The package builder can now print future R2 upload keys, content types, SHA values, and Worker routes with `mutates_cloud=false`, without creating Cloudflare tokens, uploading objects, or deploying the Worker.
 
 ## Product Target
 
@@ -710,6 +711,42 @@ Boundaries:
 - this does not deploy the Worker to Cloudflare;
 - this does not update the live `doloclaw.com/download` page;
 - generated release preview artifacts stay outside the repo by default and are cleaned after validation.
+
+### TI-024 - Dry-Run Publish Plan
+
+Status: repo implementation completed on 2026-05-13 for local dry-run output only; no cloud token, upload, or Worker deploy performed.
+
+Make the eventual cloud publish step inspectable before any mutation.
+
+Command:
+
+```text
+python3 tools/token_intelligence/build_local_package.py --version 0.1.0-beta.1 --dry-run-publish-plan
+```
+
+Current behavior:
+
+- output includes `publish_plan.dry_run=true`;
+- output includes `publish_plan.mutates_cloud=false`;
+- output lists future R2 keys under `omnimemora/token-intelligence/<version>/`;
+- each upload item includes local path, R2 key, content type, byte size, and SHA256;
+- output names the Worker route paths expected by TI-022;
+- output names `OMNIMEMORA_RELEASE_BUCKET` and `OMNIMEMORA_CONTROL_ENTRY_WORKER` as env-controlled release surfaces without reading credentials.
+
+Validated `0.1.0-beta.1` dry-run plan:
+
+- R2 prefix: `omnimemora/token-intelligence/0.1.0-beta.1/`;
+- upload items: package zip, `SHA256SUMS.txt`, `latest.json`, `0.1.0-beta.1.json`;
+- Worker routes: `/download/file/token-intelligence/omni-token-audit-0.1.0-beta.1-local.zip`, `/releases/token-intelligence/latest.json`, `/releases/token-intelligence/0.1.0-beta.1.json`;
+- example package SHA from the validation run: `9b75990f441552d0b2a029c9a6feacd749284d050e98a18367ed8d3d512acab1`.
+
+Boundaries:
+
+- this does not create Cloudflare API tokens;
+- this does not upload artifacts to R2;
+- this does not deploy the Worker;
+- this does not update live `doloclaw.com` routes;
+- the output is a candidate plan, not evidence of cloud availability.
 
 ## Validation Requirements
 

@@ -437,6 +437,55 @@ def test_local_package_builder_outputs_checksum_metadata_and_launcher(tmp_path):
     assert hashlib.sha256(release_zip_path.read_bytes()).hexdigest() == payload["sha256"]
 
 
+def test_local_package_builder_dry_run_publish_plan_has_no_cloud_side_effects(tmp_path):
+    script = REPO_ROOT / "tools" / "token_intelligence" / "build_local_package.py"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--output-dir",
+            str(tmp_path),
+            "--version",
+            "0.1.0-test",
+            "--dry-run-publish-plan",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+    plan = payload["publish_plan"]
+    upload_files = {item["r2_key"]: item for item in plan["upload_files"]}
+
+    assert plan["dry_run"] is True
+    assert plan["mutates_cloud"] is False
+    assert plan["product"] == "omnimemora-token-intelligence"
+    assert plan["version"] == "0.1.0-test"
+    assert plan["r2_prefix"] == "omnimemora/token-intelligence/0.1.0-test/"
+    assert plan["worker_expected_token_intelligence_version"] == "0.1.0-test"
+    assert plan["worker_routes"] == {
+        "download": "/download/file/token-intelligence/omni-token-audit-0.1.0-test-local.zip",
+        "latest_manifest": "/releases/token-intelligence/latest.json",
+        "version_manifest": "/releases/token-intelligence/0.1.0-test.json",
+    }
+    assert set(upload_files) == {
+        "omnimemora/token-intelligence/0.1.0-test/0.1.0-test.json",
+        "omnimemora/token-intelligence/0.1.0-test/SHA256SUMS.txt",
+        "omnimemora/token-intelligence/0.1.0-test/latest.json",
+        "omnimemora/token-intelligence/0.1.0-test/omni-token-audit-0.1.0-test-local.zip",
+    }
+    assert upload_files[
+        "omnimemora/token-intelligence/0.1.0-test/latest.json"
+    ]["content_type"] == "application/json; charset=utf-8"
+    assert upload_files[
+        "omnimemora/token-intelligence/0.1.0-test/omni-token-audit-0.1.0-test-local.zip"
+    ]["content_type"] == "application/zip"
+    assert upload_files[
+        "omnimemora/token-intelligence/0.1.0-test/omni-token-audit-0.1.0-test-local.zip"
+    ]["sha256"] == payload["sha256"]
+
+
 def test_local_package_real_client_minimal_attach_flow(tmp_path):
     unzip = shutil.which("unzip")
     if unzip is None:
