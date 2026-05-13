@@ -60,6 +60,8 @@ def test_default_config_write_does_not_store_raw_api_key(tmp_path, monkeypatch):
     payload = json.loads(config_path.read_text(encoding="utf-8"))
 
     assert payload["upstream"]["api_key_env"] == "OMNI_AUDIT_UPSTREAM_API_KEY"
+    assert payload["upstreams"]["openai"]["api_key_env"] == "OMNI_AUDIT_OPENAI_UPSTREAM_API_KEY"
+    assert payload["upstreams"]["anthropic"]["api_key_env"] == "OMNI_AUDIT_ANTHROPIC_UPSTREAM_API_KEY"
     assert "secret-value-should-not-be-written" not in config_path.read_text(encoding="utf-8")
     assert payload["privacy"]["content_mode"] == "metadata_only"
     assert payload["privacy"]["store_raw_prompt"] is False
@@ -100,6 +102,61 @@ def test_config_resolves_api_key_from_environment_without_persisting_it(tmp_path
     assert config.resolved_upstream_api_key() == "resolved-secret"
     assert local_proxy_config.upstream_api_key == "resolved-secret"
     assert "resolved-secret" not in config_path.read_text(encoding="utf-8")
+
+
+def test_config_supports_protocol_specific_upstreams(tmp_path, monkeypatch):
+    config_path = tmp_path / "config.json"
+    config_path.write_text(
+        json.dumps(
+            {
+                "server": {"host": "127.0.0.1", "port": 18081},
+                "upstream": {
+                    "base_url": "https://legacy.example/v1",
+                    "api_key_env": "LEGACY_UPSTREAM_KEY",
+                    "timeout_seconds": 5,
+                },
+                "upstreams": {
+                    "openai": {
+                        "base_url": "https://openai-relay.example/v1",
+                        "api_key_env": "OPENAI_UPSTREAM_KEY",
+                        "timeout_seconds": 7,
+                    },
+                    "anthropic": {
+                        "base_url": "https://minimax-anthropic.example",
+                        "api_key_env": "ANTHROPIC_UPSTREAM_KEY",
+                        "timeout_seconds": 9,
+                    },
+                },
+                "privacy": {"content_mode": "metadata_only"},
+                "audit": {"enabled": True, "fail_open": True},
+                "updates": {
+                    "enabled": True,
+                    "metadata_url": "https://doloclaw.com/releases/token-intelligence/latest.json",
+                    "channel": "beta",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("LEGACY_UPSTREAM_KEY", "legacy-secret")
+    monkeypatch.setenv("OPENAI_UPSTREAM_KEY", "openai-secret")
+    monkeypatch.setenv("ANTHROPIC_UPSTREAM_KEY", "anthropic-secret")
+
+    config = token_intelligence.load_config(config_path)
+    local_proxy_config = config.to_local_proxy_config()
+
+    assert config.resolved_upstream_api_key() == "legacy-secret"
+    assert config.resolved_openai_upstream_api_key() == "openai-secret"
+    assert config.resolved_anthropic_upstream_api_key() == "anthropic-secret"
+    assert local_proxy_config.upstream_api_key == "legacy-secret"
+    assert local_proxy_config.openai_upstream_base_url == "https://openai-relay.example/v1"
+    assert local_proxy_config.openai_upstream_api_key == "openai-secret"
+    assert local_proxy_config.openai_upstream_timeout_seconds == 7
+    assert local_proxy_config.anthropic_upstream_base_url == "https://minimax-anthropic.example"
+    assert local_proxy_config.anthropic_upstream_api_key == "anthropic-secret"
+    assert local_proxy_config.anthropic_upstream_timeout_seconds == 9
+    assert "openai-secret" not in config_path.read_text(encoding="utf-8")
+    assert "anthropic-secret" not in config_path.read_text(encoding="utf-8")
 
 
 def test_invalid_config_blocks_port_open_before_proxy_creation():

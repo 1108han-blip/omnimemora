@@ -46,6 +46,12 @@ class LocalProxyConfig:
     upstream_base_url: str
     upstream_api_key: str = ""
     upstream_timeout_seconds: float = 120.0
+    openai_upstream_base_url: str = ""
+    openai_upstream_api_key: str = ""
+    openai_upstream_timeout_seconds: Optional[float] = None
+    anthropic_upstream_base_url: str = ""
+    anthropic_upstream_api_key: str = ""
+    anthropic_upstream_timeout_seconds: Optional[float] = None
     host: str = "127.0.0.1"
     port: int = 18081
     audit_enabled: bool = True
@@ -204,10 +210,11 @@ def _forward_chat_completion(
     *,
     content_type: str,
 ) -> tuple[int, dict[str, str], bytes]:
-    target = _join_upstream_path(config.upstream_base_url, "chat/completions")
+    target = _join_upstream_path(_openai_upstream_base_url(config), "chat/completions")
     headers = {"content-type": content_type}
-    if config.upstream_api_key:
-        headers["authorization"] = f"Bearer {config.upstream_api_key}"
+    upstream_api_key = _openai_upstream_api_key(config)
+    if upstream_api_key:
+        headers["authorization"] = f"Bearer {upstream_api_key}"
 
     request = urllib.request.Request(
         target,
@@ -216,7 +223,7 @@ def _forward_chat_completion(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=config.upstream_timeout_seconds) as response:
+        with urllib.request.urlopen(request, timeout=_openai_upstream_timeout_seconds(config)) as response:
             response_body = response.read()
             return int(response.status), _lower_headers(response.headers.items()), response_body
     except urllib.error.HTTPError as exc:
@@ -242,7 +249,7 @@ def _forward_anthropic_messages(
     request_headers: Any,
     content_type: str,
 ) -> tuple[int, dict[str, str], bytes]:
-    target = _join_anthropic_messages_path(config.upstream_base_url)
+    target = _join_anthropic_messages_path(_anthropic_upstream_base_url(config))
     headers = _anthropic_forward_headers(config, request_headers, content_type=content_type)
     request = urllib.request.Request(
         target,
@@ -251,7 +258,7 @@ def _forward_anthropic_messages(
         method="POST",
     )
     try:
-        with urllib.request.urlopen(request, timeout=config.upstream_timeout_seconds) as response:
+        with urllib.request.urlopen(request, timeout=_anthropic_upstream_timeout_seconds(config)) as response:
             response_body = response.read()
             return int(response.status), _lower_headers(response.headers.items()), response_body
     except urllib.error.HTTPError as exc:
@@ -290,9 +297,34 @@ def _anthropic_forward_headers(config: LocalProxyConfig, request_headers: Any, *
     beta = _request_header(request_headers, "anthropic-beta")
     if beta:
         headers["anthropic-beta"] = beta
-    if config.upstream_api_key:
-        headers["x-api-key"] = config.upstream_api_key
+    upstream_api_key = _anthropic_upstream_api_key(config)
+    if upstream_api_key:
+        headers["x-api-key"] = upstream_api_key
     return headers
+
+
+def _openai_upstream_base_url(config: LocalProxyConfig) -> str:
+    return (config.openai_upstream_base_url or config.upstream_base_url).strip()
+
+
+def _openai_upstream_api_key(config: LocalProxyConfig) -> str:
+    return (config.openai_upstream_api_key or config.upstream_api_key).strip()
+
+
+def _openai_upstream_timeout_seconds(config: LocalProxyConfig) -> float:
+    return config.openai_upstream_timeout_seconds or config.upstream_timeout_seconds
+
+
+def _anthropic_upstream_base_url(config: LocalProxyConfig) -> str:
+    return (config.anthropic_upstream_base_url or config.upstream_base_url).strip()
+
+
+def _anthropic_upstream_api_key(config: LocalProxyConfig) -> str:
+    return (config.anthropic_upstream_api_key or config.upstream_api_key).strip()
+
+
+def _anthropic_upstream_timeout_seconds(config: LocalProxyConfig) -> float:
+    return config.anthropic_upstream_timeout_seconds or config.upstream_timeout_seconds
 
 
 def _send_audit_summary(handler: BaseHTTPRequestHandler, config: LocalProxyConfig, raw_path: str) -> None:
@@ -820,7 +852,7 @@ def _record_proxy_audit_event(
             request_id=request_id,
             request_payload=request_payload,
             response_payload=response_payload,
-            upstream_base_url=config.upstream_base_url,
+            upstream_base_url=_audit_upstream_base_url(config, route),
             provider="local_proxy",
             model_requested=model_requested,
             model_reported=model_reported,
@@ -859,6 +891,12 @@ def _workflow_metadata(headers: Any) -> dict[str, str]:
         if isinstance(value, str) and value.strip():
             metadata[key] = value.strip()[:120]
     return metadata
+
+
+def _audit_upstream_base_url(config: LocalProxyConfig, route: str) -> str:
+    if route == "/v1/messages":
+        return _anthropic_upstream_base_url(config)
+    return _openai_upstream_base_url(config)
 
 
 def _request_header(headers: Any, name: str) -> str:
@@ -900,11 +938,17 @@ def _lower_headers(headers: Any) -> dict[str, str]:
 def _validate_config(config: LocalProxyConfig) -> None:
     if config.host != "127.0.0.1":
         raise ValueError("TI-001 local proxy must bind to 127.0.0.1 by default")
-    if not config.upstream_base_url.strip():
-        raise ValueError("upstream_base_url is required")
+    if not _openai_upstream_base_url(config):
+        raise ValueError("openai_upstream_base_url is required")
+    if not _anthropic_upstream_base_url(config):
+        raise ValueError("anthropic_upstream_base_url is required")
     if config.port <= 0 or config.port > 65535:
         raise ValueError("port must be between 1 and 65535")
     if config.upstream_timeout_seconds <= 0:
         raise ValueError("upstream_timeout_seconds must be positive")
+    if _openai_upstream_timeout_seconds(config) <= 0:
+        raise ValueError("openai_upstream_timeout_seconds must be positive")
+    if _anthropic_upstream_timeout_seconds(config) <= 0:
+        raise ValueError("anthropic_upstream_timeout_seconds must be positive")
     if config.update_check_enabled and not config.update_metadata_url.strip():
         raise ValueError("update_metadata_url is required when update checks are enabled")

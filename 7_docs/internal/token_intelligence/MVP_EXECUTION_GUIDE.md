@@ -12,6 +12,12 @@ Target:
 
 The product must explain where tokens were spent, why they were spent, what was waste, and which Omni optimization can reduce future token use. Cost and money views are optional interpretation layers on top of token-flow truth.
 
+Refined product target:
+
+> DoloToken is the LLM Usage Verification Layer for OmniMemora.
+
+It is not a universal tokenizer and should not be marketed as exact third-party token calculation. LLM tokens are provider-specific accounting units. The product value is unified sampling, source labeling, confidence labeling, drift detection, and conservative runtime trust signals.
+
 External name: DoloToken.
 
 Internal name: Token Intelligence Lite.
@@ -22,15 +28,43 @@ Use:
 
 ```text
 DoloToken gives local token transparency for LLM users.
+DoloToken verifies LLM usage behavior across providers, relays, and APIs.
 ```
 
 Do not use:
 
 ```text
 Proof that a middleman is cheating.
+Exact universal token counter.
 ```
 
 Omni may detect unexplained deltas, but must report them as differences with possible causes, not accusations. Token counts can legitimately differ because of tokenizer differences, hidden context, caching, reasoning tokens, multimodal tokens, server-side tools, and relay accounting rules.
+
+## MVP Product Goal
+
+MVP goal:
+
+```text
+Build a unified sampling layer for every LLM request that passes through OmniMemora `18011`, then expose conservative usage verification signals without claiming absolute truth.
+```
+
+The MVP is successful when a non-technical user can answer:
+
+- which agent, workflow, model, provider, and protocol spent tokens;
+- whether the upstream reported usage or only local estimates are available;
+- whether reported usage looks normal, divergent, incomplete, or unsupported;
+- whether cache, latency, stream speed, finish reason, or model identity show obvious anomalies;
+- where OmniMemora can reduce future token waste without hiding the measurement source.
+
+The MVP is not required to prove:
+
+- exact provider billing truth;
+- exact hidden reasoning tokens;
+- exact cache internals;
+- exact model identity;
+- fraud or intentional relay abuse.
+
+Those can become later Runtime Audit / Model Fingerprinting capabilities after enough samples exist.
 
 ## First Packaging Decision
 
@@ -93,18 +127,24 @@ Boundary clarification:
 
 Included:
 
-- OpenAI-compatible `POST /v1/chat/completions` proxy.
-- Anthropic-compatible non-streaming `POST /v1/messages` proxy.
-- Non-streaming first; streaming follows after receipt semantics are stable.
-- Configurable upstream base URL and API key reference.
-- Response `usage` extraction.
-- Local token estimate when usage is missing.
+- `18011` remains the only official OmniMemora agent ingress.
+- Unified sampling for LLM requests that pass through `18011`.
+- OpenAI-compatible `POST /v1/chat/completions` sample normalization.
+- Anthropic-compatible non-streaming `POST /v1/messages` sample normalization.
+- Provider/protocol/model/request metadata.
+- Input/output character counts.
+- Response `usage` extraction when present.
+- Local token estimate when usage is missing or for comparison.
 - Source and confidence label on every token number, and on every optional cost number when cost is present.
+- Latency, finish reason, status code, and route/protocol metadata.
+- Cache read/write fields when the provider or relay exposes them.
+- Reasoning token fields when the provider or relay exposes them.
 - Compact SQLite audit ledger.
 - No raw prompt storage by default.
 - Request receipt read/export.
 - Local recent-usage report API or small local page.
 - Difference analysis between reported usage and local estimate.
+- Initial conservative verification statuses: `normal`, `watch`, `anomaly`, `needs_review`, `unsupported`.
 - Potential savings report.
 
 Deferred:
@@ -113,6 +153,11 @@ Deferred:
 - Browser extension capture.
 - Full OpenAI Responses API coverage.
 - Anthropic streaming and tool-loop semantic hardening for Claude Code and OpenClaw.
+- Stream cadence and token-per-second trust scoring.
+- Provider tokenizer/count API integration.
+- Cross-tokenizer divergence matrix.
+- Model fingerprinting or "real model probability" claims.
+- AI Provider Trust Score.
 - Multi-tenant team billing.
 - Automatic optimization.
 - User behavior analytics beyond token/workflow ROI and optional cost interpretation.
@@ -147,6 +192,66 @@ D rough_estimate       unknown tokenizer, multimodal, reasoning, server tool, or
 Rough estimates must never be displayed as billing truth.
 
 Token accounting is the foundation. Money calculation is optional because official prices, relay prices, regions, discounts, user groups, cache rules, and routing policies differ. A future calculator may support user-selected pricing profiles, but no price table is the product anchor.
+
+## Unified Sampling Record
+
+Every sampled request should move toward this minimum normalized shape:
+
+```json
+{
+  "schema_version": "llm-usage-sample-v1",
+  "request_id": "req_xxx",
+  "agent_id": "openclaw",
+  "workflow_tag": "coding",
+  "provider": "minimax",
+  "protocol": "anthropic_messages",
+  "model_requested": "MiniMax-M2.7",
+  "model_reported": "MiniMax-M2.7",
+  "route": "/v1/messages",
+  "status_code": 200,
+  "input_chars": 1832,
+  "output_chars": 640,
+  "local_estimated_input_tokens": 512,
+  "provider_input_tokens": 601,
+  "provider_output_tokens": 220,
+  "provider_total_tokens": 821,
+  "cache_read_tokens": 0,
+  "cache_write_tokens": 0,
+  "reasoning_tokens": null,
+  "latency_ms": 4221,
+  "stream_tokens_per_second": null,
+  "finish_reason": "stop",
+  "usage_source": "provider_reported",
+  "usage_confidence": "official_usage",
+  "verification_status": "normal"
+}
+```
+
+Do not store raw prompt or raw response in this MVP shape by default. Store hashes, lengths, compact block summaries, and provider-visible usage metadata.
+
+## Verification Signals
+
+MVP signals:
+
+- token divergence: reported usage versus local estimate;
+- chars/token ratio: rough sanity check for unusual accounting;
+- usage completeness: whether input, output, total, cache, and reasoning fields exist;
+- cache plausibility: whether cache read/write values are plausible for the request shape;
+- latency/token: basic speed sanity check;
+- model consistency: requested model, reported model, provider, and route alignment;
+- finish reason risk: stop, length, error, tool, or provider-specific termination markers.
+
+Future signals:
+
+- stream cadence and burst analysis;
+- cross-tokenizer divergence across tiktoken, provider tokenizer, sentencepiece, Qwen tokenizer, and others;
+- model fingerprinting from latency, stream rhythm, refusal pattern, style entropy, tool-call timing, and stop behavior;
+- AI Provider Trust Score.
+
+Trust language:
+
+- use `normal`, `watch`, `anomaly`, `needs_review`, `unsupported`;
+- avoid `cheating`, `fake`, `fraud`, or `real Claude probability` in MVP UI unless later evidence and governance explicitly support that product line.
 
 ## Three-Ledger Model
 

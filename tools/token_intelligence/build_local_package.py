@@ -145,9 +145,12 @@ Current version boundary:
 Quickstart:
   ./omni-token-audit init
   # Edit ~/.omnimemora/token-intelligence/config.json:
-  #   upstream.base_url = your upstream /v1 endpoint
-  #   upstream.api_key_env = the environment variable that contains your API key
-  export OMNI_AUDIT_UPSTREAM_API_KEY="your-upstream-key"
+  #   upstreams.openai.base_url = your OpenAI-compatible upstream /v1 endpoint
+  #   upstreams.openai.api_key_env = the environment variable that contains your OpenAI-compatible API key
+  #   upstreams.anthropic.base_url = your Anthropic-compatible upstream endpoint, for example MiniMax M2.7
+  #   upstreams.anthropic.api_key_env = the environment variable that contains your Anthropic-compatible API key
+  export OMNI_AUDIT_OPENAI_UPSTREAM_API_KEY="your-openai-upstream-key"
+  export OMNI_AUDIT_ANTHROPIC_UPSTREAM_API_KEY="your-anthropic-upstream-key"
   ./omni-token-audit doctor
   ./omni-token-audit proxy start
 

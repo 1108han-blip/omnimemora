@@ -87,8 +87,10 @@ omni-token-audit version
 Optional later commands:
 
 ```text
-omni-token-audit config set upstream.base_url <url>
-omni-token-audit config set upstream.api_key_env <ENV_NAME>
+omni-token-audit config set upstreams.openai.base_url <url>
+omni-token-audit config set upstreams.openai.api_key_env <ENV_NAME>
+omni-token-audit config set upstreams.anthropic.base_url <url>
+omni-token-audit config set upstreams.anthropic.api_key_env <ENV_NAME>
 omni-token-audit report today
 ```
 
@@ -127,6 +129,18 @@ Minimum config:
     "api_key_env": "OMNI_AUDIT_UPSTREAM_API_KEY",
     "timeout_seconds": 120
   },
+  "upstreams": {
+    "openai": {
+      "base_url": "https://example-openai-relay.invalid/v1",
+      "api_key_env": "OMNI_AUDIT_OPENAI_UPSTREAM_API_KEY",
+      "timeout_seconds": 120
+    },
+    "anthropic": {
+      "base_url": "https://example-anthropic-relay.invalid",
+      "api_key_env": "OMNI_AUDIT_ANTHROPIC_UPSTREAM_API_KEY",
+      "timeout_seconds": 120
+    }
+  },
   "privacy": {
     "content_mode": "metadata_only",
     "store_raw_prompt": false,
@@ -146,7 +160,10 @@ Minimum config:
 
 Rules:
 
-- store API key by environment-variable reference, not raw key, in the default config;
+- store API keys by environment-variable reference, not raw key, in the default config;
+- `upstreams.openai` is authoritative for `/v1/chat/completions`;
+- `upstreams.anthropic` is authoritative for `/v1/messages`;
+- legacy `upstream` remains only as a compatibility fallback for older config files;
 - invalid config must fail before opening the port;
 - audit persistence failure must not block upstream forwarding when `fail_open=true`;
 - `content_mode=full_content` is out of TI-001 scope.
@@ -168,8 +185,8 @@ GET  /updates/check
 
 Route semantics:
 
-- `/v1/chat/completions` forwards to `<upstream.base_url>/chat/completions`.
-- `/v1/messages` forwards to `<upstream.base_url>/v1/messages`, or to `<upstream.base_url>/messages` when the configured base already ends in `/v1`.
+- `/v1/chat/completions` forwards to `<upstreams.openai.base_url>/chat/completions`.
+- `/v1/messages` forwards to `<upstreams.anthropic.base_url>/v1/messages`, or to `<upstreams.anthropic.base_url>/messages` when the configured base already ends in `/v1`.
 - Non-streaming only in TI-001.
 - Response body and status should match upstream unless the local proxy itself fails before upstream is called.
 - Audit receipt creation happens after upstream response parsing and must not mutate the user-visible response.
@@ -179,7 +196,8 @@ Route semantics:
 
 Forward:
 
-- `Authorization` rebuilt from configured upstream key;
+- OpenAI-compatible `Authorization` rebuilt from `upstreams.openai` key;
+- Anthropic-compatible `x-api-key` rebuilt from `upstreams.anthropic` key;
 - content type;
 - provider-compatible request body.
 

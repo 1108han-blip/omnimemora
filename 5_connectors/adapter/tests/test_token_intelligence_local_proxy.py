@@ -279,6 +279,60 @@ def test_anthropic_messages_forwards_and_records_audit_without_raw_content(tmp_p
     assert secret_response not in serialized
 
 
+def test_protocol_specific_upstreams_are_routed_separately():
+    openai_upstream = _start_fake_upstream(
+        response_body=_json_bytes(
+            {
+                "id": "chatcmpl-split",
+                "model": "openai-relay-model",
+                "choices": [{"message": {"content": "ok"}}],
+                "usage": {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5},
+            }
+        )
+    )
+    anthropic_upstream = _start_fake_upstream(
+        response_body=_json_bytes(
+            {
+                "id": "msg_split",
+                "type": "message",
+                "model": "MiniMax-M2.7",
+                "content": [{"type": "text", "text": "ok"}],
+                "usage": {"input_tokens": 4, "output_tokens": 3},
+            }
+        )
+    )
+    proxy = _start_proxy_with_options(
+        "https://legacy.example.invalid/v1",
+        upstream_api_key="legacy-secret",
+        openai_upstream_base_url=f"{_base_url(openai_upstream)}/v1",
+        openai_upstream_api_key="openai-secret",
+        anthropic_upstream_base_url=_base_url(anthropic_upstream),
+        anthropic_upstream_api_key="anthropic-secret",
+    )
+    try:
+        openai_status, _openai_body = _post_json(
+            f"{_base_url(proxy)}/v1/chat/completions",
+            {"model": "openai-relay-model", "messages": [{"role": "user", "content": "hello"}]},
+        )
+        anthropic_status, _anthropic_body = _post_json(
+            f"{_base_url(proxy)}/v1/messages",
+            {"model": "MiniMax-M2.7", "max_tokens": 8, "messages": [{"role": "user", "content": "hello"}]},
+        )
+    finally:
+        _stop_server(proxy)
+        _stop_server(openai_upstream)
+        _stop_server(anthropic_upstream)
+
+    assert openai_status == 200
+    assert anthropic_status == 200
+    assert openai_upstream.state["last_path"] == "/v1/chat/completions"
+    assert openai_upstream.state["last_authorization"] == "Bearer openai-secret"
+    assert openai_upstream.state["last_x_api_key"] is None
+    assert anthropic_upstream.state["last_path"] == "/v1/messages"
+    assert anthropic_upstream.state["last_authorization"] is None
+    assert anthropic_upstream.state["last_x_api_key"] == "anthropic-secret"
+
+
 def test_audit_write_failure_is_fail_open(tmp_path):
     sqlite_dir_path = tmp_path / "not-a-db-dir"
     sqlite_dir_path.mkdir()
@@ -627,6 +681,10 @@ def _start_proxy_with_options(
     upstream_base_url: str,
     *,
     upstream_api_key: str = "",
+    openai_upstream_base_url: str = "",
+    openai_upstream_api_key: str = "",
+    anthropic_upstream_base_url: str = "",
+    anthropic_upstream_api_key: str = "",
     audit_enabled: bool = False,
     audit_db_path: str = "",
     audit_fail_open: bool = True,
@@ -637,6 +695,10 @@ def _start_proxy_with_options(
         port=_free_port(),
         upstream_base_url=upstream_base_url,
         upstream_api_key=upstream_api_key,
+        openai_upstream_base_url=openai_upstream_base_url,
+        openai_upstream_api_key=openai_upstream_api_key,
+        anthropic_upstream_base_url=anthropic_upstream_base_url,
+        anthropic_upstream_api_key=anthropic_upstream_api_key,
         upstream_timeout_seconds=5,
         audit_enabled=audit_enabled,
         audit_db_path=audit_db_path or None,

@@ -3,6 +3,7 @@
 from .config import (
     AuditConfig,
     PrivacyConfig,
+    ProtocolUpstreamsConfig,
     ServerConfig,
     TokenIntelligenceConfig,
     UpdatesConfig,
@@ -47,6 +48,7 @@ __all__ = [
     "NormalizedCost",
     "NormalizedUsage",
     "PrivacyConfig",
+    "ProtocolUpstreamsConfig",
     "ServerConfig",
     "TokenIntelligenceConfig",
     "UpdatesConfig",

@@ -53,6 +53,8 @@
 - 2026-05-13: TI-028 repo-only local report page added. The DoloToken proxy now serves a no-code browser report at `/report`, backed by existing metadata-only audit summary, top-request, and potential-savings APIs.
 - 2026-05-13: Product path clarification recorded. OmniMemora is an agent path and optimization layer, not an upstream model owner. OpenClaw and Claude Code currently use Anthropic-compatible MiniMax M2.7 paths when routed; `gemma4:26b` is a local Ollama model option and must not be documented as the current OmniMemora upstream.
 - 2026-05-13: TI-029 repo-only Anthropic non-streaming audit path added. The DoloToken local proxy now accepts `POST /v1/messages`, forwards to the configured Anthropic-compatible upstream without request-body rewrite, forwards `anthropic-version`, uses `x-api-key` from the configured upstream key, and records metadata-only token receipts from Anthropic `usage` fields. Streaming, tool-loop semantic hardening, and provider tokenizer/count APIs remain follow-up work.
+- 2026-05-13: TI-030 repo-only protocol-specific upstream config added. DoloToken now supports separate `upstreams.openai` and `upstreams.anthropic` base URL/API-key-env settings while retaining legacy `upstream` as a compatibility fallback. OpenAI `/v1/chat/completions` and Anthropic `/v1/messages` no longer have to share one upstream/key setting.
+- 2026-05-13: TI-031 product target refined. DoloToken / Token Intelligence is an LLM Usage Verification Layer on the OmniMemora `18011` path, not a universal tokenizer. The MVP target is a unified sampling layer plus conservative trust signals for token divergence, cache plausibility, latency/token, stream behavior, and model/routing consistency.
 
 ## Naming
 
@@ -81,7 +83,27 @@ Reason:
 
 ## Product Target
 
-DoloToken is not simple usage accounting.
+DoloToken is not simple usage accounting, and it is not a universal tokenizer.
+
+The product target is:
+
+```text
+LLM Usage Verification Layer for OmniMemora.
+```
+
+Or, in engineering terms:
+
+```text
+AI Runtime Audit for requests that pass through OmniMemora.
+```
+
+Core thesis:
+
+- LLM tokens are provider-specific accounting units, not a universal currency.
+- Exact third-party token calculation is not the durable product goal.
+- The durable product goal is a cross-provider, cross-relay, cross-protocol usage verification layer.
+- DoloToken must collect consistent observations, preserve source/confidence labels, compare reported usage with local estimates, and surface conservative trust signals.
+- DoloToken must not accuse a provider, relay, or middleman of fraud without independent evidence; it should report measurable anomalies and likely explanations.
 
 It must explain:
 
@@ -99,6 +121,66 @@ It must explain:
 Primary target: accurate token-flow accounting.
 
 Money is a secondary convenience layer. Users can calculate money themselves from trusted token counts, or use a small optional calculator/profile when they want a local estimate. OmniMemora must not lock product truth to one official price table, one relay price table, one region, or one user group. Reported relay/provider cost can be recorded as evidence; locally inferred cost must remain labeled and optional.
+
+## Usage Verification Scope
+
+Token counts cannot be truly unified across OpenAI, Anthropic, Gemini, DeepSeek, Qwen, local Ollama models, and relays because each provider may differ on tokenizer, hidden system context, reasoning tokens, cache rules, tool-call accounting, multimodal tokens, and server-side behavior.
+
+Therefore DoloToken standardizes the accounting envelope, not the provider tokenizer.
+
+Unified usage record:
+
+```json
+{
+  "provider": "minimax",
+  "protocol": "anthropic_messages",
+  "model_requested": "MiniMax-M2.7",
+  "model_reported": "MiniMax-M2.7",
+  "input_chars": 1832,
+  "local_estimated_tokens": 512,
+  "provider_input_tokens": 601,
+  "provider_output_tokens": 220,
+  "reasoning_tokens": null,
+  "cache_read_tokens": 0,
+  "cache_write_tokens": 0,
+  "latency_ms": 4221,
+  "stream_tokens_per_second": 31,
+  "finish_reason": "stop",
+  "source": "provider_reported",
+  "confidence": "official_usage"
+}
+```
+
+Verification signals:
+
+- token divergence: reported usage versus local estimate;
+- chars/token ratio: unusually high or low input/output accounting;
+- cache plausibility: cache read/write patterns that do not match request shape;
+- latency/token: unusually fast, slow, or unstable generation behavior;
+- stream cadence: token-per-second, burst, and stall patterns when streaming is supported;
+- model/routing consistency: requested model, reported model, route, protocol, and provider identity alignment;
+- hidden truncation risk: finish reason, output length, and context-size symptoms;
+- reasoning opacity: missing, excessive, or inconsistent reasoning-token reporting when the provider exposes it.
+
+Trust outputs must be conservative:
+
+```text
+normal
+watch
+anomaly
+needs_review
+unsupported
+```
+
+Avoid early claims like:
+
+```text
+fake Claude probability
+provider cheated
+exact billing truth
+```
+
+Those belong only to a later model-fingerprinting line after enough sampled evidence exists.
 
 ## Current Version Scope
 
@@ -121,6 +203,7 @@ Product boundary:
 - `/v1/models` compatibility output must not be treated as proof of actual agent model selection or upstream health.
 - Local estimates must not be presented as provider billing truth.
 - Difference analysis must be neutral. It can identify unexplained deltas and possible causes, but it must not accuse a relay or provider without independent evidence.
+- Token authenticity scoring and model fingerprinting are future trust layers; the current MVP must first collect reliable unified samples.
 - OpenAI Responses API, streaming receipt semantics, provider tokenizer/count APIs, and richer multimodal/reasoning/cache normalization remain follow-up protocol adapters.
 - Hidden provider-side context, server tools, reasoning tokens, cache rules, multimodal tokens, and relay pricing rules may limit local-only accuracy.
 
@@ -677,7 +760,7 @@ Current behavior:
 
 - the test builds a fresh local package and unpacks it with system `unzip` so executable-bit behavior is part of the gate;
 - the proxy runs from the unpacked package as a subprocess, not from imported repo modules;
-- the upstream receives the configured upstream API key from the environment;
+- the OpenAI-compatible upstream receives the configured OpenAI upstream API key from the environment;
 - the client response is pass-through and contains `x-omni-token-audit-id`;
 - receipt records `relay_reported` token usage;
 - summary/top-requests record `openclaw` and `coding` tags from request headers;
@@ -699,7 +782,7 @@ Prepare the downloadable package so a user can understand and verify the local b
 Exit:
 
 - package README explains what Token Intelligence Lite does and that source code is not included;
-- README gives minimum config steps for `upstream.base_url` and `upstream.api_key_env`;
+- README gives minimum config steps for `upstreams.openai.*` and `upstreams.anthropic.*`, with legacy `upstream.*` retained only as compatibility fallback;
 - README gives the OpenAI-compatible client base URL `http://127.0.0.1:18081/v1`;
 - README lists `doctor`, `proxy start`, optional `attach/detach`, report commands, and `update check`;
 - README tells users to verify `SHA256SUMS.txt` before replacing the package;
@@ -1004,6 +1087,28 @@ Exit:
 - users can open `http://127.0.0.1:18081/report` after starting the proxy;
 - page shows request count, total/input/output/reasoning tokens, top agents, top models, top requests, and optimization signals;
 - existing CLI reports remain available for users who want JSON output.
+
+### TI-030 - Protocol-Specific Upstream Config
+
+Status: repo implementation completed on 2026-05-13 for the DoloToken local proxy.
+
+Goal:
+
+- avoid forcing OpenAI-compatible and Anthropic-compatible traffic to share one upstream URL/key;
+- support MiniMax M2.7 through Anthropic-compatible `/v1/messages` while keeping OpenAI-compatible relay traffic separately configurable;
+- preserve old config files by treating legacy `upstream` as fallback only.
+
+Config contract:
+
+- `upstreams.openai.base_url` and `upstreams.openai.api_key_env` drive `/v1/chat/completions`;
+- `upstreams.anthropic.base_url` and `upstreams.anthropic.api_key_env` drive `/v1/messages`;
+- `upstream.base_url` and `upstream.api_key_env` remain readable for older installs but should not be the recommended new setup.
+
+Boundary:
+
+- repo-only product package behavior;
+- no cloud publish in this batch;
+- no mutation of OpenClaw, Claude Code, or other official client config files.
 
 ## Validation Requirements
 
