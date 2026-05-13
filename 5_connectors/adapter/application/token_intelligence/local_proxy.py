@@ -11,6 +11,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Optional
 from urllib.parse import urljoin
 
+from .ledger import build_audit_event, record_audit_event
+from .usage_normalizer import normalize_openai_compatible_usage
+
 VERSION = "0.1.0-dev"
 SERVICE_NAME = "omni-token-audit-local-proxy"
 
@@ -22,6 +25,9 @@ class LocalProxyConfig:
     upstream_timeout_seconds: float = 120.0
     host: str = "127.0.0.1"
     port: int = 18081
+    audit_enabled: bool = True
+    audit_fail_open: bool = True
+    audit_db_path: Optional[str] = None
 
 
 def create_server(config: LocalProxyConfig) -> ThreadingHTTPServer:
@@ -81,12 +87,32 @@ def _make_handler(config: LocalProxyConfig) -> type[BaseHTTPRequestHandler]:
                 content_type=self.headers.get("content-type", "application/json"),
             )
             elapsed_ms = int((time.monotonic() - started) * 1000)
+            audit_id, audit_error = _record_proxy_audit_event(
+                config,
+                request_body=body,
+                response_body=response_body,
+                status_code=status_code,
+                latency_ms=elapsed_ms,
+            )
+            if audit_error and not config.audit_fail_open:
+                status_code = 500
+                response_headers = {"content-type": "application/json"}
+                response_body = _json_bytes(
+                    {
+                        "error": "audit_persistence_failed",
+                        "message": audit_error,
+                    }
+                )
             self.send_response(status_code)
             content_type = response_headers.get("content-type", "application/json")
             self.send_header("content-type", content_type)
             self.send_header("content-length", str(len(response_body)))
             self.send_header("x-omni-token-audit-mode", "passthrough")
             self.send_header("x-omni-token-audit-latency-ms", str(elapsed_ms))
+            if audit_id:
+                self.send_header("x-omni-token-audit-id", audit_id)
+            if audit_error and config.audit_fail_open:
+                self.send_header("x-omni-token-audit-error", "persistence_failed")
             self.end_headers()
             self.wfile.write(response_body)
 
@@ -136,6 +162,62 @@ def _forward_chat_completion(
 def _join_upstream_path(base_url: str, path: str) -> str:
     normalized_base = base_url.rstrip("/") + "/"
     return urljoin(normalized_base, path)
+
+
+def _record_proxy_audit_event(
+    config: LocalProxyConfig,
+    *,
+    request_body: bytes,
+    response_body: bytes,
+    status_code: int,
+    latency_ms: int,
+) -> tuple[Optional[str], str]:
+    if not config.audit_enabled:
+        return None, ""
+    try:
+        request_payload = _json_payload(request_body)
+        response_payload = _json_payload(response_body)
+        usage = normalize_openai_compatible_usage(
+            response_payload if isinstance(response_payload, dict) else {},
+            usage_source="relay_reported",
+        )
+        model_requested = _string_field(request_payload, "model")
+        model_reported = _string_field(response_payload, "model") or model_requested
+        request_id = _string_field(response_payload, "id") or f"local_proxy_{time.time_ns()}"
+        event = build_audit_event(
+            request_id=request_id,
+            request_payload=request_payload,
+            response_payload=response_payload,
+            upstream_base_url=config.upstream_base_url,
+            provider="local_proxy",
+            model_requested=model_requested,
+            model_reported=model_reported,
+            usage=usage,
+            latency_ms=latency_ms,
+            status_code=status_code,
+            metadata={
+                "route": "/v1/chat/completions",
+                "proxy_mode": "candidate_local_proxy",
+            },
+        )
+        record_audit_event(event, path=config.audit_db_path)
+        return event.audit_id, ""
+    except Exception as exc:
+        return None, str(exc)
+
+
+def _json_payload(body: bytes) -> Any:
+    try:
+        return json.loads(body.decode("utf-8"))
+    except Exception:
+        return {"body_sha256_only": True}
+
+
+def _string_field(payload: Any, key: str) -> str:
+    if not isinstance(payload, dict):
+        return ""
+    value = payload.get(key)
+    return str(value) if value is not None else ""
 
 
 def _send_json(handler: BaseHTTPRequestHandler, status_code: int, payload: dict[str, Any]) -> None:

@@ -1,5 +1,6 @@
 import importlib
 import json
+import sqlite3
 import socket
 import sys
 import threading
@@ -75,6 +76,77 @@ def test_chat_completions_forwards_body_to_configured_upstream():
     assert upstream.state["last_content_type"] == "application/json"
 
 
+def test_chat_completions_records_audit_without_raw_prompt(tmp_path):
+    sqlite_path = tmp_path / "audit.sqlite3"
+    secret_prompt = "SECRET_PROMPT_SHOULD_NOT_BE_IN_LEDGER"
+    secret_response = "SECRET_RESPONSE_SHOULD_NOT_BE_IN_LEDGER"
+    upstream_body = {
+        "id": "chatcmpl-audited",
+        "model": "relay-model-reported",
+        "choices": [{"message": {"content": secret_response}}],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+    }
+    upstream = _start_fake_upstream(response_body=_json_bytes(upstream_body))
+    proxy = _start_proxy(
+        f"{_base_url(upstream)}/v1",
+        audit_db_path=str(sqlite_path),
+        audit_enabled=True,
+    )
+    request_body = {
+        "model": "relay-model-requested",
+        "messages": [{"role": "user", "content": secret_prompt}],
+    }
+    try:
+        status, body, headers = _post_json_with_headers(f"{_base_url(proxy)}/v1/chat/completions", request_body)
+    finally:
+        _stop_server(proxy)
+        _stop_server(upstream)
+
+    assert status == 200
+    assert json.loads(body) == upstream_body
+    assert headers["x-omni-token-audit-id"].startswith("omni_audit_")
+    with sqlite3.connect(str(sqlite_path)) as conn:
+        conn.row_factory = sqlite3.Row
+        row = conn.execute("SELECT * FROM audit_events LIMIT 1").fetchone()
+    assert row["request_id"] == "chatcmpl-audited"
+    assert row["model_requested"] == "relay-model-requested"
+    assert row["model_reported"] == "relay-model-reported"
+    usage = json.loads(row["usage_json"])
+    assert usage["total_tokens"] == 15
+    assert usage["source"] == "relay_reported"
+    serialized_row = json.dumps(dict(row), sort_keys=True)
+    assert secret_prompt not in serialized_row
+    assert secret_response not in serialized_row
+
+
+def test_audit_write_failure_is_fail_open(tmp_path):
+    sqlite_dir_path = tmp_path / "not-a-db-dir"
+    sqlite_dir_path.mkdir()
+    upstream_body = {
+        "id": "chatcmpl-fail-open",
+        "usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
+    }
+    upstream = _start_fake_upstream(response_body=_json_bytes(upstream_body))
+    proxy = _start_proxy(
+        f"{_base_url(upstream)}/v1",
+        audit_db_path=str(sqlite_dir_path),
+        audit_enabled=True,
+        audit_fail_open=True,
+    )
+    try:
+        status, body, headers = _post_json_with_headers(
+            f"{_base_url(proxy)}/v1/chat/completions",
+            {"model": "relay-model"},
+        )
+    finally:
+        _stop_server(proxy)
+        _stop_server(upstream)
+
+    assert status == 200
+    assert json.loads(body) == upstream_body
+    assert headers["x-omni-token-audit-error"] == "persistence_failed"
+
+
 def test_chat_completions_preserves_upstream_error_status_and_body():
     upstream_body = {"error": {"message": "rate limited", "type": "rate_limit"}}
     upstream = _start_fake_upstream(response_status=429, response_body=_json_bytes(upstream_body))
@@ -89,17 +161,44 @@ def test_chat_completions_preserves_upstream_error_status_and_body():
     assert json.loads(body) == upstream_body
 
 
-def _start_proxy(upstream_base_url: str, *, upstream_api_key: str = ""):
+def _start_proxy_with_options(
+    upstream_base_url: str,
+    *,
+    upstream_api_key: str = "",
+    audit_enabled: bool = False,
+    audit_db_path: str = "",
+    audit_fail_open: bool = True,
+):
     config = token_intelligence.LocalProxyConfig(
         host="127.0.0.1",
         port=_free_port(),
         upstream_base_url=upstream_base_url,
         upstream_api_key=upstream_api_key,
         upstream_timeout_seconds=5,
+        audit_enabled=audit_enabled,
+        audit_db_path=audit_db_path or None,
+        audit_fail_open=audit_fail_open,
     )
     server = token_intelligence.create_server(config)
     _serve_in_thread(server)
     return server
+
+
+def _start_proxy(
+    upstream_base_url: str,
+    *,
+    upstream_api_key: str = "",
+    audit_enabled: bool = False,
+    audit_db_path: str = "",
+    audit_fail_open: bool = True,
+):
+    return _start_proxy_with_options(
+        upstream_base_url,
+        upstream_api_key=upstream_api_key,
+        audit_enabled=audit_enabled,
+        audit_db_path=audit_db_path,
+        audit_fail_open=audit_fail_open,
+    )
 
 
 def _start_fake_upstream(*, response_status: int = 200, response_body: bytes = b"{}"):
@@ -136,6 +235,11 @@ def _get_json(url: str):
 
 
 def _post_json(url: str, payload: dict):
+    status, body, _headers = _post_json_with_headers(url, payload)
+    return status, body
+
+
+def _post_json_with_headers(url: str, payload: dict):
     data = _json_bytes(payload)
     request = urllib.request.Request(
         url,
@@ -145,9 +249,11 @@ def _post_json(url: str, payload: dict):
     )
     try:
         with urllib.request.urlopen(request, timeout=5) as response:
-            return int(response.status), response.read()
+            headers = {key.lower(): value for key, value in response.headers.items()}
+            return int(response.status), response.read(), headers
     except urllib.error.HTTPError as exc:
-        return int(exc.code), exc.read()
+        headers = {key.lower(): value for key, value in exc.headers.items()}
+        return int(exc.code), exc.read(), headers
 
 
 def _json_bytes(payload: dict) -> bytes:

@@ -94,6 +94,8 @@ class TokenIntelligenceConfig:
             upstream_base_url=self.upstream.base_url,
             upstream_api_key=self.resolved_upstream_api_key(),
             upstream_timeout_seconds=self.upstream.timeout_seconds,
+            audit_enabled=self.audit.enabled,
+            audit_fail_open=self.audit.fail_open,
         )
 
 

@@ -346,16 +346,19 @@ Exit:
 
 ### TI-001C - Audit Ledger Integration
 
+Status: repo implementation completed on 2026-05-13; receipt API and running promotion not started.
+
 Scope:
 
 - call existing Token Intelligence core after upstream response;
-- record event and receipt;
+- record metadata-only audit event suitable for later receipt retrieval;
 - fail open when audit persistence fails.
 
 Exit:
 
 - raw prompt/response absence tested;
 - audit failure does not block successful upstream response.
+- successful audit returns `x-omni-token-audit-id`.
 
 ### TI-001D - Receipt And Summary API
 
