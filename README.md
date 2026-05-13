@@ -27,6 +27,8 @@ Agent -> Gateway (:18011) -> compile/recall/inject -> Upstream LLM
 
 Token Intelligence Phase 8 starts from localhost/local proxy for cost and capacity control. This does not remove `doloclaw.com`, Cloudflare, or Railway from the product strategy; cloud Token Intelligence hosting remains a later deployment option after storage, traffic, privacy, and cost capacity are measured.
 
+Token Intelligence can ship as a proprietary local CLI/local-proxy download. It must support online update checks and operator-pushed update notices through product-owned release metadata. During the unsigned beta stage, macOS users may need to allow the app or CLI manually in Privacy & Security / Gatekeeper; the product must state this clearly instead of implying a signed silent updater.
+
 ## Frozen Truth
 
 - OmniMemora Desktop app is the current user control/display entry.

@@ -43,10 +43,20 @@ Configured upstream provider or relay
 Rules:
 
 - Default endpoint is local, for example `http://127.0.0.1:<port>`.
+- First commercial shape can be a proprietary local CLI/local proxy download.
 - No paid server requirement for MVP.
 - No full desktop app requirement before audit-only trial.
 - No browser extension as the primary capture path.
 - Shared audit core remains reusable by full OmniMemora.
+
+Update and distribution rules:
+
+- Source code does not need to be open.
+- The local CLI/proxy should check product-owned release metadata for online updates.
+- The product may push update notices, minimum-version notices, and security/bugfix prompts through that metadata.
+- Downloads must be versioned and checksum-verifiable.
+- During unsigned macOS beta distribution, the user may need to allow the binary manually in Privacy & Security / Gatekeeper.
+- Do not present this beta path as a signed silent updater until paid signing/notarization is actually in place.
 
 Cloud note:
 

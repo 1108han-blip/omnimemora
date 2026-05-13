@@ -192,6 +192,8 @@ Token Intelligence 是 Token Savings 的解释层和增值层。
 - Token Intelligence 不得退化为普通 usage dashboard。
 - Phase 8 Token Intelligence 只允许做 workflow/token ROI 和 User Pattern Lite，不得在本阶段变成用户画像、行为监控或隐藏 telemetry 产品。
 - 用户画像不是当前阶段能力。未来如需升级，必须作为新的显式产品阶段，先完成用户控制、隐私、存储、禁用、导出、删除和透明解释机制设计。
+- Phase 8 可作为闭源本地 CLI / local proxy 分发；代码不需要开源，但 release metadata、版本、校验、更新提示和隐私边界必须对用户透明。
+- 未购买 macOS 签名/公证前，beta 分发必须把 Privacy & Security / Gatekeeper 手动放行作为明确用户步骤，而不是伪装成 signed silent updater。
 - 默认不得存储 raw prompt、完整 tool output 或完整 provider response。
 - 用户数据必须可查看、可删除、可过期、可导出。
 - 计量结果必须标注置信度，例如 official usage、official count API、provider tokenizer、compatible estimate、rough estimate。

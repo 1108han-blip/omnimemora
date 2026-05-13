@@ -207,6 +207,8 @@ Phase 8 不是普通 token 统计。它必须回答：
 
 - 本地轻量入口可审计真实 OpenAI/Anthropic-compatible 请求，不要求先安装完整桌面包或付费云服务器。
 - `doloclaw.com`、Cloudflare、Railway 仍是可用产品资源，但 Phase 8 首发不得假设云端容量、存储成本、隐私边界和运行费用已经被验证；云端 Token Intelligence 托管必须在本地 MVP 证明价值后单独评估。
+- 首发产品形态允许是闭源本地 CLI / local proxy 下载包，但必须支持在线版本检查、产品侧推送更新提示、可校验下载包和清晰升级路径。
+- 未购买 macOS 签名/公证前，beta 安装/升级必须明确说明用户可能需要在 Privacy & Security / Gatekeeper 中手动放行；不得承诺 signed silent update。
 - 记录 provider/model/request/block-level token breakdown，并标注 confidence class。
 - 默认不存 raw prompt、完整 tool output 或完整 provider response。
 - 小型用户数据库只保存 compact audit/user-pattern metadata，并提供查看、删除、过期、导出路径。

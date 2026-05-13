@@ -60,9 +60,17 @@ Cloud clarification:
 Recommended packaging:
 
 - shared core module inside OmniMemora,
-- lightweight local proxy / CLI package for first adoption,
+- proprietary lightweight local proxy / CLI package for first adoption,
 - optional local report page,
 - optional local MCP companion for agent queries.
+
+Distribution requirements:
+
+- Users download and run it locally; source code does not need to be open.
+- The local CLI/proxy must support online version checks and product-pushed update notices through product-owned release metadata.
+- Release downloads must be versioned and checksum-verifiable.
+- During unsigned beta distribution, macOS users may need a manual Privacy & Security / Gatekeeper allow step. This is acceptable for beta, but must be stated plainly.
+- Do not describe unsigned beta updates as signed silent updates.
 
 Execution guide:
 
