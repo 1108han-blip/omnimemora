@@ -16,6 +16,7 @@ from .ledger import (
     build_audit_event,
     delete_audit_event,
     get_audit_event,
+    list_top_requests,
     purge_audit_events_older_than,
     record_audit_event,
     summarize_recent_events,
@@ -103,6 +104,9 @@ def _make_handler(config: LocalProxyConfig) -> type[BaseHTTPRequestHandler]:
                 return
             if parsed_path == "/audit/reports/potential-savings":
                 _send_potential_savings_report(self, config, self.path)
+                return
+            if parsed_path == "/audit/reports/top-requests":
+                _send_top_requests_report(self, config, self.path)
                 return
             if parsed_path.startswith("/audit/events/"):
                 _send_audit_event(self, config, parsed_path)
@@ -244,6 +248,15 @@ def _send_potential_savings_report(handler: BaseHTTPRequestHandler, config: Loca
         report = build_potential_savings_report(summary)
     except Exception as exc:
         _send_json(handler, 500, {"error": "potential_savings_report_failed", "message": str(exc)})
+        return
+    _send_json(handler, 200, report)
+
+
+def _send_top_requests_report(handler: BaseHTTPRequestHandler, config: LocalProxyConfig, raw_path: str) -> None:
+    try:
+        report = list_top_requests(path=config.audit_db_path, limit=_summary_limit(raw_path))
+    except Exception as exc:
+        _send_json(handler, 500, {"error": "top_requests_report_failed", "message": str(exc)})
         return
     _send_json(handler, 200, report)
 

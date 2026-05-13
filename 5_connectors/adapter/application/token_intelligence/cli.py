@@ -11,7 +11,7 @@ from pathlib import Path
 from typing import Optional
 
 from .config import default_config_path, load_config, write_default_config
-from .ledger import get_audit_event, summarize_recent_events
+from .ledger import get_audit_event, list_top_requests, summarize_recent_events
 from .local_proxy import VERSION, check_update_metadata, serve_forever
 from .receipts import build_receipt
 from .reports import build_potential_savings_report
@@ -86,6 +86,11 @@ def _build_parser() -> argparse.ArgumentParser:
     savings_parser.add_argument("--limit", default="1000", help="recent event limit, max 1000")
     savings_parser.add_argument("--db", default="", help="optional audit sqlite path")
     savings_parser.set_defaults(func=_cmd_report_potential_savings)
+
+    top_requests_parser = report_subparsers.add_parser("top-requests", help="print highest token/cost requests")
+    top_requests_parser.add_argument("--limit", default="1000", help="recent event limit, max 1000")
+    top_requests_parser.add_argument("--db", default="", help="optional audit sqlite path")
+    top_requests_parser.set_defaults(func=_cmd_report_top_requests)
 
     return parser
 
@@ -173,6 +178,12 @@ def _cmd_report_summary(args: argparse.Namespace) -> int:
 def _cmd_report_potential_savings(args: argparse.Namespace) -> int:
     summary = summarize_recent_events(path=_str_arg(args.db), limit=_limit_arg(args.limit))
     payload = build_potential_savings_report(summary)
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
+def _cmd_report_top_requests(args: argparse.Namespace) -> int:
+    payload = list_top_requests(path=_str_arg(args.db), limit=_limit_arg(args.limit))
     print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
     return 0
 

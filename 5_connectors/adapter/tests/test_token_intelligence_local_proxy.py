@@ -105,6 +105,7 @@ def test_chat_completions_records_audit_without_raw_prompt(tmp_path):
         receipt_status, receipt = _get_json_with_status(f"{_base_url(proxy)}/audit/events/{audit_id}/receipt")
         event_status, event = _get_json_with_status(f"{_base_url(proxy)}/audit/events/{audit_id}")
         summary_status, summary = _get_json_with_status(f"{_base_url(proxy)}/audit/summary?limit=10")
+        top_status, top_requests = _get_json_with_status(f"{_base_url(proxy)}/audit/reports/top-requests?limit=5000")
     finally:
         _stop_server(proxy)
         _stop_server(upstream)
@@ -128,6 +129,10 @@ def test_chat_completions_records_audit_without_raw_prompt(tmp_path):
     assert summary["top_models"] == [
         {"model": "relay-model-requested", "request_count": 1, "total_tokens": 15}
     ]
+    assert top_status == 200
+    assert top_requests["window"] == {"bounded": True, "limit": 1000}
+    assert top_requests["top_by_tokens"][0]["audit_id"] == audit_id
+    assert top_requests["top_by_tokens"][0]["total_tokens"] == 15
     assert {block["block_type"] for block in summary["top_blocks"]} >= {"current_user_intent", "provider_output"}
     assert sum(summary["reconciliation"]["status_counts"].values()) == 1
     with sqlite3.connect(str(sqlite_path)) as conn:
@@ -142,7 +147,7 @@ def test_chat_completions_records_audit_without_raw_prompt(tmp_path):
     serialized_row = json.dumps(dict(row), sort_keys=True)
     assert secret_prompt not in serialized_row
     assert secret_response not in serialized_row
-    serialized_api_payloads = json.dumps([receipt, event, summary], sort_keys=True)
+    serialized_api_payloads = json.dumps([receipt, event, summary, top_requests], sort_keys=True)
     assert secret_prompt not in serialized_api_payloads
     assert secret_response not in serialized_api_payloads
 

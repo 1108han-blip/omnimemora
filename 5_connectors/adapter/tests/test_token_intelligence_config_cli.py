@@ -215,6 +215,13 @@ def test_cli_report_summary_and_potential_savings_are_metadata_only(tmp_path, ca
     assert report["top_opportunities"][0]["category"] == "duplicate_context"
     assert secret_prompt not in json.dumps(report, sort_keys=True)
 
+    assert cli.main(["report", "top-requests", "--db", str(sqlite_path), "--limit", "5000"]) == 0
+    top_requests = json.loads(capsys.readouterr().out)
+    assert top_requests["window"] == {"bounded": True, "limit": 1000}
+    assert top_requests["top_by_tokens"][0]["request_id"] == "req-report"
+    assert top_requests["top_by_tokens"][0]["total_tokens"] == 15
+    assert secret_prompt not in json.dumps(top_requests, sort_keys=True)
+
 
 def test_local_package_builder_outputs_checksum_metadata_and_launcher(tmp_path):
     script = REPO_ROOT / "tools" / "token_intelligence" / "build_local_package.py"

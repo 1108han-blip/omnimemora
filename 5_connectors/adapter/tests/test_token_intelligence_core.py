@@ -405,6 +405,72 @@ def test_audit_ledger_roundtrip_and_receipt_are_metadata_only(tmp_path, monkeypa
     assert meta["content_mode"] == "metadata_only"
 
 
+def test_top_requests_report_is_bounded_and_metadata_only(tmp_path, monkeypatch):
+    sqlite_path = tmp_path / "token_intelligence.sqlite3"
+    monkeypatch.setenv("OMNIMEMORA_TOKEN_INTELLIGENCE_DB", str(sqlite_path))
+    secret_prompt = "SECRET_TOP_REQUEST_PROMPT_NOT_STORED"
+    small_usage = token_intelligence.normalize_openai_compatible_usage(
+        {"usage": {"prompt_tokens": 4, "completion_tokens": 1, "total_tokens": 5}},
+        usage_source="relay_reported",
+    )
+    large_usage = token_intelligence.normalize_openai_compatible_usage(
+        {"usage": {"prompt_tokens": 90, "completion_tokens": 10, "total_tokens": 100}},
+        usage_source="relay_reported",
+    )
+    small_event = token_intelligence.build_audit_event(
+        request_id="req-small",
+        request_payload={"messages": [{"role": "user", "content": secret_prompt}]},
+        response_payload={"id": "req-small"},
+        upstream_base_url="https://relay.example/v1",
+        provider="relay",
+        model_requested="small-model",
+        usage=small_usage,
+    )
+    large_event = token_intelligence.build_audit_event(
+        request_id="req-large",
+        request_payload={"messages": [{"role": "user", "content": secret_prompt}]},
+        response_payload={"id": "req-large"},
+        upstream_base_url="https://relay.example/v1",
+        provider="relay",
+        model_requested="large-model",
+        usage=large_usage,
+        cost=token_intelligence.NormalizedCost(
+            total_cost_usd=0.0123,
+            source="relay_reported",
+            confidence="official_usage",
+            pricing_version="test-price-v1",
+        ),
+        opportunities=[
+            {
+                "detector_id": "duplicate_context_v1",
+                "category": "duplicate_context",
+                "reason_code": "repeated_message_content",
+                "token_estimate": 50,
+                "potential_saving_tokens": 20,
+                "item_count": 2,
+                "severity": "medium",
+                "source": "local_estimated",
+                "confidence": "compatible_estimate",
+            }
+        ],
+        reconciliation={"status": "normal"},
+        latency_ms=42,
+        status_code=200,
+    )
+    token_intelligence.record_audit_event(small_event)
+    token_intelligence.record_audit_event(large_event)
+
+    report = token_intelligence.list_top_requests(limit=5000)
+
+    assert report["window"] == {"bounded": True, "limit": 1000}
+    assert report["event_count"] == 2
+    assert report["top_by_tokens"][0]["request_id"] == "req-large"
+    assert report["top_by_tokens"][0]["total_tokens"] == 100
+    assert report["top_by_tokens"][0]["potential_saving_tokens"] == 20
+    assert report["top_by_cost"][0]["total_cost_usd"] == 0.0123
+    assert secret_prompt not in json.dumps(report, sort_keys=True)
+
+
 def test_audit_ledger_delete_and_retention_purge(tmp_path, monkeypatch):
     sqlite_path = tmp_path / "token_intelligence.sqlite3"
     monkeypatch.setenv("OMNIMEMORA_TOKEN_INTELLIGENCE_DB", str(sqlite_path))

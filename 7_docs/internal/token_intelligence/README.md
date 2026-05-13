@@ -29,6 +29,7 @@
 - 2026-05-13: TI-008 repo-only local MCP companion added inside the candidate local proxy. `/mcp` exposes read-only `token_intelligence.summary` and `token_intelligence.potential_savings` tools for opted-in agents; it does not capture requests, write memory, or replace the primary proxy path.
 - 2026-05-13: TI-009 repo-only usage reconciliation added. Audit events, receipts, and summaries now compare reported total tokens against local estimates and label normal, warning, unexplained, estimated-only, or not-applicable cases without treating deltas as fraud evidence.
 - 2026-05-13: TI-010 repo-only CLI report surface added. `omni-token-audit report summary` and `omni-token-audit report potential-savings` read bounded local audit data and print metadata-only JSON without starting the proxy or scanning large history.
+- 2026-05-13: TI-011 repo-only top requests report added. The candidate proxy and CLI expose bounded highest-token/highest-cost request summaries from local audit metadata, with source/confidence labels and no raw prompt output.
 
 ## Product Target
 
@@ -383,6 +384,26 @@ Current behavior:
 - optional `--db <path>` supports explicit local ledger selection for verification and support;
 - report output uses the same summary/report builders as the candidate local proxy;
 - raw prompt, response, and tool output are not printed.
+
+### TI-011 - Top Requests Report Surface
+
+Status: repo implementation completed on 2026-05-13 for local metadata-only top request reports.
+
+Expose the first "where did tokens go" request list without GUI, cloud, or long history scans.
+
+Exit:
+
+- users can identify the highest-token and highest-cost recent requests;
+- each request row remains a receipt pointer, not a raw prompt viewer;
+- output stays bounded and metadata-only.
+
+Current behavior:
+
+- `/audit/reports/top-requests?limit=<n>` returns top recent requests by total tokens and by cost when cost exists;
+- `omni-token-audit report top-requests --limit <n>` prints the same metadata-only report from a local ledger;
+- rows include audit id, request id, provider/model, token counts, usage source/confidence, optional cost source/confidence, potential saving tokens, reconciliation status, status code, latency, and timestamp;
+- the report reads at most 1000 recent ledger rows and does not scan large history;
+- raw prompt, response, tool output, and full provider body are not printed.
 
 ## Validation Requirements
 

@@ -322,6 +322,47 @@ def summarize_recent_events(*, path: Optional[str] = None, limit: int = 1000) ->
     }
 
 
+def list_top_requests(*, path: Optional[str] = None, limit: int = 1000) -> dict[str, Any]:
+    bounded_limit = max(1, min(int(limit), 1000))
+    init_schema(path)
+    with _connect(path) as conn:
+        rows = conn.execute(
+            """
+            SELECT audit_id, request_id, model_requested, model_reported, provider, usage_json, cost_json,
+                   status_code, latency_ms, opportunities_json, reconciliation_json, created_at
+            FROM audit_events
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (bounded_limit,),
+        ).fetchall()
+
+    request_summaries = [_row_to_request_summary(row) for row in rows]
+    top_by_tokens = sorted(
+        request_summaries,
+        key=lambda item: (
+            -int(item.get("total_tokens") or 0),
+            -int(item.get("potential_saving_tokens") or 0),
+            str(item.get("created_at") or ""),
+        ),
+    )[:10]
+    top_by_cost = sorted(
+        [item for item in request_summaries if item.get("total_cost_usd") is not None],
+        key=lambda item: (
+            -float(item.get("total_cost_usd") or 0.0),
+            -int(item.get("total_tokens") or 0),
+            str(item.get("created_at") or ""),
+        ),
+    )[:10]
+    return {
+        "schema_version": "token-intelligence-top-requests-v1",
+        "window": {"limit": bounded_limit, "bounded": True},
+        "event_count": len(rows),
+        "top_by_tokens": top_by_tokens,
+        "top_by_cost": top_by_cost,
+    }
+
+
 def _row_to_event(row: sqlite3.Row) -> AuditEvent:
     usage_payload = _loads(row["usage_json"])
     cost_payload = _loads(row["cost_json"])
@@ -344,6 +385,43 @@ def _row_to_event(row: sqlite3.Row) -> AuditEvent:
         opportunities=_loads_list(_row_value(row, "opportunities_json", "[]")),
         reconciliation=_loads(_row_value(row, "reconciliation_json", "{}")),
     )
+
+
+def _row_to_request_summary(row: sqlite3.Row) -> dict[str, Any]:
+    usage = _loads(row["usage_json"])
+    cost = _loads(row["cost_json"])
+    opportunities = _loads_list(row["opportunities_json"])
+    reconciliation = _loads(row["reconciliation_json"])
+    cost_value = _safe_float(cost.get("total_cost_usd"))
+    return _drop_none(
+        {
+            "audit_id": str(row["audit_id"]),
+            "request_id": str(row["request_id"]),
+            "provider": str(row["provider"]),
+            "model_requested": str(row["model_requested"]),
+            "model_reported": str(row["model_reported"]),
+            "input_tokens": max(0, _safe_int(usage.get("input_tokens")) or 0),
+            "output_tokens": max(0, _safe_int(usage.get("output_tokens")) or 0),
+            "total_tokens": max(0, _safe_int(usage.get("total_tokens")) or 0),
+            "usage_source": str(usage.get("source") or "unknown"),
+            "usage_confidence": str(usage.get("confidence") or "unknown"),
+            "total_cost_usd": round(cost_value, 8) if cost_value is not None else None,
+            "cost_source": str(cost.get("source") or "") if cost_value is not None else None,
+            "cost_confidence": str(cost.get("confidence") or "") if cost_value is not None else None,
+            "potential_saving_tokens": sum(
+                max(0, _safe_int(opportunity.get("potential_saving_tokens")) or 0)
+                for opportunity in opportunities
+            ),
+            "reconciliation_status": str(reconciliation.get("status") or "unknown"),
+            "status_code": row["status_code"],
+            "latency_ms": row["latency_ms"],
+            "created_at": str(row["created_at"]),
+        }
+    )
+
+
+def _drop_none(payload: dict[str, Any]) -> dict[str, Any]:
+    return {key: value for key, value in payload.items() if value is not None}
 
 
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
