@@ -37,6 +37,7 @@
 - 2026-05-13: TI-016 repo-only skill-like attach profile added. `doctor`, `attach`, and `detach` now create reversible local connection profiles for agents without mutating official agent configs.
 - 2026-05-13: TI-017 repo-only managed launcher added. `attach --with-launcher` writes a reversible env file and launch wrapper so users can run compatible agents through Token Audit without editing agent configs.
 - 2026-05-13: TI-018 repo-only harness snippet generator added. `snippets` prints copy-paste integration examples for common harnesses without editing files or storing API key values.
+- 2026-05-13: TI-019 candidate package smoke passed. The local zip now preserves executable launcher permissions and has been unpacked and run through fake-upstream pass-through, receipt, reports, snippets, attach, and detach in a temp directory.
 
 ## Product Target
 
@@ -558,6 +559,27 @@ Current behavior:
 - snippets include the API key environment variable name, not the API key value;
 - output is marked `mutates_files=false` and `stores_api_key_value=false`;
 - no official harness config, `18011`, desktop GUI, or cloud setting is changed.
+
+### TI-019 - Candidate Package Smoke Gate
+
+Status: candidate package smoke completed on 2026-05-13; no running promotion performed.
+
+Validate the downloadable local package path before any user-facing release step.
+
+Exit:
+
+- the zip preserves executable permission metadata for `omni-token-audit`;
+- the package runs from an unpacked temp directory;
+- fake upstream pass-through creates an audit receipt and reports;
+- attach and detach launcher artifacts are reversible.
+
+Current behavior:
+
+- `tools/token_intelligence/build_local_package.py` writes Unix executable bits into the zip metadata;
+- package smoke used `/usr/bin/unzip`, ran `omni-token-audit version`, `doctor`, `snippets`, `attach --with-launcher`, `proxy start`, `receipt get`, `report summary`, `report top-requests`, `report potential-savings`, and `detach`;
+- smoke result: request forwarded to `/v1/chat/completions`, upstream authorization header present, response text `SMOKE_OK`, audit id present, receipt usage source `relay_reported`, cost captured when reported, top request readable, and secrets not present in outputs;
+- launcher write/remove was verified: `launcher_exists_after_attach=true`, `launcher_removed_by_detach=true`;
+- this gate validates the candidate package only; it does not promote Token Intelligence into `18011`, desktop GUI, cloud release, or official agent config mutation.
 
 ## Validation Requirements
 

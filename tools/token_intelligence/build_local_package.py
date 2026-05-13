@@ -122,7 +122,11 @@ def _zip_dir(source_dir: Path, zip_path: Path) -> None:
     with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
         for path in sorted(source_dir.rglob("*")):
             if path.is_file():
-                archive.write(path, path.relative_to(source_dir.parent))
+                arcname = str(path.relative_to(source_dir.parent))
+                info = zipfile.ZipInfo.from_file(path, arcname=arcname)
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.external_attr = (path.stat().st_mode & 0xFFFF) << 16
+                archive.writestr(info, path.read_bytes())
 
 
 def _sha256(path: Path) -> str:

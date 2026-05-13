@@ -368,7 +368,9 @@ def test_local_package_builder_outputs_checksum_metadata_and_launcher(tmp_path):
 
     with zipfile.ZipFile(zip_path) as archive:
         names = set(archive.namelist())
+        launcher_info = archive.getinfo("omni-token-audit-0.1.0-test-local/omni-token-audit")
     assert "omni-token-audit-0.1.0-test-local/omni-token-audit" in names
     assert "omni-token-audit-0.1.0-test-local/token_intelligence/cli.py" in names
     assert all("__pycache__" not in name for name in names)
+    assert ((launcher_info.external_attr >> 16) & 0o111) != 0
     assert payload["sha256"] in checksum_path.read_text(encoding="utf-8")
