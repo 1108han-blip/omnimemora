@@ -75,6 +75,7 @@ Distribution requirements:
 Execution guide:
 
 - [MVP Execution Guide](./MVP_EXECUTION_GUIDE.md)
+- [TI-001 Local Proxy Engineering Plan](./TI001_LOCAL_PROXY_ENGINEERING_PLAN.md)
 
 ## Relationship To Phase 7
 
