@@ -145,6 +145,24 @@ def test_waste_detectors_emit_safe_optimization_opportunities():
     assert secret_tool_result not in json.dumps(opportunities, sort_keys=True)
 
 
+def test_potential_savings_report_summarizes_opportunities():
+    report = token_intelligence.build_potential_savings_report(
+        {
+            "event_count": 2,
+            "top_opportunities": [
+                {"category": "duplicate_context", "potential_saving_tokens": 12},
+                {"category": "long_tool_result", "potential_saving_tokens": 30},
+            ],
+            "top_blocks": [{"block_type": "tool_results", "token_estimate": 80}],
+            "top_models": [{"model": "relay-model", "total_tokens": 100}],
+        }
+    )
+
+    assert report["potential_saving_tokens"] == 42
+    assert report["confidence"] == "compatible_estimate"
+    assert {item["category"] for item in report["advice"]} == {"duplicate_context", "tool_results"}
+
+
 def test_audit_ledger_roundtrip_and_receipt_are_metadata_only(tmp_path, monkeypatch):
     sqlite_path = tmp_path / "token_intelligence.sqlite3"
     monkeypatch.setenv("OMNIMEMORA_TOKEN_INTELLIGENCE_DB", str(sqlite_path))

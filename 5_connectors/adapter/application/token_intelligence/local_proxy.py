@@ -20,6 +20,7 @@ from .ledger import (
     record_audit_event,
     summarize_recent_events,
 )
+from .reports import build_potential_savings_report
 from .receipts import build_receipt
 from .usage_normalizer import (
     estimate_openai_compatible_input_tokens,
@@ -93,6 +94,9 @@ def _make_handler(config: LocalProxyConfig) -> type[BaseHTTPRequestHandler]:
                 return
             if parsed_path == "/audit/summary":
                 _send_audit_summary(self, config, self.path)
+                return
+            if parsed_path == "/audit/reports/potential-savings":
+                _send_potential_savings_report(self, config, self.path)
                 return
             if parsed_path.startswith("/audit/events/"):
                 _send_audit_event(self, config, parsed_path)
@@ -209,6 +213,16 @@ def _send_audit_summary(handler: BaseHTTPRequestHandler, config: LocalProxyConfi
         _send_json(handler, 500, {"error": "audit_summary_failed", "message": str(exc)})
         return
     _send_json(handler, 200, summary)
+
+
+def _send_potential_savings_report(handler: BaseHTTPRequestHandler, config: LocalProxyConfig, raw_path: str) -> None:
+    try:
+        summary = summarize_recent_events(path=config.audit_db_path, limit=_summary_limit(raw_path))
+        report = build_potential_savings_report(summary)
+    except Exception as exc:
+        _send_json(handler, 500, {"error": "potential_savings_report_failed", "message": str(exc)})
+        return
+    _send_json(handler, 200, report)
 
 
 def _send_audit_event(handler: BaseHTTPRequestHandler, config: LocalProxyConfig, path: str) -> None:

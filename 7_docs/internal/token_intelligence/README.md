@@ -24,6 +24,7 @@
 - 2026-05-13: TI-003 repo-only block-level spend breakdown added. Audit events and receipts now include safe block summaries with block type, token estimate, item count, source, and confidence; raw block content is not stored.
 - 2026-05-13: TI-004 repo-only waste detectors added for duplicate context, long tool results, and tool-result-heavy context. Receipts and summaries expose compact optimization opportunities with reason codes and potential saving estimates; no automatic optimization is performed.
 - 2026-05-13: TI-005 repo-only data controls added. The candidate audit store supports single-event delete, bounded retention purge, metadata-only receipt export/read, and audit-disabled forwarding; user-pattern records remain unopened until a separate approval-gated design exists.
+- 2026-05-13: TI-006 repo-only potential savings report added. The candidate proxy exposes `/audit/reports/potential-savings`, derived from bounded summary data, to show estimated savings opportunities without enabling automatic optimization.
 
 ## Product Target
 
@@ -287,11 +288,20 @@ Current behavior:
 
 ### TI-006 - Potential Savings Report
 
+Status: repo implementation completed on 2026-05-13 for candidate local audit data.
+
 Show what could be saved before enabling optimization.
 
 Exit:
 
 - report identifies the top saving opportunities by agent, model, prompt, workflow, and block type.
+
+Current behavior:
+
+- `/audit/reports/potential-savings` reads bounded recent audit summary data;
+- report includes `potential_saving_tokens`, `top_opportunities`, `top_blocks`, `top_models`, source, and confidence;
+- advice is limited to explicit token-saving actions such as deduplication and tool-result compression;
+- no automatic optimization, routing, model switching, or user-pattern inference is triggered.
 
 ### TI-007 - Actual Savings Proof
 

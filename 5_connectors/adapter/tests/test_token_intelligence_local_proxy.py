@@ -231,6 +231,7 @@ def test_proxy_receipt_and_summary_include_safe_optimization_opportunities(tmp_p
             f"{_base_url(proxy)}/audit/events/{headers['x-omni-token-audit-id']}/receipt"
         )
         summary_status, summary = _get_json_with_status(f"{_base_url(proxy)}/audit/summary")
+        report_status, report = _get_json_with_status(f"{_base_url(proxy)}/audit/reports/potential-savings")
     finally:
         _stop_server(proxy)
         _stop_server(upstream)
@@ -242,7 +243,10 @@ def test_proxy_receipt_and_summary_include_safe_optimization_opportunities(tmp_p
     assert "duplicate_context" in categories
     assert "long_tool_result" in categories
     assert summary["top_opportunities"][0]["potential_saving_tokens"] > 0
-    serialized = json.dumps([receipt, summary], sort_keys=True)
+    assert report_status == 200
+    assert report["potential_saving_tokens"] > 0
+    assert report["top_opportunities"]
+    serialized = json.dumps([receipt, summary, report], sort_keys=True)
     assert secret_tool_result not in serialized
     assert repeated not in serialized
 
