@@ -50,6 +50,10 @@ Recommended packaging:
 - optional local report page,
 - optional local MCP companion for agent queries.
 
+Execution guide:
+
+- [MVP Execution Guide](./MVP_EXECUTION_GUIDE.md)
+
 ## Relationship To Phase 7
 
 Phase 7 answers: can OmniMemora safely reduce tokens?
