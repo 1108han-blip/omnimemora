@@ -10,6 +10,7 @@ import urllib.request
 from pathlib import Path
 from typing import Optional
 
+from .agent_attach import attach_profile, build_doctor_report, detach_profile
 from .config import default_config_path, load_config, write_default_config
 from .ledger import get_audit_event, list_top_requests, summarize_recent_events
 from .local_proxy import VERSION, check_update_metadata, serve_forever
@@ -39,6 +40,20 @@ def _build_parser() -> argparse.ArgumentParser:
 
     version_parser = subparsers.add_parser("version", help="print CLI version")
     version_parser.set_defaults(func=_cmd_version)
+
+    doctor_parser = subparsers.add_parser("doctor", help="check local audit proxy readiness")
+    doctor_parser.add_argument("--config", default="", help="config path")
+    doctor_parser.set_defaults(func=_cmd_doctor)
+
+    attach_parser = subparsers.add_parser("attach", help="write a local agent connection profile")
+    attach_parser.add_argument("target", help="agent target, for example openclaw, claude-code, or generic")
+    attach_parser.add_argument("--config", default="", help="config path")
+    attach_parser.add_argument("--dry-run", action="store_true", help="print profile without writing it")
+    attach_parser.set_defaults(func=_cmd_attach)
+
+    detach_parser = subparsers.add_parser("detach", help="remove a local agent connection profile")
+    detach_parser.add_argument("target", help="agent target")
+    detach_parser.set_defaults(func=_cmd_detach)
 
     proxy_parser = subparsers.add_parser("proxy", help="manage the local proxy")
     proxy_subparsers = proxy_parser.add_subparsers(dest="proxy_command")
@@ -110,6 +125,23 @@ def _cmd_init(args: argparse.Namespace) -> int:
 def _cmd_version(args: argparse.Namespace) -> int:
     _ = args
     print(VERSION)
+    return 0
+
+
+def _cmd_doctor(args: argparse.Namespace) -> int:
+    status_code, payload = build_doctor_report(_path_arg(args.config) or default_config_path())
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    return status_code
+
+
+def _cmd_attach(args: argparse.Namespace) -> int:
+    profile = attach_profile(args.target, _path_arg(args.config), dry_run=bool(args.dry_run))
+    print(json.dumps(profile, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
+def _cmd_detach(args: argparse.Namespace) -> int:
+    print(json.dumps(detach_profile(args.target), ensure_ascii=False, sort_keys=True))
     return 0
 
 

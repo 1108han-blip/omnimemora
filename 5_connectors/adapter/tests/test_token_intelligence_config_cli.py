@@ -106,6 +106,63 @@ def test_cli_proxy_status_reports_unreachable_for_stopped_proxy(tmp_path, capsys
     assert payload["url"] == "http://127.0.0.1:18081/health"
 
 
+def test_cli_doctor_attach_and_detach_are_profile_only(tmp_path, monkeypatch, capsys):
+    config_path = tmp_path / "config.json"
+    attach_dir = tmp_path / "agents"
+    monkeypatch.setenv("OMNI_AUDIT_UPSTREAM_API_KEY", "secret-value-not-written")
+    monkeypatch.setenv("OMNIMEMORA_TOKEN_INTELLIGENCE_ATTACH_DIR", str(attach_dir))
+    config_path.write_text(
+        json.dumps(
+            {
+                "server": {"host": "127.0.0.1", "port": 18081},
+                "upstream": {
+                    "base_url": "https://relay.example/v1",
+                    "api_key_env": "OMNI_AUDIT_UPSTREAM_API_KEY",
+                    "timeout_seconds": 120,
+                },
+                "privacy": {"content_mode": "metadata_only"},
+                "audit": {"enabled": True, "fail_open": True},
+                "updates": {
+                    "enabled": True,
+                    "metadata_url": "https://doloclaw.com/releases/token-intelligence/latest.json",
+                    "channel": "beta",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert cli.main(["doctor", "--config", str(config_path)]) == 0
+    doctor = json.loads(capsys.readouterr().out)
+    assert doctor["config_valid"] is True
+    assert doctor["upstream_api_key_env"] == "OMNI_AUDIT_UPSTREAM_API_KEY"
+    assert doctor["upstream_api_key_present"] is True
+    assert doctor["proxy_health"]["reachable"] is False
+    assert "secret-value-not-written" not in json.dumps(doctor, sort_keys=True)
+
+    assert cli.main(["attach", "openclaw", "--config", str(config_path)]) == 0
+    profile = json.loads(capsys.readouterr().out)
+    profile_path = attach_dir / "openclaw.json"
+    written = json.loads(profile_path.read_text(encoding="utf-8"))
+    assert profile["status"] == "profile_written"
+    assert profile["agent_config_mutated"] is False
+    assert profile["proxy_base_url"] == "http://127.0.0.1:18081/v1"
+    assert written["client_headers"] == {"x-omni-agent-id": "openclaw"}
+    assert "secret-value-not-written" not in json.dumps(written, sort_keys=True)
+
+    assert cli.main(["attach", "claude_code", "--config", str(config_path), "--dry-run"]) == 0
+    dry_run = json.loads(capsys.readouterr().out)
+    assert dry_run["target"] == "claude-code"
+    assert dry_run["agent_id"] == "claude_code"
+    assert not (attach_dir / "claude-code.json").exists()
+
+    assert cli.main(["detach", "openclaw"]) == 0
+    detached = json.loads(capsys.readouterr().out)
+    assert detached["status"] == "detached"
+    assert detached["agent_config_mutated"] is False
+    assert not profile_path.exists()
+
+
 def test_cli_receipt_get_reads_metadata_only_receipt(tmp_path, monkeypatch, capsys):
     sqlite_path = tmp_path / "audit.sqlite3"
     monkeypatch.setenv("OMNIMEMORA_TOKEN_INTELLIGENCE_DB", str(sqlite_path))

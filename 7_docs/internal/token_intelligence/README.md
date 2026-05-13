@@ -34,6 +34,7 @@
 - 2026-05-13: TI-013 repo-only workflow ROI tags added. The candidate proxy can store explicit opt-in agent/project/workflow headers and summarize top token/cost consumers by those tags without inferring user profiles.
 - 2026-05-13: TI-014 repo-only MCP top requests tool added. The local MCP companion can expose bounded top request summaries to opted-in agents without becoming a capture or memory-write path.
 - 2026-05-13: TI-015 repo-only beta version alignment completed. CLI, local proxy, MCP server info, and local package builder now report `0.1.0-beta.1` consistently.
+- 2026-05-13: TI-016 repo-only skill-like attach profile added. `doctor`, `attach`, and `detach` now create reversible local connection profiles for agents without mutating official agent configs.
 
 ## Product Target
 
@@ -488,6 +489,28 @@ Current behavior:
 - MCP `initialize` reports `0.1.0-beta.1`;
 - `tools/token_intelligence/build_local_package.py` defaults to `0.1.0-beta.1`;
 - no cloud upload, desktop GUI promotion, or `18011` runtime replacement is performed by this alignment step.
+
+### TI-016 - Skill-Like Attach Profile
+
+Status: repo implementation completed on 2026-05-13 for local connection profiles only.
+
+Make Token Audit feel closer to a skill install while keeping real request capture explicit and reversible.
+
+Exit:
+
+- users can run one command to generate an agent connection profile;
+- users can inspect local readiness with a doctor command;
+- detach removes the Token Audit profile without touching official agent config.
+
+Current behavior:
+
+- `omni-token-audit doctor` checks config validity, proxy health, upstream API key environment presence, attach directory, and supported targets;
+- `omni-token-audit attach openclaw` writes an Omni-owned profile under `~/.omnimemora/token-intelligence/agents/openclaw.json`;
+- `omni-token-audit attach claude-code --dry-run` prints the profile without writing it;
+- `omni-token-audit detach <target>` removes the profile if it exists;
+- profiles include `proxy_base_url`, `mcp_url`, upstream base URL, API key environment variable name, and recommended client headers;
+- actual OpenClaw, Claude Code, or other agent configuration files are not mutated in TI-016;
+- no API key value, raw prompt, response, tool output, memory write, or `18011` behavior is stored or changed.
 
 ## Validation Requirements
 
