@@ -121,8 +121,9 @@ def _version_text(version: str, channel: str) -> str:
 
 
 def _readme_text(version: str) -> str:
-    return f"""OmniMemora Token Intelligence Lite {version}
+    return f"""DoloToken {version}
 
+OmniMemora Token Intelligence Lite internal package.
 This is an unsigned controlled-beta local proxy package.
 Source code is not included in this package.
 

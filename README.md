@@ -25,9 +25,11 @@ Agent -> Gateway (:18011) -> compile/recall/inject -> Upstream LLM
 | Railway | Recommendation candidate snapshot/state storage, lightweight async aggregation jobs | `/memory/*` primary path, main compile path |
 | Local (`18011` + `8765`) | Active/fallback execution truth, promotion-controlled active policy | Remote override of local active |
 
-Token Intelligence Phase 8 starts from localhost/local proxy for cost and capacity control. This does not remove `doloclaw.com`, Cloudflare, or Railway from the product strategy; cloud Token Intelligence hosting remains a later deployment option after storage, traffic, privacy, and cost capacity are measured.
+Phase 8 external product name is **DoloToken**. Internal engineering name remains Token Intelligence Lite.
 
-Token Intelligence can ship as a proprietary local CLI/local-proxy download. It must support online update checks and operator-pushed update notices through product-owned release metadata. During the unsigned beta stage, macOS users may need to allow the app or CLI manually in Privacy & Security / Gatekeeper; the product must state this clearly instead of implying a signed silent updater.
+DoloToken starts from localhost/local proxy for cost and capacity control. This does not remove `doloclaw.com`, Cloudflare, or Railway from the product strategy; cloud DoloToken hosting remains a later deployment option after storage, traffic, privacy, and cost capacity are measured.
+
+DoloToken can ship as a proprietary local CLI/local-proxy download. It must support online update checks and operator-pushed update notices through product-owned release metadata. During the unsigned beta stage, macOS users may need to allow the app or CLI manually in Privacy & Security / Gatekeeper; the product must state this clearly instead of implying a signed silent updater.
 
 ## Frozen Truth
 
@@ -53,13 +55,13 @@ Token Intelligence can ship as a proprietary local CLI/local-proxy download. It 
 正式 roadmap phase：**Phase 7（当前主线：Structured Compile MVP）**（见 `0_blueprint/ROADMAP.md`）
 
 > **Phase 标签说明**：`7_docs/internal/phase6/` 为 **internal historical workstream**，已收口并保留为治理/发布历史索引。当前产品能力工程入口是 `7_docs/internal/structured_compile/README.md`。
-> **下一正式阶段**：Phase 8（Token Intelligence Lite）已作为下一阶段固定在 roadmap，用于解释 token 花费、诊断浪费、推荐优化并证明实际节省。Phase 8 不得退化为普通 usage dashboard；当前阶段只做 workflow/token ROI 和 User Pattern Lite，不做用户画像。未来若升级为用户画像能力，必须作为新的显式产品阶段重新设计用户控制、隐私、存储和退出机制。
+> **下一正式阶段**：Phase 8（DoloToken / Token Intelligence Lite）已作为下一阶段固定在 roadmap，用于解释 token 花费、诊断浪费、推荐优化并证明实际节省。Phase 8 不得退化为普通 usage dashboard；当前阶段只做 workflow/token ROI 和 User Pattern Lite，不做用户画像。未来若升级为用户画像能力，必须作为新的显式产品阶段重新设计用户控制、隐私、存储和退出机制。
 
 Start here:
 
 - [0_blueprint/ROADMAP.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/ROADMAP.md) — 正式 roadmap SSOT
 - [7_docs/internal/structured_compile/README.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/structured_compile/README.md) — 当前结构化编译主线
-- [7_docs/internal/token_intelligence/README.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/token_intelligence/README.md) — 下一阶段 Token Intelligence Lite 主线
+- [7_docs/internal/token_intelligence/README.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/token_intelligence/README.md) — 下一阶段 DoloToken / Token Intelligence Lite 主线
 - [0_blueprint/PRODUCT_DEFINITION.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/PRODUCT_DEFINITION.md)
 - [0_blueprint/PRODUCT_CONFIGURATION_AND_BOUNDARY_BASELINE.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/PRODUCT_CONFIGURATION_AND_BOUNDARY_BASELINE.md)
 - [9_adr/ADR-0003-interface-access-paths.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/9_adr/ADR-0003-interface-access-paths.md)

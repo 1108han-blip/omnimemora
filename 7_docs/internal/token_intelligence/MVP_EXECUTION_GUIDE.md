@@ -1,4 +1,4 @@
-# Token Intelligence Lite MVP Execution Guide
+# DoloToken / Token Intelligence Lite MVP Execution Guide
 
 Date: 2026-05-13
 
@@ -8,16 +8,20 @@ This guide converts the external GPT draft into a usable Phase 8 execution guide
 
 Target:
 
-> AI request receipts plus token-flow intelligence for local-first LLM users.
+> DoloToken: local AI request receipts plus token-flow intelligence for LLM users.
 
 The product must explain where tokens were spent, why they were spent, what was waste, and which Omni optimization can reduce future token use. Cost and money views are optional interpretation layers on top of token-flow truth.
+
+External name: DoloToken.
+
+Internal name: Token Intelligence Lite.
 
 ## Product Position
 
 Use:
 
 ```text
-Token transparency for LLM users.
+DoloToken gives local token transparency for LLM users.
 ```
 
 Do not use:
@@ -35,7 +39,7 @@ Phase 8 starts as a lightweight local module and local entrypoint.
 ```text
 Client / AI tool / relay user
         ↓
-Omni Token Intelligence Lite on localhost
+DoloToken local proxy on localhost
         ↓
 Configured upstream provider or relay
 ```
@@ -66,7 +70,7 @@ Cloud note:
 
 ## Relationship To Omni
 
-Token Intelligence is an Omni module with a light standalone entrypoint.
+DoloToken is the standalone product name for an OmniMemora Token Intelligence module with a light local entrypoint.
 
 ```text
 shared token intelligence core

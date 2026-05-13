@@ -427,6 +427,8 @@ def test_local_package_builder_outputs_checksum_metadata_and_launcher(tmp_path):
     assert "omni-token-audit-0.1.0-test-local/token_intelligence/cli.py" in names
     assert all("__pycache__" not in name for name in names)
     assert ((launcher_info.external_attr >> 16) & 0o111) != 0
+    assert "DoloToken 0.1.0-test" in readme_text
+    assert "OmniMemora Token Intelligence Lite internal package" in readme_text
     assert "Source code is not included" in readme_text
     assert "OPENAI_BASE_URL=http://127.0.0.1:18081/v1" in readme_text
     assert "./omni-token-audit update check" in readme_text
@@ -778,7 +780,8 @@ assert.equal(missing.status, 404);
 const page = await call('/download');
 assert.equal(page.status, 200);
 const html = await page.text();
-assert.match(html, /Token Intelligence Lite CLI/);
+assert.match(html, /DoloToken CLI/);
+assert.match(html, /View DoloToken release manifest/);
 assert.match(html, /releases\/token-intelligence\/latest\.json/);
 """
     subprocess.run(

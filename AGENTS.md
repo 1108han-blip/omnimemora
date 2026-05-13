@@ -76,7 +76,8 @@ Internal data rules:
 Engineering admission rules:
 
 - new engineering must directly make the product save more tokens, save more cost, run faster, or get smaller.
-- Token Intelligence work is admissible only when it improves token-flow accuracy, diagnoses token waste, ranks cost drivers from source-labeled data, or connects to a concrete optimization path such as structured compile, prompt reduction, memory repair, or User Pattern Lite. Money calculation is optional and must not become the anchor for token audit truth.
+- DoloToken is the external product name for the Token Intelligence Lite line. Internal code, route, CLI, and engineering references may remain `token_intelligence`, Token Intelligence Lite, and `omni-token-audit` until a separate rename batch is explicitly opened.
+- Token Intelligence / DoloToken work is admissible only when it improves token-flow accuracy, diagnoses token waste, ranks cost drivers from source-labeled data, or connects to a concrete optimization path such as structured compile, prompt reduction, memory repair, or User Pattern Lite. Money calculation is optional and must not become the anchor for token audit truth.
 - new code must replace old code, not stack complexity on top of it.
 - default internal interface targets are p50 <10ms, p95 <30ms, max <100ms.
 - default read paths must not scan historical files or read frozen governance artifacts.

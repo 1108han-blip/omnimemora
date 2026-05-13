@@ -1,9 +1,10 @@
-# Token Intelligence Lite Mainline
+# DoloToken / Token Intelligence Lite Mainline
 
 ## Status
 
 - Created: 2026-05-13
-- Product line: OmniMemora Token Intelligence Lite
+- External product name: DoloToken
+- Internal product line: OmniMemora Token Intelligence Lite
 - Roadmap phase: Phase 8, next formal stage after Structured Compile MVP
 - Current status: direction fixed in product constitution and roadmap; repo-only Token Intelligence core and candidate local proxy exist; no `18011`, GUI, cloud, or running configuration change yet.
 
@@ -46,10 +47,36 @@
 - 2026-05-13: TI-024 repo-only dry-run publish plan added. The package builder can now print future R2 upload keys, content types, SHA values, and Worker routes with `mutates_cloud=false`, without creating Cloudflare tokens, uploading objects, or deploying the Worker.
 - 2026-05-13: TI-025 repo-only release preflight gate added. The package builder now checks Worker template version alignment, Cloudflare auth visibility, target account/bucket/Worker resolution, upload file count, and manual publish readiness without uploading or deploying.
 - 2026-05-13: TI-026 cloud release completed. Token Intelligence `0.1.0-beta.1` artifacts were uploaded to R2, the control-entry Worker was deployed, live `/download` now lists the Token Intelligence CLI beta, and remote package SHA/version were verified.
+- 2026-05-13: Naming decision recorded. The external product name is DoloToken; Token Intelligence remains the internal module, engineering line, technical capability name, route namespace, and compatibility surface.
+
+## Naming
+
+DoloToken is the user-facing product name for Token Intelligence Lite.
+
+Use externally:
+
+- DoloToken
+- DoloToken by OmniMemora
+- DoloToken: local AI token audit and request receipts
+
+Keep internally:
+
+- `token_intelligence`
+- Token Intelligence Lite
+- `omni-token-audit`
+- `/releases/token-intelligence/...`
+- `/download/file/token-intelligence/...`
+
+Reason:
+
+- `Dolo` is tied to the operator-owned `doloclaw.com` brand asset.
+- `Omni` is broad and commonly used, so it remains a platform/module association rather than the short external product name.
+- `Token` directly signals token-flow accounting, which is the product foundation.
+- Internal names remain stable to avoid unnecessary route, CLI, package, and test churn.
 
 ## Product Target
 
-Token Intelligence is not simple usage accounting.
+DoloToken is not simple usage accounting.
 
 It must explain:
 
@@ -667,7 +694,7 @@ Candidate route behavior:
 
 - `/download/file/token-intelligence/omni-token-audit-0.1.0-beta.1-local.zip` redirects to `https://assets.doloclaw.com/omnimemora/token-intelligence/0.1.0-beta.1/omni-token-audit-0.1.0-beta.1-local.zip`;
 - `/releases/token-intelligence/latest.json` redirects to `https://assets.doloclaw.com/omnimemora/token-intelligence/0.1.0-beta.1/latest.json`;
-- `/download` lists "Token Intelligence Lite CLI (local proxy beta)" and links the Token Intelligence release manifest;
+- `/download` lists "DoloToken CLI (local token audit beta)" and links the DoloToken release manifest;
 - unknown Token Intelligence package names return 404;
 - local Node-based Worker route test verifies the behavior after placeholder substitution.
 
@@ -828,7 +855,7 @@ Running verification:
 - downloaded remote zip SHA matched the release SHA above;
 - unpacked remote zip ran `omni-token-audit version` and returned `0.1.0-beta.1`;
 - unpacked remote zip ran `omni-token-audit snippets --list` and returned the supported snippet list;
-- `https://doloclaw.com/download` displays "Token Intelligence Lite CLI (local proxy beta)" and the Token Intelligence release manifest link;
+- `https://doloclaw.com/download` displays "DoloToken CLI (local token audit beta)" and the DoloToken release manifest link after the next Worker deployment;
 - `https://doloclaw.com/releases/latest.json` still reports desktop `1.0.0-beta.17` and `beta_one_click_download_verify_open_dmg`;
 - `https://doloclaw.com/download/file/darwin-arm64` still redirects to the desktop beta17 DMG;
 - `https://doloclaw.com/health` remains healthy and reports `release_posture=proprietary-controlled-beta`;

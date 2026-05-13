@@ -900,7 +900,7 @@ function downloadHtml() {
       href: `/download/file/windows-amd64`
     },
     {
-      label: "Token Intelligence Lite CLI (local proxy beta)",
+      label: "DoloToken CLI (local token audit beta)",
       href: `/download/file/token-intelligence/${TOKEN_INTELLIGENCE_PACKAGE}`
     }
   ];
@@ -1035,7 +1035,7 @@ function downloadHtml() {
       <ul class="downloads">${list}</ul>
       <p><a href="/download/file/sha256sums">Download SHA256SUMS.txt</a></p>
       <p><a href="/releases/latest.json">View latest release manifest</a></p>
-      <p><a href="/releases/token-intelligence/latest.json">View Token Intelligence release manifest</a></p>
+      <p><a href="/releases/token-intelligence/latest.json">View DoloToken release manifest</a></p>
 
       <h2>Install Steps</h2>
       <ul>
@@ -1060,7 +1060,7 @@ function downloadHtml() {
 
       <div class="meta">
         <div>Feedback: <a href="mailto:${SUPPORT_EMAIL}?subject=OmniMemora%20Beta%20Feedback">${SUPPORT_EMAIL}</a></div>
-        <div>Token Intelligence: <code>${TOKEN_INTELLIGENCE_VERSION}</code>, local proxy beta, checksum required before replacement.</div>
+        <div>DoloToken: <code>${TOKEN_INTELLIGENCE_VERSION}</code>, local token audit beta, checksum required before replacement.</div>
         <div>License: all rights reserved, beta only, no redistribution, no commercial use.</div>
       </div>
     </section>
