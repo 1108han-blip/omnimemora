@@ -19,6 +19,7 @@ from .ledger import (
     get_audit_event,
     init_schema,
     record_audit_event,
+    summarize_recent_events,
 )
 from .models import AuditEvent, NormalizedCost, NormalizedUsage
 from .receipts import build_receipt
@@ -48,6 +49,7 @@ __all__ = [
     "normalize_openai_compatible_usage",
     "record_audit_event",
     "serve_forever",
+    "summarize_recent_events",
     "validate_config",
     "write_default_config",
 ]

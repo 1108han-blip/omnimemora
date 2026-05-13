@@ -17,6 +17,7 @@
 - 2026-05-13: TI-001A repo-only local proxy skeleton added with `/health`, `/version`, and non-streaming `/v1/chat/completions` pass-through on a candidate server; still not promoted into `18011` or desktop GUI.
 - 2026-05-13: TI-001B repo-only config and CLI skeleton added. Config stores upstream API key environment-variable references, rejects raw-content modes, and validates before proxy startup; CLI packaging/distribution is still not started.
 - 2026-05-13: TI-001C repo-only audit ledger integration added. The candidate proxy records metadata-only audit events after upstream responses, labels relay-reported usage, emits an audit id header, and fails open when audit persistence fails; receipt/summary HTTP APIs remain TI-001D.
+- 2026-05-13: TI-001D repo-only receipt and summary API added. The candidate proxy exposes bounded `/audit/events/<audit_id>`, `/audit/events/<audit_id>/receipt`, and `/audit/summary` reads, and CLI receipt get/export prints metadata-only receipts; running promotion remains not started.
 
 ## Product Target
 

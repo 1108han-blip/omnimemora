@@ -11,7 +11,9 @@ from pathlib import Path
 from typing import Optional
 
 from .config import default_config_path, load_config, write_default_config
+from .ledger import get_audit_event
 from .local_proxy import VERSION, serve_forever
+from .receipts import build_receipt
 
 
 def main(argv: Optional[list[str]] = None) -> int:
@@ -49,18 +51,18 @@ def _build_parser() -> argparse.ArgumentParser:
     status_parser.add_argument("--config", default="", help="config path")
     status_parser.set_defaults(func=_cmd_proxy_status)
 
-    receipt_parser = subparsers.add_parser("receipt", help="receipt commands are reserved for TI-001D")
+    receipt_parser = subparsers.add_parser("receipt", help="read local audit receipts")
     receipt_subparsers = receipt_parser.add_subparsers(dest="receipt_command")
-    receipt_parser.set_defaults(func=_cmd_receipt_not_implemented)
+    receipt_parser.set_defaults(func=_cmd_help)
 
-    get_parser = receipt_subparsers.add_parser("get", help="reserved")
+    get_parser = receipt_subparsers.add_parser("get", help="print a local audit receipt")
     get_parser.add_argument("audit_id")
-    get_parser.set_defaults(func=_cmd_receipt_not_implemented)
+    get_parser.set_defaults(func=_cmd_receipt_get)
 
-    export_parser = receipt_subparsers.add_parser("export", help="reserved")
+    export_parser = receipt_subparsers.add_parser("export", help="export a local audit receipt")
     export_parser.add_argument("audit_id")
     export_parser.add_argument("--format", default="json", choices=["json"])
-    export_parser.set_defaults(func=_cmd_receipt_not_implemented)
+    export_parser.set_defaults(func=_cmd_receipt_get)
 
     update_parser = subparsers.add_parser("update", help="update commands are reserved for TI-001E")
     update_subparsers = update_parser.add_subparsers(dest="update_command")
@@ -120,10 +122,13 @@ def _cmd_proxy_status(args: argparse.Namespace) -> int:
     return 0
 
 
-def _cmd_receipt_not_implemented(args: argparse.Namespace) -> int:
-    _ = args
-    print("receipt commands are reserved for TI-001D", file=sys.stderr)
-    return 2
+def _cmd_receipt_get(args: argparse.Namespace) -> int:
+    event = get_audit_event(args.audit_id)
+    if event is None:
+        print(json.dumps({"error": "audit_event_not_found", "audit_id": args.audit_id}, sort_keys=True), file=sys.stderr)
+        return 1
+    print(json.dumps(build_receipt(event), ensure_ascii=False, sort_keys=True))
+    return 0
 
 
 def _cmd_update_not_implemented(args: argparse.Namespace) -> int:

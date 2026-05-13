@@ -97,14 +97,33 @@ def test_chat_completions_records_audit_without_raw_prompt(tmp_path):
         "messages": [{"role": "user", "content": secret_prompt}],
     }
     try:
-        status, body, headers = _post_json_with_headers(f"{_base_url(proxy)}/v1/chat/completions", request_body)
+        status, body, headers = _post_json_with_headers(
+            f"{_base_url(proxy)}/v1/chat/completions",
+            request_body,
+        )
+        audit_id = headers["x-omni-token-audit-id"]
+        receipt_status, receipt = _get_json_with_status(f"{_base_url(proxy)}/audit/events/{audit_id}/receipt")
+        event_status, event = _get_json_with_status(f"{_base_url(proxy)}/audit/events/{audit_id}")
+        summary_status, summary = _get_json_with_status(f"{_base_url(proxy)}/audit/summary?limit=10")
     finally:
         _stop_server(proxy)
         _stop_server(upstream)
 
     assert status == 200
     assert json.loads(body) == upstream_body
-    assert headers["x-omni-token-audit-id"].startswith("omni_audit_")
+    assert audit_id.startswith("omni_audit_")
+    assert receipt_status == 200
+    assert receipt["usage"]["source"] == "relay_reported"
+    assert receipt["usage"]["confidence"] == "official_usage"
+    assert event_status == 200
+    assert event["metadata"]["route"] == "/v1/chat/completions"
+    assert summary_status == 200
+    assert summary["event_count"] == 1
+    assert summary["usage"]["total_tokens"] == 15
+    assert summary["usage_sources"] == {"relay_reported": 1}
+    assert summary["top_models"] == [
+        {"model": "relay-model-requested", "request_count": 1, "total_tokens": 15}
+    ]
     with sqlite3.connect(str(sqlite_path)) as conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute("SELECT * FROM audit_events LIMIT 1").fetchone()
@@ -117,6 +136,9 @@ def test_chat_completions_records_audit_without_raw_prompt(tmp_path):
     serialized_row = json.dumps(dict(row), sort_keys=True)
     assert secret_prompt not in serialized_row
     assert secret_response not in serialized_row
+    serialized_api_payloads = json.dumps([receipt, event, summary], sort_keys=True)
+    assert secret_prompt not in serialized_api_payloads
+    assert secret_response not in serialized_api_payloads
 
 
 def test_audit_write_failure_is_fail_open(tmp_path):
@@ -230,8 +252,16 @@ def _base_url(server) -> str:
 
 
 def _get_json(url: str):
-    with urllib.request.urlopen(url, timeout=5) as response:
-        return json.loads(response.read())
+    _status, payload = _get_json_with_status(url)
+    return payload
+
+
+def _get_json_with_status(url: str):
+    try:
+        with urllib.request.urlopen(url, timeout=5) as response:
+            return int(response.status), json.loads(response.read())
+    except urllib.error.HTTPError as exc:
+        return int(exc.code), json.loads(exc.read())
 
 
 def _post_json(url: str, payload: dict):

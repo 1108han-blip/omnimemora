@@ -9,9 +9,10 @@ import urllib.request
 from dataclasses import dataclass
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Optional
-from urllib.parse import urljoin
+from urllib.parse import parse_qs, urljoin, urlparse
 
-from .ledger import build_audit_event, record_audit_event
+from .ledger import build_audit_event, get_audit_event, record_audit_event, summarize_recent_events
+from .receipts import build_receipt
 from .usage_normalizer import normalize_openai_compatible_usage
 
 VERSION = "0.1.0-dev"
@@ -50,7 +51,8 @@ def _make_handler(config: LocalProxyConfig) -> type[BaseHTTPRequestHandler]:
         server_version = f"{SERVICE_NAME}/{VERSION}"
 
         def do_GET(self) -> None:  # noqa: N802 - stdlib handler API
-            if self.path == "/health":
+            parsed_path = urlparse(self.path).path
+            if parsed_path == "/health":
                 _send_json(
                     self,
                     200,
@@ -62,7 +64,7 @@ def _make_handler(config: LocalProxyConfig) -> type[BaseHTTPRequestHandler]:
                     },
                 )
                 return
-            if self.path == "/version":
+            if parsed_path == "/version":
                 _send_json(
                     self,
                     200,
@@ -72,7 +74,13 @@ def _make_handler(config: LocalProxyConfig) -> type[BaseHTTPRequestHandler]:
                     },
                 )
                 return
-            _send_json(self, 404, {"error": "not_found", "path": self.path})
+            if parsed_path == "/audit/summary":
+                _send_audit_summary(self, config, self.path)
+                return
+            if parsed_path.startswith("/audit/events/"):
+                _send_audit_event(self, config, parsed_path)
+                return
+            _send_json(self, 404, {"error": "not_found", "path": parsed_path})
 
         def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
             if self.path != "/v1/chat/completions":
@@ -162,6 +170,46 @@ def _forward_chat_completion(
 def _join_upstream_path(base_url: str, path: str) -> str:
     normalized_base = base_url.rstrip("/") + "/"
     return urljoin(normalized_base, path)
+
+
+def _send_audit_summary(handler: BaseHTTPRequestHandler, config: LocalProxyConfig, raw_path: str) -> None:
+    try:
+        summary = summarize_recent_events(path=config.audit_db_path, limit=_summary_limit(raw_path))
+    except Exception as exc:
+        _send_json(handler, 500, {"error": "audit_summary_failed", "message": str(exc)})
+        return
+    _send_json(handler, 200, summary)
+
+
+def _send_audit_event(handler: BaseHTTPRequestHandler, config: LocalProxyConfig, path: str) -> None:
+    parts = path.strip("/").split("/")
+    if len(parts) not in {3, 4} or parts[:2] != ["audit", "events"]:
+        _send_json(handler, 404, {"error": "not_found", "path": path})
+        return
+    audit_id = parts[2]
+    is_receipt = len(parts) == 4 and parts[3] == "receipt"
+    if len(parts) == 4 and not is_receipt:
+        _send_json(handler, 404, {"error": "not_found", "path": path})
+        return
+    try:
+        event = get_audit_event(audit_id, path=config.audit_db_path)
+    except Exception as exc:
+        _send_json(handler, 500, {"error": "audit_read_failed", "message": str(exc)})
+        return
+    if event is None:
+        _send_json(handler, 404, {"error": "audit_event_not_found", "audit_id": audit_id})
+        return
+    _send_json(handler, 200, build_receipt(event) if is_receipt else event.to_dict())
+
+
+def _summary_limit(raw_path: str) -> int:
+    values = parse_qs(urlparse(raw_path).query).get("limit", [])
+    if not values:
+        return 1000
+    try:
+        return max(1, min(int(values[0]), 1000))
+    except Exception:
+        return 1000
 
 
 def _record_proxy_audit_event(

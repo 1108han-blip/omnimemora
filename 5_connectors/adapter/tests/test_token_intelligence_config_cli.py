@@ -101,3 +101,33 @@ def test_cli_proxy_status_reports_unreachable_for_stopped_proxy(tmp_path, capsys
     payload = json.loads(capsys.readouterr().out)
     assert payload["status"] == "unreachable"
     assert payload["url"] == "http://127.0.0.1:18081/health"
+
+
+def test_cli_receipt_get_reads_metadata_only_receipt(tmp_path, monkeypatch, capsys):
+    sqlite_path = tmp_path / "audit.sqlite3"
+    monkeypatch.setenv("OMNIMEMORA_TOKEN_INTELLIGENCE_DB", str(sqlite_path))
+    secret_prompt = "SECRET_PROMPT_NOT_IN_CLI_RECEIPT"
+    usage = token_intelligence.normalize_openai_compatible_usage(
+        {"usage": {"prompt_tokens": 3, "completion_tokens": 2, "total_tokens": 5}},
+        usage_source="relay_reported",
+    )
+    event = token_intelligence.build_audit_event(
+        request_id="req-cli-receipt",
+        request_payload={"messages": [{"role": "user", "content": secret_prompt}]},
+        response_payload={"id": "chatcmpl-cli", "usage": {"total_tokens": 5}},
+        upstream_base_url="https://relay.example/v1",
+        provider="local_proxy",
+        model_requested="relay-model",
+        model_reported="relay-model",
+        usage=usage,
+        latency_ms=12,
+        status_code=200,
+    )
+    token_intelligence.record_audit_event(event)
+
+    assert cli.main(["receipt", "get", event.audit_id]) == 0
+    receipt = json.loads(capsys.readouterr().out)
+
+    assert receipt["audit_id"] == event.audit_id
+    assert receipt["usage"]["source"] == "relay_reported"
+    assert secret_prompt not in json.dumps(receipt, sort_keys=True)

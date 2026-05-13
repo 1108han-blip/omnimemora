@@ -182,6 +182,81 @@ def count_events(*, path: Optional[str] = None) -> int:
     return int(row["c"] if row else 0)
 
 
+def summarize_recent_events(*, path: Optional[str] = None, limit: int = 1000) -> dict[str, Any]:
+    bounded_limit = max(1, min(int(limit), 1000))
+    init_schema(path)
+    with _connect(path) as conn:
+        rows = conn.execute(
+            """
+            SELECT model_requested, usage_json, cost_json, status_code, latency_ms, created_at
+            FROM audit_events
+            ORDER BY created_at DESC
+            LIMIT ?
+            """,
+            (bounded_limit,),
+        ).fetchall()
+
+    source_counts: dict[str, int] = {}
+    confidence_counts: dict[str, int] = {}
+    status_counts: dict[str, int] = {}
+    model_counts: dict[str, dict[str, Any]] = {}
+    usage_totals = {
+        "input_tokens": 0,
+        "output_tokens": 0,
+        "total_tokens": 0,
+        "cached_input_tokens": 0,
+        "reasoning_tokens": 0,
+    }
+    total_cost_usd = 0.0
+    cost_present = False
+    latency_values: list[int] = []
+
+    for row in rows:
+        usage = _loads(row["usage_json"])
+        cost = _loads(row["cost_json"])
+        model = str(row["model_requested"] or "")
+        status = str(row["status_code"] if row["status_code"] is not None else "unknown")
+        source = str(usage.get("source") or "unknown")
+        confidence = str(usage.get("confidence") or "unknown")
+        total_tokens = _safe_int(usage.get("total_tokens")) or 0
+
+        source_counts[source] = source_counts.get(source, 0) + 1
+        confidence_counts[confidence] = confidence_counts.get(confidence, 0) + 1
+        status_counts[status] = status_counts.get(status, 0) + 1
+
+        for key in usage_totals:
+            usage_totals[key] += _safe_int(usage.get(key)) or 0
+
+        cost_value = _safe_float(cost.get("total_cost_usd"))
+        if cost_value is not None:
+            total_cost_usd += cost_value
+            cost_present = True
+
+        if row["latency_ms"] is not None:
+            latency_values.append(int(row["latency_ms"]))
+
+        model_entry = model_counts.setdefault(model, {"model": model, "request_count": 0, "total_tokens": 0})
+        model_entry["request_count"] += 1
+        model_entry["total_tokens"] += total_tokens
+
+    top_models = sorted(
+        model_counts.values(),
+        key=lambda item: (-int(item["total_tokens"]), -int(item["request_count"]), str(item["model"])),
+    )[:10]
+    return {
+        "schema_version": "token-intelligence-summary-v1",
+        "window": {"limit": bounded_limit, "bounded": True},
+        "event_count": len(rows),
+        "usage": usage_totals,
+        "usage_sources": source_counts,
+        "confidence": confidence_counts,
+        "status_codes": status_counts,
+        "top_models": top_models,
+        "cost": {"total_cost_usd": round(total_cost_usd, 8)} if cost_present else {},
+        "latency_ms": _latency_summary(latency_values),
+    }
+
+
 def _row_to_event(row: sqlite3.Row) -> AuditEvent:
     usage_payload = _loads(row["usage_json"])
     cost_payload = _loads(row["cost_json"])
@@ -235,6 +310,26 @@ def _safe_int(value: Any) -> Optional[int]:
         return int(value)
     except Exception:
         return None
+
+
+def _safe_float(value: Any) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        return float(value)
+    except Exception:
+        return None
+
+
+def _latency_summary(values: list[int]) -> dict[str, int]:
+    if not values:
+        return {}
+    ordered = sorted(values)
+    return {
+        "min": ordered[0],
+        "max": ordered[-1],
+        "avg": int(sum(ordered) / len(ordered)),
+    }
 
 
 def _sanitize_metadata(metadata: dict[str, Any]) -> dict[str, Any]:

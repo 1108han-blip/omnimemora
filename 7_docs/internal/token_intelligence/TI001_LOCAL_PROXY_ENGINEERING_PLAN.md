@@ -362,6 +362,8 @@ Exit:
 
 ### TI-001D - Receipt And Summary API
 
+Status: repo implementation completed on 2026-05-13; running promotion not started.
+
 Scope:
 
 - add receipt read/export;
