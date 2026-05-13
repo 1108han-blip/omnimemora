@@ -392,6 +392,8 @@ Exit:
 
 ### TI-001F - Packaging Candidate
 
+Status: repo implementation completed on 2026-05-13; actual cloud publication not started.
+
 Scope:
 
 - package CLI/local proxy for local beta test;

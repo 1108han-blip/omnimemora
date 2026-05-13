@@ -1,12 +1,15 @@
 import importlib
 import json
+import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
 import pytest
 
 
 APP_DIR = Path(__file__).resolve().parents[1] / "application"
+REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(APP_DIR))
 token_intelligence = importlib.import_module("token_intelligence")
 cli = importlib.import_module("token_intelligence.cli")
@@ -167,3 +170,41 @@ def test_cli_update_check_reads_metadata_without_download(tmp_path, capsys):
     assert result["unsigned_beta"] is True
     assert "Privacy & Security" in result["gatekeeper_note"]
     assert "download_url" not in result
+
+
+def test_local_package_builder_outputs_checksum_metadata_and_launcher(tmp_path):
+    script = REPO_ROOT / "tools" / "token_intelligence" / "build_local_package.py"
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--output-dir",
+            str(tmp_path),
+            "--version",
+            "0.1.0-test",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    payload = json.loads(result.stdout)
+
+    zip_path = Path(payload["zip"])
+    metadata_path = Path(payload["metadata"])
+    checksum_path = tmp_path / "SHA256SUMS.txt"
+    assert zip_path.exists()
+    assert metadata_path.exists()
+    assert checksum_path.exists()
+
+    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    assert metadata["version"] == "0.1.0-test"
+    assert metadata["platforms"]["darwin-arm64"]["sha256"] == payload["sha256"]
+    assert metadata["platforms"]["darwin-arm64"]["unsigned_beta"] is True
+
+    with zipfile.ZipFile(zip_path) as archive:
+        names = set(archive.namelist())
+    assert "omni-token-audit-0.1.0-test-local/omni-token-audit" in names
+    assert "omni-token-audit-0.1.0-test-local/token_intelligence/cli.py" in names
+    assert all("__pycache__" not in name for name in names)
+    assert payload["sha256"] in checksum_path.read_text(encoding="utf-8")

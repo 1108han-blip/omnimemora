@@ -19,6 +19,7 @@
 - 2026-05-13: TI-001C repo-only audit ledger integration added. The candidate proxy records metadata-only audit events after upstream responses, labels relay-reported usage, emits an audit id header, and fails open when audit persistence fails; receipt/summary HTTP APIs remain TI-001D.
 - 2026-05-13: TI-001D repo-only receipt and summary API added. The candidate proxy exposes bounded `/audit/events/<audit_id>`, `/audit/events/<audit_id>/receipt`, and `/audit/summary` reads, and CLI receipt get/export prints metadata-only receipts; running promotion remains not started.
 - 2026-05-13: TI-001E repo-only update metadata check added. The candidate proxy and CLI parse product-owned release metadata, report current/latest/minimum version and unsigned beta Gatekeeper notes, and do not auto-download or install packages.
+- 2026-05-13: TI-001F repo-only local package builder added. It stages a checksum-verifiable local zip package under an operator-selected output directory, emits `SHA256SUMS.txt` and `latest.local.json`, and defaults to `/tmp` so build artifacts do not pollute the repo.
 
 ## Product Target
 
@@ -68,6 +69,26 @@ Recommended packaging:
 - proprietary lightweight local proxy / CLI package for first adoption,
 - optional local report page,
 - optional local MCP companion for agent queries.
+
+Local package candidate:
+
+```text
+python3 tools/token_intelligence/build_local_package.py --version 0.1.0-beta.1
+```
+
+Default output:
+
+```text
+/tmp/omnimemora-token-intelligence-build/
+```
+
+Generated candidate files:
+
+- `omni-token-audit-<version>-local.zip`
+- `SHA256SUMS.txt`
+- `latest.local.json`
+
+The package is unsigned beta material. It is not an automatic installer, does not self-update, and macOS users may need Privacy & Security / Gatekeeper manual approval.
 
 Distribution requirements:
 

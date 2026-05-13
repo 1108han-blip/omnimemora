@@ -64,7 +64,7 @@ def _build_parser() -> argparse.ArgumentParser:
     export_parser.add_argument("--format", default="json", choices=["json"])
     export_parser.set_defaults(func=_cmd_receipt_get)
 
-    update_parser = subparsers.add_parser("update", help="update commands are reserved for TI-001E")
+    update_parser = subparsers.add_parser("update", help="check release metadata")
     update_subparsers = update_parser.add_subparsers(dest="update_command")
     update_parser.set_defaults(func=_cmd_update_not_implemented)
 
@@ -134,7 +134,7 @@ def _cmd_receipt_get(args: argparse.Namespace) -> int:
 
 def _cmd_update_not_implemented(args: argparse.Namespace) -> int:
     _ = args
-    print("update check is reserved for TI-001E", file=sys.stderr)
+    print("Run `omni-token-audit update check --help` for usage.", file=sys.stderr)
     return 2
 
 
