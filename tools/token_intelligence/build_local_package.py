@@ -132,6 +132,14 @@ What it does:
   - forwards requests to your configured upstream provider or relay
   - records token-flow receipts without storing raw prompts by default
   - labels reported token usage separately from local estimates
+  - summarizes local receipts, top requests, and potential token savings
+
+Current version boundary:
+  - audits LLM requests only when they pass through this local proxy
+  - treats provider-reported or relay-reported usage as the highest-confidence count
+  - uses local estimates only when upstream usage is missing or for comparison
+  - does not present local estimates as provider billing truth
+  - reports usage differences neutrally as normal, warning, unexplained, estimated-only, or not-applicable
 
 Quickstart:
   ./omni-token-audit init

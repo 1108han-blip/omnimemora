@@ -49,6 +49,7 @@
 - 2026-05-13: TI-026 cloud release completed. Token Intelligence `0.1.0-beta.1` artifacts were uploaded to R2, the control-entry Worker was deployed, live `/download` now lists the Token Intelligence CLI beta, and remote package SHA/version were verified.
 - 2026-05-13: Naming decision recorded. The external product name is DoloToken; Token Intelligence remains the internal module, engineering line, technical capability name, route namespace, and compatibility surface.
 - 2026-05-13: TI-027 DoloToken brand-sync release completed. DoloToken `0.1.0-beta.2` artifacts were uploaded to R2, the control-entry Worker was redeployed, live `/download` now lists the DoloToken CLI beta, and remote package SHA/version were verified.
+- 2026-05-13: Current-version product scope recorded. DoloToken can audit relay/middleman token usage and can become a unified token-flow meter for LLM requests that pass through it, but it must label provider-reported, relay-reported, local-estimated, and rough-estimated counts separately and must not claim local estimates as provider billing truth.
 
 ## Naming
 
@@ -95,6 +96,26 @@ It must explain:
 Primary target: accurate token-flow accounting.
 
 Money is a secondary convenience layer. Users can calculate money themselves from trusted token counts, or use a small optional calculator/profile when they want a local estimate. OmniMemora must not lock product truth to one official price table, one relay price table, one region, or one user group. Reported relay/provider cost can be recorded as evidence; locally inferred cost must remain labeled and optional.
+
+## Current Version Scope
+
+This version can be used to audit token usage through relays, middlemen, and OpenAI-compatible LLM clients when their requests are routed through DoloToken.
+
+Product claim:
+
+- DoloToken records and explains token flow for LLM requests that pass through the local proxy.
+- Relay-reported or provider-reported `usage` remains the highest-confidence count for this version.
+- When upstream usage is missing, DoloToken records a local estimate with an explicit estimate confidence label.
+- DoloToken can compare reported usage against local estimates and mark normal, warning, unexplained, estimated-only, or not-applicable differences.
+- DoloToken can unify local receipts, summaries, top requests, workflow tags, and optimization opportunities across compatible clients and relays.
+
+Product boundary:
+
+- DoloToken does not directly measure requests that do not pass through it.
+- Local estimates must not be presented as provider billing truth.
+- Difference analysis must be neutral. It can identify unexplained deltas and possible causes, but it must not accuse a relay or provider without independent evidence.
+- Native Anthropic `/v1/messages`, OpenAI Responses API, streaming receipt semantics, provider tokenizer/count APIs, and richer multimodal/reasoning/cache normalization remain follow-up protocol adapters.
+- Hidden provider-side context, server tools, reasoning tokens, cache rules, multimodal tokens, and relay pricing rules may limit local-only accuracy.
 
 ## Product Shape
 
