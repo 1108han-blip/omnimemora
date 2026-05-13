@@ -32,4 +32,5 @@ def build_receipt(event: AuditEvent) -> dict[str, Any]:
         "latency_ms": event.latency_ms,
         "status_code": event.status_code,
         "created_at": event.created_at,
+        "blocks": event.blocks,
     }

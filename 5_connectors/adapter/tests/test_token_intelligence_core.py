@@ -77,6 +77,39 @@ def test_openai_compatible_estimator_returns_bounded_counts():
     assert usage.total_tokens == request_tokens + output_tokens
 
 
+def test_block_breakdown_classifies_without_raw_content():
+    secret_tool_result = "SECRET_TOOL_RESULT_NOT_IN_BLOCKS"
+    blocks = token_intelligence.classify_openai_compatible_blocks(
+        {
+            "model": "relay-model",
+            "messages": [
+                {"role": "system", "content": "system rules"},
+                {"role": "user", "content": "older request"},
+                {"role": "assistant", "tool_calls": [{"id": "call_1", "function": {"name": "search"}}]},
+                {"role": "tool", "tool_call_id": "call_1", "content": secret_tool_result},
+                {"role": "user", "content": "current request"},
+            ],
+            "tools": [{"type": "function", "function": {"name": "search"}}],
+            "omni_memory_context": {"hit_count": 2},
+        },
+        {"choices": [{"message": {"content": "answer"}}]},
+    )
+    block_types = {block["block_type"] for block in blocks}
+
+    assert {
+        "system_developer_instructions",
+        "current_user_intent",
+        "conversation_history",
+        "tool_schemas",
+        "tool_calls",
+        "tool_results",
+        "memory_context_injection",
+        "provider_output",
+    }.issubset(block_types)
+    assert all(block["token_estimate"] > 0 for block in blocks)
+    assert secret_tool_result not in json.dumps(blocks, sort_keys=True)
+
+
 def test_audit_ledger_roundtrip_and_receipt_are_metadata_only(tmp_path, monkeypatch):
     sqlite_path = tmp_path / "token_intelligence.sqlite3"
     monkeypatch.setenv("OMNIMEMORA_TOKEN_INTELLIGENCE_DB", str(sqlite_path))
@@ -109,6 +142,16 @@ def test_audit_ledger_roundtrip_and_receipt_are_metadata_only(tmp_path, monkeypa
             "tool_output": response_secret,
             "nested": {"content": request_secret},
         },
+        blocks=[
+            {
+                "block_type": "current_user_intent",
+                "token_estimate": 8,
+                "item_count": 1,
+                "source": "local_estimated",
+                "confidence": "compatible_estimate",
+                "raw_content": request_secret,
+            }
+        ],
     )
 
     token_intelligence.record_audit_event(event)
@@ -121,9 +164,19 @@ def test_audit_ledger_roundtrip_and_receipt_are_metadata_only(tmp_path, monkeypa
     assert loaded.request_id == "req-token-intelligence"
     assert loaded.usage.total_tokens == 25
     assert loaded.metadata == {"agent_id": "test-agent"}
+    assert loaded.blocks == [
+        {
+            "block_type": "current_user_intent",
+            "token_estimate": 8,
+            "item_count": 1,
+            "source": "local_estimated",
+            "confidence": "compatible_estimate",
+        }
+    ]
     assert receipt["request_hash"].startswith("sha256:")
     assert receipt["response_hash"].startswith("sha256:")
     assert receipt["usage"]["source"] == "provider_reported"
+    assert receipt["blocks"][0]["block_type"] == "current_user_intent"
 
     with sqlite3.connect(str(sqlite_path)) as conn:
         conn.row_factory = sqlite3.Row

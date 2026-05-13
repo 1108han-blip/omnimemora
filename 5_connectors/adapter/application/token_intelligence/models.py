@@ -92,6 +92,7 @@ class AuditEvent:
     status_code: Optional[int] = None
     created_at: str = ""
     metadata: Dict[str, Any] = field(default_factory=dict)
+    blocks: list[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return _drop_none(
@@ -110,6 +111,7 @@ class AuditEvent:
                 "status_code": self.status_code,
                 "created_at": self.created_at,
                 "metadata": self.metadata,
+                "blocks": self.blocks,
             }
         )
 

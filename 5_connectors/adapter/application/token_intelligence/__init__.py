@@ -13,6 +13,7 @@ from .config import (
     validate_config,
     write_default_config,
 )
+from .block_breakdown import classify_openai_compatible_blocks
 from .ledger import (
     build_audit_event,
     count_events,
@@ -44,6 +45,7 @@ __all__ = [
     "build_audit_event",
     "build_receipt",
     "check_update_metadata",
+    "classify_openai_compatible_blocks",
     "count_events",
     "create_server",
     "default_config",

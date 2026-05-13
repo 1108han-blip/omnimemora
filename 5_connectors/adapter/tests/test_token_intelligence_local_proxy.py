@@ -115,8 +115,10 @@ def test_chat_completions_records_audit_without_raw_prompt(tmp_path):
     assert receipt_status == 200
     assert receipt["usage"]["source"] == "relay_reported"
     assert receipt["usage"]["confidence"] == "official_usage"
+    assert {block["block_type"] for block in receipt["blocks"]} >= {"current_user_intent", "provider_output"}
     assert event_status == 200
     assert event["metadata"]["route"] == "/v1/chat/completions"
+    assert event["blocks"] == receipt["blocks"]
     assert summary_status == 200
     assert summary["event_count"] == 1
     assert summary["usage"]["total_tokens"] == 15
@@ -124,6 +126,7 @@ def test_chat_completions_records_audit_without_raw_prompt(tmp_path):
     assert summary["top_models"] == [
         {"model": "relay-model-requested", "request_count": 1, "total_tokens": 15}
     ]
+    assert {block["block_type"] for block in summary["top_blocks"]} >= {"current_user_intent", "provider_output"}
     with sqlite3.connect(str(sqlite_path)) as conn:
         conn.row_factory = sqlite3.Row
         row = conn.execute("SELECT * FROM audit_events LIMIT 1").fetchone()

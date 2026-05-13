@@ -68,10 +68,12 @@ def init_schema(path: Optional[str] = None) -> None:
                 latency_ms INTEGER,
                 status_code INTEGER,
                 metadata_json TEXT NOT NULL,
+                blocks_json TEXT NOT NULL DEFAULT '[]',
                 created_at TEXT NOT NULL
             );
             """
         )
+        _ensure_column(conn, "audit_events", "blocks_json", "TEXT NOT NULL DEFAULT '[]'")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS audit_meta (
@@ -102,6 +104,7 @@ def build_audit_event(
     latency_ms: Optional[int] = None,
     status_code: Optional[int] = None,
     metadata: Optional[dict[str, Any]] = None,
+    blocks: Optional[list[dict[str, Any]]] = None,
 ) -> AuditEvent:
     created_at = _utc_now_iso()
     return AuditEvent(
@@ -119,6 +122,7 @@ def build_audit_event(
         status_code=_safe_int(status_code),
         created_at=created_at,
         metadata=_sanitize_metadata(metadata or {}),
+        blocks=_sanitize_blocks(blocks or []),
     )
 
 
@@ -141,8 +145,9 @@ def record_audit_event(event: AuditEvent, *, path: Optional[str] = None) -> None
                 latency_ms,
                 status_code,
                 metadata_json,
+                blocks_json,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 event.audit_id,
@@ -158,6 +163,7 @@ def record_audit_event(event: AuditEvent, *, path: Optional[str] = None) -> None
                 event.latency_ms,
                 event.status_code,
                 _json(event.metadata),
+                _json_list(event.blocks),
                 event.created_at,
             ),
         )
@@ -188,7 +194,7 @@ def summarize_recent_events(*, path: Optional[str] = None, limit: int = 1000) ->
     with _connect(path) as conn:
         rows = conn.execute(
             """
-            SELECT model_requested, usage_json, cost_json, status_code, latency_ms, created_at
+            SELECT model_requested, usage_json, cost_json, status_code, latency_ms, blocks_json, created_at
             FROM audit_events
             ORDER BY created_at DESC
             LIMIT ?
@@ -210,6 +216,7 @@ def summarize_recent_events(*, path: Optional[str] = None, limit: int = 1000) ->
     total_cost_usd = 0.0
     cost_present = False
     latency_values: list[int] = []
+    block_totals: dict[str, dict[str, Any]] = {}
 
     for row in rows:
         usage = _loads(row["usage_json"])
@@ -235,6 +242,12 @@ def summarize_recent_events(*, path: Optional[str] = None, limit: int = 1000) ->
         if row["latency_ms"] is not None:
             latency_values.append(int(row["latency_ms"]))
 
+        for block in _loads_list(row["blocks_json"]):
+            block_type = str(_as_dict(block).get("block_type") or "unknown")
+            token_estimate = _safe_int(_as_dict(block).get("token_estimate")) or 0
+            block_entry = block_totals.setdefault(block_type, {"block_type": block_type, "token_estimate": 0})
+            block_entry["token_estimate"] += token_estimate
+
         model_entry = model_counts.setdefault(model, {"model": model, "request_count": 0, "total_tokens": 0})
         model_entry["request_count"] += 1
         model_entry["total_tokens"] += total_tokens
@@ -243,6 +256,7 @@ def summarize_recent_events(*, path: Optional[str] = None, limit: int = 1000) ->
         model_counts.values(),
         key=lambda item: (-int(item["total_tokens"]), -int(item["request_count"]), str(item["model"])),
     )[:10]
+    top_blocks = sorted(block_totals.values(), key=lambda item: (-int(item["token_estimate"]), str(item["block_type"])))
     return {
         "schema_version": "token-intelligence-summary-v1",
         "window": {"limit": bounded_limit, "bounded": True},
@@ -252,6 +266,7 @@ def summarize_recent_events(*, path: Optional[str] = None, limit: int = 1000) ->
         "confidence": confidence_counts,
         "status_codes": status_counts,
         "top_models": top_models,
+        "top_blocks": top_blocks,
         "cost": {"total_cost_usd": round(total_cost_usd, 8)} if cost_present else {},
         "latency_ms": _latency_summary(latency_values),
     }
@@ -275,7 +290,15 @@ def _row_to_event(row: sqlite3.Row) -> AuditEvent:
         status_code=row["status_code"],
         created_at=str(row["created_at"]),
         metadata=_loads(row["metadata_json"]),
+        blocks=_loads_list(_row_value(row, "blocks_json", "[]")),
     )
+
+
+def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:
+    rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+    if any(str(row["name"]) == column for row in rows):
+        return
+    conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
 
 def _set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
@@ -295,12 +318,34 @@ def _json(payload: dict[str, Any]) -> str:
     return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
 
 
+def _json_list(payload: list[dict[str, Any]]) -> str:
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
 def _loads(payload: str) -> dict[str, Any]:
     try:
         parsed = json.loads(payload or "{}")
     except Exception:
         return {}
     return parsed if isinstance(parsed, dict) else {}
+
+
+def _loads_list(payload: str) -> list[dict[str, Any]]:
+    try:
+        parsed = json.loads(payload or "[]")
+    except Exception:
+        return []
+    if not isinstance(parsed, list):
+        return []
+    return [_as_dict(item) for item in parsed if isinstance(item, dict)]
+
+
+def _as_dict(value: Any) -> dict[str, Any]:
+    return value if isinstance(value, dict) else {}
+
+
+def _row_value(row: sqlite3.Row, key: str, default: Any) -> Any:
+    return row[key] if key in row.keys() else default
 
 
 def _safe_int(value: Any) -> Optional[int]:
@@ -341,6 +386,24 @@ def _sanitize_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
             continue
         if isinstance(raw_value, (str, int, float, bool)) or raw_value is None:
             sanitized[key] = _cap_metadata_value(raw_value)
+    return sanitized
+
+
+def _sanitize_blocks(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    sanitized: list[dict[str, Any]] = []
+    for block in blocks:
+        block_type = str(block.get("block_type") or "")
+        if not block_type:
+            continue
+        sanitized.append(
+            {
+                "block_type": block_type,
+                "token_estimate": max(0, _safe_int(block.get("token_estimate")) or 0),
+                "item_count": max(0, _safe_int(block.get("item_count")) or 0),
+                "source": str(block.get("source") or "local_estimated"),
+                "confidence": str(block.get("confidence") or "compatible_estimate"),
+            }
+        )
     return sanitized
 
 

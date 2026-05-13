@@ -21,6 +21,7 @@
 - 2026-05-13: TI-001E repo-only update metadata check added. The candidate proxy and CLI parse product-owned release metadata, report current/latest/minimum version and unsigned beta Gatekeeper notes, and do not auto-download or install packages.
 - 2026-05-13: TI-001F repo-only local package builder added. It stages a checksum-verifiable local zip package under an operator-selected output directory, emits `SHA256SUMS.txt` and `latest.local.json`, and defaults to `/tmp` so build artifacts do not pollute the repo.
 - 2026-05-13: TI-002 repo-only local estimate fallback added. When upstream omits `usage`, the candidate proxy records `local_estimated` usage with `compatible_estimate` confidence; provider/relay-reported usage remains preferred and is not overwritten.
+- 2026-05-13: TI-003 repo-only block-level spend breakdown added. Audit events and receipts now include safe block summaries with block type, token estimate, item count, source, and confidence; raw block content is not stored.
 
 ## Product Target
 
@@ -211,6 +212,8 @@ Current behavior:
 
 ### TI-003 - Block-Level Spend Breakdown
 
+Status: repo implementation completed on 2026-05-13 for OpenAI-compatible request/response block classification.
+
 Classify token spend by block.
 
 Minimum block classes:
@@ -227,6 +230,13 @@ Minimum block classes:
 Exit:
 
 - users can see what part of the request consumed tokens.
+
+Current behavior:
+
+- block summaries are stored in `blocks_json` and surfaced in audit event/receipt responses;
+- `/audit/summary` aggregates `top_blocks` from bounded recent ledger rows;
+- block rows contain only class names, token estimates, item counts, source, and confidence;
+- raw message, tool result, prompt, and provider output text are excluded from block records.
 
 ### TI-004 - Waste Detectors
 

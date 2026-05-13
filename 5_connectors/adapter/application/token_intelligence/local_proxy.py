@@ -11,6 +11,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Any, Optional
 from urllib.parse import parse_qs, urljoin, urlparse
 
+from .block_breakdown import classify_openai_compatible_blocks
 from .ledger import build_audit_event, get_audit_event, record_audit_event, summarize_recent_events
 from .receipts import build_receipt
 from .usage_normalizer import (
@@ -311,6 +312,7 @@ def _record_proxy_audit_event(
                 "route": "/v1/chat/completions",
                 "proxy_mode": "candidate_local_proxy",
             },
+            blocks=classify_openai_compatible_blocks(request_payload, response_payload),
         )
         record_audit_event(event, path=config.audit_db_path)
         return event.audit_id, ""
