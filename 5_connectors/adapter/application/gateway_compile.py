@@ -556,7 +556,7 @@ def _maybe_run_structured_compile(
 
 
 def _structured_compile_deadline_profile(*, agent_id: str, normalized: dict, payload: dict) -> dict:
-    """Return a narrow OpenClaw profile for 45s harness deadlines."""
+    """Return an opt-in OpenClaw compatibility profile for non-product deadline experiments."""
     if agent_id != "openclaw":
         return {}
     if not bool(getattr(config, "structured_compile_openclaw_deadline_profile_enabled", True)):

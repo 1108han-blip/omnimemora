@@ -360,7 +360,7 @@ class Config(BaseModel):
     )
     structured_compile_openclaw_deadline_profile_enabled: bool = _env_bool(
         "OMNIMEMORA_STRUCTURED_COMPILE_OPENCLAW_DEADLINE_PROFILE_ENABLED",
-        True,
+        False,
     )
     structured_compile_openclaw_deadline_seconds: float = float(
         os.getenv("OMNIMEMORA_STRUCTURED_COMPILE_OPENCLAW_DEADLINE_SECONDS", "45")

@@ -1281,6 +1281,26 @@ Change scope:
 - Resident background logic stayed flat; no daemon, scheduler, watcher, or asynchronous worker was added.
 - Internal log retention remains governed by the existing product retention path; no user-facing memory path was touched.
 
+### SC-028 - OpenClaw Harness Profile Boundary and Protocol Error Preservation
+
+Goal: keep OpenClaw product ingress from inheriting the 45-second harness profile by default, while preserving protocol-level failure facts for the agent to handle.
+
+Status: repo reality implemented on 2026-05-14. Running promotion is a separate step because this changes the `18011` adapter behavior.
+
+Implementation:
+
+- `OMNIMEMORA_STRUCTURED_COMPILE_OPENCLAW_DEADLINE_PROFILE_ENABLED` now defaults to `false`; the 45-second OpenClaw profile remains available only as an explicit compatibility experiment.
+- OpenClaw keeps the normal upstream timeout budget; OmniMemora does not manage the agent's client window.
+- OpenClaw upstream timeouts, upstream HTTP errors, and unexpected adapter errors preserve structured protocol error metadata instead of being converted into assistant messages.
+- Failure responses preserve proxy failure metadata through protocol error bodies and compile/proxy event records.
+
+Boundary:
+
+- This does not disable structured compile globally.
+- This does not manage OpenClaw UX, retries, final answer wording, or model behavior.
+- This does not touch user-facing memory, meter files, retention policy, or the legacy `5173` surface.
+- This does not silently truncate documents; document preservation remains governed by SC-027.
+
 ## Success Criteria
 
 Repo reality:

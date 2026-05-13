@@ -911,6 +911,10 @@ def _annotate_upstream_error(
     return {
         "type": body_json.get("type", "error"),
         "message": body_json.get("message", gateway_msg),
+        "error": {
+            "type": error_type,
+            "message": body_json.get("message", gateway_msg),
+        },
         "gateway_upstream_error": upstream_error,
     }
 
@@ -3468,6 +3472,17 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
                     truth_meta=truth_meta,
                     trace_id=trace_id,
                 )
+                _record_compile_event(
+                    request_id=request_id,
+                    agent_id=agent_id,
+                    path=route_label,
+                    model=model,
+                    compile_meta=compile_meta,
+                    proxy_status="failed",
+                    proxy_status_code=status_code,
+                    truth_meta=truth_meta,
+                    trace_id=trace_id,
+                )
                 # P1-1: annotate error body so Claude Code knows it's a Gateway-upstream issue
                 error_body = _annotate_upstream_error(
                     raw_body=upstream_resp.text,
@@ -3626,6 +3641,17 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
             truth_meta=truth_meta,
             trace_id=trace_id,
         )
+        _record_compile_event(
+            request_id=request_id,
+            agent_id=agent_id,
+            path=route_label,
+            model=model,
+            compile_meta=compile_meta,
+            proxy_status="failed",
+            proxy_status_code=status_code,
+            truth_meta=truth_meta,
+            trace_id=trace_id,
+        )
         if e.response:
             error_body = _annotate_upstream_error(
                 raw_body=e.response.text,
@@ -3654,6 +3680,18 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
             "error", None,
             error=f"{error_type}|{error_msg[:150]}",
             truth_meta=truth_meta,
+            trace_id=trace_id,
+        )
+        _record_compile_event(
+            request_id=request_id,
+            agent_id=agent_id,
+            path=route_label,
+            model=model,
+            compile_meta=compile_meta,
+            proxy_status="failed",
+            proxy_status_code=504,
+            truth_meta=truth_meta,
+            trace_id=trace_id,
         )
         loguru.logger.error(f"[LLM_PROXY/ANTHROPIC] upstream timeout: {e}")
         error_body = _annotate_upstream_error(
@@ -3682,6 +3720,18 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
             "error", None,
             error=f"{error_type}|{error_msg[:150]}",
             truth_meta=truth_meta,
+            trace_id=trace_id,
+        )
+        _record_compile_event(
+            request_id=request_id,
+            agent_id=agent_id,
+            path=route_label,
+            model=model,
+            compile_meta=compile_meta,
+            proxy_status="failed",
+            proxy_status_code=500,
+            truth_meta=truth_meta,
+            trace_id=trace_id,
         )
         loguru.logger.error(f"[LLM_PROXY/ANTHROPIC] unexpected error: {e}")
         error_body = _annotate_upstream_error(

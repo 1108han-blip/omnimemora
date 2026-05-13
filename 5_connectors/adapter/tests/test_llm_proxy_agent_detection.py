@@ -151,6 +151,76 @@ if __name__ == "__main__":
 
 
 class TestOpenClawRouteFallback(unittest.IsolatedAsyncioTestCase):
+    async def test_openclaw_anthropic_timeout_returns_protocol_error_without_assistant_takeover(self):
+        body = {
+            "model": "MiniMax-M2.7",
+            "messages": [{"role": "user", "content": "hi"}],
+            "stream": True,
+        }
+
+        class _Req:
+            def __init__(self):
+                self.headers = {"user-agent": "openclaw-control-ui"}
+                self.query_params = {}
+                self.state = SimpleNamespace()
+                self._json = body
+                self.url = SimpleNamespace(path="/llm/v1/messages")
+
+            async def json(self):
+                return self._json
+
+        class _FakeClient:
+            def __init__(self, *args, **kwargs):
+                seen["timeout"] = kwargs.get("timeout")
+
+            def build_request(self, method, url, json=None, headers=None):
+                return {"method": method, "url": url, "json": json, "headers": headers}
+
+            async def send(self, request, stream=False):
+                raise httpx.TimeoutException("upstream took too long")
+
+            async def aclose(self):
+                seen["client_closed"] = True
+
+        seen = {}
+        recorded_compile = []
+        recorded_events = []
+        original_client = llm_proxy.httpx.AsyncClient
+        original_route_enabled = llm_proxy._routing_enabled_for_agent
+        original_get_upstream = llm_proxy.get_upstream_for_anthropic
+        original_record_compile = llm_proxy._record_compile_event
+        original_record_event = llm_proxy._record_event
+        original_true_stream_flag = llm_proxy._ANTHROPIC_TRUE_STREAMING_OPENCLAW
+
+        try:
+            llm_proxy.httpx.AsyncClient = _FakeClient
+            llm_proxy._routing_enabled_for_agent = lambda agent_id: False
+            llm_proxy.get_upstream_for_anthropic = lambda model: {
+                "base_url": "https://example.test/anthropic",
+                "api_key": "test-key",
+                "timeout_seconds": 120,
+            }
+            llm_proxy._record_compile_event = lambda **kwargs: recorded_compile.append(kwargs)
+            llm_proxy._record_event = lambda *args, **kwargs: recorded_events.append((args, kwargs))
+            llm_proxy._ANTHROPIC_TRUE_STREAMING_OPENCLAW = True
+
+            response = await llm_proxy.proxy_anthropic_messages_compatible(_Req())
+        finally:
+            llm_proxy.httpx.AsyncClient = original_client
+            llm_proxy._routing_enabled_for_agent = original_route_enabled
+            llm_proxy.get_upstream_for_anthropic = original_get_upstream
+            llm_proxy._record_compile_event = original_record_compile
+            llm_proxy._record_event = original_record_event
+            llm_proxy._ANTHROPIC_TRUE_STREAMING_OPENCLAW = original_true_stream_flag
+
+        body_text = response.body.decode("utf-8")
+        self.assertEqual(response.status_code, 504)
+        self.assertIn("upstream_timeout", body_text)
+        self.assertNotIn("message_start", body_text)
+        self.assertNotIn("content_block_delta", body_text)
+        self.assertTrue(seen["client_closed"])
+        self.assertTrue(any(item.get("proxy_status_code") == 504 for item in recorded_compile))
+
     async def test_openclaw_anthropic_stream_uses_true_streaming_send(self):
         body = {
             "model": "MiniMax-M2.7",
