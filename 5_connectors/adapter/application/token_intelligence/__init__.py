@@ -34,11 +34,14 @@ from .reports import build_potential_savings_report
 from .savings_proof import build_actual_savings_proof
 from .local_proxy import LocalProxyConfig, check_update_metadata, create_server, serve_forever
 from .usage_normalizer import (
+    estimate_anthropic_compatible_output_tokens,
     estimate_openai_compatible_input_tokens,
     estimate_openai_compatible_output_tokens,
+    normalize_anthropic_compatible_usage,
     normalize_openai_compatible_cost,
     normalize_openai_compatible_usage,
 )
+from .usage_samples import record_anthropic_usage_sample, record_openai_usage_sample
 from .waste_detectors import detect_openai_compatible_waste
 
 __all__ = [
@@ -70,13 +73,17 @@ __all__ = [
     "init_schema",
     "load_config",
     "list_top_requests",
+    "estimate_anthropic_compatible_output_tokens",
     "estimate_openai_compatible_input_tokens",
     "estimate_openai_compatible_output_tokens",
     "mcp_health",
+    "normalize_anthropic_compatible_usage",
     "normalize_openai_compatible_cost",
     "normalize_openai_compatible_usage",
     "purge_audit_events_older_than",
     "record_audit_event",
+    "record_anthropic_usage_sample",
+    "record_openai_usage_sample",
     "reconcile_openai_compatible_usage",
     "serve_forever",
     "summarize_recent_events",

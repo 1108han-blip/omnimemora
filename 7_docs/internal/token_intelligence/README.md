@@ -55,6 +55,7 @@
 - 2026-05-13: TI-029 repo-only Anthropic non-streaming audit path added. The DoloToken local proxy now accepts `POST /v1/messages`, forwards to the configured Anthropic-compatible upstream without request-body rewrite, forwards `anthropic-version`, uses `x-api-key` from the configured upstream key, and records metadata-only token receipts from Anthropic `usage` fields. Streaming, tool-loop semantic hardening, and provider tokenizer/count APIs remain follow-up work.
 - 2026-05-13: TI-030 repo-only protocol-specific upstream config added. DoloToken now supports separate `upstreams.openai` and `upstreams.anthropic` base URL/API-key-env settings while retaining legacy `upstream` as a compatibility fallback. OpenAI `/v1/chat/completions` and Anthropic `/v1/messages` no longer have to share one upstream/key setting.
 - 2026-05-13: TI-031 product target refined. DoloToken / Token Intelligence is an LLM Usage Verification Layer on the OmniMemora `18011` path, not a universal tokenizer. The MVP target is a unified sampling layer plus conservative trust signals for token divergence, cache plausibility, latency/token, stream behavior, and model/routing consistency.
+- 2026-05-13: TI-032 repo implementation added the first `18011` unified sampling layer. Non-streaming OpenAI-compatible chat completions and Anthropic-compatible messages that pass through product ingress now record metadata-only Token Intelligence audit samples into the existing ledger with source/confidence labels, local estimates, provider usage, cache fields, latency, reconciliation status, and optimization opportunities.
 
 ## Naming
 
@@ -1109,6 +1110,39 @@ Boundary:
 - repo-only product package behavior;
 - no cloud publish in this batch;
 - no mutation of OpenClaw, Claude Code, or other official client config files.
+
+### TI-032 - Product Ingress Unified Usage Sampling
+
+Status: repo implementation completed on 2026-05-13 for the OmniMemora `18011` product ingress.
+
+Goal:
+
+- make `18011` the first official product path that can collect DoloToken / Token Intelligence samples;
+- keep DoloToken inside OmniMemora instead of asking users to point OpenClaw or Claude Code at a second visible proxy;
+- record token-flow facts without claiming universal tokenizer accuracy.
+
+Implemented path:
+
+- OpenAI-compatible non-streaming chat completions through `18011` `/llm/chat`;
+- Anthropic-compatible non-streaming messages through `18011` `/llm/v1/messages`, `/v1/messages`, and `/llm/anthropic`;
+- metadata-only records written to the existing Token Intelligence SQLite ledger;
+- existing DoloToken CLI/report APIs can read the same ledger.
+
+Recorded fields:
+
+- provider and model labels;
+- provider-reported or locally estimated input/output/total tokens;
+- cache read/write tokens and reasoning tokens when upstream reports them;
+- local token estimates, character counts, latency, status code, finish reason;
+- reconciliation status and safe optimization opportunities.
+
+Boundary:
+
+- no OpenClaw config mutation;
+- no `18081` promotion as an agent ingress;
+- no desktop GUI rebuild;
+- no raw prompt or raw response storage;
+- no streaming reconstruction, trust score, model fingerprinting, or provider accusation layer in this MVP batch.
 
 ## Validation Requirements
 

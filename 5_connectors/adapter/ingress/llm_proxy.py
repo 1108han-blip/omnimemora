@@ -3042,6 +3042,82 @@ def _build_passthrough_response(
     return response
 
 
+def _record_product_usage_sample_fail_open(
+    *,
+    protocol: str,
+    request_id: str,
+    route_label: str,
+    request_payload: dict,
+    response_payload: dict,
+    upstream_base_url: str,
+    provider: str,
+    model_requested: str,
+    latency_ms: Optional[int],
+    status_code: Optional[int],
+    agent_id: str,
+) -> None:
+    """Record metadata-only token usage without affecting LLM delivery."""
+    if status_code is None or status_code >= 400:
+        return
+    try:
+        usage_samples = importlib.import_module(
+            "5_connectors.adapter.application.token_intelligence.usage_samples"
+        )
+        common_kwargs = {
+            "request_id": request_id,
+            "route": route_label,
+            "request_payload": request_payload,
+            "response_payload": response_payload,
+            "upstream_base_url": upstream_base_url,
+            "provider": provider,
+            "model_requested": model_requested,
+            "latency_ms": latency_ms,
+            "status_code": status_code,
+            "agent_id": agent_id,
+            "workflow_tag": _safe_metadata_tag(request_payload.get("workflow_tag")),
+            "project_id": _safe_metadata_tag(request_payload.get("project_id")),
+            "workspace_tag": _safe_metadata_tag(request_payload.get("workspace_tag")),
+        }
+        if protocol == "anthropic_messages":
+            event = usage_samples.record_anthropic_usage_sample(**common_kwargs)
+        else:
+            event = usage_samples.record_openai_usage_sample(**common_kwargs)
+        loguru.logger.info(
+            f"[LLM_PROXY/USAGE_SAMPLE] request_id={request_id} route={route_label} "
+            f"protocol={protocol} audit_id={event.audit_id}"
+        )
+    except Exception as exc:
+        loguru.logger.warning(
+            f"[LLM_PROXY/USAGE_SAMPLE] request_id={request_id} route={route_label} skipped: {exc}"
+        )
+
+
+def _schedule_product_usage_sample_fail_open(**kwargs) -> None:
+    async def _run_usage_sample() -> None:
+        await asyncio.to_thread(_record_product_usage_sample_fail_open, **kwargs)
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_run_usage_sample())
+    except RuntimeError:
+        _record_product_usage_sample_fail_open(**kwargs)
+
+
+def _safe_metadata_tag(value) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    return stripped[:120] if stripped else None
+
+
+def _json_payload_from_response(upstream_resp: httpx.Response) -> Optional[dict]:
+    try:
+        parsed = upstream_resp.json()
+    except Exception:
+        return None
+    return parsed if isinstance(parsed, dict) else None
+
+
 def _use_true_anthropic_streaming(*, agent_id: str, is_streaming: bool) -> bool:
     return bool(is_streaming and agent_id == "openclaw" and _ANTHROPIC_TRUE_STREAMING_OPENCLAW)
 
@@ -3293,11 +3369,13 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(upstream["timeout_seconds"], connect=15.0)
         ) as client:
+            upstream_start = _time.perf_counter()
             upstream_resp = await client.post(
                 f"{upstream_base}/v1/messages",
                 json=compiled_body,
                 headers=headers,
             )
+            latency_ms = int((_time.perf_counter() - upstream_start) * 1000)
 
             if upstream_resp.status_code >= 400:
                 upstream_url = f"{upstream_base}/v1/messages"
@@ -3423,6 +3501,24 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
                     original_payload=body,
                     forwarded_payload=forwarded_payload,
                 )
+                response_payload = _json_payload_from_response(upstream_resp)
+                if response_payload is not None:
+                    _schedule_product_usage_sample_fail_open(
+                        protocol="anthropic_messages",
+                        request_id=request_id,
+                        route_label=route_label,
+                        request_payload=forwarded_payload,
+                        response_payload=response_payload,
+                        upstream_base_url=upstream_base,
+                        provider=infer_provider_name(
+                            upstream_base,
+                            upstream.get("provider", "anthropic"),
+                        ),
+                        model_requested=str(model or ""),
+                        latency_ms=latency_ms,
+                        status_code=upstream_resp.status_code,
+                        agent_id=agent_id,
+                    )
                 return _build_passthrough_response(
                     request_id=request_id,
                     route_label=route_label,
@@ -3659,7 +3755,9 @@ async def proxy_openai_chat(request: Request):
         async with httpx.AsyncClient(
             timeout=httpx.Timeout(upstream["timeout_seconds"], connect=15.0)
         ) as client:
+            upstream_start = _time.perf_counter()
             upstream_resp = await client.post(upstream_url, json=compiled_body, headers=headers)
+            latency_ms = int((_time.perf_counter() - upstream_start) * 1000)
             await _auto_write_internal_work_memory(
                 request_id=request_id,
                 route_label="/llm/chat",
@@ -3679,6 +3777,24 @@ async def proxy_openai_chat(request: Request):
                 proxy_status_code=upstream_resp.status_code,
                 trace_id=trace_id,
             )
+            response_payload = _json_payload_from_response(upstream_resp)
+            if response_payload is not None:
+                _schedule_product_usage_sample_fail_open(
+                    protocol="openai_chat_completions",
+                    request_id=request_id,
+                    route_label="/llm/chat",
+                    request_payload=compiled_body,
+                    response_payload=response_payload,
+                    upstream_base_url=upstream["base_url"],
+                    provider=infer_provider_name(
+                        upstream["base_url"],
+                        upstream.get("provider", "openai_compatible"),
+                    ),
+                    model_requested=str(model or ""),
+                    latency_ms=latency_ms,
+                    status_code=upstream_resp.status_code,
+                    agent_id=agent_id,
+                )
             return _passthrough_response(
                 request_id=request_id,
                 route="/llm/chat",
@@ -3732,11 +3848,13 @@ async def proxy_openai_chat(request: Request):
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(upstream["timeout_seconds"], connect=15.0)
             ) as client:
+                upstream_start = _time.perf_counter()
                 upstream_resp = await client.post(
                     upstream_url,
                     json=compiled_body,
                     headers=headers,
                 )
+                latency_ms = int((_time.perf_counter() - upstream_start) * 1000)
 
                 if upstream_resp.status_code >= 400:
                     status_code = upstream_resp.status_code
@@ -3800,6 +3918,25 @@ async def proxy_openai_chat(request: Request):
                     truth_meta=truth_meta,
                     trace_id=trace_id,
                 )
+                response_payload = _json_payload_from_response(upstream_resp)
+                if response_payload is not None:
+                    resolved_base_url = contract.base_url_resolved or upstream["base_url"]
+                    _schedule_product_usage_sample_fail_open(
+                        protocol="openai_chat_completions",
+                        request_id=request_id,
+                        route_label="/llm/chat",
+                        request_payload=compiled_body,
+                        response_payload=response_payload,
+                        upstream_base_url=resolved_base_url,
+                        provider=infer_provider_name(
+                            resolved_base_url,
+                            upstream.get("provider", "openai_compatible"),
+                        ),
+                        model_requested=str(model or ""),
+                        latency_ms=latency_ms,
+                        status_code=upstream_resp.status_code,
+                        agent_id=agent_id,
+                    )
                 return _build_passthrough_response(
                     request_id=request_id,
                     route_label="/llm/chat",
