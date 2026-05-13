@@ -5,7 +5,15 @@
 - Created: 2026-05-13
 - Product line: OmniMemora Token Intelligence Lite
 - Roadmap phase: Phase 8, next formal stage after Structured Compile MVP
-- Current status: direction fixed in product constitution and roadmap; no product behavior, schema, GUI, or running configuration change yet.
+- Current status: direction fixed in product constitution and roadmap; repo-only Token Intelligence core exists; no product request path, GUI, cloud, or running configuration change yet.
+
+## Repo Implementation Status
+
+- 2026-05-13: added isolated adapter core under `5_connectors/adapter/application/token_intelligence/`.
+- Covered core objects: OpenAI-compatible usage normalization, confidence/source labels, metadata-only SQLite audit ledger, and compact receipt generation.
+- Default storage posture: request/response hashes plus compact sanitized metadata; no raw prompt, tool output, or full provider response body by default.
+- Running boundary: not wired into `llm_proxy.py`, `18011`, desktop GUI, or cloud release package yet.
+- Validation: `PYTHONPATH=. uvx --with httpx --with pydantic --with loguru pytest -q 5_connectors/adapter/tests/test_token_intelligence_core.py 5_connectors/adapter/tests/test_context_compiler_token_estimates.py` -> `5 passed`.
 
 ## Product Target
 

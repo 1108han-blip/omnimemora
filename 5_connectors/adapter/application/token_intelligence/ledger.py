@@ -1,0 +1,255 @@
+"""SQLite audit ledger for Token Intelligence Lite."""
+
+from __future__ import annotations
+
+import json
+import os
+import sqlite3
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Optional
+from uuid import uuid4
+
+from .models import AuditEvent, NormalizedCost, NormalizedUsage
+from .receipts import stable_hash
+
+SCHEMA_VERSION = "token-intelligence-ledger-v1"
+_SENSITIVE_METADATA_KEY_PARTS = {
+    "content",
+    "message",
+    "messages",
+    "prompt",
+    "request",
+    "response",
+    "tool_output",
+    "tool_result",
+}
+
+
+def _utc_now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _default_sqlite_path() -> Path:
+    return Path.home() / ".omnimemora" / "adapter" / "token_intelligence" / "audit.sqlite3"
+
+
+def resolve_sqlite_path(path: Optional[str] = None) -> Path:
+    explicit = (path or os.getenv("OMNIMEMORA_TOKEN_INTELLIGENCE_DB", "")).strip()
+    return Path(explicit).expanduser() if explicit else _default_sqlite_path()
+
+
+def _connect(path: Optional[str] = None) -> sqlite3.Connection:
+    sqlite_path = resolve_sqlite_path(path)
+    sqlite_path.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(str(sqlite_path), timeout=5.0)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA journal_mode=WAL;")
+    conn.execute("PRAGMA synchronous=NORMAL;")
+    conn.execute("PRAGMA foreign_keys=ON;")
+    return conn
+
+
+def init_schema(path: Optional[str] = None) -> None:
+    with _connect(path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS audit_events (
+                audit_id TEXT PRIMARY KEY,
+                request_id TEXT NOT NULL,
+                request_hash TEXT NOT NULL,
+                response_hash TEXT NOT NULL,
+                upstream_base_url_hash TEXT NOT NULL,
+                provider TEXT NOT NULL,
+                model_requested TEXT NOT NULL,
+                model_reported TEXT NOT NULL,
+                usage_json TEXT NOT NULL,
+                cost_json TEXT NOT NULL,
+                latency_ms INTEGER,
+                status_code INTEGER,
+                metadata_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS audit_meta (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            """
+        )
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_events_request_id ON audit_events(request_id);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_events_created_at ON audit_events(created_at);")
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_audit_events_model ON audit_events(model_requested);")
+        _set_meta(conn, "schema_version", SCHEMA_VERSION)
+        _set_meta(conn, "content_mode", "metadata_only")
+
+
+def build_audit_event(
+    *,
+    request_id: str,
+    request_payload: Any,
+    response_payload: Any,
+    upstream_base_url: str,
+    provider: str,
+    model_requested: str,
+    usage: NormalizedUsage,
+    cost: Optional[NormalizedCost] = None,
+    model_reported: Optional[str] = None,
+    latency_ms: Optional[int] = None,
+    status_code: Optional[int] = None,
+    metadata: Optional[dict[str, Any]] = None,
+) -> AuditEvent:
+    created_at = _utc_now_iso()
+    return AuditEvent(
+        audit_id=f"omni_audit_{uuid4().hex}",
+        request_id=str(request_id or uuid4().hex),
+        request_hash=stable_hash(request_payload),
+        response_hash=stable_hash(response_payload),
+        upstream_base_url_hash=stable_hash(str(upstream_base_url or "")),
+        provider=str(provider or "unknown"),
+        model_requested=str(model_requested or ""),
+        model_reported=str(model_reported or model_requested or ""),
+        usage=usage,
+        cost=cost or NormalizedCost(),
+        latency_ms=_safe_int(latency_ms),
+        status_code=_safe_int(status_code),
+        created_at=created_at,
+        metadata=_sanitize_metadata(metadata or {}),
+    )
+
+
+def record_audit_event(event: AuditEvent, *, path: Optional[str] = None) -> None:
+    init_schema(path)
+    with _connect(path) as conn:
+        conn.execute(
+            """
+            INSERT INTO audit_events (
+                audit_id,
+                request_id,
+                request_hash,
+                response_hash,
+                upstream_base_url_hash,
+                provider,
+                model_requested,
+                model_reported,
+                usage_json,
+                cost_json,
+                latency_ms,
+                status_code,
+                metadata_json,
+                created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                event.audit_id,
+                event.request_id,
+                event.request_hash,
+                event.response_hash,
+                event.upstream_base_url_hash,
+                event.provider,
+                event.model_requested,
+                event.model_reported,
+                _json(event.usage.to_dict()),
+                _json(event.cost.to_dict()),
+                event.latency_ms,
+                event.status_code,
+                _json(event.metadata),
+                event.created_at,
+            ),
+        )
+
+
+def get_audit_event(audit_id: str, *, path: Optional[str] = None) -> Optional[AuditEvent]:
+    init_schema(path)
+    with _connect(path) as conn:
+        row = conn.execute(
+            "SELECT * FROM audit_events WHERE audit_id = ? LIMIT 1",
+            (audit_id,),
+        ).fetchone()
+    if row is None:
+        return None
+    return _row_to_event(row)
+
+
+def count_events(*, path: Optional[str] = None) -> int:
+    init_schema(path)
+    with _connect(path) as conn:
+        row = conn.execute("SELECT COUNT(*) AS c FROM audit_events").fetchone()
+    return int(row["c"] if row else 0)
+
+
+def _row_to_event(row: sqlite3.Row) -> AuditEvent:
+    usage_payload = _loads(row["usage_json"])
+    cost_payload = _loads(row["cost_json"])
+    return AuditEvent(
+        audit_id=str(row["audit_id"]),
+        request_id=str(row["request_id"]),
+        request_hash=str(row["request_hash"]),
+        response_hash=str(row["response_hash"]),
+        upstream_base_url_hash=str(row["upstream_base_url_hash"]),
+        provider=str(row["provider"]),
+        model_requested=str(row["model_requested"]),
+        model_reported=str(row["model_reported"]),
+        usage=NormalizedUsage(**usage_payload),
+        cost=NormalizedCost(**cost_payload),
+        latency_ms=row["latency_ms"],
+        status_code=row["status_code"],
+        created_at=str(row["created_at"]),
+        metadata=_loads(row["metadata_json"]),
+    )
+
+
+def _set_meta(conn: sqlite3.Connection, key: str, value: str) -> None:
+    conn.execute(
+        """
+        INSERT INTO audit_meta (key, value, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET
+            value = excluded.value,
+            updated_at = excluded.updated_at
+        """,
+        (key, value, _utc_now_iso()),
+    )
+
+
+def _json(payload: dict[str, Any]) -> str:
+    return json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+
+
+def _loads(payload: str) -> dict[str, Any]:
+    try:
+        parsed = json.loads(payload or "{}")
+    except Exception:
+        return {}
+    return parsed if isinstance(parsed, dict) else {}
+
+
+def _safe_int(value: Any) -> Optional[int]:
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except Exception:
+        return None
+
+
+def _sanitize_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
+    sanitized: dict[str, Any] = {}
+    for raw_key, raw_value in metadata.items():
+        key = str(raw_key)
+        lowered = key.lower()
+        if any(part in lowered for part in _SENSITIVE_METADATA_KEY_PARTS):
+            continue
+        if isinstance(raw_value, (str, int, float, bool)) or raw_value is None:
+            sanitized[key] = _cap_metadata_value(raw_value)
+    return sanitized
+
+
+def _cap_metadata_value(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    return value if len(value) <= 200 else value[:200] + "..."
