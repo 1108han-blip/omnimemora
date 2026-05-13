@@ -44,6 +44,7 @@
 - 2026-05-13: TI-022 repo-only cloud route candidate prepared. Current live `doloclaw.com` Token Intelligence paths were confirmed 404, then the Worker template gained candidate redirects for Token Intelligence package downloads and release metadata, with local route tests only and no cloud deployment.
 - 2026-05-13: TI-023 repo-only local release layout added. The package builder now emits a local R2-preview directory with zip, `SHA256SUMS.txt`, `latest.json`, and versioned manifest, and tests verify SHA/metadata consistency before any upload.
 - 2026-05-13: TI-024 repo-only dry-run publish plan added. The package builder can now print future R2 upload keys, content types, SHA values, and Worker routes with `mutates_cloud=false`, without creating Cloudflare tokens, uploading objects, or deploying the Worker.
+- 2026-05-13: TI-025 repo-only release preflight gate added. The package builder now checks Worker template version alignment, Cloudflare auth visibility, target account/bucket/Worker resolution, upload file count, and manual publish readiness without uploading or deploying.
 
 ## Product Target
 
@@ -747,6 +748,52 @@ Boundaries:
 - this does not deploy the Worker;
 - this does not update live `doloclaw.com` routes;
 - the output is a candidate plan, not evidence of cloud availability.
+
+### TI-025 - Release Preflight Gate
+
+Status: repo implementation completed on 2026-05-13 for local preflight output only; no cloud token, upload, or Worker deploy performed.
+
+Make the last pre-publication gate explicit before running any real Cloudflare/R2 mutation.
+
+Command:
+
+```text
+python3 tools/token_intelligence/build_local_package.py --version 0.1.0-beta.1 --preflight-release-gate
+```
+
+Current behavior:
+
+- output includes `preflight.dry_run=true`;
+- output includes `preflight.mutates_cloud=false`;
+- output verifies Worker template `TOKEN_INTELLIGENCE_VERSION` matches the package version;
+- output checks Cloudflare auth env visibility without printing secret values;
+- output resolves target account, release bucket, and Worker name from env or current release defaults;
+- output checks that the release preview contains 4 upload files;
+- output returns `ready_for_manual_publish` only when credentials, target config, Worker version, and release files are all ready;
+- output still includes the TI-024 `publish_plan`.
+
+Validated local preflight on 2026-05-13:
+
+- credentials_ready: `true`;
+- target_config_ready: `true`;
+- worker_version_matches: `true`;
+- required_files_present: `true`;
+- ready_for_manual_publish: `true`;
+- target account/bucket/Worker resolved to the current release defaults when env overrides were absent.
+
+Validated live pre-publication state:
+
+- `https://doloclaw.com/releases/token-intelligence/latest.json` returned 404;
+- `https://doloclaw.com/download/file/token-intelligence/omni-token-audit-0.1.0-beta.1-local.zip` returned 404;
+- `https://doloclaw.com/download` returned 200 and still displayed the Desktop beta17 page only.
+
+Boundaries:
+
+- this does not create Cloudflare API tokens;
+- this does not upload artifacts to R2;
+- this does not deploy the Worker;
+- this does not update live `doloclaw.com` routes;
+- live-route checks are recorded separately from local preflight and are not treated as candidate code being active.
 
 ## Validation Requirements
 

@@ -6,8 +6,11 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
+import re
 import shutil
 import stat
+import subprocess
 import tempfile
 import zipfile
 from datetime import datetime, timezone
@@ -16,10 +19,14 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MODULE_DIR = REPO_ROOT / "5_connectors" / "adapter" / "application" / "token_intelligence"
+WORKER_TEMPLATE = REPO_ROOT / "6_console" / "control-entry" / "worker.js"
 DEFAULT_OUTPUT_DIR = Path(tempfile.gettempdir()) / "omnimemora-token-intelligence-build"
 DEFAULT_VERSION = "0.1.0-beta.1"
 DEFAULT_CHANNEL = "beta"
 PRODUCT = "omnimemora-token-intelligence"
+DEFAULT_CLOUDFLARE_ACCOUNT_ID = "066fdd55ca132844a1a136e3f90ae0aa"
+DEFAULT_RELEASE_BUCKET = "doloclaw-assets-v2"
+DEFAULT_CONTROL_ENTRY_WORKER = "omnimemora-control-entry"
 
 
 def main() -> int:
@@ -62,6 +69,10 @@ def main() -> int:
     }
     if args.dry_run_publish_plan:
         payload["publish_plan"] = _dry_run_publish_plan(release_dir, version)
+    if args.preflight_release_gate:
+        publish_plan = payload.get("publish_plan") or _dry_run_publish_plan(release_dir, version)
+        payload["publish_plan"] = publish_plan
+        payload["preflight"] = _preflight_release_gate(version, publish_plan)
 
     print(json.dumps(payload, sort_keys=True))
     return 0
@@ -76,6 +87,11 @@ def _parser() -> argparse.ArgumentParser:
         "--dry-run-publish-plan",
         action="store_true",
         help="print the future R2/Worker publication plan without uploading or deploying",
+    )
+    parser.add_argument(
+        "--preflight-release-gate",
+        action="store_true",
+        help="print local cloud-publication readiness checks without uploading or deploying",
     )
     return parser
 
@@ -211,6 +227,91 @@ def _dry_run_publish_plan(release_dir: Path, version: str) -> dict[str, object]:
             "version_manifest": f"/releases/token-intelligence/{version}.json",
         },
         "upload_files": upload_files,
+    }
+
+
+def _preflight_release_gate(version: str, publish_plan: dict[str, object]) -> dict[str, object]:
+    worker_version = _worker_token_intelligence_version()
+    credential_env = [
+        "CLOUDFLARE_AUTH_EMAIL",
+        "CLOUDFLARE_GLOBAL_API_KEY",
+    ]
+    credential_presence = {name: _env_present(name) for name in credential_env}
+    target_config = {
+        "CLOUDFLARE_ACCOUNT_ID": _target_config("CLOUDFLARE_ACCOUNT_ID", DEFAULT_CLOUDFLARE_ACCOUNT_ID),
+        "OMNIMEMORA_RELEASE_BUCKET": _target_config("OMNIMEMORA_RELEASE_BUCKET", DEFAULT_RELEASE_BUCKET),
+        "OMNIMEMORA_CONTROL_ENTRY_WORKER": _target_config(
+            "OMNIMEMORA_CONTROL_ENTRY_WORKER",
+            DEFAULT_CONTROL_ENTRY_WORKER,
+        ),
+    }
+    upload_files = publish_plan.get("upload_files")
+    upload_count = len(upload_files) if isinstance(upload_files, list) else 0
+    required_files_present = upload_count == 4
+    worker_version_matches = worker_version == version
+    credentials_ready = all(credential_presence.values())
+    target_config_ready = all(item["value_present"] for item in target_config.values())
+    return {
+        "dry_run": True,
+        "mutates_cloud": False,
+        "version": version,
+        "worker_template": str(WORKER_TEMPLATE),
+        "worker_token_intelligence_version": worker_version,
+        "worker_version_matches": worker_version_matches,
+        "credential_env": credential_presence,
+        "credentials_ready": credentials_ready,
+        "target_config": target_config,
+        "target_config_ready": target_config_ready,
+        "upload_file_count": upload_count,
+        "required_files_present": required_files_present,
+        "live_route_check_included": False,
+        "ready_for_manual_publish": bool(
+            worker_version_matches and credentials_ready and target_config_ready and required_files_present
+        ),
+        "next_manual_checks": [
+            "Confirm live token-intelligence routes are still expected before upload.",
+            "Upload the files listed in publish_plan only after operator approval.",
+            "Deploy the Worker only after R2 object availability is verified.",
+        ],
+    }
+
+
+def _worker_token_intelligence_version() -> str:
+    try:
+        raw = WORKER_TEMPLATE.read_text(encoding="utf-8")
+    except Exception:
+        return ""
+    match = re.search(r'TOKEN_INTELLIGENCE_VERSION\s*=\s*"([^"]+)"', raw)
+    return match.group(1) if match else ""
+
+
+def _env_present(name: str) -> bool:
+    return bool(_env_value(name))
+
+
+def _env_value(name: str) -> str:
+    if os.getenv(name, "").strip():
+        return os.getenv(name, "").strip()
+    try:
+        value = subprocess.run(
+            ["launchctl", "getenv", name],
+            check=False,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+    except Exception:
+        value = ""
+    return value.strip()
+
+
+def _target_config(name: str, default: str) -> dict[str, object]:
+    value = _env_value(name)
+    source = "env" if value else "default"
+    resolved = value or default
+    return {
+        "source": source,
+        "value": resolved,
+        "value_present": bool(resolved),
     }
 
 

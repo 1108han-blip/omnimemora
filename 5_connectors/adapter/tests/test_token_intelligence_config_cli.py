@@ -486,6 +486,57 @@ def test_local_package_builder_dry_run_publish_plan_has_no_cloud_side_effects(tm
     ]["sha256"] == payload["sha256"]
 
 
+def test_local_package_builder_preflight_release_gate_is_read_only(tmp_path):
+    script = REPO_ROOT / "tools" / "token_intelligence" / "build_local_package.py"
+    fake_secret = "fake-cloudflare-secret-not-in-output"
+    env = {
+        **os_environ_without_pythonpath(),
+        "CLOUDFLARE_AUTH_EMAIL": "operator@example.test",
+        "CLOUDFLARE_GLOBAL_API_KEY": fake_secret,
+        "CLOUDFLARE_ACCOUNT_ID": "test-account-id",
+        "OMNIMEMORA_RELEASE_BUCKET": "test-bucket",
+        "OMNIMEMORA_CONTROL_ENTRY_WORKER": "test-worker",
+    }
+
+    result = subprocess.run(
+        [
+            sys.executable,
+            str(script),
+            "--output-dir",
+            str(tmp_path),
+            "--version",
+            "0.1.0-beta.1",
+            "--preflight-release-gate",
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
+    payload = json.loads(result.stdout)
+    preflight = payload["preflight"]
+
+    assert preflight["dry_run"] is True
+    assert preflight["mutates_cloud"] is False
+    assert preflight["worker_token_intelligence_version"] == "0.1.0-beta.1"
+    assert preflight["worker_version_matches"] is True
+    assert preflight["credentials_ready"] is True
+    assert preflight["credential_env"] == {
+        "CLOUDFLARE_AUTH_EMAIL": True,
+        "CLOUDFLARE_GLOBAL_API_KEY": True,
+    }
+    assert preflight["target_config_ready"] is True
+    assert preflight["target_config"]["CLOUDFLARE_ACCOUNT_ID"]["value"] == "test-account-id"
+    assert preflight["target_config"]["OMNIMEMORA_RELEASE_BUCKET"]["value"] == "test-bucket"
+    assert preflight["target_config"]["OMNIMEMORA_CONTROL_ENTRY_WORKER"]["value"] == "test-worker"
+    assert preflight["upload_file_count"] == 4
+    assert preflight["required_files_present"] is True
+    assert preflight["live_route_check_included"] is False
+    assert preflight["ready_for_manual_publish"] is True
+    assert payload["publish_plan"]["mutates_cloud"] is False
+    assert fake_secret not in result.stdout
+
+
 def test_local_package_real_client_minimal_attach_flow(tmp_path):
     unzip = shutil.which("unzip")
     if unzip is None:
