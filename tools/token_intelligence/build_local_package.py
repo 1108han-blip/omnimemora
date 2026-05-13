@@ -89,13 +89,43 @@ def _readme_text(version: str) -> str:
     return f"""OmniMemora Token Intelligence Lite {version}
 
 This is an unsigned controlled-beta local proxy package.
+Source code is not included in this package.
 
-Run:
+What it does:
+  - runs a localhost OpenAI-compatible audit proxy
+  - forwards requests to your configured upstream provider or relay
+  - records token-flow receipts without storing raw prompts by default
+  - labels reported token usage separately from local estimates
+
+Quickstart:
   ./omni-token-audit init
-  ./omni-token-audit proxy start --config ~/.omnimemora/token-intelligence/config.json
+  # Edit ~/.omnimemora/token-intelligence/config.json:
+  #   upstream.base_url = your upstream /v1 endpoint
+  #   upstream.api_key_env = the environment variable that contains your API key
+  export OMNI_AUDIT_UPSTREAM_API_KEY="your-upstream-key"
+  ./omni-token-audit doctor
+  ./omni-token-audit proxy start
+
+Point a compatible client at:
+  OPENAI_BASE_URL=http://127.0.0.1:18081/v1
+  OPENAI_API_KEY can be any placeholder accepted by your client
+
+Optional attach helper:
+  ./omni-token-audit attach openclaw --with-launcher
+  ./omni-token-audit detach openclaw
+
+Reports:
+  ./omni-token-audit report summary
+  ./omni-token-audit report top-requests
+  ./omni-token-audit report potential-savings
+
+Updates:
+  ./omni-token-audit update check
+
+Verify downloads with SHA256SUMS.txt before replacing this package.
 
 During unsigned macOS beta distribution, Privacy & Security / Gatekeeper manual approval may be required.
-No automatic install or self-update is performed by this package candidate.
+No silent install or self-replacement is performed by this package candidate.
 """
 
 

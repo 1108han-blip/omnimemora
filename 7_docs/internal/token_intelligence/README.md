@@ -40,6 +40,7 @@
 - 2026-05-13: TI-019 candidate package smoke passed. The local zip now preserves executable launcher permissions and has been unpacked and run through fake-upstream pass-through, receipt, reports, snippets, attach, and detach in a temp directory.
 - 2026-05-13: Product decision recorded: Token Intelligence is token-flow accuracy first. Money/cost remains optional, source-labeled, and user-configurable; no official or relay price table is treated as the product anchor.
 - 2026-05-13: TI-020 repo-only real-client attach smoke added. The candidate package is built, unpacked with system unzip, started as a subprocess, called through a normal OpenAI-compatible HTTP client, and then verified through receipt/summary/top-request CLI reads plus reversible detach.
+- 2026-05-13: TI-021 repo-only beta package quickstart prepared. The package README now states local proxy purpose, config steps, compatible client base URL, optional attach helper, report commands, update check, checksum verification, private-source boundary, and unsigned Gatekeeper note.
 
 ## Product Target
 
@@ -621,6 +622,29 @@ Boundaries:
 - this is a candidate package/user-style smoke only;
 - it does not mutate official OpenClaw, Claude Code, or other harness config files;
 - it does not promote Token Intelligence into `18011`, desktop GUI, cloud release, or a signed updater path.
+
+### TI-021 - Beta Package Quickstart And Release Metadata Prep
+
+Status: repo implementation completed on 2026-05-13 for local package contents only; no cloud upload or Worker route change performed.
+
+Prepare the downloadable package so a user can understand and verify the local beta path without source access.
+
+Exit:
+
+- package README explains what Token Intelligence Lite does and that source code is not included;
+- README gives minimum config steps for `upstream.base_url` and `upstream.api_key_env`;
+- README gives the OpenAI-compatible client base URL `http://127.0.0.1:18081/v1`;
+- README lists `doctor`, `proxy start`, optional `attach/detach`, report commands, and `update check`;
+- README tells users to verify `SHA256SUMS.txt` before replacing the package;
+- README states unsigned beta Gatekeeper behavior and does not imply signed silent updates;
+- builder test verifies the README text and executable-bit package metadata.
+
+Boundaries:
+
+- no cloud publication is performed in TI-021;
+- no `doloclaw.com/download` page or Worker route is changed in this batch;
+- no automatic installer, self-replacement, or signed updater claim is added;
+- price/cost calculation remains optional and does not affect token-flow audit truth.
 
 ## Validation Requirements
 

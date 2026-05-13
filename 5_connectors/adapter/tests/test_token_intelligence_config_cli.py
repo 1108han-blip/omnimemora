@@ -405,10 +405,16 @@ def test_local_package_builder_outputs_checksum_metadata_and_launcher(tmp_path):
     with zipfile.ZipFile(zip_path) as archive:
         names = set(archive.namelist())
         launcher_info = archive.getinfo("omni-token-audit-0.1.0-test-local/omni-token-audit")
+        readme_text = archive.read("omni-token-audit-0.1.0-test-local/README.txt").decode("utf-8")
     assert "omni-token-audit-0.1.0-test-local/omni-token-audit" in names
     assert "omni-token-audit-0.1.0-test-local/token_intelligence/cli.py" in names
     assert all("__pycache__" not in name for name in names)
     assert ((launcher_info.external_attr >> 16) & 0o111) != 0
+    assert "Source code is not included" in readme_text
+    assert "OPENAI_BASE_URL=http://127.0.0.1:18081/v1" in readme_text
+    assert "./omni-token-audit update check" in readme_text
+    assert "Privacy & Security / Gatekeeper" in readme_text
+    assert "No silent install or self-replacement" in readme_text
     assert payload["sha256"] in checksum_path.read_text(encoding="utf-8")
 
 
