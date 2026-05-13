@@ -145,6 +145,7 @@ def _make_handler(config: LocalProxyConfig) -> type[BaseHTTPRequestHandler]:
                 response_body=response_body,
                 status_code=status_code,
                 latency_ms=elapsed_ms,
+                request_headers=self.headers,
             )
             if audit_error and not config.audit_fail_open:
                 status_code = 500
@@ -405,6 +406,7 @@ def _record_proxy_audit_event(
     response_body: bytes,
     status_code: int,
     latency_ms: int,
+    request_headers: Any = None,
 ) -> tuple[Optional[str], str]:
     if not config.audit_enabled:
         return None, ""
@@ -441,6 +443,7 @@ def _record_proxy_audit_event(
             metadata={
                 "route": "/v1/chat/completions",
                 "proxy_mode": "candidate_local_proxy",
+                **_workflow_metadata(request_headers),
             },
             blocks=blocks,
             opportunities=detect_openai_compatible_waste(request_payload, blocks),
@@ -450,6 +453,23 @@ def _record_proxy_audit_event(
         return event.audit_id, ""
     except Exception as exc:
         return None, str(exc)
+
+
+def _workflow_metadata(headers: Any) -> dict[str, str]:
+    if headers is None:
+        return {}
+    mapping = {
+        "agent_id": "x-omni-agent-id",
+        "project_id": "x-omni-project-id",
+        "workflow_tag": "x-omni-workflow-tag",
+        "workspace_tag": "x-omni-workspace-tag",
+    }
+    metadata: dict[str, str] = {}
+    for key, header_name in mapping.items():
+        value = headers.get(header_name) if hasattr(headers, "get") else None
+        if isinstance(value, str) and value.strip():
+            metadata[key] = value.strip()[:120]
+    return metadata
 
 
 def _json_payload(body: bytes) -> Any:

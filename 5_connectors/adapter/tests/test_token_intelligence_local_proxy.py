@@ -106,6 +106,11 @@ def test_chat_completions_records_audit_without_raw_prompt(tmp_path):
         status, body, headers = _post_json_with_headers(
             f"{_base_url(proxy)}/v1/chat/completions",
             request_body,
+            headers={
+                "x-omni-agent-id": "openclaw",
+                "x-omni-project-id": "token-audit-test",
+                "x-omni-workflow-tag": "coding",
+            },
         )
         audit_id = headers["x-omni-token-audit-id"]
         receipt_status, receipt = _get_json_with_status(f"{_base_url(proxy)}/audit/events/{audit_id}/receipt")
@@ -130,6 +135,9 @@ def test_chat_completions_records_audit_without_raw_prompt(tmp_path):
     assert {block["block_type"] for block in receipt["blocks"]} >= {"current_user_intent", "provider_output"}
     assert event_status == 200
     assert event["metadata"]["route"] == "/v1/chat/completions"
+    assert event["metadata"]["agent_id"] == "openclaw"
+    assert event["metadata"]["project_id"] == "token-audit-test"
+    assert event["metadata"]["workflow_tag"] == "coding"
     assert event["blocks"] == receipt["blocks"]
     assert summary_status == 200
     assert summary["event_count"] == 1
@@ -138,10 +146,15 @@ def test_chat_completions_records_audit_without_raw_prompt(tmp_path):
     assert summary["top_models"] == [
         {"model": "relay-model-requested", "request_count": 1, "total_tokens": 15}
     ]
+    assert summary["top_agents"][0]["agent_id"] == "openclaw"
+    assert summary["top_workflows"][0]["workflow_tag"] == "coding"
+    assert summary["top_projects"][0]["project_id"] == "token-audit-test"
     assert top_status == 200
     assert top_requests["window"] == {"bounded": True, "limit": 1000}
     assert top_requests["top_by_tokens"][0]["audit_id"] == audit_id
     assert top_requests["top_by_tokens"][0]["total_tokens"] == 15
+    assert top_requests["top_by_tokens"][0]["agent_id"] == "openclaw"
+    assert top_requests["top_by_tokens"][0]["workflow_tag"] == "coding"
     assert top_requests["top_by_cost"][0]["total_cost_usd"] == 0.0015
     assert {block["block_type"] for block in summary["top_blocks"]} >= {"current_user_intent", "provider_output"}
     assert sum(summary["reconciliation"]["status_counts"].values()) == 1
@@ -581,12 +594,15 @@ def _post_json(url: str, payload: dict):
     return status, body
 
 
-def _post_json_with_headers(url: str, payload: dict):
+def _post_json_with_headers(url: str, payload: dict, headers: dict[str, str] | None = None):
     data = _json_bytes(payload)
+    request_headers = {"content-type": "application/json"}
+    if headers:
+        request_headers.update(headers)
     request = urllib.request.Request(
         url,
         data=data,
-        headers={"content-type": "application/json"},
+        headers=request_headers,
         method="POST",
     )
     try:

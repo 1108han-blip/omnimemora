@@ -222,7 +222,8 @@ def summarize_recent_events(*, path: Optional[str] = None, limit: int = 1000) ->
     with _connect(path) as conn:
         rows = conn.execute(
             """
-            SELECT model_requested, usage_json, cost_json, status_code, latency_ms, blocks_json, opportunities_json, reconciliation_json, created_at
+            SELECT model_requested, usage_json, cost_json, status_code, latency_ms, metadata_json,
+                   blocks_json, opportunities_json, reconciliation_json, created_at
             FROM audit_events
             ORDER BY created_at DESC
             LIMIT ?
@@ -247,10 +248,14 @@ def summarize_recent_events(*, path: Optional[str] = None, limit: int = 1000) ->
     block_totals: dict[str, dict[str, Any]] = {}
     opportunity_totals: dict[str, dict[str, Any]] = {}
     reconciliation_status_counts: dict[str, int] = {}
+    agent_totals: dict[str, dict[str, Any]] = {}
+    workflow_totals: dict[str, dict[str, Any]] = {}
+    project_totals: dict[str, dict[str, Any]] = {}
 
     for row in rows:
         usage = _loads(row["usage_json"])
         cost = _loads(row["cost_json"])
+        metadata = _loads(row["metadata_json"])
         model = str(row["model_requested"] or "")
         status = str(row["status_code"] if row["status_code"] is not None else "unknown")
         source = str(usage.get("source") or "unknown")
@@ -268,6 +273,9 @@ def summarize_recent_events(*, path: Optional[str] = None, limit: int = 1000) ->
         if cost_value is not None:
             total_cost_usd += cost_value
             cost_present = True
+        _add_rollup(agent_totals, "agent_id", metadata.get("agent_id"), total_tokens, cost_value)
+        _add_rollup(workflow_totals, "workflow_tag", metadata.get("workflow_tag"), total_tokens, cost_value)
+        _add_rollup(project_totals, "project_id", metadata.get("project_id"), total_tokens, cost_value)
 
         if row["latency_ms"] is not None:
             latency_values.append(int(row["latency_ms"]))
@@ -314,6 +322,9 @@ def summarize_recent_events(*, path: Optional[str] = None, limit: int = 1000) ->
         "confidence": confidence_counts,
         "status_codes": status_counts,
         "top_models": top_models,
+        "top_agents": _top_rollups(agent_totals),
+        "top_workflows": _top_rollups(workflow_totals),
+        "top_projects": _top_rollups(project_totals),
         "top_blocks": top_blocks,
         "top_opportunities": top_opportunities,
         "reconciliation": {"status_counts": reconciliation_status_counts},
@@ -329,7 +340,7 @@ def list_top_requests(*, path: Optional[str] = None, limit: int = 1000) -> dict[
         rows = conn.execute(
             """
             SELECT audit_id, request_id, model_requested, model_reported, provider, usage_json, cost_json,
-                   status_code, latency_ms, opportunities_json, reconciliation_json, created_at
+                   status_code, latency_ms, metadata_json, opportunities_json, reconciliation_json, created_at
             FROM audit_events
             ORDER BY created_at DESC
             LIMIT ?
@@ -390,6 +401,7 @@ def _row_to_event(row: sqlite3.Row) -> AuditEvent:
 def _row_to_request_summary(row: sqlite3.Row) -> dict[str, Any]:
     usage = _loads(row["usage_json"])
     cost = _loads(row["cost_json"])
+    metadata = _loads(_row_value(row, "metadata_json", "{}"))
     opportunities = _loads_list(row["opportunities_json"])
     reconciliation = _loads(row["reconciliation_json"])
     cost_value = _safe_float(cost.get("total_cost_usd"))
@@ -408,6 +420,9 @@ def _row_to_request_summary(row: sqlite3.Row) -> dict[str, Any]:
             "total_cost_usd": round(cost_value, 8) if cost_value is not None else None,
             "cost_source": str(cost.get("source") or "") if cost_value is not None else None,
             "cost_confidence": str(cost.get("confidence") or "") if cost_value is not None else None,
+            "agent_id": _safe_tag(metadata.get("agent_id")),
+            "workflow_tag": _safe_tag(metadata.get("workflow_tag")),
+            "project_id": _safe_tag(metadata.get("project_id")),
             "potential_saving_tokens": sum(
                 max(0, _safe_int(opportunity.get("potential_saving_tokens")) or 0)
                 for opportunity in opportunities
@@ -422,6 +437,55 @@ def _row_to_request_summary(row: sqlite3.Row) -> dict[str, Any]:
 
 def _drop_none(payload: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in payload.items() if value is not None}
+
+
+def _add_rollup(
+    target: dict[str, dict[str, Any]],
+    key_name: str,
+    value: Any,
+    total_tokens: int,
+    total_cost_usd: Optional[float],
+) -> None:
+    tag = _safe_tag(value)
+    if not tag:
+        return
+    entry = target.setdefault(
+        tag,
+        {
+            key_name: tag,
+            "request_count": 0,
+            "total_tokens": 0,
+            "total_cost_usd": 0.0,
+            "cost_present": False,
+        },
+    )
+    entry["request_count"] += 1
+    entry["total_tokens"] += max(0, int(total_tokens or 0))
+    if total_cost_usd is not None:
+        entry["total_cost_usd"] = round(float(entry["total_cost_usd"]) + float(total_cost_usd), 8)
+        entry["cost_present"] = True
+
+
+def _top_rollups(items: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+    ordered = sorted(
+        items.values(),
+        key=lambda item: (-int(item["total_tokens"]), -int(item["request_count"]), str(next(iter(item.values())))),
+    )
+    payloads: list[dict[str, Any]] = []
+    for item in ordered[:10]:
+        payload = dict(item)
+        cost_present = bool(payload.pop("cost_present", False))
+        if not cost_present:
+            payload.pop("total_cost_usd", None)
+        payloads.append(_drop_none(payload))
+    return payloads
+
+
+def _safe_tag(value: Any) -> Optional[str]:
+    if not isinstance(value, str):
+        return None
+    stripped = value.strip()
+    return stripped[:120] if stripped else None
 
 
 def _ensure_column(conn: sqlite3.Connection, table: str, column: str, definition: str) -> None:

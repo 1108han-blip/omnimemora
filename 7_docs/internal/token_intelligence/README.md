@@ -31,6 +31,7 @@
 - 2026-05-13: TI-010 repo-only CLI report surface added. `omni-token-audit report summary` and `omni-token-audit report potential-savings` read bounded local audit data and print metadata-only JSON without starting the proxy or scanning large history.
 - 2026-05-13: TI-011 repo-only top requests report added. The candidate proxy and CLI expose bounded highest-token/highest-cost request summaries from local audit metadata, with source/confidence labels and no raw prompt output.
 - 2026-05-13: TI-012 repo-only reported cost ingestion added. The candidate proxy records provider/relay-reported cost fields with pricing version when present, but does not infer cost from a local price table yet.
+- 2026-05-13: TI-013 repo-only workflow ROI tags added. The candidate proxy can store explicit opt-in agent/project/workflow headers and summarize top token/cost consumers by those tags without inferring user profiles.
 
 ## Product Target
 
@@ -425,6 +426,27 @@ Current behavior:
 - `pricing_version` or `price_version` is copied when present;
 - `/audit/summary` and `/audit/reports/top-requests` can surface cost totals/top-by-cost when cost exists;
 - no local provider pricing table or billing-truth claim is active in TI-012.
+
+### TI-013 - Workflow ROI Tags
+
+Status: repo implementation completed on 2026-05-13 for explicit metadata tags only.
+
+Let users identify expensive agents and workflows without deriving a broad user profile.
+
+Exit:
+
+- agent, project, and workflow labels are explicit input metadata, not inferred from prompt content;
+- summary/report surfaces can roll up token and cost by those labels;
+- raw content remains outside the audit store.
+
+Current behavior:
+
+- the candidate proxy accepts `x-omni-agent-id`, `x-omni-project-id`, `x-omni-workflow-tag`, and `x-omni-workspace-tag`;
+- tags are stored through the existing sanitized metadata path and capped to short strings;
+- `/audit/summary` includes `top_agents`, `top_workflows`, and `top_projects`;
+- `/audit/reports/top-requests` includes agent/project/workflow tags on request rows when present;
+- `/audit/reports/potential-savings` carries the same top agent/workflow/project rollups;
+- no hidden habit inference, user profiling, memory write, or automatic optimization is enabled.
 
 ## Validation Requirements
 

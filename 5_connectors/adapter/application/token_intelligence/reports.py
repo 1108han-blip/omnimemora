@@ -18,6 +18,9 @@ def build_potential_savings_report(summary: dict[str, Any]) -> dict[str, Any]:
         "top_opportunities": opportunity_items[:10],
         "top_blocks": blocks[:10] if isinstance(blocks, list) else [],
         "top_models": models[:10] if isinstance(models, list) else [],
+        "top_agents": _list_field(summary, "top_agents"),
+        "top_workflows": _list_field(summary, "top_workflows"),
+        "top_projects": _list_field(summary, "top_projects"),
         "source": "local_estimated",
         "confidence": "compatible_estimate" if total_potential > 0 else "rough_estimate",
         "advice": _advice(opportunity_items),
@@ -39,3 +42,8 @@ def _safe_int(value: Any) -> int:
         return max(0, int(value or 0))
     except Exception:
         return 0
+
+
+def _list_field(payload: dict[str, Any], key: str) -> list[Any]:
+    value = payload.get(key) if isinstance(payload, dict) else []
+    return value[:10] if isinstance(value, list) else []

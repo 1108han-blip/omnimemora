@@ -478,19 +478,27 @@ def test_top_requests_report_is_bounded_and_metadata_only(tmp_path, monkeypatch)
         reconciliation={"status": "normal"},
         latency_ms=42,
         status_code=200,
+        metadata={"agent_id": "openclaw", "workflow_tag": "coding", "project_id": "token-audit-test"},
     )
     token_intelligence.record_audit_event(small_event)
     token_intelligence.record_audit_event(large_event)
 
     report = token_intelligence.list_top_requests(limit=5000)
+    summary = token_intelligence.summarize_recent_events(limit=5000)
 
     assert report["window"] == {"bounded": True, "limit": 1000}
     assert report["event_count"] == 2
     assert report["top_by_tokens"][0]["request_id"] == "req-large"
     assert report["top_by_tokens"][0]["total_tokens"] == 100
+    assert report["top_by_tokens"][0]["agent_id"] == "openclaw"
+    assert report["top_by_tokens"][0]["workflow_tag"] == "coding"
     assert report["top_by_tokens"][0]["potential_saving_tokens"] == 20
     assert report["top_by_cost"][0]["total_cost_usd"] == 0.0123
+    assert summary["top_agents"][0]["agent_id"] == "openclaw"
+    assert summary["top_workflows"][0]["workflow_tag"] == "coding"
+    assert summary["top_projects"][0]["project_id"] == "token-audit-test"
     assert secret_prompt not in json.dumps(report, sort_keys=True)
+    assert secret_prompt not in json.dumps(summary, sort_keys=True)
 
 
 def test_audit_ledger_delete_and_retention_purge(tmp_path, monkeypatch):
