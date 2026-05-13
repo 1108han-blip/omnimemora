@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib
+import json
 from typing import Any, Dict, Optional
 
 from .models import NormalizedUsage
@@ -13,6 +15,7 @@ def normalize_openai_compatible_usage(
     local_input_estimate: Optional[int] = None,
     local_output_estimate: Optional[int] = None,
     usage_source: str = "provider_reported",
+    local_estimate_confidence: str = "tokenizer_estimate",
 ) -> NormalizedUsage:
     """Normalize OpenAI-compatible usage fields.
 
@@ -28,7 +31,7 @@ def normalize_openai_compatible_usage(
             output_tokens=output_estimate,
             total_tokens=total,
             source="local_estimated",
-            confidence="tokenizer_estimate" if total is not None else "rough_estimate",
+            confidence=local_estimate_confidence if total is not None else "rough_estimate",
             raw_usage_present=False,
         )
 
@@ -52,6 +55,37 @@ def normalize_openai_compatible_usage(
         confidence="official_usage",
         raw_usage_present=True,
     )
+
+
+def estimate_openai_compatible_input_tokens(payload: Any) -> Optional[int]:
+    if not isinstance(payload, dict):
+        return None
+    return _estimate_payload_tokens(payload)
+
+
+def estimate_openai_compatible_output_tokens(payload: Any) -> Optional[int]:
+    if not isinstance(payload, dict):
+        return None
+    choices = payload.get("choices")
+    if isinstance(choices, list) and choices:
+        return _estimate_payload_tokens({"choices": choices})
+    output = payload.get("output")
+    if output is not None:
+        return _estimate_payload_tokens({"output": output})
+    return None
+
+
+def _estimate_payload_tokens(payload: Dict[str, Any]) -> Optional[int]:
+    try:
+        metrics = importlib.import_module("context_compiler.metrics")
+        estimate = metrics.estimate_payload_tokens_detailed(payload)
+        return max(1, int(estimate.tokens))
+    except Exception:
+        try:
+            serialized = json.dumps(payload, ensure_ascii=False, separators=(",", ":"))
+        except Exception:
+            serialized = str(payload)
+        return max(1, int(len(serialized) / 4)) if serialized else None
 
 
 def _safe_int(value: Any) -> Optional[int]:

@@ -17,6 +17,8 @@ USAGE_SOURCES = {
 CONFIDENCE_CLASSES = {
     "official_usage",
     "reconciled_usage",
+    "provider_tokenizer",
+    "compatible_estimate",
     "tokenizer_estimate",
     "rough_estimate",
 }

@@ -24,7 +24,11 @@ from .ledger import (
 from .models import AuditEvent, NormalizedCost, NormalizedUsage
 from .receipts import build_receipt
 from .local_proxy import LocalProxyConfig, check_update_metadata, create_server, serve_forever
-from .usage_normalizer import normalize_openai_compatible_usage
+from .usage_normalizer import (
+    estimate_openai_compatible_input_tokens,
+    estimate_openai_compatible_output_tokens,
+    normalize_openai_compatible_usage,
+)
 
 __all__ = [
     "AuditEvent",
@@ -47,6 +51,8 @@ __all__ = [
     "get_audit_event",
     "init_schema",
     "load_config",
+    "estimate_openai_compatible_input_tokens",
+    "estimate_openai_compatible_output_tokens",
     "normalize_openai_compatible_usage",
     "record_audit_event",
     "serve_forever",

@@ -13,7 +13,11 @@ from urllib.parse import parse_qs, urljoin, urlparse
 
 from .ledger import build_audit_event, get_audit_event, record_audit_event, summarize_recent_events
 from .receipts import build_receipt
-from .usage_normalizer import normalize_openai_compatible_usage
+from .usage_normalizer import (
+    estimate_openai_compatible_input_tokens,
+    estimate_openai_compatible_output_tokens,
+    normalize_openai_compatible_usage,
+)
 
 VERSION = "0.1.0-dev"
 SERVICE_NAME = "omni-token-audit-local-proxy"
@@ -285,6 +289,9 @@ def _record_proxy_audit_event(
         usage = normalize_openai_compatible_usage(
             response_payload if isinstance(response_payload, dict) else {},
             usage_source="relay_reported",
+            local_input_estimate=estimate_openai_compatible_input_tokens(request_payload),
+            local_output_estimate=estimate_openai_compatible_output_tokens(response_payload),
+            local_estimate_confidence="compatible_estimate",
         )
         model_requested = _string_field(request_payload, "model")
         model_reported = _string_field(response_payload, "model") or model_requested

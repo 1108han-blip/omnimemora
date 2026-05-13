@@ -56,6 +56,27 @@ def test_missing_usage_is_labeled_as_local_estimate():
     assert usage.raw_usage_present is False
 
 
+def test_openai_compatible_estimator_returns_bounded_counts():
+    request_tokens = token_intelligence.estimate_openai_compatible_input_tokens(
+        {"model": "relay-model", "messages": [{"role": "user", "content": "中文 mixed request"}]}
+    )
+    output_tokens = token_intelligence.estimate_openai_compatible_output_tokens(
+        {"choices": [{"message": {"role": "assistant", "content": "estimated answer"}}]}
+    )
+    usage = token_intelligence.normalize_openai_compatible_usage(
+        {"id": "chatcmpl-no-usage"},
+        local_input_estimate=request_tokens,
+        local_output_estimate=output_tokens,
+        local_estimate_confidence="compatible_estimate",
+    )
+
+    assert request_tokens is not None and request_tokens > 0
+    assert output_tokens is not None and output_tokens > 0
+    assert usage.source == "local_estimated"
+    assert usage.confidence == "compatible_estimate"
+    assert usage.total_tokens == request_tokens + output_tokens
+
+
 def test_audit_ledger_roundtrip_and_receipt_are_metadata_only(tmp_path, monkeypatch):
     sqlite_path = tmp_path / "token_intelligence.sqlite3"
     monkeypatch.setenv("OMNIMEMORA_TOKEN_INTELLIGENCE_DB", str(sqlite_path))

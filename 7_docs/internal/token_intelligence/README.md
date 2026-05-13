@@ -20,6 +20,7 @@
 - 2026-05-13: TI-001D repo-only receipt and summary API added. The candidate proxy exposes bounded `/audit/events/<audit_id>`, `/audit/events/<audit_id>/receipt`, and `/audit/summary` reads, and CLI receipt get/export prints metadata-only receipts; running promotion remains not started.
 - 2026-05-13: TI-001E repo-only update metadata check added. The candidate proxy and CLI parse product-owned release metadata, report current/latest/minimum version and unsigned beta Gatekeeper notes, and do not auto-download or install packages.
 - 2026-05-13: TI-001F repo-only local package builder added. It stages a checksum-verifiable local zip package under an operator-selected output directory, emits `SHA256SUMS.txt` and `latest.local.json`, and defaults to `/tmp` so build artifacts do not pollute the repo.
+- 2026-05-13: TI-002 repo-only local estimate fallback added. When upstream omits `usage`, the candidate proxy records `local_estimated` usage with `compatible_estimate` confidence; provider/relay-reported usage remains preferred and is not overwritten.
 
 ## Product Target
 
@@ -185,6 +186,8 @@ Exit:
 
 ### TI-002 - Provider-Aligned Counting
 
+Status: repo implementation completed on 2026-05-13 for local estimate fallback; provider-specific tokenizer/count APIs remain future work.
+
 Add confidence-labeled token counts.
 
 Confidence classes:
@@ -199,6 +202,12 @@ Exit:
 
 - every displayed count carries a confidence class;
 - rough estimates cannot be presented as billing truth.
+
+Current behavior:
+
+- reported OpenAI-compatible `usage` is stored as `provider_reported` or `relay_reported` with `official_usage` confidence;
+- missing usage falls back to local payload/output estimation and is stored as `local_estimated` with `compatible_estimate` confidence;
+- local estimates are shown as estimates only and must not be used as proof of provider billing truth.
 
 ### TI-003 - Block-Level Spend Breakdown
 

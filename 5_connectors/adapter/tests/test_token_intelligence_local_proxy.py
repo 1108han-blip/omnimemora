@@ -169,6 +169,39 @@ def test_audit_write_failure_is_fail_open(tmp_path):
     assert headers["x-omni-token-audit-error"] == "persistence_failed"
 
 
+def test_missing_upstream_usage_records_compatible_local_estimate(tmp_path):
+    sqlite_path = tmp_path / "audit.sqlite3"
+    upstream_body = {
+        "id": "chatcmpl-no-usage",
+        "model": "relay-model",
+        "choices": [{"message": {"role": "assistant", "content": "estimated answer"}}],
+    }
+    upstream = _start_fake_upstream(response_body=_json_bytes(upstream_body))
+    proxy = _start_proxy(
+        f"{_base_url(upstream)}/v1",
+        audit_db_path=str(sqlite_path),
+        audit_enabled=True,
+    )
+    try:
+        status, _body, headers = _post_json_with_headers(
+            f"{_base_url(proxy)}/v1/chat/completions",
+            {"model": "relay-model", "messages": [{"role": "user", "content": "estimate this"}]},
+        )
+        receipt_status, receipt = _get_json_with_status(
+            f"{_base_url(proxy)}/audit/events/{headers['x-omni-token-audit-id']}/receipt"
+        )
+    finally:
+        _stop_server(proxy)
+        _stop_server(upstream)
+
+    assert status == 200
+    assert receipt_status == 200
+    assert receipt["usage"]["source"] == "local_estimated"
+    assert receipt["usage"]["confidence"] == "compatible_estimate"
+    assert receipt["usage"]["raw_usage_present"] is False
+    assert receipt["usage"]["total_tokens"] > 0
+
+
 def test_update_check_reads_release_metadata_without_download(tmp_path):
     metadata_path = tmp_path / "latest.json"
     metadata_path.write_text(
