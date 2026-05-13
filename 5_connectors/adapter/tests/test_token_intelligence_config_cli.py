@@ -130,7 +130,7 @@ def test_cli_init_and_version(tmp_path, capsys):
     assert config_path.exists()
 
     assert cli.main(["version"]) == 0
-    assert capsys.readouterr().out.strip() == "0.1.0-beta.1"
+    assert capsys.readouterr().out.strip() == "0.1.0-beta.2"
 
 
 def test_cli_proxy_status_reports_unreachable_for_stopped_proxy(tmp_path, capsys):
@@ -293,8 +293,8 @@ def test_cli_update_check_reads_metadata_without_download(tmp_path, capsys):
             {
                 "product": "omnimemora-token-intelligence",
                 "channel": "beta",
-                "version": "0.1.0-beta.1",
-                "minimum_supported_version": "0.1.0-beta.1",
+                "version": "0.1.0-beta.2",
+                "minimum_supported_version": "0.1.0-beta.2",
                 "force_update": False,
                 "platforms": {
                     "darwin-arm64": {
@@ -316,7 +316,7 @@ def test_cli_update_check_reads_metadata_without_download(tmp_path, capsys):
     assert cli.main(["update", "check", "--config", str(config_path)]) == 0
     result = json.loads(capsys.readouterr().out)
 
-    assert result["latest_version"] == "0.1.0-beta.1"
+    assert result["latest_version"] == "0.1.0-beta.2"
     assert result["unsigned_beta"] is True
     assert "Privacy & Security" in result["gatekeeper_note"]
     assert "download_url" not in result
@@ -507,7 +507,7 @@ def test_local_package_builder_preflight_release_gate_is_read_only(tmp_path):
             "--output-dir",
             str(tmp_path),
             "--version",
-            "0.1.0-beta.1",
+            "0.1.0-beta.2",
             "--preflight-release-gate",
         ],
         check=True,
@@ -520,7 +520,7 @@ def test_local_package_builder_preflight_release_gate_is_read_only(tmp_path):
 
     assert preflight["dry_run"] is True
     assert preflight["mutates_cloud"] is False
-    assert preflight["worker_token_intelligence_version"] == "0.1.0-beta.1"
+    assert preflight["worker_token_intelligence_version"] == "0.1.0-beta.2"
     assert preflight["worker_version_matches"] is True
     assert preflight["credentials_ready"] is True
     assert preflight["credential_env"] == {
@@ -760,18 +760,18 @@ async function call(path) {
   return await response;
 }
 
-const download = await call('/download/file/token-intelligence/omni-token-audit-0.1.0-beta.1-local.zip');
+const download = await call('/download/file/token-intelligence/omni-token-audit-0.1.0-beta.2-local.zip');
 assert.equal(download.status, 302);
 assert.equal(
   download.headers.get('location'),
-  'https://assets.doloclaw.com/omnimemora/token-intelligence/0.1.0-beta.1/omni-token-audit-0.1.0-beta.1-local.zip'
+  'https://assets.doloclaw.com/omnimemora/token-intelligence/0.1.0-beta.2/omni-token-audit-0.1.0-beta.2-local.zip'
 );
 
 const manifest = await call('/releases/token-intelligence/latest.json');
 assert.equal(manifest.status, 302);
 assert.equal(
   manifest.headers.get('location'),
-  'https://assets.doloclaw.com/omnimemora/token-intelligence/0.1.0-beta.1/latest.json'
+  'https://assets.doloclaw.com/omnimemora/token-intelligence/0.1.0-beta.2/latest.json'
 );
 
 const missing = await call('/download/file/token-intelligence/not-real.zip');

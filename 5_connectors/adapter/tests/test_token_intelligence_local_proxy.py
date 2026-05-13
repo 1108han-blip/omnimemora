@@ -46,7 +46,7 @@ def test_local_proxy_health_and_version_routes():
     assert health["status"] == "ok"
     assert health["service"] == "omni-token-audit-local-proxy"
     assert health["mode"] == "candidate_local_proxy"
-    assert version["version"] == "0.1.0-beta.1"
+    assert version["version"] == "0.1.0-beta.2"
 
 
 def test_chat_completions_forwards_body_to_configured_upstream():
@@ -473,9 +473,9 @@ def test_update_check_reads_release_metadata_without_download(tmp_path):
             {
                 "product": "omnimemora-token-intelligence",
                 "channel": "beta",
-                "version": "0.1.0-beta.1",
+                "version": "0.1.0-beta.2",
                 "published_at": "2026-05-13T00:00:00Z",
-                "minimum_supported_version": "0.1.0-beta.1",
+                "minimum_supported_version": "0.1.0-beta.2",
                 "force_update": False,
                 "platforms": {
                     "darwin-arm64": {
@@ -500,8 +500,8 @@ def test_update_check_reads_release_metadata_without_download(tmp_path):
 
     assert status == 200
     assert payload["status"] == "ok"
-    assert payload["current_version"] == "0.1.0-beta.1"
-    assert payload["latest_version"] == "0.1.0-beta.1"
+    assert payload["current_version"] == "0.1.0-beta.2"
+    assert payload["latest_version"] == "0.1.0-beta.2"
     assert payload["update_available"] is False
     assert payload["unsigned_beta"] is True
     assert "Privacy & Security" in payload["gatekeeper_note"]
