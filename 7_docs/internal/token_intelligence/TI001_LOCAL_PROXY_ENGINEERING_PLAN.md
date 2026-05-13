@@ -377,6 +377,8 @@ Exit:
 
 ### TI-001E - Update Check
 
+Status: repo implementation completed on 2026-05-13; packaging and cloud publishing not started.
+
 Scope:
 
 - parse product-owned release metadata;

@@ -12,7 +12,7 @@ from typing import Optional
 
 from .config import default_config_path, load_config, write_default_config
 from .ledger import get_audit_event
-from .local_proxy import VERSION, serve_forever
+from .local_proxy import VERSION, check_update_metadata, serve_forever
 from .receipts import build_receipt
 
 
@@ -68,8 +68,9 @@ def _build_parser() -> argparse.ArgumentParser:
     update_subparsers = update_parser.add_subparsers(dest="update_command")
     update_parser.set_defaults(func=_cmd_update_not_implemented)
 
-    check_parser = update_subparsers.add_parser("check", help="reserved")
-    check_parser.set_defaults(func=_cmd_update_not_implemented)
+    check_parser = update_subparsers.add_parser("check", help="check product-owned release metadata")
+    check_parser.add_argument("--config", default="", help="config path")
+    check_parser.set_defaults(func=_cmd_update_check)
 
     return parser
 
@@ -135,6 +136,17 @@ def _cmd_update_not_implemented(args: argparse.Namespace) -> int:
     _ = args
     print("update check is reserved for TI-001E", file=sys.stderr)
     return 2
+
+
+def _cmd_update_check(args: argparse.Namespace) -> int:
+    config = load_config(_path_arg(args.config))
+    payload = check_update_metadata(
+        config.updates.metadata_url,
+        channel=config.updates.channel,
+        enabled=config.updates.enabled,
+    )
+    print(json.dumps(payload, ensure_ascii=False, sort_keys=True))
+    return 0
 
 
 def _path_arg(value: str) -> Optional[Path]:

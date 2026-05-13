@@ -23,7 +23,7 @@ from .ledger import (
 )
 from .models import AuditEvent, NormalizedCost, NormalizedUsage
 from .receipts import build_receipt
-from .local_proxy import LocalProxyConfig, create_server, serve_forever
+from .local_proxy import LocalProxyConfig, check_update_metadata, create_server, serve_forever
 from .usage_normalizer import normalize_openai_compatible_usage
 
 __all__ = [
@@ -39,6 +39,7 @@ __all__ = [
     "UpstreamConfig",
     "build_audit_event",
     "build_receipt",
+    "check_update_metadata",
     "count_events",
     "create_server",
     "default_config",

@@ -17,6 +17,7 @@ from .usage_normalizer import normalize_openai_compatible_usage
 
 VERSION = "0.1.0-dev"
 SERVICE_NAME = "omni-token-audit-local-proxy"
+DEFAULT_UPDATE_METADATA_URL = "https://doloclaw.com/releases/token-intelligence/latest.json"
 
 
 @dataclass(frozen=True)
@@ -29,6 +30,9 @@ class LocalProxyConfig:
     audit_enabled: bool = True
     audit_fail_open: bool = True
     audit_db_path: Optional[str] = None
+    update_check_enabled: bool = True
+    update_metadata_url: str = DEFAULT_UPDATE_METADATA_URL
+    update_channel: str = "beta"
 
 
 def create_server(config: LocalProxyConfig) -> ThreadingHTTPServer:
@@ -79,6 +83,9 @@ def _make_handler(config: LocalProxyConfig) -> type[BaseHTTPRequestHandler]:
                 return
             if parsed_path.startswith("/audit/events/"):
                 _send_audit_event(self, config, parsed_path)
+                return
+            if parsed_path == "/updates/check":
+                _send_update_check(self, config)
                 return
             _send_json(self, 404, {"error": "not_found", "path": parsed_path})
 
@@ -212,6 +219,56 @@ def _summary_limit(raw_path: str) -> int:
         return 1000
 
 
+def _send_update_check(handler: BaseHTTPRequestHandler, config: LocalProxyConfig) -> None:
+    try:
+        payload = check_update_metadata(
+            config.update_metadata_url,
+            channel=config.update_channel,
+            enabled=config.update_check_enabled,
+        )
+    except Exception as exc:
+        _send_json(handler, 502, {"error": "update_check_failed", "message": str(exc)})
+        return
+    _send_json(handler, 200, payload)
+
+
+def check_update_metadata(metadata_url: str, *, channel: str = "beta", enabled: bool = True) -> dict[str, Any]:
+    if not enabled:
+        return {
+            "status": "disabled",
+            "service": SERVICE_NAME,
+            "current_version": VERSION,
+            "channel": channel,
+        }
+    with urllib.request.urlopen(metadata_url, timeout=3) as response:
+        payload = json.loads(response.read())
+    if not isinstance(payload, dict):
+        raise ValueError("update metadata root must be an object")
+    platform_payload = _platform_payload(payload)
+    latest_version = str(payload.get("version") or "")
+    return {
+        "status": "ok",
+        "service": SERVICE_NAME,
+        "current_version": VERSION,
+        "latest_version": latest_version,
+        "minimum_supported_version": str(payload.get("minimum_supported_version") or ""),
+        "update_available": bool(latest_version and latest_version != VERSION),
+        "force_update": bool(payload.get("force_update", False)),
+        "channel": str(payload.get("channel") or channel),
+        "published_at": str(payload.get("published_at") or ""),
+        "unsigned_beta": bool(platform_payload.get("unsigned_beta", False)),
+        "gatekeeper_note": str(platform_payload.get("gatekeeper_note") or ""),
+    }
+
+
+def _platform_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    platforms = payload.get("platforms")
+    if not isinstance(platforms, dict):
+        return {}
+    platform = platforms.get("darwin-arm64")
+    return platform if isinstance(platform, dict) else {}
+
+
 def _record_proxy_audit_event(
     config: LocalProxyConfig,
     *,
@@ -294,3 +351,5 @@ def _validate_config(config: LocalProxyConfig) -> None:
         raise ValueError("port must be between 1 and 65535")
     if config.upstream_timeout_seconds <= 0:
         raise ValueError("upstream_timeout_seconds must be positive")
+    if config.update_check_enabled and not config.update_metadata_url.strip():
+        raise ValueError("update_metadata_url is required when update checks are enabled")

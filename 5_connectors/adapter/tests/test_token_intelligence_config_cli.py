@@ -131,3 +131,39 @@ def test_cli_receipt_get_reads_metadata_only_receipt(tmp_path, monkeypatch, caps
     assert receipt["audit_id"] == event.audit_id
     assert receipt["usage"]["source"] == "relay_reported"
     assert secret_prompt not in json.dumps(receipt, sort_keys=True)
+
+
+def test_cli_update_check_reads_metadata_without_download(tmp_path, capsys):
+    metadata_path = tmp_path / "latest.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "product": "omnimemora-token-intelligence",
+                "channel": "beta",
+                "version": "0.1.0-beta.1",
+                "minimum_supported_version": "0.1.0-beta.1",
+                "force_update": False,
+                "platforms": {
+                    "darwin-arm64": {
+                        "download_url": "https://doloclaw.com/download/file/token-intelligence/darwin-arm64",
+                        "unsigned_beta": True,
+                        "gatekeeper_note": "Manual Privacy & Security approval may be required during beta.",
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    config_path = tmp_path / "config.json"
+    token_intelligence.write_default_config(config_path)
+    payload = json.loads(config_path.read_text(encoding="utf-8"))
+    payload["updates"]["metadata_url"] = metadata_path.as_uri()
+    config_path.write_text(json.dumps(payload), encoding="utf-8")
+
+    assert cli.main(["update", "check", "--config", str(config_path)]) == 0
+    result = json.loads(capsys.readouterr().out)
+
+    assert result["latest_version"] == "0.1.0-beta.1"
+    assert result["unsigned_beta"] is True
+    assert "Privacy & Security" in result["gatekeeper_note"]
+    assert "download_url" not in result

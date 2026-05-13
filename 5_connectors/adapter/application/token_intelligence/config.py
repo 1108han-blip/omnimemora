@@ -96,6 +96,9 @@ class TokenIntelligenceConfig:
             upstream_timeout_seconds=self.upstream.timeout_seconds,
             audit_enabled=self.audit.enabled,
             audit_fail_open=self.audit.fail_open,
+            update_check_enabled=self.updates.enabled,
+            update_metadata_url=self.updates.metadata_url,
+            update_channel=self.updates.channel,
         )
 
 

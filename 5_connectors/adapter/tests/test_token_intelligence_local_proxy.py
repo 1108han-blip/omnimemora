@@ -169,6 +169,48 @@ def test_audit_write_failure_is_fail_open(tmp_path):
     assert headers["x-omni-token-audit-error"] == "persistence_failed"
 
 
+def test_update_check_reads_release_metadata_without_download(tmp_path):
+    metadata_path = tmp_path / "latest.json"
+    metadata_path.write_text(
+        json.dumps(
+            {
+                "product": "omnimemora-token-intelligence",
+                "channel": "beta",
+                "version": "0.1.0-beta.1",
+                "published_at": "2026-05-13T00:00:00Z",
+                "minimum_supported_version": "0.1.0-beta.1",
+                "force_update": False,
+                "platforms": {
+                    "darwin-arm64": {
+                        "download_url": "https://doloclaw.com/download/file/token-intelligence/darwin-arm64",
+                        "sha256": "abc123",
+                        "unsigned_beta": True,
+                        "gatekeeper_note": "Manual Privacy & Security approval may be required during beta.",
+                    }
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    proxy = _start_proxy(
+        "https://example.invalid/v1",
+        update_metadata_url=metadata_path.as_uri(),
+    )
+    try:
+        status, payload = _get_json_with_status(f"{_base_url(proxy)}/updates/check")
+    finally:
+        _stop_server(proxy)
+
+    assert status == 200
+    assert payload["status"] == "ok"
+    assert payload["current_version"] == "0.1.0-dev"
+    assert payload["latest_version"] == "0.1.0-beta.1"
+    assert payload["update_available"] is True
+    assert payload["unsigned_beta"] is True
+    assert "Privacy & Security" in payload["gatekeeper_note"]
+    assert "download_url" not in payload
+
+
 def test_chat_completions_preserves_upstream_error_status_and_body():
     upstream_body = {"error": {"message": "rate limited", "type": "rate_limit"}}
     upstream = _start_fake_upstream(response_status=429, response_body=_json_bytes(upstream_body))
@@ -190,6 +232,7 @@ def _start_proxy_with_options(
     audit_enabled: bool = False,
     audit_db_path: str = "",
     audit_fail_open: bool = True,
+    update_metadata_url: str = "",
 ):
     config = token_intelligence.LocalProxyConfig(
         host="127.0.0.1",
@@ -200,6 +243,8 @@ def _start_proxy_with_options(
         audit_enabled=audit_enabled,
         audit_db_path=audit_db_path or None,
         audit_fail_open=audit_fail_open,
+        update_metadata_url=update_metadata_url
+        or "https://doloclaw.com/releases/token-intelligence/latest.json",
     )
     server = token_intelligence.create_server(config)
     _serve_in_thread(server)
@@ -213,6 +258,7 @@ def _start_proxy(
     audit_enabled: bool = False,
     audit_db_path: str = "",
     audit_fail_open: bool = True,
+    update_metadata_url: str = "",
 ):
     return _start_proxy_with_options(
         upstream_base_url,
@@ -220,6 +266,7 @@ def _start_proxy(
         audit_enabled=audit_enabled,
         audit_db_path=audit_db_path,
         audit_fail_open=audit_fail_open,
+        update_metadata_url=update_metadata_url,
     )
 
 
