@@ -93,6 +93,7 @@ class AuditEvent:
     created_at: str = ""
     metadata: Dict[str, Any] = field(default_factory=dict)
     blocks: list[Dict[str, Any]] = field(default_factory=list)
+    opportunities: list[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return _drop_none(
@@ -112,6 +113,7 @@ class AuditEvent:
                 "created_at": self.created_at,
                 "metadata": self.metadata,
                 "blocks": self.blocks,
+                "opportunities": self.opportunities,
             }
         )
 

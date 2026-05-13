@@ -205,6 +205,48 @@ def test_missing_upstream_usage_records_compatible_local_estimate(tmp_path):
     assert receipt["usage"]["total_tokens"] > 0
 
 
+def test_proxy_receipt_and_summary_include_safe_optimization_opportunities(tmp_path):
+    sqlite_path = tmp_path / "audit.sqlite3"
+    repeated = "repeat this long context block for proxy duplicate detection"
+    secret_tool_result = "SECRET_PROXY_TOOL_RESULT_NOT_IN_RECEIPT " * 160
+    upstream = _start_fake_upstream(response_body=_json_bytes({"id": "chatcmpl-opportunities"}))
+    proxy = _start_proxy(
+        f"{_base_url(upstream)}/v1",
+        audit_db_path=str(sqlite_path),
+        audit_enabled=True,
+    )
+    request_body = {
+        "model": "relay-model",
+        "messages": [
+            {"role": "user", "content": repeated},
+            {"role": "assistant", "content": "ok"},
+            {"role": "user", "content": repeated},
+            {"role": "tool", "content": secret_tool_result},
+            {"role": "user", "content": "current request"},
+        ],
+    }
+    try:
+        status, _body, headers = _post_json_with_headers(f"{_base_url(proxy)}/v1/chat/completions", request_body)
+        receipt_status, receipt = _get_json_with_status(
+            f"{_base_url(proxy)}/audit/events/{headers['x-omni-token-audit-id']}/receipt"
+        )
+        summary_status, summary = _get_json_with_status(f"{_base_url(proxy)}/audit/summary")
+    finally:
+        _stop_server(proxy)
+        _stop_server(upstream)
+
+    assert status == 200
+    assert receipt_status == 200
+    assert summary_status == 200
+    categories = {item["category"] for item in receipt["opportunities"]}
+    assert "duplicate_context" in categories
+    assert "long_tool_result" in categories
+    assert summary["top_opportunities"][0]["potential_saving_tokens"] > 0
+    serialized = json.dumps([receipt, summary], sort_keys=True)
+    assert secret_tool_result not in serialized
+    assert repeated not in serialized
+
+
 def test_update_check_reads_release_metadata_without_download(tmp_path):
     metadata_path = tmp_path / "latest.json"
     metadata_path.write_text(

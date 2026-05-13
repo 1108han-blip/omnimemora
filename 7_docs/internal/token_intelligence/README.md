@@ -22,6 +22,7 @@
 - 2026-05-13: TI-001F repo-only local package builder added. It stages a checksum-verifiable local zip package under an operator-selected output directory, emits `SHA256SUMS.txt` and `latest.local.json`, and defaults to `/tmp` so build artifacts do not pollute the repo.
 - 2026-05-13: TI-002 repo-only local estimate fallback added. When upstream omits `usage`, the candidate proxy records `local_estimated` usage with `compatible_estimate` confidence; provider/relay-reported usage remains preferred and is not overwritten.
 - 2026-05-13: TI-003 repo-only block-level spend breakdown added. Audit events and receipts now include safe block summaries with block type, token estimate, item count, source, and confidence; raw block content is not stored.
+- 2026-05-13: TI-004 repo-only waste detectors added for duplicate context, long tool results, and tool-result-heavy context. Receipts and summaries expose compact optimization opportunities with reason codes and potential saving estimates; no automatic optimization is performed.
 
 ## Product Target
 
@@ -240,6 +241,8 @@ Current behavior:
 
 ### TI-004 - Waste Detectors
 
+Status: repo implementation completed on 2026-05-13 for first safe local detectors; automatic optimization remains out of scope.
+
 Detect high-value waste categories:
 
 - duplicate context,
@@ -252,6 +255,14 @@ Detect high-value waste categories:
 Exit:
 
 - every detector emits a compact reason and potential saving estimate.
+
+Current behavior:
+
+- `duplicate_context_v1` detects repeated message content and records only a reason/category plus estimated repeated tokens;
+- `long_tool_result_v1` detects oversized tool/function result payloads and estimates compressible savings;
+- `tool_result_share_v1` flags requests where tool results dominate the block-level token estimate;
+- detector output is stored as `opportunities_json` and surfaced in receipts and bounded `/audit/summary`;
+- opportunity records never contain raw prompt, raw repeated text, or raw tool output.
 
 ### TI-005 - User Data Plane
 

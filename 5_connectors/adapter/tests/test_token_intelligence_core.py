@@ -110,6 +110,41 @@ def test_block_breakdown_classifies_without_raw_content():
     assert secret_tool_result not in json.dumps(blocks, sort_keys=True)
 
 
+def test_waste_detectors_emit_safe_optimization_opportunities():
+    repeated = "repeat this long context block for duplicate detection"
+    secret_tool_result = "SECRET_LONG_TOOL_RESULT_NOT_IN_OPPORTUNITY " * 160
+    blocks = token_intelligence.classify_openai_compatible_blocks(
+        {
+            "messages": [
+                {"role": "user", "content": repeated},
+                {"role": "assistant", "content": "ok"},
+                {"role": "user", "content": repeated},
+                {"role": "tool", "content": secret_tool_result},
+                {"role": "user", "content": "current request"},
+            ]
+        }
+    )
+    opportunities = token_intelligence.detect_openai_compatible_waste(
+        {
+            "messages": [
+                {"role": "user", "content": repeated},
+                {"role": "assistant", "content": "ok"},
+                {"role": "user", "content": repeated},
+                {"role": "tool", "content": secret_tool_result},
+                {"role": "user", "content": "current request"},
+            ]
+        },
+        blocks,
+    )
+    categories = {item["category"] for item in opportunities}
+
+    assert "duplicate_context" in categories
+    assert "long_tool_result" in categories
+    assert all(item["potential_saving_tokens"] > 0 for item in opportunities)
+    assert all(item["source"] == "local_estimated" for item in opportunities)
+    assert secret_tool_result not in json.dumps(opportunities, sort_keys=True)
+
+
 def test_audit_ledger_roundtrip_and_receipt_are_metadata_only(tmp_path, monkeypatch):
     sqlite_path = tmp_path / "token_intelligence.sqlite3"
     monkeypatch.setenv("OMNIMEMORA_TOKEN_INTELLIGENCE_DB", str(sqlite_path))
@@ -152,6 +187,20 @@ def test_audit_ledger_roundtrip_and_receipt_are_metadata_only(tmp_path, monkeypa
                 "raw_content": request_secret,
             }
         ],
+        opportunities=[
+            {
+                "detector_id": "duplicate_context_v1",
+                "category": "duplicate_context",
+                "reason_code": "repeated_message_content",
+                "token_estimate": 8,
+                "potential_saving_tokens": 8,
+                "item_count": 1,
+                "severity": "medium",
+                "source": "local_estimated",
+                "confidence": "compatible_estimate",
+                "raw_content": request_secret,
+            }
+        ],
     )
 
     token_intelligence.record_audit_event(event)
@@ -173,10 +222,24 @@ def test_audit_ledger_roundtrip_and_receipt_are_metadata_only(tmp_path, monkeypa
             "confidence": "compatible_estimate",
         }
     ]
+    assert loaded.opportunities == [
+        {
+            "detector_id": "duplicate_context_v1",
+            "category": "duplicate_context",
+            "reason_code": "repeated_message_content",
+            "token_estimate": 8,
+            "potential_saving_tokens": 8,
+            "item_count": 1,
+            "severity": "medium",
+            "source": "local_estimated",
+            "confidence": "compatible_estimate",
+        }
+    ]
     assert receipt["request_hash"].startswith("sha256:")
     assert receipt["response_hash"].startswith("sha256:")
     assert receipt["usage"]["source"] == "provider_reported"
     assert receipt["blocks"][0]["block_type"] == "current_user_intent"
+    assert receipt["opportunities"][0]["category"] == "duplicate_context"
 
     with sqlite3.connect(str(sqlite_path)) as conn:
         conn.row_factory = sqlite3.Row

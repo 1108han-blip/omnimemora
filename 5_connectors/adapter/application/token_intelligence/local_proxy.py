@@ -19,6 +19,7 @@ from .usage_normalizer import (
     estimate_openai_compatible_output_tokens,
     normalize_openai_compatible_usage,
 )
+from .waste_detectors import detect_openai_compatible_waste
 
 VERSION = "0.1.0-dev"
 SERVICE_NAME = "omni-token-audit-local-proxy"
@@ -297,6 +298,7 @@ def _record_proxy_audit_event(
         model_requested = _string_field(request_payload, "model")
         model_reported = _string_field(response_payload, "model") or model_requested
         request_id = _string_field(response_payload, "id") or f"local_proxy_{time.time_ns()}"
+        blocks = classify_openai_compatible_blocks(request_payload, response_payload)
         event = build_audit_event(
             request_id=request_id,
             request_payload=request_payload,
@@ -312,7 +314,8 @@ def _record_proxy_audit_event(
                 "route": "/v1/chat/completions",
                 "proxy_mode": "candidate_local_proxy",
             },
-            blocks=classify_openai_compatible_blocks(request_payload, response_payload),
+            blocks=blocks,
+            opportunities=detect_openai_compatible_waste(request_payload, blocks),
         )
         record_audit_event(event, path=config.audit_db_path)
         return event.audit_id, ""

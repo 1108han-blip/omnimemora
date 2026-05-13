@@ -30,6 +30,7 @@ from .usage_normalizer import (
     estimate_openai_compatible_output_tokens,
     normalize_openai_compatible_usage,
 )
+from .waste_detectors import detect_openai_compatible_waste
 
 __all__ = [
     "AuditEvent",
@@ -50,6 +51,7 @@ __all__ = [
     "create_server",
     "default_config",
     "default_config_path",
+    "detect_openai_compatible_waste",
     "get_audit_event",
     "init_schema",
     "load_config",
