@@ -295,14 +295,29 @@ def test_mcp_companion_tools_are_read_only_and_bounded(tmp_path, monkeypatch):
             "params": {"name": "token_intelligence.potential_savings", "arguments": {"limit": 1}},
         }
     )
+    top_requests = token_intelligence.dispatch_mcp_jsonrpc(
+        {
+            "jsonrpc": "2.0",
+            "id": 4,
+            "method": "tools/call",
+            "params": {"name": "token_intelligence.top_requests", "arguments": {"limit": 5000}},
+        }
+    )
 
     tool_names = {tool["name"] for tool in tools["result"]["tools"]}
-    assert tool_names == {"token_intelligence.summary", "token_intelligence.potential_savings"}
+    assert tool_names == {
+        "token_intelligence.summary",
+        "token_intelligence.potential_savings",
+        "token_intelligence.top_requests",
+    }
     summary_payload = json.loads(summary["result"]["content"][0]["text"])
     report_payload = json.loads(report["result"]["content"][0]["text"])
+    top_requests_payload = json.loads(top_requests["result"]["content"][0]["text"])
     assert summary_payload["window"] == {"bounded": True, "limit": 1000}
     assert summary_payload["event_count"] == 1
     assert report_payload["potential_saving_tokens"] == 10
+    assert top_requests_payload["window"] == {"bounded": True, "limit": 1000}
+    assert top_requests_payload["top_by_tokens"][0]["request_id"] == "mcp-summary"
 
 
 def test_audit_ledger_roundtrip_and_receipt_are_metadata_only(tmp_path, monkeypatch):

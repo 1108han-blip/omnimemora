@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any, Optional
 
-from .ledger import summarize_recent_events
+from .ledger import list_top_requests, summarize_recent_events
 from .reports import build_potential_savings_report
 
 
@@ -63,6 +63,11 @@ def _tools_payload() -> dict[str, Any]:
                 "description": "Read bounded local potential token-savings report. This does not run automatic optimization.",
                 "inputSchema": _limit_schema(),
             },
+            {
+                "name": "token_intelligence.top_requests",
+                "description": "Read bounded highest-token and highest-cost local audit request summaries.",
+                "inputSchema": _limit_schema(),
+            },
         ]
     }
 
@@ -91,6 +96,8 @@ def _call_tool(params: dict[str, Any], *, audit_db_path: Optional[str]) -> list[
     if name == "token_intelligence.potential_savings":
         summary = summarize_recent_events(path=audit_db_path, limit=limit)
         return [_json_text(build_potential_savings_report(summary))]
+    if name == "token_intelligence.top_requests":
+        return [_json_text(list_top_requests(path=audit_db_path, limit=limit))]
     return [{"type": "text", "text": f"error: unknown tool: {name}"}]
 
 

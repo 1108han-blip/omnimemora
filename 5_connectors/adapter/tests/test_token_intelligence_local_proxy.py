@@ -430,6 +430,15 @@ def test_mcp_companion_exposes_read_only_summary_tools(tmp_path):
                 "params": {"name": "token_intelligence.potential_savings", "arguments": {"limit": 5}},
             },
         )
+        top_status, top_body, _top_headers = _post_json_with_headers(
+            f"{_base_url(proxy)}/mcp",
+            {
+                "jsonrpc": "2.0",
+                "id": 3,
+                "method": "tools/call",
+                "params": {"name": "token_intelligence.top_requests", "arguments": {"limit": 5000}},
+            },
+        )
     finally:
         _stop_server(proxy)
         _stop_server(upstream)
@@ -439,12 +448,22 @@ def test_mcp_companion_exposes_read_only_summary_tools(tmp_path):
     assert health["mode"] == "candidate_local_companion"
     tools_payload = json.loads(tools_body)
     tool_names = {tool["name"] for tool in tools_payload["result"]["tools"]}
-    assert tool_names == {"token_intelligence.summary", "token_intelligence.potential_savings"}
+    assert tool_names == {
+        "token_intelligence.summary",
+        "token_intelligence.potential_savings",
+        "token_intelligence.top_requests",
+    }
     report_payload = json.loads(report_body)
     report = json.loads(report_payload["result"]["content"][0]["text"])
+    top_payload = json.loads(top_body)
+    top_report = json.loads(top_payload["result"]["content"][0]["text"])
     assert report_status == 200
+    assert top_status == 200
     assert report["potential_saving_tokens"] > 0
+    assert top_report["window"] == {"bounded": True, "limit": 1000}
+    assert top_report["top_by_tokens"][0]["request_id"] == "chatcmpl-mcp"
     assert repeated not in json.dumps(report_payload, sort_keys=True)
+    assert repeated not in json.dumps(top_payload, sort_keys=True)
 
 
 def test_update_check_reads_release_metadata_without_download(tmp_path):

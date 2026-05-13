@@ -32,6 +32,7 @@
 - 2026-05-13: TI-011 repo-only top requests report added. The candidate proxy and CLI expose bounded highest-token/highest-cost request summaries from local audit metadata, with source/confidence labels and no raw prompt output.
 - 2026-05-13: TI-012 repo-only reported cost ingestion added. The candidate proxy records provider/relay-reported cost fields with pricing version when present, but does not infer cost from a local price table yet.
 - 2026-05-13: TI-013 repo-only workflow ROI tags added. The candidate proxy can store explicit opt-in agent/project/workflow headers and summarize top token/cost consumers by those tags without inferring user profiles.
+- 2026-05-13: TI-014 repo-only MCP top requests tool added. The local MCP companion can expose bounded top request summaries to opted-in agents without becoming a capture or memory-write path.
 
 ## Product Target
 
@@ -447,6 +448,25 @@ Current behavior:
 - `/audit/reports/top-requests` includes agent/project/workflow tags on request rows when present;
 - `/audit/reports/potential-savings` carries the same top agent/workflow/project rollups;
 - no hidden habit inference, user profiling, memory write, or automatic optimization is enabled.
+
+### TI-014 - MCP Top Requests Tool
+
+Status: repo implementation completed on 2026-05-13 inside the candidate local proxy only; no `18011` MCP change or promotion started.
+
+Expose top request summaries to agents that explicitly connect to the local companion.
+
+Exit:
+
+- agents can query summary, potential savings, and top requests from the same read-only MCP surface;
+- all MCP reads remain bounded and metadata-only;
+- MCP remains optional and cannot capture traffic by itself.
+
+Current behavior:
+
+- `tools/list` includes `token_intelligence.top_requests`;
+- `tools/call` for `token_intelligence.top_requests` returns the same bounded schema as `/audit/reports/top-requests`;
+- the tool reads at most 1000 recent local ledger rows;
+- no request capture, memory write, compile routing, profile inference, or `18011` MCP behavior is changed.
 
 ## Validation Requirements
 
