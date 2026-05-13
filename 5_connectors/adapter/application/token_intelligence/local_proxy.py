@@ -12,7 +12,14 @@ from typing import Any, Optional
 from urllib.parse import parse_qs, urljoin, urlparse
 
 from .block_breakdown import classify_openai_compatible_blocks
-from .ledger import build_audit_event, get_audit_event, record_audit_event, summarize_recent_events
+from .ledger import (
+    build_audit_event,
+    delete_audit_event,
+    get_audit_event,
+    purge_audit_events_older_than,
+    record_audit_event,
+    summarize_recent_events,
+)
 from .receipts import build_receipt
 from .usage_normalizer import (
     estimate_openai_compatible_input_tokens,
@@ -96,6 +103,9 @@ def _make_handler(config: LocalProxyConfig) -> type[BaseHTTPRequestHandler]:
             _send_json(self, 404, {"error": "not_found", "path": parsed_path})
 
         def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
+            if self.path == "/audit/retention/purge":
+                _handle_retention_purge(self, config)
+                return
             if self.path != "/v1/chat/completions":
                 _send_json(self, 404, {"error": "not_found", "path": self.path})
                 return
@@ -136,6 +146,13 @@ def _make_handler(config: LocalProxyConfig) -> type[BaseHTTPRequestHandler]:
                 self.send_header("x-omni-token-audit-error", "persistence_failed")
             self.end_headers()
             self.wfile.write(response_body)
+
+        def do_DELETE(self) -> None:  # noqa: N802 - stdlib handler API
+            parsed_path = urlparse(self.path).path
+            if not parsed_path.startswith("/audit/events/"):
+                _send_json(self, 404, {"error": "not_found", "path": parsed_path})
+                return
+            _delete_audit_event(self, config, parsed_path)
 
         def log_message(self, _format: str, *_args: Any) -> None:
             return
@@ -215,6 +232,44 @@ def _send_audit_event(handler: BaseHTTPRequestHandler, config: LocalProxyConfig,
     _send_json(handler, 200, build_receipt(event) if is_receipt else event.to_dict())
 
 
+def _delete_audit_event(handler: BaseHTTPRequestHandler, config: LocalProxyConfig, path: str) -> None:
+    parts = path.strip("/").split("/")
+    if len(parts) != 3 or parts[:2] != ["audit", "events"]:
+        _send_json(handler, 404, {"error": "not_found", "path": path})
+        return
+    audit_id = parts[2]
+    try:
+        deleted = delete_audit_event(audit_id, path=config.audit_db_path)
+    except Exception as exc:
+        _send_json(handler, 500, {"error": "audit_delete_failed", "message": str(exc)})
+        return
+    status = "deleted" if deleted else "not_found"
+    _send_json(handler, 200 if deleted else 404, {"status": status, "audit_id": audit_id})
+
+
+def _handle_retention_purge(handler: BaseHTTPRequestHandler, config: LocalProxyConfig) -> None:
+    content_length = int(handler.headers.get("content-length") or "0")
+    body = handler.rfile.read(content_length)
+    payload = _json_payload(body)
+    older_than_days = 7
+    if isinstance(payload, dict):
+        older_than_days = _safe_int(payload.get("older_than_days"), default=7)
+    try:
+        deleted_count = purge_audit_events_older_than(older_than_days, path=config.audit_db_path)
+    except Exception as exc:
+        _send_json(handler, 500, {"error": "audit_retention_purge_failed", "message": str(exc)})
+        return
+    _send_json(
+        handler,
+        200,
+        {
+            "status": "purged",
+            "older_than_days": max(1, min(older_than_days, 365)),
+            "deleted_count": deleted_count,
+        },
+    )
+
+
 def _summary_limit(raw_path: str) -> int:
     values = parse_qs(urlparse(raw_path).query).get("limit", [])
     if not values:
@@ -223,6 +278,13 @@ def _summary_limit(raw_path: str) -> int:
         return max(1, min(int(values[0]), 1000))
     except Exception:
         return 1000
+
+
+def _safe_int(value: Any, *, default: int) -> int:
+    try:
+        return int(value)
+    except Exception:
+        return default
 
 
 def _send_update_check(handler: BaseHTTPRequestHandler, config: LocalProxyConfig) -> None:

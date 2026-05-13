@@ -251,3 +251,43 @@ def test_audit_ledger_roundtrip_and_receipt_are_metadata_only(tmp_path, monkeypa
     assert response_secret not in serialized_row
     assert meta["schema_version"] == "token-intelligence-ledger-v1"
     assert meta["content_mode"] == "metadata_only"
+
+
+def test_audit_ledger_delete_and_retention_purge(tmp_path, monkeypatch):
+    sqlite_path = tmp_path / "token_intelligence.sqlite3"
+    monkeypatch.setenv("OMNIMEMORA_TOKEN_INTELLIGENCE_DB", str(sqlite_path))
+    usage = token_intelligence.normalize_openai_compatible_usage(
+        {"usage": {"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2}}
+    )
+    old_event = token_intelligence.build_audit_event(
+        request_id="old",
+        request_payload={"model": "relay"},
+        response_payload={"id": "old"},
+        upstream_base_url="https://relay.example/v1",
+        provider="relay",
+        model_requested="relay",
+        usage=usage,
+    )
+    delete_event = token_intelligence.build_audit_event(
+        request_id="delete",
+        request_payload={"model": "relay"},
+        response_payload={"id": "delete"},
+        upstream_base_url="https://relay.example/v1",
+        provider="relay",
+        model_requested="relay",
+        usage=usage,
+    )
+    token_intelligence.record_audit_event(old_event)
+    token_intelligence.record_audit_event(delete_event)
+    with sqlite3.connect(str(sqlite_path)) as conn:
+        conn.execute(
+            "UPDATE audit_events SET created_at = ? WHERE audit_id = ?",
+            ("2000-01-01T00:00:00+00:00", old_event.audit_id),
+        )
+
+    assert token_intelligence.count_events() == 2
+    assert token_intelligence.delete_audit_event(delete_event.audit_id) is True
+    assert token_intelligence.delete_audit_event(delete_event.audit_id) is False
+    assert token_intelligence.count_events() == 1
+    assert token_intelligence.purge_audit_events_older_than(7) == 1
+    assert token_intelligence.count_events() == 0

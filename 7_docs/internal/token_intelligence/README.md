@@ -23,6 +23,7 @@
 - 2026-05-13: TI-002 repo-only local estimate fallback added. When upstream omits `usage`, the candidate proxy records `local_estimated` usage with `compatible_estimate` confidence; provider/relay-reported usage remains preferred and is not overwritten.
 - 2026-05-13: TI-003 repo-only block-level spend breakdown added. Audit events and receipts now include safe block summaries with block type, token estimate, item count, source, and confidence; raw block content is not stored.
 - 2026-05-13: TI-004 repo-only waste detectors added for duplicate context, long tool results, and tool-result-heavy context. Receipts and summaries expose compact optimization opportunities with reason codes and potential saving estimates; no automatic optimization is performed.
+- 2026-05-13: TI-005 repo-only data controls added. The candidate audit store supports single-event delete, bounded retention purge, metadata-only receipt export/read, and audit-disabled forwarding; user-pattern records remain unopened until a separate approval-gated design exists.
 
 ## Product Target
 
@@ -266,6 +267,8 @@ Current behavior:
 
 ### TI-005 - User Data Plane
 
+Status: repo implementation completed on 2026-05-13 for audit data controls only; user-pattern storage is not started.
+
 Implement a small, bounded audit/user-pattern store only after schema and retention tests exist.
 
 Exit:
@@ -273,6 +276,14 @@ Exit:
 - retention, delete, export, and disable controls are tested;
 - user-pattern records are compact and approval-gated;
 - audit records avoid raw payload storage by default.
+
+Current behavior:
+
+- `DELETE /audit/events/<audit_id>` deletes one audit event from the candidate local ledger;
+- `POST /audit/retention/purge` deletes events older than a bounded day threshold;
+- audit can be disabled in config so forwarding continues without creating audit rows;
+- receipt read/export uses metadata-only hashes, usage, blocks, and opportunities;
+- no user-pattern table or habit inference is active in TI-005.
 
 ### TI-006 - Potential Savings Report
 

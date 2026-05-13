@@ -247,6 +247,89 @@ def test_proxy_receipt_and_summary_include_safe_optimization_opportunities(tmp_p
     assert repeated not in serialized
 
 
+def test_audit_delete_and_disabled_audit_controls(tmp_path):
+    sqlite_path = tmp_path / "audit.sqlite3"
+    upstream = _start_fake_upstream(response_body=_json_bytes({"id": "chatcmpl-delete"}))
+    proxy = _start_proxy(
+        f"{_base_url(upstream)}/v1",
+        audit_db_path=str(sqlite_path),
+        audit_enabled=True,
+    )
+    try:
+        status, _body, headers = _post_json_with_headers(
+            f"{_base_url(proxy)}/v1/chat/completions",
+            {"model": "relay-model", "messages": [{"role": "user", "content": "delete me"}]},
+        )
+        audit_id = headers["x-omni-token-audit-id"]
+        delete_status, delete_payload = _delete_json(f"{_base_url(proxy)}/audit/events/{audit_id}")
+        receipt_status, missing_payload = _get_json_with_status(f"{_base_url(proxy)}/audit/events/{audit_id}/receipt")
+    finally:
+        _stop_server(proxy)
+        _stop_server(upstream)
+
+    assert status == 200
+    assert delete_status == 200
+    assert delete_payload == {"audit_id": audit_id, "status": "deleted"}
+    assert receipt_status == 404
+    assert missing_payload["error"] == "audit_event_not_found"
+
+    upstream = _start_fake_upstream(response_body=_json_bytes({"id": "chatcmpl-disabled"}))
+    proxy = _start_proxy(
+        f"{_base_url(upstream)}/v1",
+        audit_db_path=str(sqlite_path),
+        audit_enabled=False,
+    )
+    try:
+        status, _body, headers = _post_json_with_headers(
+            f"{_base_url(proxy)}/v1/chat/completions",
+            {"model": "relay-model", "messages": [{"role": "user", "content": "do not audit"}]},
+        )
+        summary_status, summary = _get_json_with_status(f"{_base_url(proxy)}/audit/summary")
+    finally:
+        _stop_server(proxy)
+        _stop_server(upstream)
+
+    assert status == 200
+    assert "x-omni-token-audit-id" not in headers
+    assert summary_status == 200
+    assert summary["event_count"] == 0
+
+
+def test_retention_purge_endpoint_removes_old_rows(tmp_path):
+    sqlite_path = tmp_path / "audit.sqlite3"
+    upstream = _start_fake_upstream(response_body=_json_bytes({"id": "chatcmpl-retention"}))
+    proxy = _start_proxy(
+        f"{_base_url(upstream)}/v1",
+        audit_db_path=str(sqlite_path),
+        audit_enabled=True,
+    )
+    try:
+        status, _body, headers = _post_json_with_headers(
+            f"{_base_url(proxy)}/v1/chat/completions",
+            {"model": "relay-model", "messages": [{"role": "user", "content": "old event"}]},
+        )
+        audit_id = headers["x-omni-token-audit-id"]
+        with sqlite3.connect(str(sqlite_path)) as conn:
+            conn.execute(
+                "UPDATE audit_events SET created_at = ? WHERE audit_id = ?",
+                ("2000-01-01T00:00:00+00:00", audit_id),
+            )
+        purge_status, purge_payload, _purge_headers = _post_json_with_headers(
+            f"{_base_url(proxy)}/audit/retention/purge",
+            {"older_than_days": 7},
+        )
+        summary_status, summary = _get_json_with_status(f"{_base_url(proxy)}/audit/summary")
+    finally:
+        _stop_server(proxy)
+        _stop_server(upstream)
+
+    assert status == 200
+    assert purge_status == 200
+    assert purge_payload and json.loads(purge_payload)["deleted_count"] == 1
+    assert summary_status == 200
+    assert summary["event_count"] == 0
+
+
 def test_update_check_reads_release_metadata_without_download(tmp_path):
     metadata_path = tmp_path / "latest.json"
     metadata_path.write_text(
@@ -409,6 +492,15 @@ def _post_json_with_headers(url: str, payload: dict):
     except urllib.error.HTTPError as exc:
         headers = {key.lower(): value for key, value in exc.headers.items()}
         return int(exc.code), exc.read(), headers
+
+
+def _delete_json(url: str):
+    request = urllib.request.Request(url, method="DELETE")
+    try:
+        with urllib.request.urlopen(request, timeout=5) as response:
+            return int(response.status), json.loads(response.read())
+    except urllib.error.HTTPError as exc:
+        return int(exc.code), json.loads(exc.read())
 
 
 def _json_bytes(payload: dict) -> bytes:

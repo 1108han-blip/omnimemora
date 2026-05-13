@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 import os
 import sqlite3
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Optional
 from uuid import uuid4
@@ -185,6 +185,22 @@ def get_audit_event(audit_id: str, *, path: Optional[str] = None) -> Optional[Au
     if row is None:
         return None
     return _row_to_event(row)
+
+
+def delete_audit_event(audit_id: str, *, path: Optional[str] = None) -> bool:
+    init_schema(path)
+    with _connect(path) as conn:
+        cursor = conn.execute("DELETE FROM audit_events WHERE audit_id = ?", (audit_id,))
+    return int(cursor.rowcount or 0) > 0
+
+
+def purge_audit_events_older_than(days: int, *, path: Optional[str] = None) -> int:
+    bounded_days = max(1, min(int(days), 365))
+    cutoff = datetime.now(timezone.utc) - timedelta(days=bounded_days)
+    init_schema(path)
+    with _connect(path) as conn:
+        cursor = conn.execute("DELETE FROM audit_events WHERE created_at < ?", (cutoff.isoformat(),))
+    return int(cursor.rowcount or 0)
 
 
 def count_events(*, path: Optional[str] = None) -> int:
