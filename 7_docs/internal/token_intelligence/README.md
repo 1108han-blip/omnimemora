@@ -42,6 +42,7 @@
 - 2026-05-13: TI-020 repo-only real-client attach smoke added. The candidate package is built, unpacked with system unzip, started as a subprocess, called through a normal OpenAI-compatible HTTP client, and then verified through receipt/summary/top-request CLI reads plus reversible detach.
 - 2026-05-13: TI-021 repo-only beta package quickstart prepared. The package README now states local proxy purpose, config steps, compatible client base URL, optional attach helper, report commands, update check, checksum verification, private-source boundary, and unsigned Gatekeeper note.
 - 2026-05-13: TI-022 repo-only cloud route candidate prepared. Current live `doloclaw.com` Token Intelligence paths were confirmed 404, then the Worker template gained candidate redirects for Token Intelligence package downloads and release metadata, with local route tests only and no cloud deployment.
+- 2026-05-13: TI-023 repo-only local release layout added. The package builder now emits a local R2-preview directory with zip, `SHA256SUMS.txt`, `latest.json`, and versioned manifest, and tests verify SHA/metadata consistency before any upload.
 
 ## Product Target
 
@@ -673,6 +674,42 @@ Boundaries:
 - this does not deploy the Worker to Cloudflare;
 - this does not alter desktop beta17 download behavior;
 - this does not promote Token Intelligence into `18011` or the desktop GUI.
+
+### TI-023 - Local Release Layout And Metadata Consistency
+
+Status: repo implementation completed on 2026-05-13 for local release preview only; no cloud upload or Worker deployment performed.
+
+Generate the exact local file layout expected by the TI-022 Worker routes before touching R2.
+
+Output layout:
+
+```text
+<output-dir>/
+  omni-token-audit-<version>-local.zip
+  SHA256SUMS.txt
+  latest.local.json
+  release/omnimemora/token-intelligence/<version>/
+    omni-token-audit-<version>-local.zip
+    SHA256SUMS.txt
+    latest.json
+    <version>.json
+```
+
+Current behavior:
+
+- `tools/token_intelligence/build_local_package.py` now returns `release_dir` in its JSON output;
+- the release preview directory mirrors the future R2 prefix `omnimemora/token-intelligence/<version>/`;
+- `latest.json` and `<version>.json` contain the same product-owned metadata;
+- the manifest download URL points to `/download/file/token-intelligence/omni-token-audit-<version>-local.zip`;
+- `SHA256SUMS.txt` and manifest SHA match the actual zip bytes;
+- validation built `0.1.0-beta.1` locally and confirmed `sha_matches=true` and `version_manifest_matches=true`.
+
+Boundaries:
+
+- this does not upload artifacts to R2;
+- this does not deploy the Worker to Cloudflare;
+- this does not update the live `doloclaw.com/download` page;
+- generated release preview artifacts stay outside the repo by default and are cleaned after validation.
 
 ## Validation Requirements
 

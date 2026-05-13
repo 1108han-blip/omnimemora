@@ -31,9 +31,12 @@ def main() -> int:
     zip_path = output_dir / f"{package_name}.zip"
     checksum_path = output_dir / "SHA256SUMS.txt"
     metadata_path = output_dir / "latest.local.json"
+    release_dir = output_dir / "release" / "omnimemora" / "token-intelligence" / version
 
     if stage_dir.exists():
         shutil.rmtree(stage_dir)
+    if release_dir.exists():
+        shutil.rmtree(release_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
     stage_dir.mkdir(parents=True)
 
@@ -46,10 +49,22 @@ def main() -> int:
         zip_path.unlink()
     _zip_dir(stage_dir, zip_path)
     digest = _sha256(zip_path)
+    metadata = _metadata(version, args.channel, zip_path.name, digest)
     _write_text(checksum_path, f"{digest}  {zip_path.name}\n")
-    _write_json(metadata_path, _metadata(version, args.channel, zip_path.name, digest))
+    _write_json(metadata_path, metadata)
+    _write_release_layout(release_dir, zip_path, digest, metadata, version)
 
-    print(json.dumps({"zip": str(zip_path), "sha256": digest, "metadata": str(metadata_path)}, sort_keys=True))
+    print(
+        json.dumps(
+            {
+                "zip": str(zip_path),
+                "sha256": digest,
+                "metadata": str(metadata_path),
+                "release_dir": str(release_dir),
+            },
+            sort_keys=True,
+        )
+    )
     return 0
 
 
@@ -146,6 +161,20 @@ def _metadata(version: str, channel: str, zip_name: str, digest: str) -> dict[st
             }
         },
     }
+
+
+def _write_release_layout(
+    release_dir: Path,
+    zip_path: Path,
+    digest: str,
+    metadata: dict[str, object],
+    version: str,
+) -> None:
+    release_dir.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(zip_path, release_dir / zip_path.name)
+    _write_text(release_dir / "SHA256SUMS.txt", f"{digest}  {zip_path.name}\n")
+    _write_json(release_dir / "latest.json", metadata)
+    _write_json(release_dir / f"{version}.json", metadata)
 
 
 def _zip_dir(source_dir: Path, zip_path: Path) -> None:

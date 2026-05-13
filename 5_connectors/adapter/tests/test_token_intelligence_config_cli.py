@@ -1,4 +1,5 @@
 import importlib
+import hashlib
 import json
 import os
 import shutil
@@ -392,15 +393,31 @@ def test_local_package_builder_outputs_checksum_metadata_and_launcher(tmp_path):
 
     zip_path = Path(payload["zip"])
     metadata_path = Path(payload["metadata"])
+    release_dir = Path(payload["release_dir"])
     checksum_path = tmp_path / "SHA256SUMS.txt"
+    release_zip_path = release_dir / zip_path.name
+    release_checksum_path = release_dir / "SHA256SUMS.txt"
+    release_latest_path = release_dir / "latest.json"
+    release_version_path = release_dir / "0.1.0-test.json"
     assert zip_path.exists()
     assert metadata_path.exists()
     assert checksum_path.exists()
+    assert release_zip_path.exists()
+    assert release_checksum_path.exists()
+    assert release_latest_path.exists()
+    assert release_version_path.exists()
 
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+    release_latest = json.loads(release_latest_path.read_text(encoding="utf-8"))
+    release_version = json.loads(release_version_path.read_text(encoding="utf-8"))
     assert metadata["version"] == "0.1.0-test"
     assert metadata["platforms"]["darwin-arm64"]["sha256"] == payload["sha256"]
     assert metadata["platforms"]["darwin-arm64"]["unsigned_beta"] is True
+    assert release_latest == metadata
+    assert release_version == metadata
+    assert release_latest["platforms"]["darwin-arm64"]["download_url"].endswith(
+        "/download/file/token-intelligence/omni-token-audit-0.1.0-test-local.zip"
+    )
 
     with zipfile.ZipFile(zip_path) as archive:
         names = set(archive.namelist())
@@ -416,6 +433,8 @@ def test_local_package_builder_outputs_checksum_metadata_and_launcher(tmp_path):
     assert "Privacy & Security / Gatekeeper" in readme_text
     assert "No silent install or self-replacement" in readme_text
     assert payload["sha256"] in checksum_path.read_text(encoding="utf-8")
+    assert release_checksum_path.read_text(encoding="utf-8") == checksum_path.read_text(encoding="utf-8")
+    assert hashlib.sha256(release_zip_path.read_bytes()).hexdigest() == payload["sha256"]
 
 
 def test_local_package_real_client_minimal_attach_flow(tmp_path):
