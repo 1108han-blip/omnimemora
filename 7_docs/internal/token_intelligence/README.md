@@ -39,6 +39,7 @@
 - 2026-05-13: TI-018 repo-only harness snippet generator added. `snippets` prints copy-paste integration examples for common harnesses without editing files or storing API key values.
 - 2026-05-13: TI-019 candidate package smoke passed. The local zip now preserves executable launcher permissions and has been unpacked and run through fake-upstream pass-through, receipt, reports, snippets, attach, and detach in a temp directory.
 - 2026-05-13: Product decision recorded: Token Intelligence is token-flow accuracy first. Money/cost remains optional, source-labeled, and user-configurable; no official or relay price table is treated as the product anchor.
+- 2026-05-13: TI-020 repo-only real-client attach smoke added. The candidate package is built, unpacked with system unzip, started as a subprocess, called through a normal OpenAI-compatible HTTP client, and then verified through receipt/summary/top-request CLI reads plus reversible detach.
 
 ## Product Target
 
@@ -589,6 +590,37 @@ Current behavior:
 - smoke result: request forwarded to `/v1/chat/completions`, upstream authorization header present, response text `SMOKE_OK`, audit id present, receipt usage source `relay_reported`, cost captured when reported, top request readable, and secrets not present in outputs;
 - launcher write/remove was verified: `launcher_exists_after_attach=true`, `launcher_removed_by_detach=true`;
 - this gate validates the candidate package only; it does not promote Token Intelligence into `18011`, desktop GUI, cloud release, or official agent config mutation.
+
+### TI-020 - Real Client Minimal Attach Smoke
+
+Status: repo implementation completed on 2026-05-13 as a repeatable package-level test; no running promotion performed.
+
+Validate the minimum user-style path after package smoke:
+
+- user unpacks the local candidate package;
+- user writes local config with upstream base URL and API key environment reference;
+- user runs `omni-token-audit attach openclaw --with-launcher`;
+- user starts `omni-token-audit proxy start`;
+- a normal OpenAI-compatible client sends `POST /v1/chat/completions` to the local proxy;
+- user reads `receipt`, `report summary`, and `report top-requests`;
+- user runs `detach` and removes managed artifacts.
+
+Current behavior:
+
+- the test builds a fresh local package and unpacks it with system `unzip` so executable-bit behavior is part of the gate;
+- the proxy runs from the unpacked package as a subprocess, not from imported repo modules;
+- the upstream receives the configured upstream API key from the environment;
+- the client response is pass-through and contains `x-omni-token-audit-id`;
+- receipt records `relay_reported` token usage;
+- summary/top-requests record `openclaw` and `coding` tags from request headers;
+- detach removes the managed launcher and env/profile artifacts;
+- the upstream API key value and request prompt text are absent from CLI outputs and config.
+
+Boundaries:
+
+- this is a candidate package/user-style smoke only;
+- it does not mutate official OpenClaw, Claude Code, or other harness config files;
+- it does not promote Token Intelligence into `18011`, desktop GUI, cloud release, or a signed updater path.
 
 ## Validation Requirements
 

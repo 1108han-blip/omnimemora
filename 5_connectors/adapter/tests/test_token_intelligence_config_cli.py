@@ -1,8 +1,15 @@
 import importlib
 import json
+import os
+import shutil
+import socket
 import subprocess
 import sys
+import threading
+import time
+import urllib.request
 import zipfile
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
 import pytest
@@ -13,6 +20,35 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(APP_DIR))
 token_intelligence = importlib.import_module("token_intelligence")
 cli = importlib.import_module("token_intelligence.cli")
+
+
+class _ClientSmokeUpstreamHandler(BaseHTTPRequestHandler):
+    def do_POST(self):  # noqa: N802 - stdlib handler API
+        content_length = int(self.headers.get("content-length") or "0")
+        body = self.rfile.read(content_length)
+        self.server.state["last_path"] = self.path
+        self.server.state["last_body"] = body
+        self.server.state["last_authorization"] = self.headers.get("authorization")
+
+        response_body = json.dumps(
+            {
+                "id": "chatcmpl-ti020-real-client",
+                "object": "chat.completion",
+                "model": "relay-model-reported",
+                "choices": [{"message": {"role": "assistant", "content": "TI020_OK"}}],
+                "usage": {"prompt_tokens": 9, "completion_tokens": 3, "total_tokens": 12},
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        self.send_response(200)
+        self.send_header("content-type", "application/json")
+        self.send_header("content-length", str(len(response_body)))
+        self.end_headers()
+        self.wfile.write(response_body)
+
+    def log_message(self, _format, *_args):
+        return
 
 
 def test_default_config_write_does_not_store_raw_api_key(tmp_path, monkeypatch):
@@ -374,3 +410,260 @@ def test_local_package_builder_outputs_checksum_metadata_and_launcher(tmp_path):
     assert all("__pycache__" not in name for name in names)
     assert ((launcher_info.external_attr >> 16) & 0o111) != 0
     assert payload["sha256"] in checksum_path.read_text(encoding="utf-8")
+
+
+def test_local_package_real_client_minimal_attach_flow(tmp_path):
+    unzip = shutil.which("unzip")
+    if unzip is None:
+        pytest.skip("system unzip is required to validate executable-bit package unpacking")
+
+    script = REPO_ROOT / "tools" / "token_intelligence" / "build_local_package.py"
+    build_dir = tmp_path / "build"
+    unpack_dir = tmp_path / "unpacked"
+    home_dir = tmp_path / "home"
+    attach_dir = tmp_path / "agents"
+    db_path = tmp_path / "audit.sqlite3"
+    proxy_port = _free_port()
+    upstream = _start_client_smoke_upstream()
+    proxy_process = None
+    secret_value = "ti020-upstream-secret-not-persisted"
+    try:
+        build_result = subprocess.run(
+            [
+                sys.executable,
+                str(script),
+                "--output-dir",
+                str(build_dir),
+                "--version",
+                "0.1.0-test",
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        package_payload = json.loads(build_result.stdout)
+        zip_path = Path(package_payload["zip"])
+        subprocess.run([unzip, "-q", str(zip_path), "-d", str(unpack_dir)], check=True)
+        package_dir = unpack_dir / "omni-token-audit-0.1.0-test-local"
+        launcher = package_dir / "omni-token-audit"
+        assert launcher.exists()
+        assert launcher.stat().st_mode & 0o111
+
+        config_path = tmp_path / "config.json"
+        config_path.write_text(
+            json.dumps(
+                {
+                    "server": {"host": "127.0.0.1", "port": proxy_port},
+                    "upstream": {
+                        "base_url": f"{_base_url(upstream)}/v1",
+                        "api_key_env": "TI020_UPSTREAM_KEY",
+                        "timeout_seconds": 5,
+                    },
+                    "privacy": {"content_mode": "metadata_only"},
+                    "audit": {"enabled": True, "fail_open": True},
+                    "updates": {
+                        "enabled": False,
+                        "metadata_url": "https://doloclaw.com/releases/token-intelligence/latest.json",
+                        "channel": "beta",
+                    },
+                },
+                sort_keys=True,
+            ),
+            encoding="utf-8",
+        )
+        env = {
+            **os_environ_without_pythonpath(),
+            "HOME": str(home_dir),
+            "TI020_UPSTREAM_KEY": secret_value,
+            "OMNIMEMORA_TOKEN_INTELLIGENCE_DB": str(db_path),
+            "OMNIMEMORA_TOKEN_INTELLIGENCE_ATTACH_DIR": str(attach_dir),
+        }
+
+        attach_result = subprocess.run(
+            [str(launcher), "attach", "openclaw", "--config", str(config_path), "--with-launcher"],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=str(package_dir),
+        )
+        attach_payload = json.loads(attach_result.stdout)
+        assert attach_payload["status"] == "profile_written"
+        assert attach_payload["proxy_base_url"] == f"http://127.0.0.1:{proxy_port}/v1"
+        assert attach_payload["agent_config_mutated"] is False
+        assert (attach_dir / "openclaw-launch.sh").exists()
+
+        proxy_process = subprocess.Popen(
+            [str(launcher), "proxy", "start", "--config", str(config_path)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            env=env,
+            cwd=str(package_dir),
+        )
+        _wait_for_health(f"http://127.0.0.1:{proxy_port}/health", proxy_process)
+
+        status, response_body, response_headers = _post_real_client_json(
+            f"http://127.0.0.1:{proxy_port}/v1/chat/completions",
+            {
+                "model": "relay-model-requested",
+                "messages": [{"role": "user", "content": "TI020_REAL_CLIENT_PROMPT"}],
+            },
+            headers={
+                "authorization": "Bearer client-placeholder",
+                "x-omni-agent-id": "openclaw",
+                "x-omni-workflow-tag": "coding",
+            },
+        )
+        response_payload = json.loads(response_body)
+        audit_id = response_headers["x-omni-token-audit-id"]
+
+        receipt_result = subprocess.run(
+            [str(launcher), "receipt", "get", audit_id],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=str(package_dir),
+        )
+        summary_result = subprocess.run(
+            [str(launcher), "report", "summary", "--limit", "100"],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=str(package_dir),
+        )
+        top_result = subprocess.run(
+            [str(launcher), "report", "top-requests", "--limit", "100"],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=str(package_dir),
+        )
+        detach_result = subprocess.run(
+            [str(launcher), "detach", "openclaw"],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+            cwd=str(package_dir),
+        )
+        receipt = json.loads(receipt_result.stdout)
+        summary = json.loads(summary_result.stdout)
+        top_requests = json.loads(top_result.stdout)
+        detach_payload = json.loads(detach_result.stdout)
+    finally:
+        if proxy_process is not None:
+            _stop_process(proxy_process)
+        _stop_server(upstream)
+
+    assert status == 200
+    assert response_payload["choices"][0]["message"]["content"] == "TI020_OK"
+    assert upstream.state["last_path"] == "/v1/chat/completions"
+    assert upstream.state["last_authorization"] == f"Bearer {secret_value}"
+    assert json.loads(upstream.state["last_body"])["model"] == "relay-model-requested"
+    assert receipt["usage"]["source"] == "relay_reported"
+    assert receipt["usage"]["total_tokens"] == 12
+    assert summary["event_count"] == 1
+    assert summary["usage"]["total_tokens"] == 12
+    assert summary["top_agents"][0]["agent_id"] == "openclaw"
+    assert summary["top_workflows"][0]["workflow_tag"] == "coding"
+    assert top_requests["top_by_tokens"][0]["request_id"] == "chatcmpl-ti020-real-client"
+    assert top_requests["top_by_tokens"][0]["agent_id"] == "openclaw"
+    assert top_requests["top_by_tokens"][0]["workflow_tag"] == "coding"
+    assert detach_payload["status"] == "detached"
+    assert detach_payload["removed_launcher"] is True
+    assert not (attach_dir / "openclaw-launch.sh").exists()
+    serialized_outputs = "\n".join(
+        [
+            attach_result.stdout,
+            receipt_result.stdout,
+            summary_result.stdout,
+            top_result.stdout,
+            detach_result.stdout,
+            config_path.read_text(encoding="utf-8"),
+        ]
+    )
+    assert secret_value not in serialized_outputs
+    assert "TI020_REAL_CLIENT_PROMPT" not in serialized_outputs
+
+
+def os_environ_without_pythonpath() -> dict[str, str]:
+    env = dict(os.environ)
+    env.pop("PYTHONPATH", None)
+    return env
+
+
+def _start_client_smoke_upstream():
+    server = ThreadingHTTPServer(("127.0.0.1", _free_port()), _ClientSmokeUpstreamHandler)
+    server.daemon_threads = True
+    server.state = {}
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    server.thread = thread
+    return server
+
+
+def _stop_server(server):
+    server.shutdown()
+    server.server_close()
+    server.thread.join(timeout=2)
+
+
+def _base_url(server) -> str:
+    host, port = server.server_address[:2]
+    return f"http://{host}:{port}"
+
+
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind(("127.0.0.1", 0))
+        return int(sock.getsockname()[1])
+
+
+def _wait_for_health(url: str, process: subprocess.Popen[str]) -> None:
+    deadline = time.time() + 5
+    last_error = ""
+    while time.time() < deadline:
+        if process.poll() is not None:
+            stdout, stderr = process.communicate(timeout=1)
+            raise AssertionError(f"proxy exited early: stdout={stdout} stderr={stderr}")
+        try:
+            with urllib.request.urlopen(url, timeout=0.5) as response:
+                if int(response.status) == 200:
+                    return
+        except Exception as exc:
+            last_error = str(exc)
+        time.sleep(0.05)
+    raise AssertionError(f"proxy health did not become ready: {last_error}")
+
+
+def _post_real_client_json(url: str, payload: dict, *, headers: dict[str, str] | None = None):
+    request_headers = {"content-type": "application/json"}
+    if headers:
+        request_headers.update(headers)
+    request = urllib.request.Request(
+        url,
+        data=json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8"),
+        headers=request_headers,
+        method="POST",
+    )
+    with urllib.request.urlopen(request, timeout=5) as response:
+        return (
+            int(response.status),
+            response.read(),
+            {key.lower(): value for key, value in response.headers.items()},
+        )
+
+
+def _stop_process(process: subprocess.Popen[str]) -> None:
+    if process.poll() is not None:
+        return
+    process.terminate()
+    try:
+        process.communicate(timeout=3)
+    except subprocess.TimeoutExpired:
+        process.kill()
+        process.communicate(timeout=3)
