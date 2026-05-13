@@ -358,6 +358,22 @@ class Config(BaseModel):
     structured_compile_max_tool_result_chars: int = int(
         os.getenv("OMNIMEMORA_STRUCTURED_COMPILE_MAX_TOOL_RESULT_CHARS", "1200")
     )
+    structured_compile_openclaw_deadline_profile_enabled: bool = _env_bool(
+        "OMNIMEMORA_STRUCTURED_COMPILE_OPENCLAW_DEADLINE_PROFILE_ENABLED",
+        True,
+    )
+    structured_compile_openclaw_deadline_seconds: float = float(
+        os.getenv("OMNIMEMORA_STRUCTURED_COMPILE_OPENCLAW_DEADLINE_SECONDS", "45")
+    )
+    structured_compile_openclaw_compile_budget_ms: int = int(
+        os.getenv("OMNIMEMORA_STRUCTURED_COMPILE_OPENCLAW_COMPILE_BUDGET_MS", "2500")
+    )
+    structured_compile_openclaw_long_context_tokens: int = int(
+        os.getenv("OMNIMEMORA_STRUCTURED_COMPILE_OPENCLAW_LONG_CONTEXT_TOKENS", "8000")
+    )
+    structured_compile_openclaw_max_tool_result_chars: int = int(
+        os.getenv("OMNIMEMORA_STRUCTURED_COMPILE_OPENCLAW_MAX_TOOL_RESULT_CHARS", "700")
+    )
 
     # Tool plane v1: local search enters through OmniMemora before agent reuse.
     tool_search_enabled: bool = _env_bool("OMNIMEMORA_TOOL_SEARCH_ENABLED", True)

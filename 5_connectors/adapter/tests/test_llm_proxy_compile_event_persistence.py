@@ -32,6 +32,14 @@ def test_record_compile_event_persists_task_type_and_skill_policy_defaults():
         "compile_reason": "runtime_compile",
         "token_estimator_name": "mixed_script_heuristic_v1",
         "token_estimator_confidence": "medium",
+        "structured_compile_latency_ms": 17,
+        "deadline_profile": "openclaw_45s_long_tool_context",
+        "deadline_profile_applied": True,
+        "client_deadline_seconds": 45.0,
+        "compile_budget_ms": 2500,
+        "deadline_budget_exceeded": False,
+        "protect_latest_tool_result": False,
+        "max_tool_result_chars": 700,
         "skill_suggestions": None,
         "skill_policy_name": None,
         "skill_policy_version": None,
@@ -58,3 +66,11 @@ def test_record_compile_event_persists_task_type_and_skill_policy_defaults():
     assert row["skill_policy_status"] == "fallback"
     assert row["token_estimator_name"] == "mixed_script_heuristic_v1"
     assert row["token_estimator_confidence"] == "medium"
+    assert row["structured_compile_latency_ms"] == 17
+    assert row["deadline_profile"] == "openclaw_45s_long_tool_context"
+    assert row["deadline_profile_applied"] is True
+    assert row["client_deadline_seconds"] == 45.0
+    assert row["compile_budget_ms"] == 2500
+    assert row["deadline_budget_exceeded"] is False
+    assert row["protect_latest_tool_result"] is False
+    assert row["max_tool_result_chars"] == 700

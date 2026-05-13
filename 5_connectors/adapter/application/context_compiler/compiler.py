@@ -31,6 +31,7 @@ def compile_anthropic_tool_context(
     payload: Dict[str, Any],
     *,
     max_tool_result_chars: int = 1200,
+    protect_latest_tool_result: bool = True,
 ) -> StructuredCompileResult:
     """Compile eligible Anthropic tool results while preserving graph structure."""
     before_estimate = estimate_payload_tokens_detailed(payload)
@@ -66,7 +67,7 @@ def compile_anthropic_tool_context(
         for content_index, part in enumerate(content):
             if not isinstance(part, dict) or part.get("type") != "tool_result":
                 continue
-            if (message_index, content_index) == latest_result_location:
+            if protect_latest_tool_result and (message_index, content_index) == latest_result_location:
                 continue
             text, replace_mode = _tool_result_text(part)
             compressed = compress_tool_result_text(text, max_chars=max_tool_result_chars)

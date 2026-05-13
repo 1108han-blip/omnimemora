@@ -4,7 +4,7 @@
 
 - Created: 2026-05-13
 - Product line: OmniMemora structured context compilation
-- Current status: SC-023 OpenClaw `web_search` can route through OmniMemora Tool Plane to local `mmx` search
+- Current status: SC-026 OpenClaw 45-second deadline profile implemented in repo reality and synced into the current app runtime
 - Supersedes phase6 as the active engineering line for compile capability work.
 
 ## Product Target
@@ -1139,6 +1139,75 @@ Decision:
 Plan:
 
 - See [Token Audit and User Pattern Lite Data Plan](./token_audit_user_data_plan.md).
+
+### SC-026 - OpenClaw 45-Second Deadline Profile
+
+Goal: reduce OpenClaw long-content failures caused by a fixed 45-second harness deadline without adding a task platform or extra LLM calls.
+
+Status: repo reality implemented on 2026-05-13. The current beta17 app runtime under `/Users/sc/.omnimemora/app/current` has been synced and validated, but the app-target promotion script still recorded `promotion_failed` because its API gate checked during the adapter restart window.
+
+Implementation:
+
+- Added an OpenClaw-only structured compile deadline profile for long Anthropic tool-context requests.
+- The profile triggers only when `agent_id=openclaw`, structured compile is enabled, the payload is Anthropic tool context, and the full payload token estimate crosses the long-context threshold.
+- Default profile values:
+  - client deadline: `45s`
+  - compile budget marker: `2500ms`
+  - long-context threshold: `8000` estimated tokens
+  - OpenClaw tool-result target: `700` chars
+- For this profile, the compiler may deterministically compress the latest oversized `tool_result`; default Claude Code behavior still protects the latest result.
+- No LLM summarization, cloud fetch, historical scan, memory search, or extra provider call is added to the upstream-critical path.
+- Compile events now persist deadline fields such as `deadline_profile`, `structured_compile_latency_ms`, `deadline_budget_exceeded`, and `protect_latest_tool_result`.
+
+Boundary:
+
+- This does not promise all OpenClaw 45-second failures can be fixed.
+- It targets failures where long tool results or large repeated context consume the client deadline before final answer assembly.
+- It keeps protocol graph fields intact: `tool_use.id`, `tool_result.tool_use_id`, roles, ordering, and provided tool schemas remain provider-valid.
+- It is not a general heartbeat, multi-step task protocol, or UI progress system.
+
+Repo validation:
+
+- `/usr/bin/python3 -m pytest 5_connectors/adapter/tests/test_context_compiler_structured_compile.py 5_connectors/adapter/tests/test_gateway_compile_skill_suggestions.py 5_connectors/adapter/tests/test_llm_proxy_compile_event_persistence.py`: `16 passed`.
+- `/usr/bin/python3 -m pytest 5_connectors/adapter/tests/test_llm_proxy_agent_detection.py 5_connectors/adapter/tests/test_llm_proxy_auto_memory_write.py 5_connectors/adapter/tests/test_gateway_compile_internal_memory_status.py 5_connectors/adapter/tests/test_compile_store_distribution_summary.py`: `17 passed`.
+- `/usr/bin/python3 -m py_compile 5_connectors/adapter/application/context_compiler/compiler.py 5_connectors/adapter/application/gateway_compile.py 5_connectors/adapter/config.py 5_connectors/adapter/ingress/llm_proxy.py`: passed.
+- `git diff --check`: passed.
+
+Running validation:
+
+- A default-target adapter promotion wrote the candidate to `/Users/sc/.omnimemora/service/current`, but failed `code_source` validation because the current beta17 LaunchAgent runs from `/Users/sc/.omnimemora/app/current`.
+  - Log: `tools/verification/logs/promotion_20260513_141556.log`
+  - Result: `promotion_failed`
+- The app-target promotion command synced the candidate into the actual running path:
+  - `OMNIMEMORA_SERVICE_DIR=/Users/sc/.omnimemora/app tools/promotion/promotion.sh adapter`
+  - Log: `tools/verification/logs/promotion_20260513_141746.log`
+  - Result: `promotion_failed`
+  - Failure scope: API reality gate reported `api_unreachable` during restart validation.
+- Independent post-restart running checks:
+  - `/debug/runtime_fingerprint` reported PID `81581` and code source under `/Users/sc/.omnimemora/app/current/5_connectors/adapter/main.py`.
+  - SHA-256 matched between repo reality and app runtime for `gateway_compile.py`, `context_compiler/compiler.py`, `config.py`, and `llm_proxy.py`.
+  - `/health`: HTTP `200`; repeated checks included `0.004738s` and `0.004788s` after the restart settled.
+  - `/metrics/summary`: HTTP `200`; repeated checks included `0.003345s`, `0.006008s`, and `0.018665s`.
+  - `/metrics/core_capabilities`: HTTP `200`, but not within the default internal `<100ms` target in this sample; repeated checks ranged from `0.195818s` to `0.718751s`.
+- Direct product ingress validation:
+  - A real `POST http://127.0.0.1:18011/llm/v1/messages` request with `agent_id=openclaw` and a long Anthropic `tool_result` executed the structured compile path.
+  - Upstream returned HTTP `500` for the artificial tool payload, but the gateway response explicitly reported `Gateway compile succeeded, upstream returned HTTP 500`.
+  - Latest compile event for request `15ad55912435`:
+    - `compile_status=structured_compile_success`
+    - `deadline_profile=openclaw_45s_long_tool_context`
+    - `deadline_profile_applied=true`
+    - `original_token_estimate=70120`
+    - `compiled_token_estimate=241`
+    - `structured_compile_latency_ms=312`
+    - `deadline_budget_exceeded=false`
+    - `protect_latest_tool_result=false`
+    - `max_tool_result_chars=700`
+
+Change scope:
+
+- File count stayed flat; all changes are in existing implementation, test, and current-line documentation files.
+- Resident background logic stayed flat; no daemon, scheduler, or new background service was added.
+- Log retention policy stayed capped by existing compile-event retention behavior; no user-facing memory path was touched.
 
 ## Success Criteria
 

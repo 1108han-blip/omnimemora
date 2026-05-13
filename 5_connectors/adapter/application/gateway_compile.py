@@ -479,10 +479,25 @@ def _maybe_run_structured_compile(
 
     from .context_compiler.compiler import compile_anthropic_tool_context
 
+    profile = _structured_compile_deadline_profile(
+        agent_id=agent_id,
+        normalized=normalized,
+        payload=payload,
+    )
+    max_tool_result_chars = int(
+        profile.get(
+            "max_tool_result_chars",
+            int(getattr(config, "structured_compile_max_tool_result_chars", 1200) or 1200),
+        )
+    )
+    protect_latest_tool_result = bool(profile.get("protect_latest_tool_result", True))
+    started_at = _time.perf_counter()
     result = compile_anthropic_tool_context(
         payload,
-        max_tool_result_chars=int(getattr(config, "structured_compile_max_tool_result_chars", 1200) or 1200),
+        max_tool_result_chars=max_tool_result_chars,
+        protect_latest_tool_result=protect_latest_tool_result,
     )
+    compile_latency_ms = int((_time.perf_counter() - started_at) * 1000)
     if result.status != "structured_compile_success":
         try:
             from .context_compiler.failure_samples import record_failure_sample
@@ -518,12 +533,52 @@ def _maybe_run_structured_compile(
     meta["structured_compile_issues"] = result.issues
     meta["token_estimator_name"] = result.token_estimator_name
     meta["token_estimator_confidence"] = result.token_estimator_confidence
+    meta["structured_compile_latency_ms"] = compile_latency_ms
+    if profile:
+        meta.update(
+            {
+                "deadline_profile": profile["deadline_profile"],
+                "deadline_profile_applied": True,
+                "client_deadline_seconds": profile["client_deadline_seconds"],
+                "compile_budget_ms": profile["compile_budget_ms"],
+                "deadline_budget_exceeded": compile_latency_ms > int(profile["compile_budget_ms"]),
+                "protect_latest_tool_result": protect_latest_tool_result,
+                "max_tool_result_chars": max_tool_result_chars,
+            }
+        )
     loguru.logger.info(
         f"[GATEWAY_COMPILE] agent={agent_id} {result.status} "
         f"reason={result.reason} changed_blocks={result.changed_blocks} "
-        f"original={result.original_token_estimate} compiled={result.compiled_token_estimate}"
+        f"original={result.original_token_estimate} compiled={result.compiled_token_estimate} "
+        f"latency_ms={compile_latency_ms} deadline_profile={profile.get('deadline_profile', '-') if profile else '-'}"
     )
     return result.payload, meta
+
+
+def _structured_compile_deadline_profile(*, agent_id: str, normalized: dict, payload: dict) -> dict:
+    """Return a narrow OpenClaw profile for 45s harness deadlines."""
+    if agent_id != "openclaw":
+        return {}
+    if not bool(getattr(config, "structured_compile_openclaw_deadline_profile_enabled", True)):
+        return {}
+    original_tokens = int(normalized.get("original_token_estimate") or 0)
+    threshold = int(getattr(config, "structured_compile_openclaw_long_context_tokens", 8000) or 8000)
+    if original_tokens < threshold:
+        try:
+            from .context_compiler.metrics import estimate_payload_tokens
+
+            original_tokens = estimate_payload_tokens(payload)
+        except Exception:
+            original_tokens = int(normalized.get("original_token_estimate") or 0)
+    if original_tokens < threshold:
+        return {}
+    return {
+        "deadline_profile": "openclaw_45s_long_tool_context",
+        "client_deadline_seconds": float(getattr(config, "structured_compile_openclaw_deadline_seconds", 45.0) or 45.0),
+        "compile_budget_ms": int(getattr(config, "structured_compile_openclaw_compile_budget_ms", 2500) or 2500),
+        "max_tool_result_chars": int(getattr(config, "structured_compile_openclaw_max_tool_result_chars", 700) or 700),
+        "protect_latest_tool_result": False,
+    }
 
 
 # ============================================================================

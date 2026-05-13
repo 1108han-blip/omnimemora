@@ -317,3 +317,60 @@ def test_gateway_compile_tool_context_uses_passthrough_when_structured_compile_d
     assert compile_meta["compile_status"] == "compile_skipped"
     assert compile_meta["compile_reason"] == "skip_tool_context_passthrough"
     assert compiled_payload == payload
+
+
+def test_gateway_compile_openclaw_deadline_profile_compresses_latest_long_result():
+    async def _unexpected_fetch_memory_candidates(**kwargs):
+        raise AssertionError("OpenClaw deadline profile should not search product memory")
+
+    async def _unexpected_execute_runtime_compile(**kwargs):
+        raise AssertionError("OpenClaw deadline profile should not run runtime compile")
+
+    old_fetch = runtime_bridge.fetch_memory_candidates
+    old_execute = runtime_bridge.execute_runtime_compile
+    old_enabled = adapter_config.structured_compile_openclaw_deadline_profile_enabled
+    old_threshold = adapter_config.structured_compile_openclaw_long_context_tokens
+    old_max_chars = adapter_config.structured_compile_openclaw_max_tool_result_chars
+    runtime_bridge.fetch_memory_candidates = _unexpected_fetch_memory_candidates
+    runtime_bridge.execute_runtime_compile = _unexpected_execute_runtime_compile
+    adapter_config.structured_compile_openclaw_deadline_profile_enabled = True
+    adapter_config.structured_compile_openclaw_long_context_tokens = 100
+    adapter_config.structured_compile_openclaw_max_tool_result_chars = 500
+    try:
+        long_latest = "\n".join(
+            [f"src/large_{i}.py:{i}: latest OpenClaw result with repeated payload" for i in range(220)]
+        )
+        payload = {
+            "_path": "/llm/v1/messages",
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [{"type": "tool_use", "id": "toolu_latest", "name": "Grep", "input": {}}],
+                },
+                {
+                    "role": "user",
+                    "content": [{"type": "tool_result", "tool_use_id": "toolu_latest", "content": long_latest}],
+                },
+            ],
+            "model": "MiniMax-M2.7",
+            "stream": True,
+        }
+        compiled_payload, compile_meta = asyncio.run(
+            gateway_compile.run_gateway_compile(payload=payload, agent_id="openclaw")
+        )
+    finally:
+        runtime_bridge.fetch_memory_candidates = old_fetch
+        runtime_bridge.execute_runtime_compile = old_execute
+        adapter_config.structured_compile_openclaw_deadline_profile_enabled = old_enabled
+        adapter_config.structured_compile_openclaw_long_context_tokens = old_threshold
+        adapter_config.structured_compile_openclaw_max_tool_result_chars = old_max_chars
+
+    assert compile_meta["compile_status"] == "structured_compile_success"
+    assert compile_meta["deadline_profile"] == "openclaw_45s_long_tool_context"
+    assert compile_meta["deadline_profile_applied"] is True
+    assert compile_meta["protect_latest_tool_result"] is False
+    assert compile_meta["max_tool_result_chars"] == 500
+    assert compile_meta["compiled_token_estimate"] < compile_meta["original_token_estimate"]
+    latest_result = compiled_payload["messages"][1]["content"][0]
+    assert latest_result["tool_use_id"] == "toolu_latest"
+    assert "original_chars=" in latest_result["content"]

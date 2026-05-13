@@ -67,6 +67,35 @@ def test_latest_tool_result_is_protected_even_when_long():
     assert result.payload is payload
 
 
+def test_latest_tool_result_can_compress_when_deadline_profile_allows_it():
+    long_latest = "\n".join([f"latest search result {i} src/file_{i}.py:{i}" for i in range(200)])
+    payload = {
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": "toolu_1", "name": "grep", "input": {}}],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": "toolu_1", "content": long_latest}],
+            },
+        ],
+    }
+
+    result = compiler.compile_anthropic_tool_context(
+        payload,
+        max_tool_result_chars=500,
+        protect_latest_tool_result=False,
+    )
+
+    assert result.status == "structured_compile_success"
+    assert result.changed_blocks == 1
+    assert result.compiled_token_estimate < result.original_token_estimate
+    latest_result = result.payload["messages"][1]["content"][0]
+    assert latest_result["tool_use_id"] == "toolu_1"
+    assert "original_chars=" in latest_result["content"]
+
+
 def test_invalid_graph_falls_back_to_passthrough():
     payload = {
         "messages": [
