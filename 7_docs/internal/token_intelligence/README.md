@@ -25,6 +25,7 @@
 - 2026-05-13: TI-004 repo-only waste detectors added for duplicate context, long tool results, and tool-result-heavy context. Receipts and summaries expose compact optimization opportunities with reason codes and potential saving estimates; no automatic optimization is performed.
 - 2026-05-13: TI-005 repo-only data controls added. The candidate audit store supports single-event delete, bounded retention purge, metadata-only receipt export/read, and audit-disabled forwarding; user-pattern records remain unopened until a separate approval-gated design exists.
 - 2026-05-13: TI-006 repo-only potential savings report added. The candidate proxy exposes `/audit/reports/potential-savings`, derived from bounded summary data, to show estimated savings opportunities without enabling automatic optimization.
+- 2026-05-13: TI-007 repo-only actual savings proof calculator added. The candidate proxy exposes a stateless `/audit/reports/actual-savings/proof` endpoint that compares recommended, baseline, and actual tokens without modifying structured compile or storing proof rows.
 
 ## Product Target
 
@@ -305,12 +306,21 @@ Current behavior:
 
 ### TI-007 - Actual Savings Proof
 
+Status: repo implementation completed on 2026-05-13 as a stateless proof calculator; structured compile integration is not started.
+
 Connect recommendations to structured compile and prove realized savings.
 
 Exit:
 
 - before/after records show recommended saving vs actual saving;
 - failed or negative-saving optimizations are visible.
+
+Current behavior:
+
+- `/audit/reports/actual-savings/proof` accepts `recommended_saving_tokens`, `baseline_tokens`, and `actual_tokens`;
+- output classifies `realized`, `partial`, `no_saving`, `negative_saving`, or `no_recommendation`;
+- proof output includes realized saving, negative saving, realization ratio, source, and confidence;
+- the endpoint is stateless and does not alter compile behavior or write audit rows.
 
 ### TI-008 - Local MCP Companion
 

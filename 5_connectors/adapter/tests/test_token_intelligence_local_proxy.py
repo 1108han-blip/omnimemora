@@ -334,6 +334,33 @@ def test_retention_purge_endpoint_removes_old_rows(tmp_path):
     assert summary["event_count"] == 0
 
 
+def test_actual_savings_proof_endpoint_is_stateless(tmp_path):
+    proxy = _start_proxy(
+        "https://example.invalid/v1",
+        audit_db_path=str(tmp_path / "audit.sqlite3"),
+        audit_enabled=False,
+    )
+    try:
+        status, body, _headers = _post_json_with_headers(
+            f"{_base_url(proxy)}/audit/reports/actual-savings/proof",
+            {
+                "recommendation_id": "rec-proxy",
+                "category": "duplicate_context",
+                "recommended_saving_tokens": 20,
+                "baseline_tokens": 100,
+                "actual_tokens": 90,
+            },
+        )
+    finally:
+        _stop_server(proxy)
+
+    payload = json.loads(body)
+    assert status == 200
+    assert payload["status"] == "partial"
+    assert payload["realized_saving_tokens"] == 10
+    assert payload["source"] == "local_estimated"
+
+
 def test_update_check_reads_release_metadata_without_download(tmp_path):
     metadata_path = tmp_path / "latest.json"
     metadata_path.write_text(

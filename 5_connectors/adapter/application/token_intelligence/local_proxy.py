@@ -22,6 +22,7 @@ from .ledger import (
 )
 from .reports import build_potential_savings_report
 from .receipts import build_receipt
+from .savings_proof import build_actual_savings_proof
 from .usage_normalizer import (
     estimate_openai_compatible_input_tokens,
     estimate_openai_compatible_output_tokens,
@@ -109,6 +110,9 @@ def _make_handler(config: LocalProxyConfig) -> type[BaseHTTPRequestHandler]:
         def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
             if self.path == "/audit/retention/purge":
                 _handle_retention_purge(self, config)
+                return
+            if self.path == "/audit/reports/actual-savings/proof":
+                _handle_actual_savings_proof(self)
                 return
             if self.path != "/v1/chat/completions":
                 _send_json(self, 404, {"error": "not_found", "path": self.path})
@@ -282,6 +286,16 @@ def _handle_retention_purge(handler: BaseHTTPRequestHandler, config: LocalProxyC
             "deleted_count": deleted_count,
         },
     )
+
+
+def _handle_actual_savings_proof(handler: BaseHTTPRequestHandler) -> None:
+    content_length = int(handler.headers.get("content-length") or "0")
+    body = handler.rfile.read(content_length)
+    payload = _json_payload(body)
+    if not isinstance(payload, dict):
+        _send_json(handler, 400, {"error": "invalid_payload"})
+        return
+    _send_json(handler, 200, build_actual_savings_proof(payload))
 
 
 def _summary_limit(raw_path: str) -> int:

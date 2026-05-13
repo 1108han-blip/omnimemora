@@ -27,6 +27,7 @@ from .ledger import (
 from .models import AuditEvent, NormalizedCost, NormalizedUsage
 from .receipts import build_receipt
 from .reports import build_potential_savings_report
+from .savings_proof import build_actual_savings_proof
 from .local_proxy import LocalProxyConfig, check_update_metadata, create_server, serve_forever
 from .usage_normalizer import (
     estimate_openai_compatible_input_tokens,
@@ -47,6 +48,7 @@ __all__ = [
     "UpdatesConfig",
     "UpstreamConfig",
     "build_audit_event",
+    "build_actual_savings_proof",
     "build_potential_savings_report",
     "build_receipt",
     "check_update_metadata",

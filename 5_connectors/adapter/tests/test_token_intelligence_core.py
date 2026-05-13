@@ -163,6 +163,33 @@ def test_potential_savings_report_summarizes_opportunities():
     assert {item["category"] for item in report["advice"]} == {"duplicate_context", "tool_results"}
 
 
+def test_actual_savings_proof_classifies_realized_and_negative_savings():
+    realized = token_intelligence.build_actual_savings_proof(
+        {
+            "recommendation_id": "rec-1",
+            "category": "duplicate_context",
+            "recommended_saving_tokens": 40,
+            "baseline_tokens": 100,
+            "actual_tokens": 55,
+        }
+    )
+    negative = token_intelligence.build_actual_savings_proof(
+        {
+            "recommendation_id": "rec-2",
+            "category": "tool_results",
+            "recommended_saving_tokens": 40,
+            "baseline_tokens": 100,
+            "actual_tokens": 120,
+        }
+    )
+
+    assert realized["status"] == "realized"
+    assert realized["realized_saving_tokens"] == 45
+    assert realized["realization_ratio"] == 1.125
+    assert negative["status"] == "negative_saving"
+    assert negative["negative_saving_tokens"] == 20
+
+
 def test_audit_ledger_roundtrip_and_receipt_are_metadata_only(tmp_path, monkeypatch):
     sqlite_path = tmp_path / "token_intelligence.sqlite3"
     monkeypatch.setenv("OMNIMEMORA_TOKEN_INTELLIGENCE_DB", str(sqlite_path))
