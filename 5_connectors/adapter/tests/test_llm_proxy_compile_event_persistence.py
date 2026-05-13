@@ -74,3 +74,38 @@ def test_record_compile_event_persists_task_type_and_skill_policy_defaults():
     assert row["deadline_budget_exceeded"] is False
     assert row["protect_latest_tool_result"] is False
     assert row["max_tool_result_chars"] == 700
+
+
+def test_streaming_usage_sample_records_metadata_only_placeholder():
+    captured = {}
+
+    def _fake_schedule(**kwargs):
+        captured.update(kwargs)
+
+    with mock.patch.object(llm_proxy, "_schedule_product_usage_sample_fail_open", side_effect=_fake_schedule):
+        llm_proxy._schedule_streaming_product_usage_sample_fail_open(
+            protocol="anthropic_messages",
+            request_id="req-stream-claude",
+            route_label="/llm/v1/messages",
+            request_payload={
+                "model": "MiniMax-M2.7",
+                "messages": [{"role": "user", "content": "hello"}],
+                "stream": True,
+            },
+            upstream_base_url="https://api.minimaxi.com/anthropic",
+            provider="minimax_anthropic_compatible",
+            model_requested="MiniMax-M2.7",
+            latency_ms=123,
+            status_code=200,
+            agent_id="claude_code",
+        )
+
+    assert captured["protocol"] == "anthropic_messages"
+    assert captured["request_id"] == "req-stream-claude"
+    assert captured["agent_id"] == "claude_code"
+    assert captured["response_payload"] == {
+        "id": "req-stream-claude",
+        "model": "MiniMax-M2.7",
+        "content": [],
+        "stop_reason": "stream_complete",
+    }

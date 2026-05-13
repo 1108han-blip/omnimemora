@@ -3108,6 +3108,48 @@ def _schedule_product_usage_sample_fail_open(**kwargs) -> None:
         _record_product_usage_sample_fail_open(**kwargs)
 
 
+def _schedule_streaming_product_usage_sample_fail_open(
+    *,
+    protocol: str,
+    request_id: str,
+    route_label: str,
+    request_payload: dict,
+    upstream_base_url: str,
+    provider: str,
+    model_requested: str,
+    latency_ms: Optional[int],
+    status_code: Optional[int],
+    agent_id: str,
+) -> None:
+    """Record a metadata-only streaming sample without buffering stream content."""
+    if protocol == "anthropic_messages":
+        response_payload = {
+            "id": request_id,
+            "model": model_requested,
+            "content": [],
+            "stop_reason": "stream_complete",
+        }
+    else:
+        response_payload = {
+            "id": request_id,
+            "model": model_requested,
+            "choices": [],
+        }
+    _schedule_product_usage_sample_fail_open(
+        protocol=protocol,
+        request_id=request_id,
+        route_label=route_label,
+        request_payload=request_payload,
+        response_payload=response_payload,
+        upstream_base_url=upstream_base_url,
+        provider=provider,
+        model_requested=model_requested,
+        latency_ms=latency_ms,
+        status_code=status_code,
+        agent_id=agent_id,
+    )
+
+
 def _safe_metadata_tag(value) -> Optional[str]:
     if not isinstance(value, str):
         return None
@@ -3246,6 +3288,7 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
                 timeout=httpx.Timeout(upstream["timeout_seconds"], connect=15.0)
             )
             try:
+                upstream_start = _time.perf_counter()
                 upstream_resp = await client.send(
                     client.build_request(
                         "POST",
@@ -3347,6 +3390,21 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
                         body=body,
                         original_payload=body,
                         forwarded_payload=forwarded_payload,
+                    )
+                    _schedule_streaming_product_usage_sample_fail_open(
+                        protocol="anthropic_messages",
+                        request_id=request_id,
+                        route_label=route_label,
+                        request_payload=forwarded_payload,
+                        upstream_base_url=upstream_base,
+                        provider=infer_provider_name(
+                            upstream_base,
+                            upstream.get("provider", "anthropic"),
+                        ),
+                        model_requested=str(model or ""),
+                        latency_ms=int((_time.perf_counter() - upstream_start) * 1000),
+                        status_code=upstream_resp.status_code,
+                        agent_id=agent_id,
                     )
 
                 content_type = upstream_resp.headers.get("content-type") or "text/event-stream"
@@ -3462,6 +3520,21 @@ async def _proxy_anthropic_messages(request: Request, route_label: str):
                     body=body,
                     original_payload=body,
                     forwarded_payload=forwarded_payload,
+                )
+                _schedule_streaming_product_usage_sample_fail_open(
+                    protocol="anthropic_messages",
+                    request_id=request_id,
+                    route_label=route_label,
+                    request_payload=forwarded_payload,
+                    upstream_base_url=upstream_base,
+                    provider=infer_provider_name(
+                        upstream_base,
+                        upstream.get("provider", "anthropic"),
+                    ),
+                    model_requested=str(model or ""),
+                    latency_ms=latency_ms,
+                    status_code=upstream_resp.status_code,
+                    agent_id=agent_id,
                 )
                 response = StreamingResponse(
                     _stream_response(upstream_resp),
