@@ -308,6 +308,8 @@ Exit:
 
 ### TI-001A - Local Proxy Skeleton
 
+Status: repo implementation completed on 2026-05-13; running promotion not started.
+
 Scope:
 
 - create the smallest local HTTP proxy surface;
