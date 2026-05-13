@@ -12,6 +12,7 @@ from typing import Optional
 
 from .agent_attach import attach_profile, build_doctor_report, detach_profile
 from .config import default_config_path, load_config, write_default_config
+from .harness_snippets import build_harness_snippet, supported_snippets
 from .ledger import get_audit_event, list_top_requests, summarize_recent_events
 from .local_proxy import VERSION, check_update_metadata, serve_forever
 from .receipts import build_receipt
@@ -55,6 +56,12 @@ def _build_parser() -> argparse.ArgumentParser:
     detach_parser = subparsers.add_parser("detach", help="remove a local agent connection profile")
     detach_parser.add_argument("target", help="agent target")
     detach_parser.set_defaults(func=_cmd_detach)
+
+    snippets_parser = subparsers.add_parser("snippets", help="print copy-paste harness snippets")
+    snippets_parser.add_argument("kind", nargs="?", default="", help="snippet kind")
+    snippets_parser.add_argument("--config", default="", help="config path")
+    snippets_parser.add_argument("--list", action="store_true", help="list supported snippet kinds")
+    snippets_parser.set_defaults(func=_cmd_snippets)
 
     proxy_parser = subparsers.add_parser("proxy", help="manage the local proxy")
     proxy_subparsers = proxy_parser.add_subparsers(dest="proxy_command")
@@ -148,6 +155,17 @@ def _cmd_attach(args: argparse.Namespace) -> int:
 
 def _cmd_detach(args: argparse.Namespace) -> int:
     print(json.dumps(detach_profile(args.target), ensure_ascii=False, sort_keys=True))
+    return 0
+
+
+def _cmd_snippets(args: argparse.Namespace) -> int:
+    if bool(args.list):
+        print(json.dumps({"supported_snippets": supported_snippets()}, ensure_ascii=False, sort_keys=True))
+        return 0
+    if not args.kind:
+        raise ValueError("snippet kind is required unless --list is used")
+    config = load_config(_path_arg(args.config))
+    print(json.dumps(build_harness_snippet(args.kind, config), ensure_ascii=False, sort_keys=True))
     return 0
 
 

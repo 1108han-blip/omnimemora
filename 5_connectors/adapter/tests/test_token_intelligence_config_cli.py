@@ -176,6 +176,49 @@ def test_cli_doctor_attach_and_detach_are_profile_only(tmp_path, monkeypatch, ca
     assert not launcher_path.exists()
 
 
+def test_cli_snippets_are_copy_paste_only_and_do_not_store_secret(tmp_path, monkeypatch, capsys):
+    config_path = tmp_path / "config.json"
+    monkeypatch.setenv("OMNI_AUDIT_UPSTREAM_API_KEY", "secret-value-not-written")
+    config_path.write_text(
+        json.dumps(
+            {
+                "server": {"host": "127.0.0.1", "port": 18081},
+                "upstream": {
+                    "base_url": "https://relay.example/v1",
+                    "api_key_env": "OMNI_AUDIT_UPSTREAM_API_KEY",
+                    "timeout_seconds": 120,
+                },
+                "privacy": {"content_mode": "metadata_only"},
+                "audit": {"enabled": True, "fail_open": True},
+                "updates": {
+                    "enabled": True,
+                    "metadata_url": "https://doloclaw.com/releases/token-intelligence/latest.json",
+                    "channel": "beta",
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert cli.main(["snippets", "--list"]) == 0
+    supported = json.loads(capsys.readouterr().out)
+    assert "openai-sdk-python" in supported["supported_snippets"]
+    assert "openclaw" in supported["supported_snippets"]
+
+    assert cli.main(["snippets", "openai-sdk-python", "--config", str(config_path)]) == 0
+    python_snippet = json.loads(capsys.readouterr().out)
+    assert python_snippet["mutates_files"] is False
+    assert python_snippet["stores_api_key_value"] is False
+    assert "http://127.0.0.1:18081/v1" in python_snippet["content"]
+    assert "OMNI_AUDIT_UPSTREAM_API_KEY" in python_snippet["content"]
+    assert "secret-value-not-written" not in json.dumps(python_snippet, sort_keys=True)
+
+    assert cli.main(["snippets", "openclaw", "--config", str(config_path)]) == 0
+    openclaw_snippet = json.loads(capsys.readouterr().out)
+    assert "attach openclaw --with-launcher" in openclaw_snippet["content"]
+    assert openclaw_snippet["mutates_files"] is False
+
+
 def test_cli_receipt_get_reads_metadata_only_receipt(tmp_path, monkeypatch, capsys):
     sqlite_path = tmp_path / "audit.sqlite3"
     monkeypatch.setenv("OMNIMEMORA_TOKEN_INTELLIGENCE_DB", str(sqlite_path))

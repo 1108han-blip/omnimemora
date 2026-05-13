@@ -36,6 +36,7 @@
 - 2026-05-13: TI-015 repo-only beta version alignment completed. CLI, local proxy, MCP server info, and local package builder now report `0.1.0-beta.1` consistently.
 - 2026-05-13: TI-016 repo-only skill-like attach profile added. `doctor`, `attach`, and `detach` now create reversible local connection profiles for agents without mutating official agent configs.
 - 2026-05-13: TI-017 repo-only managed launcher added. `attach --with-launcher` writes a reversible env file and launch wrapper so users can run compatible agents through Token Audit without editing agent configs.
+- 2026-05-13: TI-018 repo-only harness snippet generator added. `snippets` prints copy-paste integration examples for common harnesses without editing files or storing API key values.
 
 ## Product Target
 
@@ -534,6 +535,29 @@ Current behavior:
 - API key values are not written;
 - no official OpenClaw, Claude Code, Codex, or provider config file is modified;
 - this is not yet a protocol-specific Claude Code/Anthropic attach path.
+
+### TI-018 - Harness Snippet Generator
+
+Status: repo implementation completed on 2026-05-13 for copy-paste snippets only.
+
+Support heterogeneous user harnesses without maintaining brittle auto-config writers.
+
+Exit:
+
+- users can request a copy-paste snippet for common integration styles;
+- snippet output is generated from the local config;
+- no harness config file is modified.
+
+Current behavior:
+
+- `omni-token-audit snippets --list` shows supported snippets;
+- `omni-token-audit snippets generic-env` prints env exports for OpenAI-compatible harnesses;
+- `omni-token-audit snippets openai-sdk-js` and `openai-sdk-python` print SDK examples;
+- `omni-token-audit snippets litellm` prints LiteLLM-compatible env setup;
+- `omni-token-audit snippets openclaw` recommends the managed launcher and provides manual env equivalents;
+- snippets include the API key environment variable name, not the API key value;
+- output is marked `mutates_files=false` and `stores_api_key_value=false`;
+- no official harness config, `18011`, desktop GUI, or cloud setting is changed.
 
 ## Validation Requirements
 
