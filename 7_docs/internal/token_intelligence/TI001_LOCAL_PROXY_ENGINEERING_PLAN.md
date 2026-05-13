@@ -330,6 +330,8 @@ Exit:
 
 ### TI-001B - Config And Secret Reference
 
+Status: repo implementation completed on 2026-05-13; CLI packaging and running promotion not started.
+
 Scope:
 
 - config file load;

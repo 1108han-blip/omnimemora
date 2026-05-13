@@ -1,5 +1,18 @@
 """Token Intelligence Lite core modules."""
 
+from .config import (
+    AuditConfig,
+    PrivacyConfig,
+    ServerConfig,
+    TokenIntelligenceConfig,
+    UpdatesConfig,
+    UpstreamConfig,
+    default_config,
+    default_config_path,
+    load_config,
+    validate_config,
+    write_default_config,
+)
 from .ledger import (
     build_audit_event,
     count_events,
@@ -14,16 +27,27 @@ from .usage_normalizer import normalize_openai_compatible_usage
 
 __all__ = [
     "AuditEvent",
+    "AuditConfig",
     "LocalProxyConfig",
     "NormalizedCost",
     "NormalizedUsage",
+    "PrivacyConfig",
+    "ServerConfig",
+    "TokenIntelligenceConfig",
+    "UpdatesConfig",
+    "UpstreamConfig",
     "build_audit_event",
     "build_receipt",
     "count_events",
     "create_server",
+    "default_config",
+    "default_config_path",
     "get_audit_event",
     "init_schema",
+    "load_config",
     "normalize_openai_compatible_usage",
     "record_audit_event",
     "serve_forever",
+    "validate_config",
+    "write_default_config",
 ]
