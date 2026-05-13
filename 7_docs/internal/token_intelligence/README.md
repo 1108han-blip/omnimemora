@@ -1,0 +1,244 @@
+# Token Intelligence Lite Mainline
+
+## Status
+
+- Created: 2026-05-13
+- Product line: OmniMemora Token Intelligence Lite
+- Roadmap phase: Phase 8, next formal stage after Structured Compile MVP
+- Current status: direction fixed in product constitution and roadmap; no product behavior, schema, GUI, or running configuration change yet.
+
+## Product Target
+
+Token Intelligence is not simple usage accounting.
+
+It must explain:
+
+- where tokens were spent,
+- why they were spent,
+- which parts were waste,
+- how to optimize,
+- which agents are most expensive,
+- which prompts are least efficient,
+- which contexts are repeated,
+- which memory signals failed,
+- which models have weak cost/performance,
+- which workflows have the best or worst ROI.
+
+## Product Shape
+
+Phase 8 should start as a lightweight local module and entrypoint:
+
+```text
+client / middleman request
+        ↓
+Omni Token Intelligence Lite local proxy
+        ↓
+original upstream or middleman API
+```
+
+The first product surface should not require:
+
+- a paid cloud server,
+- a heavy desktop-only installation path,
+- a browser extension as the primary capture mechanism,
+- a SaaS observability backend.
+
+Recommended packaging:
+
+- shared core module inside OmniMemora,
+- lightweight local proxy / CLI package for first adoption,
+- optional local report page,
+- optional local MCP companion for agent queries.
+
+## Relationship To Phase 7
+
+Phase 7 answers: can OmniMemora safely reduce tokens?
+
+Phase 8 answers: why should the user enable optimization, where will it help, and did it actually save money?
+
+Token Intelligence must connect back to concrete optimization paths:
+
+- structured compile,
+- prompt reduction,
+- tool-result/log compression,
+- duplicate-context removal,
+- memory miss repair,
+- model/workflow selection,
+- User Pattern Lite.
+
+If an insight cannot lead to token/cost saving or a clear user decision, it is not Phase 8 product value.
+
+## Non-Goals
+
+Token Intelligence Lite must not become:
+
+- a generic usage dashboard,
+- a cloud-first observability SaaS,
+- a user profiling product,
+- hidden behavior tracking,
+- a large raw log warehouse,
+- a replacement for provider billing truth,
+- a broad agent orchestration layer.
+
+## User Data Boundary
+
+User Pattern Lite is allowed only as a token-saving support layer.
+
+Allowed:
+
+- explicit stable preferences,
+- project boundaries,
+- repeated workflow constraints,
+- repeated corrections,
+- compact facts that reduce repeated prompts.
+
+Forbidden:
+
+- sensitive personal profiling,
+- psychological, health, finance, relationship, location, or consumption inference,
+- hidden inference from meter/proxy/trace/compile logs,
+- automatic injection of low-confidence habits.
+
+All user-facing pattern data must be visible, deletable, disableable, and bounded.
+
+## Storage Boundary
+
+A small SQLite user/audit database is allowed.
+
+Rules:
+
+- no raw prompt by default,
+- no full tool output by default,
+- no full provider response body by default,
+- store hashes, counts, block classes, confidence labels, compact metadata, and optimization opportunities,
+- provide retention, delete, export, and disable paths before normal release,
+- keep request forwarding independent from noncritical persistence.
+
+Large files are not allowed as a product strategy. If a file grows, split it into focused modules or hard-cap retention.
+
+## First Capability Batches
+
+### TI-001 - Local Proxy Audit Entry
+
+Create the lightest local entrypoint for OpenAI-compatible and Anthropic-compatible requests.
+
+Exit:
+
+- user can point a client or middleman base URL at Omni Token Intelligence Lite;
+- requests pass through without semantic rewrite;
+- audit records are created without raw prompt storage by default.
+
+### TI-002 - Provider-Aligned Counting
+
+Add confidence-labeled token counts.
+
+Confidence classes:
+
+- `official_usage`
+- `official_count_api`
+- `provider_tokenizer`
+- `compatible_estimate`
+- `rough_estimate`
+
+Exit:
+
+- every displayed count carries a confidence class;
+- rough estimates cannot be presented as billing truth.
+
+### TI-003 - Block-Level Spend Breakdown
+
+Classify token spend by block.
+
+Minimum block classes:
+
+- system/developer instructions,
+- current user intent,
+- conversation history,
+- tool schemas,
+- tool calls,
+- tool results,
+- memory/context injection,
+- provider output.
+
+Exit:
+
+- users can see what part of the request consumed tokens.
+
+### TI-004 - Waste Detectors
+
+Detect high-value waste categories:
+
+- duplicate context,
+- long tool/log/diff/test output,
+- retry waste,
+- weak prompt ROI,
+- failed or irrelevant memory injection,
+- model/workflow mismatch.
+
+Exit:
+
+- every detector emits a compact reason and potential saving estimate.
+
+### TI-005 - User Data Plane
+
+Implement a small, bounded audit/user-pattern store only after schema and retention tests exist.
+
+Exit:
+
+- retention, delete, export, and disable controls are tested;
+- user-pattern records are compact and approval-gated;
+- audit records avoid raw payload storage by default.
+
+### TI-006 - Potential Savings Report
+
+Show what could be saved before enabling optimization.
+
+Exit:
+
+- report identifies the top saving opportunities by agent, model, prompt, workflow, and block type.
+
+### TI-007 - Actual Savings Proof
+
+Connect recommendations to structured compile and prove realized savings.
+
+Exit:
+
+- before/after records show recommended saving vs actual saving;
+- failed or negative-saving optimizations are visible.
+
+### TI-008 - Local MCP Companion
+
+Expose local audit summaries to opted-in agents.
+
+Exit:
+
+- agents can query recent audit summaries and optimization recommendations;
+- MCP is not the primary capture path and does not replace local proxy capture.
+
+## Validation Requirements
+
+Repo reality:
+
+- schema tests for no raw payload by default;
+- retention/delete/export tests;
+- confidence-label tests;
+- block-classification tests;
+- detector tests with small fixtures;
+- no large fixture files.
+
+Running reality:
+
+- local proxy pass-through succeeds;
+- `/health`, `/metrics/core_capabilities`, `/metrics/summary`, and `/compile/status` remain responsive when applicable;
+- audit persistence failure does not block upstream request forwarding;
+- user can disable audit/pattern features.
+
+## Success Criteria
+
+Phase 8 succeeds when a user can answer:
+
+- what spent my tokens,
+- why was it expensive,
+- what can I do to reduce it,
+- what Omni optimization can safely execute,
+- how much did it actually save.

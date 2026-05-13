@@ -53,6 +53,7 @@ OmniMemora MVP exists only to prove:
 
 - real user requests save tokens.
 - real user requests save cost.
+- real user requests can explain where tokens were spent, why they were spent, and which optimization would reduce waste.
 - the product stays stable, ultra-low-latency, and does not slow the user down.
 
 Non-MVP expansion is forbidden by default:
@@ -62,6 +63,7 @@ Non-MVP expansion is forbidden by default:
 - do not preserve long-term evidence for its own sake.
 - do not build automatic cleanup chains when a simple retention limit, truncation, deletion, or split is enough.
 - do not add UI, reports, dashboards, or diagnostics that cannot prove token-saving value.
+- do not build broad user profiling or hidden behavior tracking; only bounded User Pattern Lite records are allowed when they directly reduce repeated prompt tokens and remain user-visible, deletable, and optional.
 
 Internal data rules:
 
@@ -74,6 +76,7 @@ Internal data rules:
 Engineering admission rules:
 
 - new engineering must directly make the product save more tokens, save more cost, run faster, or get smaller.
+- Token Intelligence work is admissible only when it diagnoses token waste, ranks cost drivers, or connects to a concrete optimization path such as structured compile, prompt reduction, memory repair, or User Pattern Lite.
 - new code must replace old code, not stack complexity on top of it.
 - default internal interface targets are p50 <10ms, p95 <30ms, max <100ms.
 - default read paths must not scan historical files or read frozen governance artifacts.
@@ -102,6 +105,7 @@ Fixed target:
 - Product value is judged only by:
   - real token saving.
   - real cost saving.
+  - explainable token intelligence that identifies spend, waste, and optimization opportunity.
   - stable operation without slowing the product.
   - if these cannot be shown, the work should stop.
 - Every change must report:

@@ -15,6 +15,7 @@
     phase3/
     phase6/          # historical governance and promotion workstream
     structured_compile/  # current Phase 7 compile capability mainline
+    token_intelligence/  # next Phase 8 token intelligence value mainline
 ```
 
 # 7_docs/ - 文档层

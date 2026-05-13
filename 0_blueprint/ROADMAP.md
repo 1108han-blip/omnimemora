@@ -186,6 +186,57 @@ Roadmap 愿景一致性锚点：
 
 ---
 
+## Phase 8（下一正式阶段）：Token Intelligence Lite
+
+**目标**：把 OmniMemora 从“能节省 token 的编译层”推进到“能解释 token 花费、定位浪费、推荐优化并证明实际节省的本地智能分析层”。
+
+Phase 8 不是普通 token 统计。它必须回答：
+
+- Token 花在哪；
+- 为什么花；
+- 哪些浪费；
+- 如何优化；
+- 哪些 Agent 最烧钱；
+- 哪些 Prompt 最低效；
+- 哪些上下文重复；
+- 哪些 Memory 命中失败；
+- 哪些模型性价比最低；
+- 哪些工作流 ROI 最高。
+
+**核心验证**：
+
+- 本地轻量入口可审计真实 OpenAI/Anthropic-compatible 请求，不要求先安装完整桌面包或付费云服务器。
+- 记录 provider/model/request/block-level token breakdown，并标注 confidence class。
+- 默认不存 raw prompt、完整 tool output 或完整 provider response。
+- 小型用户数据库只保存 compact audit/user-pattern metadata，并提供查看、删除、过期、导出路径。
+- Potential Savings 可从真实请求中计算，Actual Savings 可与 structured compile 的真实节省闭环。
+- User Pattern Lite 只记录可减少重复提示的轻量用户习惯，不做用户画像。
+- Token Intelligence recommendation 必须连接到 concrete optimization path：structured compile、prompt reduction、memory repair、model/workflow selection 或 User Pattern Lite。
+
+**第一批能力**：
+
+- TI-001：local proxy / CLI audit-only 轻量入口。
+- TI-002：provider-aligned token counters and confidence labels。
+- TI-003：block-level token spend breakdown。
+- TI-004：waste detectors for duplicate context, tool-result/log inflation, retry waste, weak prompt ROI, and memory miss signals。
+- TI-005：small SQLite audit/user data plane with retention/delete/export controls。
+- TI-006：Potential Savings report。
+- TI-007：Actual Savings proof by connecting recommendations to Phase 7 structured compile.
+- TI-008：optional local MCP companion for agents to query audit and optimization summaries.
+
+**对应宪法**：
+
+- Token Savings 是核心产品能力
+- Token Intelligence 是 Token Savings 的解释层和商业价值面
+- Minimal Exposure to LLM
+- Local First
+- User Pattern Lite Boundary
+- MVP first; token saving first; no complexity expansion
+
+**计划入口**：`7_docs/internal/token_intelligence/README.md`
+
+---
+
 # 三、禁止偏移
 
 Roadmap 不允许：
@@ -194,6 +245,8 @@ Roadmap 不允许：
 - ❌ 绕过 control plane
 - ❌ 强制云端为默认路径
 - ❌ 削弱 Token Savings UI
+- ❌ 把 Token Intelligence 降级为普通 usage dashboard
+- ❌ 把 User Pattern Lite 扩张为用户画像或隐藏行为监控
 - ❌ 跳过 Scope 治理落地
 
 ---

@@ -123,6 +123,14 @@ Context 是结果，不是决策过程。
 
 OmniMemora 必须在 UI / Console 中展示 token savings（节省 token）。
 
+Token savings 不只意味着统计“用了多少 token”。产品必须逐步回答：
+
+- token 花在哪；
+- 为什么花；
+- 哪些部分浪费；
+- 如何优化；
+- 开启 OmniMemora 优化后实际节省了多少。
+
 ## 三层职责
 
 ### Runtime 层（必须产生 metering events）
@@ -155,6 +163,39 @@ OmniMemora 必须在 UI / Console 中展示 token savings（节省 token）。
 - 按 agent breakdown
 - 趋势图
 
+## Token Intelligence（下一阶段核心价值面）
+
+Token Intelligence 是 Token Savings 的解释层和增值层。
+
+它必须服务于：
+
+- 诊断 token spending；
+- 识别浪费来源；
+- 推荐优化动作；
+- 证明优化前后的实际节省；
+- 帮助用户判断 agent、prompt、memory、model、workflow 的 token/cost ROI。
+
+允许回答的问题：
+
+- Token 花在哪；
+- 为什么花；
+- 哪些 Agent 最烧钱；
+- 哪些 Prompt 最低效；
+- 哪些上下文重复；
+- 哪些 Memory 命中失败；
+- 哪些模型性价比最低；
+- 哪些工作流 ROI 最高；
+- 哪些优化可以由 OmniMemora structured compile 或 User Pattern Lite 执行。
+
+硬约束：
+
+- Token Intelligence 不得退化为普通 usage dashboard。
+- Token Intelligence 不得变成用户画像、行为监控或隐藏 telemetry 产品。
+- 默认不得存储 raw prompt、完整 tool output 或完整 provider response。
+- 用户数据必须可查看、可删除、可过期、可导出。
+- 计量结果必须标注置信度，例如 official usage、official count API、provider tokenizer、compatible estimate、rough estimate。
+- 任何 recommendation 都必须连接到具体 token/cost saving 路径，否则不得作为核心产品能力推进。
+
 ---
 
 # 六、商业能力
@@ -169,6 +210,13 @@ OmniMemora 必须在 UI / Console 中展示 token savings（节省 token）。
 收费基于：
 
 > token savings + usage + governance
+
+Token Intelligence 可作为商业能力，但收费理由必须来自：
+
+- 可信 token/cost 审计；
+- token 浪费诊断；
+- optimization opportunity；
+- actual savings proof。
 
 ---
 
@@ -268,10 +316,12 @@ OmniMemora 只解决一个核心问题：
 
 → 提升 context 质量
 → 降低 token 使用
+→ 解释 token 花费并推动实际优化
 
 所有功能必须直接服务于：
 
 - token savings 或 context optimization
+- token intelligence that leads to measurable token/cost saving
 
 否则不进入产品范围。
 
@@ -281,6 +331,7 @@ OmniMemora 只通过标准接口提供能力：
 
 - `/memory/search`
 - `/memory/write`
+- product ingress and audit interfaces required for token intelligence, such as local proxy/audit APIs, when explicitly user-enabled
 
 不扩展为 orchestration / agent runtime / tool system。
 
@@ -312,3 +363,26 @@ LLM 输入必须满足最小暴露：
 - 不暴露候选集与淘汰过程
 - 不暴露评分细节与策略参数
 - 不暴露 control plane 内部元信息
+
+## 🔴 补充条款7：User Pattern Lite Boundary
+
+OmniMemora 不做用户画像。
+
+允许做 User Pattern Lite，但它只能用于减少重复 prompt 和提升 token saving。
+
+允许记录：
+
+- 用户显式表达的稳定偏好；
+- 项目边界；
+- 重复工作流程约束；
+- 反复纠正过的错误方向；
+- 能减少重复解释的短事实。
+
+禁止记录：
+
+- 敏感个人画像；
+- 心理、健康、财务、关系、位置、消费倾向推断；
+- 从 meter/proxy/trace/compile logs 静默推断出的习惯；
+- 低置信度且自动注入上游的 habit 记录。
+
+User Pattern Lite 必须用户可见、可删、可关，并且只在与当前请求相关且能减少 token 时进入 compile。

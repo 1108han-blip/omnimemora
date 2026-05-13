@@ -49,11 +49,13 @@ Agent -> Gateway (:18011) -> compile/recall/inject -> Upstream LLM
 正式 roadmap phase：**Phase 7（当前主线：Structured Compile MVP）**（见 `0_blueprint/ROADMAP.md`）
 
 > **Phase 标签说明**：`7_docs/internal/phase6/` 为 **internal historical workstream**，已收口并保留为治理/发布历史索引。当前产品能力工程入口是 `7_docs/internal/structured_compile/README.md`。
+> **下一正式阶段**：Phase 8（Token Intelligence Lite）已作为下一阶段固定在 roadmap，用于解释 token 花费、诊断浪费、推荐优化并证明实际节省。Phase 8 不得退化为普通 usage dashboard，也不得扩张为用户画像。
 
 Start here:
 
 - [0_blueprint/ROADMAP.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/ROADMAP.md) — 正式 roadmap SSOT
 - [7_docs/internal/structured_compile/README.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/structured_compile/README.md) — 当前结构化编译主线
+- [7_docs/internal/token_intelligence/README.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/7_docs/internal/token_intelligence/README.md) — 下一阶段 Token Intelligence Lite 主线
 - [0_blueprint/PRODUCT_DEFINITION.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/PRODUCT_DEFINITION.md)
 - [0_blueprint/PRODUCT_CONFIGURATION_AND_BOUNDARY_BASELINE.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/0_blueprint/PRODUCT_CONFIGURATION_AND_BOUNDARY_BASELINE.md)
 - [9_adr/ADR-0003-interface-access-paths.md](/Users/sc/Documents/AI2/Vault/13_OmniMemora/OmniMemora/9_adr/ADR-0003-interface-access-paths.md)
@@ -93,6 +95,7 @@ If current MVP savings UI and historical summary disagree, trust `/metrics/core_
 | `4_core/local-runtime/` | Internal memory plane |
 | `6_console/demo-dashboard/` | Dashboard |
 | `7_docs/internal/structured_compile/` | Current structured compile mainline |
+| `7_docs/internal/token_intelligence/` | Next Token Intelligence Lite mainline |
 | `7_docs/internal/phase6/plan/` | Closed phase6 workstream and post-close governance records |
 | `5_connectors/archive/` | Archived connector/plugin experiments |
 
