@@ -8,9 +8,9 @@ This guide converts the external GPT draft into a usable Phase 8 execution guide
 
 Target:
 
-> AI request receipts plus token/cost intelligence for local-first LLM users.
+> AI request receipts plus token-flow intelligence for local-first LLM users.
 
-The product must explain where tokens were spent, why they were spent, what was waste, and which Omni optimization can reduce future cost.
+The product must explain where tokens were spent, why they were spent, what was waste, and which Omni optimization can reduce future token use. Cost and money views are optional interpretation layers on top of token-flow truth.
 
 ## Product Position
 
@@ -87,7 +87,7 @@ Included:
 - Configurable upstream base URL and API key reference.
 - Response `usage` extraction.
 - Local token estimate when usage is missing.
-- Source and confidence label on every token/cost number.
+- Source and confidence label on every token number, and on every optional cost number when cost is present.
 - Compact SQLite audit ledger.
 - No raw prompt storage by default.
 - Request receipt read/export.
@@ -103,7 +103,7 @@ Deferred:
 - Anthropic-native `/v1/messages` beyond later compatibility work.
 - Multi-tenant team billing.
 - Automatic optimization.
-- User behavior analytics beyond token/cost/workflow ROI.
+- User behavior analytics beyond token/workflow ROI and optional cost interpretation.
 
 Stage boundary:
 
@@ -134,6 +134,8 @@ D rough_estimate       unknown tokenizer, multimodal, reasoning, server tool, or
 
 Rough estimates must never be displayed as billing truth.
 
+Token accounting is the foundation. Money calculation is optional because official prices, relay prices, regions, discounts, user groups, cache rules, and routing policies differ. A future calculator may support user-selected pricing profiles, but no price table is the product anchor.
+
 ## Three-Ledger Model
 
 ### Token Ledger
@@ -158,7 +160,7 @@ Normalize available fields:
 - total cost,
 - pricing version.
 
-Cost is not official unless provider or relay reports it. Local price-table inference must be labeled.
+Cost is not official unless provider or relay reports it. Local price-table inference must be labeled, opt-in, and treated as calculator output, not audit truth.
 
 ### Workflow ROI Ledger
 
@@ -279,11 +281,11 @@ Keep the first dashboard small:
 
 - today requests,
 - today tokens,
-- today estimated/reported cost,
-- average cost per request,
+- optional today estimated/reported cost,
+- optional average cost per request,
 - top 10 expensive requests,
-- top models by cost,
-- top agents/workflows by cost,
+- optional top models by cost,
+- optional top agents/workflows by cost,
 - cache hit rate when available,
 - unexplained delta requests,
 - potential savings by category.

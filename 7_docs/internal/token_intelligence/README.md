@@ -38,6 +38,7 @@
 - 2026-05-13: TI-017 repo-only managed launcher added. `attach --with-launcher` writes a reversible env file and launch wrapper so users can run compatible agents through Token Audit without editing agent configs.
 - 2026-05-13: TI-018 repo-only harness snippet generator added. `snippets` prints copy-paste integration examples for common harnesses without editing files or storing API key values.
 - 2026-05-13: TI-019 candidate package smoke passed. The local zip now preserves executable launcher permissions and has been unpacked and run through fake-upstream pass-through, receipt, reports, snippets, attach, and detach in a temp directory.
+- 2026-05-13: Product decision recorded: Token Intelligence is token-flow accuracy first. Money/cost remains optional, source-labeled, and user-configurable; no official or relay price table is treated as the product anchor.
 
 ## Product Target
 
@@ -53,8 +54,12 @@ It must explain:
 - which prompts are least efficient,
 - which contexts are repeated,
 - which memory signals failed,
-- which models have weak cost/performance,
+- which models have weak token/performance or cost/performance when cost is reported,
 - which workflows have the best or worst ROI.
+
+Primary target: accurate token-flow accounting.
+
+Money is a secondary convenience layer. Users can calculate money themselves from trusted token counts, or use a small optional calculator/profile when they want a local estimate. OmniMemora must not lock product truth to one official price table, one relay price table, one region, or one user group. Reported relay/provider cost can be recorded as evidence; locally inferred cost must remain labeled and optional.
 
 ## Product Shape
 
@@ -125,7 +130,9 @@ Execution guide:
 
 Phase 7 answers: can OmniMemora safely reduce tokens?
 
-Phase 8 answers: why should the user enable optimization, where will it help, and did it actually save money?
+Phase 8 answers: why should the user enable optimization, where will it help, and did it actually save tokens?
+
+Cost can be shown when reported by a provider/relay or calculated from a user-selected profile, but token-flow accuracy is the foundation.
 
 Token Intelligence must connect back to concrete optimization paths:
 
@@ -219,6 +226,7 @@ Exit:
 
 - every displayed count carries a confidence class;
 - rough estimates cannot be presented as billing truth.
+- cost estimates cannot drive token audit correctness; they are only optional interpretation on top of token counts.
 
 Current behavior:
 
@@ -431,7 +439,8 @@ Current behavior:
 - the candidate proxy records those values as `relay_reported` with `official_usage` confidence;
 - `pricing_version` or `price_version` is copied when present;
 - `/audit/summary` and `/audit/reports/top-requests` can surface cost totals/top-by-cost when cost exists;
-- no local provider pricing table or billing-truth claim is active in TI-012.
+- no local provider pricing table or billing-truth claim is active in TI-012;
+- future price calculators must be opt-in profiles, not product anchors.
 
 ### TI-013 - Workflow ROI Tags
 
