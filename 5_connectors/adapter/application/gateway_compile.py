@@ -577,7 +577,7 @@ def _structured_compile_deadline_profile(*, agent_id: str, normalized: dict, pay
         "client_deadline_seconds": float(getattr(config, "structured_compile_openclaw_deadline_seconds", 45.0) or 45.0),
         "compile_budget_ms": int(getattr(config, "structured_compile_openclaw_compile_budget_ms", 2500) or 2500),
         "max_tool_result_chars": int(getattr(config, "structured_compile_openclaw_max_tool_result_chars", 700) or 700),
-        "protect_latest_tool_result": False,
+        "protect_latest_tool_result": True,
     }
 
 

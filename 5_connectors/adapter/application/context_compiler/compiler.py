@@ -58,6 +58,7 @@ def compile_anthropic_tool_context(
     compiled = deepcopy(payload)
     changed_blocks = 0
     reasons: List[str] = []
+    protected_reasons: List[str] = []
 
     messages = compiled.get("messages") or []
     for message_index, message in enumerate(messages):
@@ -72,6 +73,8 @@ def compile_anthropic_tool_context(
             text, replace_mode = _tool_result_text(part)
             compressed = compress_tool_result_text(text, max_chars=max_tool_result_chars)
             if not compressed.changed:
+                if compressed.reason.startswith("protected_"):
+                    protected_reasons.append(compressed.reason)
                 continue
             if replace_mode == "content_list_text":
                 part["content"] = [{"type": "text", "text": compressed.text}]
@@ -81,6 +84,13 @@ def compile_anthropic_tool_context(
             reasons.append(compressed.reason)
 
     if changed_blocks == 0:
+        if protected_reasons:
+            return _passthrough(
+                payload,
+                before_estimate,
+                "protected_tool_result_content",
+                sorted(set(protected_reasons)),
+            )
         return _passthrough(payload, before_estimate, "no_eligible_tool_result", [])
 
     if not validate_anthropic_compiled_payload(compiled):

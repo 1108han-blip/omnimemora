@@ -115,6 +115,8 @@ def test_search_result_classifier_keeps_path_hits():
     assert result.changed is True
     assert result.output_type == "search_result"
     assert "src/file_0.py:0" in result.text
+    assert "source_trace=retained_paths_or_line_markers" in result.text
+    assert "expand=rerun_or_reread_original_tool_result_if_exact_context_needed" in result.text
 
 
 def test_file_read_classifier_keeps_definitions():
@@ -129,6 +131,39 @@ def test_file_read_classifier_keeps_definitions():
     assert result.changed is True
     assert result.output_type == "file_read"
     assert "def important_function" in result.text
+
+
+def test_markdown_document_content_is_protected_from_compression():
+    text = "\n".join(
+        [
+            "# AI Runtime Telemetry System",
+            "",
+            "本质上这是一个面向模型运行时的专业技术文案。",
+            "",
+            "- 采样系统",
+            "- 流式观测系统",
+            "- 时间序列分析系统",
+            "- 指纹分类系统",
+            "",
+            "## 一、整体架构",
+            "Runtime Recorder 是这套系统的关键，因为它记录请求、chunk 和完成事件。",
+            "",
+            "```text",
+            "Client -> Gateway -> Runtime Recorder -> Provider Adapter -> LLM",
+            "```",
+            "",
+            "## 二、核心价值",
+            "这份文档的正文是用户要求改写的任务主体，不能被当成日志或搜索结果抽取。",
+        ]
+        + [f"第 {i} 段：这里保留完整解释，用于专业技术文案改写。" for i in range(80)]
+    )
+
+    result = compressors.compress_tool_result_text(text, max_chars=700)
+
+    assert result.changed is False
+    assert result.output_type == "document_content"
+    assert result.reason == "protected_document_content"
+    assert result.text == text
 
 
 def test_golden_tool_output_fixtures_reduce_tokens_and_keep_required_markers():

@@ -13,7 +13,7 @@ use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent}
 use tauri::{AppHandle, Manager, RunEvent, WebviewUrl, WebviewWindowBuilder, WindowEvent};
 use tauri_plugin_updater::UpdaterExt;
 
-const APP_VERSION: &str = "1.0.0-beta.17";
+const APP_VERSION: &str = "1.0.0-beta.18";
 const SUPPORT_EMAIL: &str = "support@doloclaw.com";
 const RUNTIME_PORT: u16 = 8765;
 const ADAPTER_PORT: u16 = 18011;
@@ -411,8 +411,8 @@ fn release_manifest_from_disk() -> Option<Value> {
     let candidates = [
         downloaded_manifest_path(),
         current_dir().join("manifest.json"),
-        repo_root().join("4_core/local-runtime/release/1.0.0-beta.17/latest.json"),
-        repo_root().join("4_core/local-runtime/release/1.0.0-beta.17/1.0.0-beta.17.json"),
+        repo_root().join("4_core/local-runtime/release/1.0.0-beta.18/latest.json"),
+        repo_root().join("4_core/local-runtime/release/1.0.0-beta.18/1.0.0-beta.18.json"),
     ];
     for path in candidates {
         if let Ok(raw) = fs::read_to_string(path) {
@@ -479,9 +479,9 @@ mod tests {
 
     #[test]
     fn version_comparison_handles_beta_patch_order() {
-        assert!(version_is_newer("1.0.0-beta.17", "1.0.0-beta.10"));
-        assert!(!version_is_newer("1.0.0-beta.10", "1.0.0-beta.17"));
-        assert!(!version_is_newer("1.0.0-beta.17", "1.0.0-beta.17"));
+        assert!(version_is_newer("1.0.0-beta.18", "1.0.0-beta.10"));
+        assert!(!version_is_newer("1.0.0-beta.10", "1.0.0-beta.18"));
+        assert!(!version_is_newer("1.0.0-beta.18", "1.0.0-beta.18"));
     }
 }
 
@@ -617,9 +617,9 @@ fn runtime_binary() -> Option<PathBuf> {
         component.join("omnimemora"),
         service_current.join("tools/omnimemora-runtime"),
         service_current.join("bin/omnimemora"),
-        root.join("4_core/local-runtime/release/1.0.0-beta.17/omnimemora-darwin-arm64/omnimemora"),
+        root.join("4_core/local-runtime/release/1.0.0-beta.18/omnimemora-darwin-arm64/omnimemora"),
         root.join(
-            "4_core/local-runtime/release/1.0.0-beta.17/omnimemora-darwin-arm64/bin/omnimemora",
+            "4_core/local-runtime/release/1.0.0-beta.18/omnimemora-darwin-arm64/bin/omnimemora",
         ),
         root.join("tools/omnimemora-runtime"),
     ])

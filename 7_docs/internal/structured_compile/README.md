@@ -4,7 +4,7 @@
 
 - Created: 2026-05-13
 - Product line: OmniMemora structured context compilation
-- Current status: SC-026 OpenClaw 45-second deadline profile implemented in repo reality and synced into the current app runtime
+- Current status: SC-027 document-content preservation implemented in repo reality as the current beta18 compile fix
 - Supersedes phase6 as the active engineering line for compile capability work.
 
 ## Product Target
@@ -1144,7 +1144,7 @@ Plan:
 
 Goal: reduce OpenClaw long-content failures caused by a fixed 45-second harness deadline without adding a task platform or extra LLM calls.
 
-Status: repo reality implemented on 2026-05-13. The current beta17 app runtime under `/Users/sc/.omnimemora/app/current` has been synced and validated, but the app-target promotion script still recorded `promotion_failed` because its API gate checked during the adapter restart window.
+Status: repo reality implemented on 2026-05-13. The current beta17 app runtime under `/Users/sc/.omnimemora/app/current` has been synced and validated, but the app-target promotion script still recorded `promotion_failed` because its API gate checked during the adapter restart window. SC-027 supersedes the part of this record that allowed OpenClaw to compress the latest oversized `tool_result`.
 
 Implementation:
 
@@ -1155,7 +1155,7 @@ Implementation:
   - compile budget marker: `2500ms`
   - long-context threshold: `8000` estimated tokens
   - OpenClaw tool-result target: `700` chars
-- For this profile, the compiler may deterministically compress the latest oversized `tool_result`; default Claude Code behavior still protects the latest result.
+- Original SC-026 behavior allowed the profile to deterministically compress the latest oversized `tool_result`; SC-027 changes the current policy so OpenClaw also protects the latest tool result by default.
 - No LLM summarization, cloud fetch, historical scan, memory search, or extra provider call is added to the upstream-critical path.
 - Compile events now persist deadline fields such as `deadline_profile`, `structured_compile_latency_ms`, `deadline_budget_exceeded`, and `protect_latest_tool_result`.
 
@@ -1203,11 +1203,83 @@ Running validation:
     - `protect_latest_tool_result=false`
     - `max_tool_result_chars=700`
 
+### SC-027 - Document Content Preservation for OpenClaw
+
+Goal: prevent structured compile from degrading complete local Markdown/document reads into keyword-only fragments when OpenClaw sends the content through `18011`.
+
+Status: repo reality, current app runtime, local beta18 package, and public controlled-beta download surface validated on 2026-05-13.
+
+Cause:
+
+- Markdown documents with bullet lists can look like diffs when a compressor treats `- item` lines as deletion lines without requiring real diff headers.
+- OpenClaw's 45-second deadline profile previously set `protect_latest_tool_result=false`, so the newest local file read could be compressed before the model saw it.
+- The old tool-result marker preserved type and size information, but did not make source preservation or expansion intent explicit enough for downstream clients.
+
+Implementation:
+
+- Structured compile now protects tool results classified as document content, including Markdown/prose with headings, paragraphs, Chinese text, and bullet lists.
+- Diff classification now requires real diff header evidence before Markdown `- item` lines can be treated as diff lines.
+- OpenClaw's deadline profile now keeps `protect_latest_tool_result=true`; the latest local read is not eligible for deterministic compression.
+- Tool-result compression markers now include `retained_content`, `source_trace`, and `expand` fields so a compressed non-document result is visibly partial and recoverable by rereading the original source.
+- When every oversized candidate is protected document content, the compiler returns passthrough with `reason=protected_tool_result_content` instead of reporting a misleading compression success.
+
+Boundary:
+
+- This is not a summarizer. Full document reads are either preserved or the client must explicitly reread the source.
+- This does not add LLM calls, cloud fetches, background tasks, historical scans, or hidden memory reads to the upstream-critical path.
+- This does not change user-facing memory, meter files, or retention policy.
+
+Repo validation:
+
+- `/usr/bin/python3 -m pytest 5_connectors/adapter/tests/test_context_compiler_compressors.py 5_connectors/adapter/tests/test_context_compiler_structured_compile.py 5_connectors/adapter/tests/test_gateway_compile_skill_suggestions.py 5_connectors/adapter/tests/test_llm_proxy_compile_event_persistence.py`: `25 passed`.
+- `npm run build` in `6_console/desktop-shell`: passed.
+- `cargo test` in `6_console/desktop-shell/src-tauri`: `1 passed`.
+- `git diff --check`: passed.
+
+Running validation:
+
+- App-target promotion command copied the adapter fix into the active runtime path:
+  - `OMNIMEMORA_SERVICE_DIR=/Users/sc/.omnimemora/app tools/promotion/promotion.sh adapter`
+  - Log: `tools/verification/logs/promotion_20260513_212752.log`
+  - Script result: `promotion_failed`
+  - Failure scope: the script API gate checked during restart and reported `api_unreachable`.
+- Independent post-restart checks showed running reality recovered and loaded the candidate:
+  - `/debug/runtime_fingerprint`: PID `88282`, code source under `/Users/sc/.omnimemora/app/current/5_connectors/adapter/main.py`.
+  - SHA-256 matched between repo reality and app runtime for `context_compiler/compressors.py`, `context_compiler/compiler.py`, and `gateway_compile.py`.
+  - `/health`: HTTP `200`, repeated checks included `0.003094s` to `0.007371s`.
+  - `/metrics/summary`: HTTP `200`, repeated checks included `0.005220s` to `0.023266s`.
+  - `/metrics/core_capabilities`: HTTP `200`, but this sample was above the default internal `<100ms` target at `0.142017s` to `0.162794s`.
+  - `/compile/status`: HTTP `200`, but this sample was above the default internal `<100ms` target at `0.115642s` to `0.143559s`.
+- Direct product ingress validation:
+  - A real `POST http://127.0.0.1:18011/llm/v1/messages` request with `agent_id=openclaw`, Anthropic tool context, and a long Markdown `tool_result` returned HTTP `200`.
+  - Latest compile event for request `6f1d67165474`:
+    - `compile_status=structured_compile_passthrough`
+    - `compile_reason=protected_tool_result_content`
+    - `deadline_profile=openclaw_45s_long_tool_context`
+    - `deadline_profile_applied=true`
+    - `original_token_estimate=8040`
+    - `compiled_token_estimate=8040`
+    - `structured_compile_latency_ms=34`
+    - `deadline_budget_exceeded=false`
+    - `protect_latest_tool_result=true`
+    - `max_tool_result_chars=700`
+
+Release validation:
+
+- `npm run tauri:build` produced the beta18 `.app`, DMG, and updater tarball, but exited non-zero because this machine has the public updater key without `TAURI_SIGNING_PRIVATE_KEY`.
+- `hdiutil imageinfo` passed for `OmniMemora Desktop_1.0.0-beta.18_aarch64.dmg`.
+- `bash 4_core/local-runtime/scripts/release/build_release.sh 1.0.0-beta.18`: passed and wrote the beta18 package set.
+- `/tmp/omni-publish-venv/bin/python 4_core/local-runtime/scripts/release/publish_beta_release.py 1.0.0-beta.18`: uploaded beta18 artifacts to R2 and deployed `omnimemora-control-entry`.
+- Public checks:
+  - `https://doloclaw.com/download`: HTTP `200` and displays `1.0.0-beta.18`.
+  - `https://doloclaw.com/releases/latest.json`: redirects to the beta18 manifest and reports version `1.0.0-beta.18`.
+  - `https://doloclaw.com/download/file/darwin-arm64`: redirects to the beta18 DMG and returns HTTP `200`.
+
 Change scope:
 
-- File count stayed flat; all changes are in existing implementation, test, and current-line documentation files.
-- Resident background logic stayed flat; no daemon, scheduler, or new background service was added.
-- Log retention policy stayed capped by existing compile-event retention behavior; no user-facing memory path was touched.
+- File count stayed flat for implementation and tests; all changes landed in existing compiler, gateway, and regression-test files.
+- Resident background logic stayed flat; no daemon, scheduler, watcher, or asynchronous worker was added.
+- Internal log retention remains governed by the existing product retention path; no user-facing memory path was touched.
 
 ## Success Criteria
 

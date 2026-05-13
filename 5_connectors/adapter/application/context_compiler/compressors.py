@@ -8,6 +8,7 @@ from typing import List
 
 
 DIFF_LINE_RE = re.compile(r"^(diff --git|index |@@ |\+\+\+ |--- |\+[^+]|-[^-])")
+DIFF_HEADER_RE = re.compile(r"^(diff --git|index |@@ |\+\+\+ |--- )")
 FILE_READ_LINE_RE = re.compile(r"^\s*(class |def |async def |function |export |import |from |package |func )")
 IMPORTANT_LINE_RE = re.compile(
     r"("
@@ -20,6 +21,10 @@ IMPORTANT_LINE_RE = re.compile(
 LOG_LINE_RE = re.compile(r"(\bERROR\b|\bWARN(?:ING)?\b|\bINFO\b|\bDEBUG\b|\bTRACE\b|\d{4}-\d{2}-\d{2}[T ]\d{2}:)", re.IGNORECASE)
 SEVERE_LOG_LINE_RE = re.compile(r"(\bERROR\b|\bWARN(?:ING)?\b|exception|traceback|timeout|denied)", re.IGNORECASE)
 SEARCH_LINE_RE = re.compile(r"([A-Za-z0-9_./-]+\.(py|ts|tsx|js|go|rs|md):\d+|https?://|rg:|grep:)", re.IGNORECASE)
+MARKDOWN_HEADING_RE = re.compile(r"^\s{0,3}#{1,6}\s+\S+")
+MARKDOWN_BULLET_RE = re.compile(r"^\s{0,6}([-*+]|\d+[.)])\s+\S+")
+MARKDOWN_TABLE_RE = re.compile(r"^\s*\|.*\|\s*$")
+MARKDOWN_FENCE_RE = re.compile(r"^\s*```")
 TEST_LINE_RE = re.compile(
     r"(FAILED|ERROR|AssertionError|Traceback|passed|failed|xfailed|xpassed|collected|"
     r"^=+ .* =+$|^_{3,} .* _{3,}$)",
@@ -62,6 +67,16 @@ def compress_tool_result_text(
 
     lines = source.splitlines()
     output_type = classify_tool_result_text(source)
+    if output_type == "document_content":
+        return CompressionResult(
+            text=source,
+            changed=False,
+            original_chars=original_chars,
+            compressed_chars=original_chars,
+            reason="protected_document_content",
+            output_type=output_type,
+        )
+
     selected: List[str] = []
 
     selected.extend(_select_lines_by_type(lines, output_type, head_lines, tail_lines, important_limit))
@@ -70,7 +85,9 @@ def compress_tool_result_text(
     body = "\n".join(selected).strip()
     marker = (
         f"[omnimemora structured compile: deterministic {output_type} compression; "
-        f"original_chars={original_chars}; retained_lines={len(selected)}]"
+        f"original_chars={original_chars}; retained_lines={len(selected)}; "
+        "retained_content=verbatim_lines; source_trace=retained_paths_or_line_markers; "
+        "expand=rerun_or_reread_original_tool_result_if_exact_context_needed]"
     )
     compressed = f"{marker}\n{body}" if body else marker
 
@@ -108,9 +125,12 @@ def classify_tool_result_text(text: str) -> str:
     search_hits = sum(1 for line in lines if SEARCH_LINE_RE.search(line))
     log_hits = sum(1 for line in lines if LOG_LINE_RE.search(line))
     file_read_hits = sum(1 for line in lines if FILE_READ_LINE_RE.search(line))
+    diff_header_hits = sum(1 for line in lines if DIFF_HEADER_RE.search(line))
 
-    if diff_hits >= 3:
+    if diff_header_hits >= 2 and diff_hits >= 3:
         return "diff"
+    if _looks_like_document_content(lines):
+        return "document_content"
     if log_hits >= max(3, int(len(lines) * 0.25)):
         return "log"
     if test_hits >= 2:
@@ -120,6 +140,43 @@ def classify_tool_result_text(text: str) -> str:
     if file_read_hits >= 2:
         return "file_read"
     return "generic"
+
+
+def _looks_like_document_content(lines: List[str]) -> bool:
+    nonempty = [line.strip() for line in lines if line.strip()]
+    if len(nonempty) < 8:
+        return False
+
+    heading_hits = sum(1 for line in nonempty if MARKDOWN_HEADING_RE.search(line))
+    bullet_hits = sum(1 for line in nonempty if MARKDOWN_BULLET_RE.search(line))
+    table_hits = sum(1 for line in nonempty if MARKDOWN_TABLE_RE.search(line))
+    fence_hits = sum(1 for line in nonempty if MARKDOWN_FENCE_RE.search(line))
+    prose_hits = sum(1 for line in nonempty if _looks_like_prose_line(line))
+
+    if heading_hits >= 2 and prose_hits >= 4:
+        return True
+    if heading_hits >= 1 and fence_hits >= 1 and prose_hits >= 3:
+        return True
+    if heading_hits >= 1 and bullet_hits >= 4 and prose_hits >= 4:
+        return True
+    if table_hits >= 2 and heading_hits >= 1 and prose_hits >= 3:
+        return True
+    return False
+
+
+def _looks_like_prose_line(line: str) -> bool:
+    if len(line) < 12:
+        return False
+    if (
+        DIFF_LINE_RE.search(line)
+        or LOG_LINE_RE.search(line)
+        or TEST_LINE_RE.search(line)
+        or SEARCH_LINE_RE.search(line)
+        or FILE_READ_LINE_RE.search(line)
+    ):
+        return False
+    stripped = line.strip("`*-+0123456789.()[]#| ")
+    return len(stripped) >= 8 and any(ch.isalpha() for ch in stripped)
 
 
 def _select_lines_by_type(

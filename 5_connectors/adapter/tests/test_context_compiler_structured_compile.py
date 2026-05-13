@@ -67,7 +67,7 @@ def test_latest_tool_result_is_protected_even_when_long():
     assert result.payload is payload
 
 
-def test_latest_tool_result_can_compress_when_deadline_profile_allows_it():
+def test_latest_tool_result_can_compress_only_with_explicit_opt_out():
     long_latest = "\n".join([f"latest search result {i} src/file_{i}.py:{i}" for i in range(200)])
     payload = {
         "messages": [
@@ -94,6 +94,59 @@ def test_latest_tool_result_can_compress_when_deadline_profile_allows_it():
     latest_result = result.payload["messages"][1]["content"][0]
     assert latest_result["tool_use_id"] == "toolu_1"
     assert "original_chars=" in latest_result["content"]
+
+
+def test_markdown_document_tool_result_is_protected_even_when_old():
+    document = "\n".join(
+        [
+            "# AI Runtime Telemetry System",
+            "",
+            "这份 Markdown 是用户要求整理和改写的内容主体。",
+            "",
+            "- Runtime Recorder",
+            "- Inspector Dashboard",
+            "- Provider Analytics",
+            "- Fingerprint Engine",
+            "",
+            "## 技术架构",
+            "OmniMemora Gateway 接收请求，然后将运行时事件交给 Recorder。",
+            "",
+            "```json",
+            '{"type": "chunk", "arrival_time_ms": 1832}',
+            "```",
+            "",
+            "## 交付要求",
+            "正文必须完整保留，否则专业文案会失真。",
+        ]
+        + [f"正文段落 {i}：保留完整论述，不能只保留标题和关键词。" for i in range(120)]
+    )
+    payload = {
+        "messages": [
+            {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": "toolu_doc", "name": "Read", "input": {}}],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": "toolu_doc", "content": document}],
+            },
+            {
+                "role": "assistant",
+                "content": [{"type": "tool_use", "id": "toolu_latest", "name": "Grep", "input": {}}],
+            },
+            {
+                "role": "user",
+                "content": [{"type": "tool_result", "tool_use_id": "toolu_latest", "content": "latest"}],
+            },
+        ]
+    }
+
+    result = compiler.compile_anthropic_tool_context(payload, max_tool_result_chars=500)
+
+    assert result.status == "structured_compile_passthrough"
+    assert result.reason == "protected_tool_result_content"
+    assert result.issues == ["protected_document_content"]
+    assert result.payload is payload
 
 
 def test_invalid_graph_falls_back_to_passthrough():

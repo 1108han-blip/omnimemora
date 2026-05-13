@@ -14,7 +14,7 @@ Highlights
 - OpenClaw evidence keeps the real user request when clients append untrusted metadata messages.
 - Request details show real before/after token counts and beta one-click desktop update falls back to a verified DMG flow when paid Apple signing is not enabled.
 - Product compile now uses a structured, protocol-preserving context path for tool-heavy agent traffic instead of unsafe whole-payload text crushing.
-- OpenClaw latency fixes remove avoidable pre-upstream adapter work and keep Anthropic-compatible streaming scoped to the validated path.
+- OpenClaw compile now preserves latest local tool results and Markdown/document content instead of shrinking full reads into keyword fragments.
 - Desktop, release manifest, and cloud download package versions are aligned for this beta package.
 - Cloud policy updates remain candidate-only and do not auto-promote over local active policy.
 

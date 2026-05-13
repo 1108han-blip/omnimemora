@@ -319,7 +319,7 @@ def test_gateway_compile_tool_context_uses_passthrough_when_structured_compile_d
     assert compiled_payload == payload
 
 
-def test_gateway_compile_openclaw_deadline_profile_compresses_latest_long_result():
+def test_gateway_compile_openclaw_deadline_profile_protects_latest_result():
     async def _unexpected_fetch_memory_candidates(**kwargs):
         raise AssertionError("OpenClaw deadline profile should not search product memory")
 
@@ -365,12 +365,81 @@ def test_gateway_compile_openclaw_deadline_profile_compresses_latest_long_result
         adapter_config.structured_compile_openclaw_long_context_tokens = old_threshold
         adapter_config.structured_compile_openclaw_max_tool_result_chars = old_max_chars
 
-    assert compile_meta["compile_status"] == "structured_compile_success"
+    assert compile_meta["compile_status"] == "structured_compile_passthrough"
+    assert compile_meta["compile_reason"] == "no_eligible_tool_result"
     assert compile_meta["deadline_profile"] == "openclaw_45s_long_tool_context"
     assert compile_meta["deadline_profile_applied"] is True
-    assert compile_meta["protect_latest_tool_result"] is False
+    assert compile_meta["protect_latest_tool_result"] is True
     assert compile_meta["max_tool_result_chars"] == 500
-    assert compile_meta["compiled_token_estimate"] < compile_meta["original_token_estimate"]
     latest_result = compiled_payload["messages"][1]["content"][0]
     assert latest_result["tool_use_id"] == "toolu_latest"
-    assert "original_chars=" in latest_result["content"]
+    assert latest_result["content"] == long_latest
+
+
+def test_gateway_compile_openclaw_deadline_profile_protects_markdown_document_result():
+    async def _unexpected_fetch_memory_candidates(**kwargs):
+        raise AssertionError("OpenClaw document protection should not search product memory")
+
+    async def _unexpected_execute_runtime_compile(**kwargs):
+        raise AssertionError("OpenClaw document protection should not run runtime compile")
+
+    old_fetch = runtime_bridge.fetch_memory_candidates
+    old_execute = runtime_bridge.execute_runtime_compile
+    old_enabled = adapter_config.structured_compile_openclaw_deadline_profile_enabled
+    old_threshold = adapter_config.structured_compile_openclaw_long_context_tokens
+    old_max_chars = adapter_config.structured_compile_openclaw_max_tool_result_chars
+    runtime_bridge.fetch_memory_candidates = _unexpected_fetch_memory_candidates
+    runtime_bridge.execute_runtime_compile = _unexpected_execute_runtime_compile
+    adapter_config.structured_compile_openclaw_deadline_profile_enabled = True
+    adapter_config.structured_compile_openclaw_long_context_tokens = 100
+    adapter_config.structured_compile_openclaw_max_tool_result_chars = 500
+    try:
+        document = "\n".join(
+            [
+                "# AI Runtime Telemetry System",
+                "",
+                "这份文档是用户要求改写的专业技术文案主体。",
+                "",
+                "- 采样系统",
+                "- 流式观测系统",
+                "- 时间序列分析系统",
+                "- 指纹分类系统",
+                "",
+                "## 关键架构",
+                "Runtime Recorder 负责记录请求、chunk、完成事件和延迟。",
+                "",
+                "```text",
+                "Client -> OmniMemora Gateway -> Runtime Recorder -> LLM",
+                "```",
+            ]
+            + [f"正文段落 {i}：这段内容必须完整保留给模型改写。" for i in range(100)]
+        )
+        payload = {
+            "_path": "/llm/v1/messages",
+            "messages": [
+                {
+                    "role": "assistant",
+                    "content": [{"type": "tool_use", "id": "toolu_doc", "name": "Read", "input": {}}],
+                },
+                {
+                    "role": "user",
+                    "content": [{"type": "tool_result", "tool_use_id": "toolu_doc", "content": document}],
+                },
+            ],
+            "model": "MiniMax-M2.7",
+            "stream": True,
+        }
+        compiled_payload, compile_meta = asyncio.run(
+            gateway_compile.run_gateway_compile(payload=payload, agent_id="openclaw")
+        )
+    finally:
+        runtime_bridge.fetch_memory_candidates = old_fetch
+        runtime_bridge.execute_runtime_compile = old_execute
+        adapter_config.structured_compile_openclaw_deadline_profile_enabled = old_enabled
+        adapter_config.structured_compile_openclaw_long_context_tokens = old_threshold
+        adapter_config.structured_compile_openclaw_max_tool_result_chars = old_max_chars
+
+    assert compile_meta["compile_status"] == "structured_compile_passthrough"
+    assert compile_meta["deadline_profile"] == "openclaw_45s_long_tool_context"
+    assert compile_meta["protect_latest_tool_result"] is True
+    assert compiled_payload["messages"][1]["content"][0]["content"] == document

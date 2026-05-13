@@ -2,7 +2,7 @@
 # scripts/release/build_release.sh - Build closed beta release archives
 set -euo pipefail
 
-PACKAGE_VERSION=${1:-"1.0.0-beta.17"}
+PACKAGE_VERSION=${1:-"1.0.0-beta.18"}
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 REPO_ROOT="$(cd "$ROOT_DIR/../.." && pwd)"
@@ -338,7 +338,7 @@ EOF
     "windows-amd64": "$windows_amd64_sha"
   },
   "download_url": "https://doloclaw.com/download",
-  "release_notes": "Upgrades the product compile path with protocol-preserving structured context compression, OpenClaw latency fixes, and desktop beta version alignment.",
+  "release_notes": "Upgrades the product compile path with protocol-preserving structured context compression and OpenClaw document-content preservation.",
   "minimum_supported_desktop_version": "1.0.0-beta.8",
   "desktop_auto_update_required": true,
   "desktop_auto_update_mode": "beta_one_click_download_verify_open_dmg",
