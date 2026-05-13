@@ -48,6 +48,12 @@ Rules:
 - No browser extension as the primary capture path.
 - Shared audit core remains reusable by full OmniMemora.
 
+Cloud note:
+
+- This is a first-packaging decision, not a rejection of OmniMemora cloud assets.
+- `doloclaw.com`, Cloudflare, and Railway remain available, but Token Intelligence should not depend on them until storage volume, request volume, privacy posture, and operating cost are measured.
+- A cloud-hosted audit product can follow after local MVP proof; it must not be assumed as the initial route.
+
 ## Relationship To Omni
 
 Token Intelligence is an Omni module with a light standalone entrypoint.
@@ -88,6 +94,12 @@ Deferred:
 - Multi-tenant team billing.
 - Automatic optimization.
 - User behavior analytics beyond token/cost/workflow ROI.
+
+Stage boundary:
+
+- Current behavior analysis means workflow/token ROI only.
+- It is not broad user profiling in the MVP.
+- A future user-profile capability is not ruled out, but it must be a separate explicit product stage with user-visible controls, opt-in, retention, export, delete, and disable paths.
 
 ## Usage Source And Confidence
 
@@ -366,6 +378,7 @@ Use as references, not dependencies:
 - Do not make browser extension the first capture path.
 - Do not store raw prompt by default.
 - Do not claim exactness when the source is estimated.
-- Do not build user profiling.
+- Do not build user profiling inside the Phase 8 MVP.
+- Do not let a future user-profile line silently inherit audit logs without a new explicit stage and controls.
 - Do not let audit persistence delay upstream forwarding.
 - Do not add large fixture or log files.

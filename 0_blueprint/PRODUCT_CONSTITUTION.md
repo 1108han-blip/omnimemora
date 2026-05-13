@@ -190,7 +190,8 @@ Token Intelligence 是 Token Savings 的解释层和增值层。
 硬约束：
 
 - Token Intelligence 不得退化为普通 usage dashboard。
-- Token Intelligence 不得变成用户画像、行为监控或隐藏 telemetry 产品。
+- Phase 8 Token Intelligence 只允许做 workflow/token ROI 和 User Pattern Lite，不得在本阶段变成用户画像、行为监控或隐藏 telemetry 产品。
+- 用户画像不是当前阶段能力。未来如需升级，必须作为新的显式产品阶段，先完成用户控制、隐私、存储、禁用、导出、删除和透明解释机制设计。
 - 默认不得存储 raw prompt、完整 tool output 或完整 provider response。
 - 用户数据必须可查看、可删除、可过期、可导出。
 - 计量结果必须标注置信度，例如 official usage、official count API、provider tokenizer、compatible estimate、rough estimate。
@@ -366,7 +367,7 @@ LLM 输入必须满足最小暴露：
 
 ## 🔴 补充条款7：User Pattern Lite Boundary
 
-OmniMemora 不做用户画像。
+OmniMemora 当前阶段不做用户画像。
 
 允许做 User Pattern Lite，但它只能用于减少重复 prompt 和提升 token saving。
 
@@ -386,3 +387,5 @@ OmniMemora 不做用户画像。
 - 低置信度且自动注入上游的 habit 记录。
 
 User Pattern Lite 必须用户可见、可删、可关，并且只在与当前请求相关且能减少 token 时进入 compile。
+
+用户画像若未来成为产品方向，不能由 User Pattern Lite 静默演化而来，必须重新开阶段、重新定义数据范围，并由用户显式启用。

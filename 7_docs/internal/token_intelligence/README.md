@@ -51,6 +51,12 @@ The first product surface should not require:
 - a browser extension as the primary capture mechanism,
 - a SaaS observability backend.
 
+Cloud clarification:
+
+- `doloclaw.com`, Cloudflare, and Railway remain available product resources.
+- Phase 8 starts local because cloud storage size, traffic shape, privacy posture, and operating cost are not yet measured for Token Intelligence.
+- Cloud-hosted Token Intelligence can be considered later, but only after local MVP value, retention requirements, and cost envelope are known.
+
 Recommended packaging:
 
 - shared core module inside OmniMemora,
@@ -91,6 +97,8 @@ Token Intelligence Lite must not become:
 - a large raw log warehouse,
 - a replacement for provider billing truth,
 - a broad agent orchestration layer.
+
+The user-profile boundary is stage-specific: Phase 8 does workflow/token ROI and User Pattern Lite only. A future user-profile product may be valuable, but it must be opened as a separate explicit stage with user control, privacy, storage, disable, export, and delete design; it must not silently emerge from audit logs.
 
 ## User Data Boundary
 

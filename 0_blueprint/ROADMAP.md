@@ -206,11 +206,12 @@ Phase 8 不是普通 token 统计。它必须回答：
 **核心验证**：
 
 - 本地轻量入口可审计真实 OpenAI/Anthropic-compatible 请求，不要求先安装完整桌面包或付费云服务器。
+- `doloclaw.com`、Cloudflare、Railway 仍是可用产品资源，但 Phase 8 首发不得假设云端容量、存储成本、隐私边界和运行费用已经被验证；云端 Token Intelligence 托管必须在本地 MVP 证明价值后单独评估。
 - 记录 provider/model/request/block-level token breakdown，并标注 confidence class。
 - 默认不存 raw prompt、完整 tool output 或完整 provider response。
 - 小型用户数据库只保存 compact audit/user-pattern metadata，并提供查看、删除、过期、导出路径。
 - Potential Savings 可从真实请求中计算，Actual Savings 可与 structured compile 的真实节省闭环。
-- User Pattern Lite 只记录可减少重复提示的轻量用户习惯，不做用户画像。
+- User Pattern Lite 当前只记录可减少重复提示的轻量用户习惯，不做用户画像；未来若要升级为用户画像，必须作为新阶段重新通过用户控制、隐私、存储、禁用、导出和删除设计。
 - Token Intelligence recommendation 必须连接到 concrete optimization path：structured compile、prompt reduction、memory repair、model/workflow selection 或 User Pattern Lite。
 
 **第一批能力**：
@@ -246,7 +247,7 @@ Roadmap 不允许：
 - ❌ 强制云端为默认路径
 - ❌ 削弱 Token Savings UI
 - ❌ 把 Token Intelligence 降级为普通 usage dashboard
-- ❌ 把 User Pattern Lite 扩张为用户画像或隐藏行为监控
+- ❌ 在 Phase 8 内把 User Pattern Lite 偷偷扩张为用户画像或隐藏行为监控
 - ❌ 跳过 Scope 治理落地
 
 ---
