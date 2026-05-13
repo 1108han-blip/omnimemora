@@ -49,6 +49,25 @@ def test_local_proxy_health_and_version_routes():
     assert version["version"] == "0.1.0-beta.2"
 
 
+def test_report_page_is_local_static_html():
+    proxy = _start_proxy("http://127.0.0.1:1/v1")
+    try:
+        report_status, report_body, report_headers = _get_raw(f"{_base_url(proxy)}/report")
+        root_status, root_body, _root_headers = _get_raw(f"{_base_url(proxy)}/")
+    finally:
+        _stop_server(proxy)
+
+    assert report_status == 200
+    assert root_status == 200
+    assert report_headers["content-type"].startswith("text/html")
+    assert b"DoloToken Report" in report_body
+    assert b"/audit/summary?limit=1000" in report_body
+    assert b"/audit/reports/top-requests?limit=50" in report_body
+    assert b"/audit/reports/potential-savings?limit=1000" in report_body
+    assert b"https://" not in report_body
+    assert b"DoloToken Report" in root_body
+
+
 def test_chat_completions_forwards_body_to_configured_upstream():
     upstream_body = {
         "id": "chatcmpl-test",
@@ -608,12 +627,22 @@ def _get_json_with_status(url: str):
         return int(exc.code), json.loads(exc.read())
 
 
+def _get_raw(url: str):
+    try:
+        with urllib.request.urlopen(url, timeout=5) as response:
+            headers = {key.lower(): value for key, value in response.headers.items()}
+            return int(response.status), response.read(), headers
+    except urllib.error.HTTPError as exc:
+        headers = {key.lower(): value for key, value in exc.headers.items()}
+        return int(exc.code), exc.read(), headers
+
+
 def _post_json(url: str, payload: dict):
     status, body, _headers = _post_json_with_headers(url, payload)
     return status, body
 
 
-def _post_json_with_headers(url: str, payload: dict, headers: dict[str, str] | None = None):
+def _post_json_with_headers(url: str, payload: dict, headers=None):
     data = _json_bytes(payload)
     request_headers = {"content-type": "application/json"}
     if headers:

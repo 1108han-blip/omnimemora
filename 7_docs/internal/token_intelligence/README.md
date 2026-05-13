@@ -50,6 +50,7 @@
 - 2026-05-13: Naming decision recorded. The external product name is DoloToken; Token Intelligence remains the internal module, engineering line, technical capability name, route namespace, and compatibility surface.
 - 2026-05-13: TI-027 DoloToken brand-sync release completed. DoloToken `0.1.0-beta.2` artifacts were uploaded to R2, the control-entry Worker was redeployed, live `/download` now lists the DoloToken CLI beta, and remote package SHA/version were verified.
 - 2026-05-13: Current-version product scope recorded. DoloToken can audit relay/middleman token usage and can become a unified token-flow meter for LLM requests that pass through it, but it must label provider-reported, relay-reported, local-estimated, and rough-estimated counts separately and must not claim local estimates as provider billing truth.
+- 2026-05-13: TI-028 repo-only local report page added. The DoloToken proxy now serves a no-code browser report at `/report`, backed by existing metadata-only audit summary, top-request, and potential-savings APIs.
 
 ## Naming
 
@@ -955,6 +956,42 @@ Boundaries:
 - no source code was published;
 - DoloToken remains unsigned controlled-beta local CLI/proxy material;
 - price/cost calculation remains optional and does not affect token-flow audit truth.
+
+### TI-028 - Local Browser Report Page
+
+Status: repo implementation completed on 2026-05-13 for the DoloToken local proxy.
+
+Goal:
+
+- let non-technical relay users see agent, model, request, and token usage without CLI commands;
+- keep all data local and metadata-only;
+- reuse the existing local audit APIs instead of adding a cloud service, desktop GUI dependency, or new storage model.
+
+User surface:
+
+- `GET /report`
+- `GET /`
+
+The page reads:
+
+- `/health`
+- `/audit/summary?limit=1000`
+- `/audit/reports/top-requests?limit=50`
+- `/audit/reports/potential-savings?limit=1000`
+
+Boundary:
+
+- local-only browser page served by the DoloToken proxy;
+- no external assets, CDN, cloud calls, cookies, or raw prompt display;
+- no write actions, deletion controls, or retention changes in this batch;
+- no `18011`, desktop GUI, OpenClaw config, or official agent config mutation;
+- `/report` is a user-readable view over existing audit metadata, not a new product truth source.
+
+Exit:
+
+- users can open `http://127.0.0.1:18081/report` after starting the proxy;
+- page shows request count, total/input/output/reasoning tokens, top agents, top models, top requests, and optimization signals;
+- existing CLI reports remain available for users who want JSON output.
 
 ## Validation Requirements
 

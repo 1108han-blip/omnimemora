@@ -75,6 +75,9 @@ def _make_handler(config: LocalProxyConfig) -> type[BaseHTTPRequestHandler]:
 
         def do_GET(self) -> None:  # noqa: N802 - stdlib handler API
             parsed_path = urlparse(self.path).path
+            if parsed_path in {"/", "/report"}:
+                _send_report_page(self)
+                return
             if parsed_path == "/health":
                 _send_json(
                     self,
@@ -261,6 +264,313 @@ def _send_top_requests_report(handler: BaseHTTPRequestHandler, config: LocalProx
         _send_json(handler, 500, {"error": "top_requests_report_failed", "message": str(exc)})
         return
     _send_json(handler, 200, report)
+
+
+def _send_report_page(handler: BaseHTTPRequestHandler) -> None:
+    body = _report_page_html().encode("utf-8")
+    handler.send_response(200)
+    handler.send_header("content-type", "text/html; charset=utf-8")
+    handler.send_header("cache-control", "no-store")
+    handler.send_header("content-length", str(len(body)))
+    handler.end_headers()
+    handler.wfile.write(body)
+
+
+def _report_page_html() -> str:
+    return """<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DoloToken Report</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8fa;
+      --panel: #ffffff;
+      --ink: #17202a;
+      --muted: #637083;
+      --line: #d9dee7;
+      --accent: #146c5a;
+      --accent-soft: #e3f3ee;
+      --warn: #8a5a0a;
+      --warn-soft: #fff2d7;
+      --bad: #9f2d2d;
+      --bad-soft: #fde4e4;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font: 14px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 20px 24px;
+      border-bottom: 1px solid var(--line);
+      background: var(--panel);
+    }
+    h1, h2 { margin: 0; font-weight: 650; letter-spacing: 0; }
+    h1 { font-size: 22px; }
+    h2 { font-size: 15px; }
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 20px 24px 40px;
+    }
+    button {
+      appearance: none;
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--ink);
+      border-radius: 6px;
+      min-height: 34px;
+      padding: 0 12px;
+      font: inherit;
+      cursor: pointer;
+    }
+    button:hover { border-color: var(--accent); }
+    .status {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      min-width: 0;
+    }
+    .dot {
+      width: 9px;
+      height: 9px;
+      border-radius: 999px;
+      background: var(--muted);
+      flex: 0 0 auto;
+    }
+    .dot.ok { background: var(--accent); }
+    .dot.bad { background: var(--bad); }
+    .grid {
+      display: grid;
+      gap: 12px;
+    }
+    .metrics {
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      margin-bottom: 18px;
+    }
+    .metric, section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+    .metric { padding: 14px; min-height: 84px; }
+    .label {
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .value {
+      margin-top: 8px;
+      font-size: 26px;
+      font-weight: 700;
+      overflow-wrap: anywhere;
+    }
+    section { margin-top: 14px; overflow: hidden; }
+    .section-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 13px 14px;
+      border-bottom: 1px solid var(--line);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+    th, td {
+      padding: 10px 14px;
+      border-bottom: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      overflow-wrap: anywhere;
+    }
+    th {
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 12px;
+    }
+    tr:last-child td { border-bottom: 0; }
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+      border-radius: 999px;
+      padding: 3px 8px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      font-size: 12px;
+      overflow-wrap: anywhere;
+    }
+    .pill.warn { background: var(--warn-soft); color: var(--warn); }
+    .pill.bad { background: var(--bad-soft); color: var(--bad); }
+    .empty, .error {
+      padding: 18px 14px;
+      color: var(--muted);
+    }
+    .error { color: var(--bad); }
+    @media (max-width: 860px) {
+      header { align-items: flex-start; flex-direction: column; }
+      main { padding: 14px; }
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      th, td { padding: 9px 10px; }
+    }
+    @media (max-width: 520px) {
+      .metrics { grid-template-columns: 1fr; }
+      .hide-sm { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>DoloToken Report</h1>
+      <div class="status"><span id="dot" class="dot"></span><span id="status">Loading</span></div>
+    </div>
+    <button id="refresh" type="button">刷新</button>
+  </header>
+  <main>
+    <div id="metrics" class="grid metrics"></div>
+    <section>
+      <div class="section-head"><h2>Agent 消耗</h2></div>
+      <div id="agents"></div>
+    </section>
+    <section>
+      <div class="section-head"><h2>模型消耗</h2></div>
+      <div id="models"></div>
+    </section>
+    <section>
+      <div class="section-head"><h2>高消耗请求</h2></div>
+      <div id="requests"></div>
+    </section>
+    <section>
+      <div class="section-head"><h2>优化信号</h2></div>
+      <div id="signals"></div>
+    </section>
+  </main>
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const fmt = (value) => Number(value || 0).toLocaleString();
+    const text = (value) => value == null || value === "" ? "-" : String(value);
+
+    function metric(label, value) {
+      return `<div class="metric"><div class="label">${label}</div><div class="value">${fmt(value)}</div></div>`;
+    }
+
+    function table(headers, rows, emptyText) {
+      if (!rows.length) return `<div class="empty">${emptyText}</div>`;
+      const head = headers.map((h) => `<th>${h}</th>`).join("");
+      const body = rows.map((row) => `<tr>${row.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("");
+      return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`;
+    }
+
+    function pill(value, kind = "") {
+      const className = kind ? `pill ${kind}` : "pill";
+      return `<span class="${className}">${text(value)}</span>`;
+    }
+
+    async function getJson(path) {
+      const response = await fetch(path, { cache: "no-store" });
+      if (!response.ok) throw new Error(`${path} returned ${response.status}`);
+      return response.json();
+    }
+
+    async function load() {
+      $("status").textContent = "加载中";
+      $("dot").className = "dot";
+      try {
+        const [health, summary, top, savings] = await Promise.all([
+          getJson("/health"),
+          getJson("/audit/summary?limit=1000"),
+          getJson("/audit/reports/top-requests?limit=50"),
+          getJson("/audit/reports/potential-savings?limit=1000"),
+        ]);
+        render(health, summary, top, savings);
+        $("dot").className = "dot ok";
+        $("status").textContent = `${health.status} - ${health.version}`;
+      } catch (error) {
+        $("dot").className = "dot bad";
+        $("status").textContent = "不可用";
+        $("metrics").innerHTML = "";
+        $("agents").innerHTML = `<div class="error">${error.message}</div>`;
+        $("models").innerHTML = "";
+        $("requests").innerHTML = "";
+        $("signals").innerHTML = "";
+      }
+    }
+
+    function render(_health, summary, top, savings) {
+      const usage = summary.usage || {};
+      $("metrics").innerHTML = [
+        metric("请求数", summary.event_count),
+        metric("总 Token", usage.total_tokens),
+        metric("输入 Token", usage.input_tokens),
+        metric("输出 Token", usage.output_tokens),
+        metric("思考 Token", usage.reasoning_tokens),
+      ].join("");
+
+      $("agents").innerHTML = table(
+        ["Agent", "请求数", "Token"],
+        (summary.top_agents || []).map((item) => [
+          text(item.agent_id),
+          fmt(item.request_count),
+          fmt(item.total_tokens),
+        ]),
+        "暂无 Agent 标签。"
+      );
+
+      $("models").innerHTML = table(
+        ["模型", "请求数", "Token"],
+        (summary.top_models || []).map((item) => [
+          text(item.model),
+          fmt(item.request_count),
+          fmt(item.total_tokens),
+        ]),
+        "暂无模型消耗。"
+      );
+
+      $("requests").innerHTML = table(
+        ["请求", "Agent", "模型", "Token", "来源", "状态"],
+        (top.top_by_tokens || []).slice(0, 20).map((item) => [
+          text(item.audit_id),
+          text(item.agent_id),
+          text(item.model_requested || item.model_reported),
+          fmt(item.total_tokens),
+          pill(item.usage_source || "unknown"),
+          pill(item.reconciliation_status || "unknown", item.reconciliation_status === "normal" ? "" : "warn"),
+        ]),
+        "暂无请求记录。"
+      );
+
+      $("signals").innerHTML = table(
+        ["信号", "可节省 Token", "来源"],
+        (savings.top_opportunities || []).slice(0, 20).map((item) => [
+          text(item.category || item.reason_code),
+          fmt(item.potential_saving_tokens),
+          pill(item.source || savings.source || "local_estimated"),
+        ]),
+        "暂无优化信号。"
+      );
+    }
+
+    $("refresh").addEventListener("click", load);
+    load();
+  </script>
+</body>
+</html>"""
 
 
 def _send_audit_event(handler: BaseHTTPRequestHandler, config: LocalProxyConfig, path: str) -> None:

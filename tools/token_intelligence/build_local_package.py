@@ -133,6 +133,7 @@ What it does:
   - records token-flow receipts without storing raw prompts by default
   - labels reported token usage separately from local estimates
   - summarizes local receipts, top requests, and potential token savings
+  - provides a local browser report page at http://127.0.0.1:18081/report
 
 Current version boundary:
   - audits LLM requests only when they pass through this local proxy
@@ -159,6 +160,7 @@ Optional attach helper:
   ./omni-token-audit detach openclaw
 
 Reports:
+  Open http://127.0.0.1:18081/report
   ./omni-token-audit report summary
   ./omni-token-audit report top-requests
   ./omni-token-audit report potential-savings
