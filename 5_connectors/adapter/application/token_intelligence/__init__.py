@@ -25,6 +25,7 @@ from .ledger import (
     summarize_recent_events,
 )
 from .models import AuditEvent, NormalizedCost, NormalizedUsage
+from .mcp_companion import dispatch_mcp_jsonrpc, mcp_health
 from .receipts import build_receipt
 from .reports import build_potential_savings_report
 from .savings_proof import build_actual_savings_proof
@@ -59,11 +60,13 @@ __all__ = [
     "default_config_path",
     "detect_openai_compatible_waste",
     "delete_audit_event",
+    "dispatch_mcp_jsonrpc",
     "get_audit_event",
     "init_schema",
     "load_config",
     "estimate_openai_compatible_input_tokens",
     "estimate_openai_compatible_output_tokens",
+    "mcp_health",
     "normalize_openai_compatible_usage",
     "purge_audit_events_older_than",
     "record_audit_event",

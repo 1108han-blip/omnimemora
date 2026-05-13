@@ -26,6 +26,7 @@
 - 2026-05-13: TI-005 repo-only data controls added. The candidate audit store supports single-event delete, bounded retention purge, metadata-only receipt export/read, and audit-disabled forwarding; user-pattern records remain unopened until a separate approval-gated design exists.
 - 2026-05-13: TI-006 repo-only potential savings report added. The candidate proxy exposes `/audit/reports/potential-savings`, derived from bounded summary data, to show estimated savings opportunities without enabling automatic optimization.
 - 2026-05-13: TI-007 repo-only actual savings proof calculator added. The candidate proxy exposes a stateless `/audit/reports/actual-savings/proof` endpoint that compares recommended, baseline, and actual tokens without modifying structured compile or storing proof rows.
+- 2026-05-13: TI-008 repo-only local MCP companion added inside the candidate local proxy. `/mcp` exposes read-only `token_intelligence.summary` and `token_intelligence.potential_savings` tools for opted-in agents; it does not capture requests, write memory, or replace the primary proxy path.
 
 ## Product Target
 
@@ -324,12 +325,22 @@ Current behavior:
 
 ### TI-008 - Local MCP Companion
 
+Status: repo implementation completed on 2026-05-13 inside the candidate local proxy only; no `18011` MCP change or promotion started.
+
 Expose local audit summaries to opted-in agents.
 
 Exit:
 
 - agents can query recent audit summaries and optimization recommendations;
 - MCP is not the primary capture path and does not replace local proxy capture.
+
+Current behavior:
+
+- `GET /mcp` reports a candidate local HTTP JSON-RPC companion;
+- `POST /mcp` supports `initialize`, `ping`, `tools/list`, and `tools/call`;
+- tools are limited to `token_intelligence.summary` and `token_intelligence.potential_savings`;
+- tool calls read bounded local audit summary/report data only;
+- no request capture, memory write, compile routing, or `18011` MCP behavior is changed.
 
 ## Validation Requirements
 

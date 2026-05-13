@@ -190,6 +190,64 @@ def test_actual_savings_proof_classifies_realized_and_negative_savings():
     assert negative["negative_saving_tokens"] == 20
 
 
+def test_mcp_companion_tools_are_read_only_and_bounded(tmp_path, monkeypatch):
+    sqlite_path = tmp_path / "token_intelligence.sqlite3"
+    monkeypatch.setenv("OMNIMEMORA_TOKEN_INTELLIGENCE_DB", str(sqlite_path))
+    usage = token_intelligence.normalize_openai_compatible_usage(
+        {"usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15}},
+        usage_source="relay_reported",
+    )
+    event = token_intelligence.build_audit_event(
+        request_id="mcp-summary",
+        request_payload={"model": "relay"},
+        response_payload={"id": "mcp-summary"},
+        upstream_base_url="https://relay.example/v1",
+        provider="local_proxy",
+        model_requested="relay-model",
+        usage=usage,
+        opportunities=[
+            {
+                "detector_id": "duplicate_context_v1",
+                "category": "duplicate_context",
+                "reason_code": "repeated_message_content",
+                "token_estimate": 10,
+                "potential_saving_tokens": 10,
+                "item_count": 1,
+                "severity": "medium",
+                "source": "local_estimated",
+                "confidence": "compatible_estimate",
+            }
+        ],
+    )
+    token_intelligence.record_audit_event(event)
+
+    tools = token_intelligence.dispatch_mcp_jsonrpc({"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+    summary = token_intelligence.dispatch_mcp_jsonrpc(
+        {
+            "jsonrpc": "2.0",
+            "id": 2,
+            "method": "tools/call",
+            "params": {"name": "token_intelligence.summary", "arguments": {"limit": 5000}},
+        }
+    )
+    report = token_intelligence.dispatch_mcp_jsonrpc(
+        {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {"name": "token_intelligence.potential_savings", "arguments": {"limit": 1}},
+        }
+    )
+
+    tool_names = {tool["name"] for tool in tools["result"]["tools"]}
+    assert tool_names == {"token_intelligence.summary", "token_intelligence.potential_savings"}
+    summary_payload = json.loads(summary["result"]["content"][0]["text"])
+    report_payload = json.loads(report["result"]["content"][0]["text"])
+    assert summary_payload["window"] == {"bounded": True, "limit": 1000}
+    assert summary_payload["event_count"] == 1
+    assert report_payload["potential_saving_tokens"] == 10
+
+
 def test_audit_ledger_roundtrip_and_receipt_are_metadata_only(tmp_path, monkeypatch):
     sqlite_path = tmp_path / "token_intelligence.sqlite3"
     monkeypatch.setenv("OMNIMEMORA_TOKEN_INTELLIGENCE_DB", str(sqlite_path))

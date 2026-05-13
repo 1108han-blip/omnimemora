@@ -361,6 +361,58 @@ def test_actual_savings_proof_endpoint_is_stateless(tmp_path):
     assert payload["source"] == "local_estimated"
 
 
+def test_mcp_companion_exposes_read_only_summary_tools(tmp_path):
+    sqlite_path = tmp_path / "audit.sqlite3"
+    upstream = _start_fake_upstream(response_body=_json_bytes({"id": "chatcmpl-mcp"}))
+    proxy = _start_proxy(
+        f"{_base_url(upstream)}/v1",
+        audit_db_path=str(sqlite_path),
+        audit_enabled=True,
+    )
+    repeated = "repeat this long context block for mcp summary"
+    try:
+        status, _body, _headers = _post_json_with_headers(
+            f"{_base_url(proxy)}/v1/chat/completions",
+            {
+                "model": "relay-model",
+                "messages": [
+                    {"role": "user", "content": repeated},
+                    {"role": "user", "content": repeated},
+                    {"role": "user", "content": "current request"},
+                ],
+            },
+        )
+        health_status, health = _get_json_with_status(f"{_base_url(proxy)}/mcp")
+        tools_status, tools_body, _tools_headers = _post_json_with_headers(
+            f"{_base_url(proxy)}/mcp",
+            {"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+        )
+        report_status, report_body, _report_headers = _post_json_with_headers(
+            f"{_base_url(proxy)}/mcp",
+            {
+                "jsonrpc": "2.0",
+                "id": 2,
+                "method": "tools/call",
+                "params": {"name": "token_intelligence.potential_savings", "arguments": {"limit": 5}},
+            },
+        )
+    finally:
+        _stop_server(proxy)
+        _stop_server(upstream)
+
+    assert status == 200
+    assert health_status == 200
+    assert health["mode"] == "candidate_local_companion"
+    tools_payload = json.loads(tools_body)
+    tool_names = {tool["name"] for tool in tools_payload["result"]["tools"]}
+    assert tool_names == {"token_intelligence.summary", "token_intelligence.potential_savings"}
+    report_payload = json.loads(report_body)
+    report = json.loads(report_payload["result"]["content"][0]["text"])
+    assert report_status == 200
+    assert report["potential_saving_tokens"] > 0
+    assert repeated not in json.dumps(report_payload, sort_keys=True)
+
+
 def test_update_check_reads_release_metadata_without_download(tmp_path):
     metadata_path = tmp_path / "latest.json"
     metadata_path.write_text(

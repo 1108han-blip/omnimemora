@@ -20,6 +20,7 @@ from .ledger import (
     record_audit_event,
     summarize_recent_events,
 )
+from .mcp_companion import dispatch_mcp_jsonrpc, mcp_health
 from .reports import build_potential_savings_report
 from .receipts import build_receipt
 from .savings_proof import build_actual_savings_proof
@@ -93,6 +94,9 @@ def _make_handler(config: LocalProxyConfig) -> type[BaseHTTPRequestHandler]:
                     },
                 )
                 return
+            if parsed_path == "/mcp":
+                _send_json(self, 200, mcp_health())
+                return
             if parsed_path == "/audit/summary":
                 _send_audit_summary(self, config, self.path)
                 return
@@ -108,6 +112,9 @@ def _make_handler(config: LocalProxyConfig) -> type[BaseHTTPRequestHandler]:
             _send_json(self, 404, {"error": "not_found", "path": parsed_path})
 
         def do_POST(self) -> None:  # noqa: N802 - stdlib handler API
+            if self.path == "/mcp":
+                _handle_mcp_jsonrpc(self, config)
+                return
             if self.path == "/audit/retention/purge":
                 _handle_retention_purge(self, config)
                 return
@@ -217,6 +224,17 @@ def _send_audit_summary(handler: BaseHTTPRequestHandler, config: LocalProxyConfi
         _send_json(handler, 500, {"error": "audit_summary_failed", "message": str(exc)})
         return
     _send_json(handler, 200, summary)
+
+
+def _handle_mcp_jsonrpc(handler: BaseHTTPRequestHandler, config: LocalProxyConfig) -> None:
+    content_length = int(handler.headers.get("content-length") or "0")
+    body = handler.rfile.read(content_length)
+    payload = _json_payload(body)
+    response = dispatch_mcp_jsonrpc(payload, audit_db_path=config.audit_db_path)
+    if response is None:
+        _send_json(handler, 204, {})
+        return
+    _send_json(handler, 200, response)
 
 
 def _send_potential_savings_report(handler: BaseHTTPRequestHandler, config: LocalProxyConfig, raw_path: str) -> None:
