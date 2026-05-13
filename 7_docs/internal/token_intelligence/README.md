@@ -45,6 +45,7 @@
 - 2026-05-13: TI-023 repo-only local release layout added. The package builder now emits a local R2-preview directory with zip, `SHA256SUMS.txt`, `latest.json`, and versioned manifest, and tests verify SHA/metadata consistency before any upload.
 - 2026-05-13: TI-024 repo-only dry-run publish plan added. The package builder can now print future R2 upload keys, content types, SHA values, and Worker routes with `mutates_cloud=false`, without creating Cloudflare tokens, uploading objects, or deploying the Worker.
 - 2026-05-13: TI-025 repo-only release preflight gate added. The package builder now checks Worker template version alignment, Cloudflare auth visibility, target account/bucket/Worker resolution, upload file count, and manual publish readiness without uploading or deploying.
+- 2026-05-13: TI-026 cloud release completed. Token Intelligence `0.1.0-beta.1` artifacts were uploaded to R2, the control-entry Worker was deployed, live `/download` now lists the Token Intelligence CLI beta, and remote package SHA/version were verified.
 
 ## Product Target
 
@@ -794,6 +795,62 @@ Boundaries:
 - this does not deploy the Worker;
 - this does not update live `doloclaw.com` routes;
 - live-route checks are recorded separately from local preflight and are not treated as candidate code being active.
+
+### TI-026 - Cloud Release
+
+Status: cloud running release completed on 2026-05-13 for Token Intelligence `0.1.0-beta.1`.
+
+Release action:
+
+- built local release preview with `--preflight-release-gate`;
+- uploaded 4 R2 objects under `omnimemora/token-intelligence/0.1.0-beta.1/`;
+- deployed Worker `omnimemora-control-entry` with desktop version placeholder kept at `1.0.0-beta.17`;
+- preserved existing desktop beta17 release paths.
+
+Uploaded objects:
+
+- `omnimemora/token-intelligence/0.1.0-beta.1/0.1.0-beta.1.json`
+- `omnimemora/token-intelligence/0.1.0-beta.1/SHA256SUMS.txt`
+- `omnimemora/token-intelligence/0.1.0-beta.1/latest.json`
+- `omnimemora/token-intelligence/0.1.0-beta.1/omni-token-audit-0.1.0-beta.1-local.zip`
+
+Release SHA:
+
+```text
+c8607db3dd30e101cb0a74d0a6ef0a6be39ea5a04e8af2719cb8d701d2810875  omni-token-audit-0.1.0-beta.1-local.zip
+```
+
+Running verification:
+
+- `https://doloclaw.com/releases/token-intelligence/latest.json` resolves to product `omnimemora-token-intelligence`, version `0.1.0-beta.1`;
+- `https://doloclaw.com/releases/token-intelligence/0.1.0-beta.1.json` resolves with the same version metadata;
+- `https://doloclaw.com/download/file/token-intelligence/omni-token-audit-0.1.0-beta.1-local.zip` redirects to the Token Intelligence R2 object;
+- downloaded remote zip SHA matched the release SHA above;
+- unpacked remote zip ran `omni-token-audit version` and returned `0.1.0-beta.1`;
+- unpacked remote zip ran `omni-token-audit snippets --list` and returned the supported snippet list;
+- `https://doloclaw.com/download` displays "Token Intelligence Lite CLI (local proxy beta)" and the Token Intelligence release manifest link;
+- `https://doloclaw.com/releases/latest.json` still reports desktop `1.0.0-beta.17` and `beta_one_click_download_verify_open_dmg`;
+- `https://doloclaw.com/download/file/darwin-arm64` still redirects to the desktop beta17 DMG;
+- `https://doloclaw.com/health` remains healthy and reports `release_posture=proprietary-controlled-beta`;
+- `http://127.0.0.1:18011/health` remains healthy;
+- `http://127.0.0.1:18011/metrics/core_capabilities` remains responsive.
+
+Download stats check:
+
+- `/api/download/stats?days=1` returned 200 and counted `token-intelligence/omni-token-audit-0.1.0-beta.1-local.zip`.
+- A broader `/api/download/stats` query timed out once at 10 seconds during validation, so stats should not be treated as the release-critical proof path.
+
+Operational note:
+
+- The first R2 upload attempt hit `Unauthorized` on the first object, consistent with temporary token propagation timing seen in earlier release tooling. Retrying with the existing propagation wait/backoff strategy succeeded.
+
+Boundaries:
+
+- no `18011` promotion was performed;
+- no desktop app package was rebuilt;
+- no source code was published;
+- Token Intelligence remains unsigned controlled-beta local CLI/proxy material;
+- price/cost calculation remains optional and does not affect token-flow audit truth.
 
 ## Validation Requirements
 
