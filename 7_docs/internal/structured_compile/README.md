@@ -1122,6 +1122,24 @@ Exit:
 - A later SC-025 candidate may implement only candidate extraction and storage metadata.
 - GUI review, automatic approval, new database tables, and cross-device/cloud sync remain out of scope until real token-saving value is proven.
 
+### SC-025 - Token Audit and User Pattern Lite Data Plan
+
+Goal: prepare Token Audit Mode as a near-term product focus while allowing a bounded user database for token-saving value, not broad user profiling.
+
+Status: direction record opened on 2026-05-13. No product behavior, schema, GUI, or running configuration change in this record.
+
+Decision:
+
+- Do not build user profiling.
+- Do allow `User Pattern Lite` when records are compact, user-visible, and used to reduce repeated prompt tokens.
+- Do allow a small user database if it supports token saving, provider-aligned token audit, and user control.
+- Do not create large files or make upstream-critical paths depend on slow persistence.
+- Token Audit Mode must include user data management from the start: view, delete/expire, confidence labels, and raw-payload avoidance by default.
+
+Plan:
+
+- See [Token Audit and User Pattern Lite Data Plan](./token_audit_user_data_plan.md).
+
 ## Success Criteria
 
 Repo reality:
