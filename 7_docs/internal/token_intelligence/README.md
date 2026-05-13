@@ -35,6 +35,7 @@
 - 2026-05-13: TI-014 repo-only MCP top requests tool added. The local MCP companion can expose bounded top request summaries to opted-in agents without becoming a capture or memory-write path.
 - 2026-05-13: TI-015 repo-only beta version alignment completed. CLI, local proxy, MCP server info, and local package builder now report `0.1.0-beta.1` consistently.
 - 2026-05-13: TI-016 repo-only skill-like attach profile added. `doctor`, `attach`, and `detach` now create reversible local connection profiles for agents without mutating official agent configs.
+- 2026-05-13: TI-017 repo-only managed launcher added. `attach --with-launcher` writes a reversible env file and launch wrapper so users can run compatible agents through Token Audit without editing agent configs.
 
 ## Product Target
 
@@ -511,6 +512,28 @@ Current behavior:
 - profiles include `proxy_base_url`, `mcp_url`, upstream base URL, API key environment variable name, and recommended client headers;
 - actual OpenClaw, Claude Code, or other agent configuration files are not mutated in TI-016;
 - no API key value, raw prompt, response, tool output, memory write, or `18011` behavior is stored or changed.
+
+### TI-017 - Managed Env Launcher
+
+Status: repo implementation completed on 2026-05-13 for local launcher artifacts only.
+
+Reduce attach friction without taking ownership of unknown agent config formats.
+
+Exit:
+
+- users can generate a wrapper that injects Token Audit connection environment variables;
+- detach removes the wrapper and env file;
+- official agent config files remain untouched.
+
+Current behavior:
+
+- `omni-token-audit attach openclaw --with-launcher` writes `openclaw.env` and `openclaw-launch.sh` next to the attach profile;
+- the env file sets `OPENAI_BASE_URL`, `OPENAI_API_KEY` as a reference to the configured API key environment variable, `OMNI_TOKEN_AUDIT_AGENT_ID`, and `OMNI_TOKEN_AUDIT_MCP_URL`;
+- the launcher sources the env file and executes the agent command passed by the user;
+- `omni-token-audit detach openclaw` removes the profile, env file, and launcher if present;
+- API key values are not written;
+- no official OpenClaw, Claude Code, Codex, or provider config file is modified;
+- this is not yet a protocol-specific Claude Code/Anthropic attach path.
 
 ## Validation Requirements
 

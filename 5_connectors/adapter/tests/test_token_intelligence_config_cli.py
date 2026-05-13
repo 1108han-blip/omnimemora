@@ -140,27 +140,40 @@ def test_cli_doctor_attach_and_detach_are_profile_only(tmp_path, monkeypatch, ca
     assert doctor["proxy_health"]["reachable"] is False
     assert "secret-value-not-written" not in json.dumps(doctor, sort_keys=True)
 
-    assert cli.main(["attach", "openclaw", "--config", str(config_path)]) == 0
+    assert cli.main(["attach", "openclaw", "--config", str(config_path), "--with-launcher"]) == 0
     profile = json.loads(capsys.readouterr().out)
     profile_path = attach_dir / "openclaw.json"
+    env_path = attach_dir / "openclaw.env"
+    launcher_path = attach_dir / "openclaw-launch.sh"
     written = json.loads(profile_path.read_text(encoding="utf-8"))
     assert profile["status"] == "profile_written"
     assert profile["agent_config_mutated"] is False
     assert profile["proxy_base_url"] == "http://127.0.0.1:18081/v1"
+    assert profile["launcher"]["script_path"] == str(launcher_path)
     assert written["client_headers"] == {"x-omni-agent-id": "openclaw"}
+    assert env_path.exists()
+    assert launcher_path.exists()
+    assert "OPENAI_BASE_URL='http://127.0.0.1:18081/v1'" in env_path.read_text(encoding="utf-8")
     assert "secret-value-not-written" not in json.dumps(written, sort_keys=True)
+    assert "secret-value-not-written" not in env_path.read_text(encoding="utf-8")
 
-    assert cli.main(["attach", "claude_code", "--config", str(config_path), "--dry-run"]) == 0
+    assert cli.main(["attach", "claude_code", "--config", str(config_path), "--dry-run", "--with-launcher"]) == 0
     dry_run = json.loads(capsys.readouterr().out)
     assert dry_run["target"] == "claude-code"
     assert dry_run["agent_id"] == "claude_code"
+    assert dry_run["launcher"]["script_path"] == str(attach_dir / "claude-code-launch.sh")
     assert not (attach_dir / "claude-code.json").exists()
+    assert not (attach_dir / "claude-code.env").exists()
 
     assert cli.main(["detach", "openclaw"]) == 0
     detached = json.loads(capsys.readouterr().out)
     assert detached["status"] == "detached"
     assert detached["agent_config_mutated"] is False
+    assert detached["removed_launcher"] is True
+    assert detached["removed_env"] is True
     assert not profile_path.exists()
+    assert not env_path.exists()
+    assert not launcher_path.exists()
 
 
 def test_cli_receipt_get_reads_metadata_only_receipt(tmp_path, monkeypatch, capsys):

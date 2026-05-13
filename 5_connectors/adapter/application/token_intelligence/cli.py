@@ -49,6 +49,7 @@ def _build_parser() -> argparse.ArgumentParser:
     attach_parser.add_argument("target", help="agent target, for example openclaw, claude-code, or generic")
     attach_parser.add_argument("--config", default="", help="config path")
     attach_parser.add_argument("--dry-run", action="store_true", help="print profile without writing it")
+    attach_parser.add_argument("--with-launcher", action="store_true", help="write a managed env launcher")
     attach_parser.set_defaults(func=_cmd_attach)
 
     detach_parser = subparsers.add_parser("detach", help="remove a local agent connection profile")
@@ -135,7 +136,12 @@ def _cmd_doctor(args: argparse.Namespace) -> int:
 
 
 def _cmd_attach(args: argparse.Namespace) -> int:
-    profile = attach_profile(args.target, _path_arg(args.config), dry_run=bool(args.dry_run))
+    profile = attach_profile(
+        args.target,
+        _path_arg(args.config),
+        dry_run=bool(args.dry_run),
+        with_launcher=bool(args.with_launcher),
+    )
     print(json.dumps(profile, ensure_ascii=False, sort_keys=True))
     return 0
 
