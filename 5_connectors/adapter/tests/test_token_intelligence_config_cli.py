@@ -596,6 +596,81 @@ def test_local_package_real_client_minimal_attach_flow(tmp_path):
     assert "TI020_REAL_CLIENT_PROMPT" not in serialized_outputs
 
 
+def test_cloud_worker_token_intelligence_download_routes_are_candidate_ready():
+    node = shutil.which("node")
+    if node is None:
+        pytest.skip("node is required to validate Cloudflare Worker route behavior")
+
+    worker_path = REPO_ROOT / "6_console" / "control-entry" / "worker.js"
+    script = r"""
+import fs from 'node:fs';
+import vm from 'node:vm';
+import assert from 'node:assert/strict';
+
+let worker = fs.readFileSync(process.env.WORKER_PATH, 'utf8')
+  .replaceAll('__PACKAGE_VERSION__', '1.0.0-beta.17')
+  .replaceAll('__SUPPORT_EMAIL__', 'support@doloclaw.com');
+
+let fetchHandler = null;
+const context = {
+  Response,
+  Request,
+  URL,
+  Date,
+  Math,
+  JSON,
+  String,
+  Number,
+  Boolean,
+  crypto: { randomUUID: () => 'test-uuid' },
+  addEventListener: (type, handler) => {
+    if (type === 'fetch') fetchHandler = handler;
+  },
+};
+vm.createContext(context);
+vm.runInContext(worker, context);
+assert.equal(typeof fetchHandler, 'function');
+
+async function call(path) {
+  let response;
+  const request = new Request(`https://doloclaw.com${path}`, { headers: { 'user-agent': 'node-test' } });
+  const event = { request, waitUntil: () => undefined, respondWith: (value) => { response = Promise.resolve(value); } };
+  fetchHandler(event);
+  return await response;
+}
+
+const download = await call('/download/file/token-intelligence/omni-token-audit-0.1.0-beta.1-local.zip');
+assert.equal(download.status, 302);
+assert.equal(
+  download.headers.get('location'),
+  'https://assets.doloclaw.com/omnimemora/token-intelligence/0.1.0-beta.1/omni-token-audit-0.1.0-beta.1-local.zip'
+);
+
+const manifest = await call('/releases/token-intelligence/latest.json');
+assert.equal(manifest.status, 302);
+assert.equal(
+  manifest.headers.get('location'),
+  'https://assets.doloclaw.com/omnimemora/token-intelligence/0.1.0-beta.1/latest.json'
+);
+
+const missing = await call('/download/file/token-intelligence/not-real.zip');
+assert.equal(missing.status, 404);
+
+const page = await call('/download');
+assert.equal(page.status, 200);
+const html = await page.text();
+assert.match(html, /Token Intelligence Lite CLI/);
+assert.match(html, /releases\/token-intelligence\/latest\.json/);
+"""
+    subprocess.run(
+        [node, "--input-type=module", "-e", script],
+        check=True,
+        capture_output=True,
+        text=True,
+        env={**os_environ_without_pythonpath(), "WORKER_PATH": str(worker_path)},
+    )
+
+
 def os_environ_without_pythonpath() -> dict[str, str]:
     env = dict(os.environ)
     env.pop("PYTHONPATH", None)

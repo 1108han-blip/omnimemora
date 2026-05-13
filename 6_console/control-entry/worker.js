@@ -4,6 +4,9 @@ const SUPPORT_EMAIL = "__SUPPORT_EMAIL__";
 const CANDIDATE_POINTER_SCHEMA = "omnimemora-cloud-candidate-pointer-v1";
 const PROMPT_OS_URL = "https://prompt.doloclaw.com/";
 const PROMO_VIDEO_FILENAME = "omnimemora-promo-guide.mp4";
+const TOKEN_INTELLIGENCE_VERSION = "0.1.0-beta.1";
+const TOKEN_INTELLIGENCE_BASE_URL = `https://assets.doloclaw.com/omnimemora/token-intelligence/${TOKEN_INTELLIGENCE_VERSION}`;
+const TOKEN_INTELLIGENCE_PACKAGE = `omni-token-audit-${TOKEN_INTELLIGENCE_VERSION}-local.zip`;
 const DOWNLOAD_FILES = {
   "darwin-arm64": `OmniMemora-Desktop-${PACKAGE_VERSION}-darwin-arm64.dmg`,
   "darwin-arm64-components": "omnimemora-darwin-arm64.zip",
@@ -15,6 +18,12 @@ const DOWNLOAD_FILES = {
   "release-index": "RELEASE_INDEX.txt",
   "latest-manifest": "latest.json",
   "version-manifest": `${PACKAGE_VERSION}.json`
+};
+const TOKEN_INTELLIGENCE_FILES = {
+  [TOKEN_INTELLIGENCE_PACKAGE]: TOKEN_INTELLIGENCE_PACKAGE,
+  "sha256sums": "SHA256SUMS.txt",
+  "latest-manifest": "latest.json",
+  "version-manifest": `${TOKEN_INTELLIGENCE_VERSION}.json`
 };
 const MEDIA_FILES = {
   "omnimemora-promo-guide.mp4": PROMO_VIDEO_FILENAME,
@@ -72,6 +81,10 @@ function trackDownloadAttempt(event, url, key, filename) {
       expirationTtl: DOWNLOAD_EVENT_RETENTION_SECONDS
     }).catch(() => undefined)
   );
+}
+
+function trackTokenIntelligenceDownloadAttempt(event, url, key, filename) {
+  trackDownloadAttempt(event, url, `token-intelligence/${key}`, filename);
 }
 
 function emptyStats(days) {
@@ -812,6 +825,23 @@ function downloadRedirectResponse(event, url) {
   });
 }
 
+function tokenIntelligenceDownloadRedirectResponse(event, url) {
+  const parts = url.pathname.split("/").filter(Boolean);
+  const key = parts[3] || "";
+  const filename = TOKEN_INTELLIGENCE_FILES[key];
+  if (!filename) {
+    return notFoundResponse(url);
+  }
+  trackTokenIntelligenceDownloadAttempt(event, url, key, filename);
+  return new Response(null, {
+    status: 302,
+    headers: {
+      location: `${TOKEN_INTELLIGENCE_BASE_URL}/${filename}`,
+      "cache-control": "no-store"
+    }
+  });
+}
+
 function mediaRedirectResponse(url) {
   const parts = url.pathname.split("/").filter(Boolean);
   const key = parts[1] || "";
@@ -830,6 +860,18 @@ function releaseManifestResponse(url) {
   }
   if (name === `${PACKAGE_VERSION}.json`) {
     return Response.redirect(`${DOWNLOAD_BASE_URL}/${PACKAGE_VERSION}.json`, 302);
+  }
+  return notFoundResponse(url);
+}
+
+function tokenIntelligenceReleaseManifestResponse(url) {
+  const parts = url.pathname.split("/").filter(Boolean);
+  const name = parts[2] || "";
+  if (name === "latest.json") {
+    return Response.redirect(`${TOKEN_INTELLIGENCE_BASE_URL}/latest.json`, 302);
+  }
+  if (name === `${TOKEN_INTELLIGENCE_VERSION}.json`) {
+    return Response.redirect(`${TOKEN_INTELLIGENCE_BASE_URL}/${TOKEN_INTELLIGENCE_VERSION}.json`, 302);
   }
   return notFoundResponse(url);
 }
@@ -856,6 +898,10 @@ function downloadHtml() {
     {
       label: "Windows (x64 component zip, installer validation pending)",
       href: `/download/file/windows-amd64`
+    },
+    {
+      label: "Token Intelligence Lite CLI (local proxy beta)",
+      href: `/download/file/token-intelligence/${TOKEN_INTELLIGENCE_PACKAGE}`
     }
   ];
 
@@ -989,6 +1035,7 @@ function downloadHtml() {
       <ul class="downloads">${list}</ul>
       <p><a href="/download/file/sha256sums">Download SHA256SUMS.txt</a></p>
       <p><a href="/releases/latest.json">View latest release manifest</a></p>
+      <p><a href="/releases/token-intelligence/latest.json">View Token Intelligence release manifest</a></p>
 
       <h2>Install Steps</h2>
       <ul>
@@ -1013,6 +1060,7 @@ function downloadHtml() {
 
       <div class="meta">
         <div>Feedback: <a href="mailto:${SUPPORT_EMAIL}?subject=OmniMemora%20Beta%20Feedback">${SUPPORT_EMAIL}</a></div>
+        <div>Token Intelligence: <code>${TOKEN_INTELLIGENCE_VERSION}</code>, local proxy beta, checksum required before replacement.</div>
         <div>License: all rights reserved, beta only, no redistribution, no commercial use.</div>
       </div>
     </section>
@@ -1065,6 +1113,10 @@ addEventListener("fetch", (event) => {
     event.respondWith(downloadHtml());
     return;
   }
+  if (url.pathname.startsWith("/download/file/token-intelligence/")) {
+    event.respondWith(tokenIntelligenceDownloadRedirectResponse(event, url));
+    return;
+  }
   if (url.pathname.startsWith("/download/file/")) {
     event.respondWith(downloadRedirectResponse(event, url));
     return;
@@ -1079,6 +1131,10 @@ addEventListener("fetch", (event) => {
   }
   if (url.pathname.startsWith("/releases/desktop-updater/")) {
     event.respondWith(desktopUpdaterResponse(url));
+    return;
+  }
+  if (url.pathname.startsWith("/releases/token-intelligence/")) {
+    event.respondWith(tokenIntelligenceReleaseManifestResponse(url));
     return;
   }
   if (url.pathname.startsWith("/releases/")) {

@@ -41,6 +41,7 @@
 - 2026-05-13: Product decision recorded: Token Intelligence is token-flow accuracy first. Money/cost remains optional, source-labeled, and user-configurable; no official or relay price table is treated as the product anchor.
 - 2026-05-13: TI-020 repo-only real-client attach smoke added. The candidate package is built, unpacked with system unzip, started as a subprocess, called through a normal OpenAI-compatible HTTP client, and then verified through receipt/summary/top-request CLI reads plus reversible detach.
 - 2026-05-13: TI-021 repo-only beta package quickstart prepared. The package README now states local proxy purpose, config steps, compatible client base URL, optional attach helper, report commands, update check, checksum verification, private-source boundary, and unsigned Gatekeeper note.
+- 2026-05-13: TI-022 repo-only cloud route candidate prepared. Current live `doloclaw.com` Token Intelligence paths were confirmed 404, then the Worker template gained candidate redirects for Token Intelligence package downloads and release metadata, with local route tests only and no cloud deployment.
 
 ## Product Target
 
@@ -645,6 +646,33 @@ Boundaries:
 - no `doloclaw.com/download` page or Worker route is changed in this batch;
 - no automatic installer, self-replacement, or signed updater claim is added;
 - price/cost calculation remains optional and does not affect token-flow audit truth.
+
+### TI-022 - Cloud Download Route Preflight
+
+Status: repo implementation completed on 2026-05-13 for Worker template candidate routes only; no cloud upload or Worker deployment performed.
+
+Prepare the cloud route shape needed before Token Intelligence can appear on `doloclaw.com/download`.
+
+Observed live cloud state before candidate change:
+
+- `https://doloclaw.com/releases/token-intelligence/latest.json` returned 404.
+- `https://doloclaw.com/download/file/token-intelligence/omni-token-audit-0.1.0-beta.1-local.zip` returned 404.
+- `https://doloclaw.com/download` displayed the desktop beta17 download page only.
+
+Candidate route behavior:
+
+- `/download/file/token-intelligence/omni-token-audit-0.1.0-beta.1-local.zip` redirects to `https://assets.doloclaw.com/omnimemora/token-intelligence/0.1.0-beta.1/omni-token-audit-0.1.0-beta.1-local.zip`;
+- `/releases/token-intelligence/latest.json` redirects to `https://assets.doloclaw.com/omnimemora/token-intelligence/0.1.0-beta.1/latest.json`;
+- `/download` lists "Token Intelligence Lite CLI (local proxy beta)" and links the Token Intelligence release manifest;
+- unknown Token Intelligence package names return 404;
+- local Node-based Worker route test verifies the behavior after placeholder substitution.
+
+Boundaries:
+
+- this does not upload package artifacts to R2;
+- this does not deploy the Worker to Cloudflare;
+- this does not alter desktop beta17 download behavior;
+- this does not promote Token Intelligence into `18011` or the desktop GUI.
 
 ## Validation Requirements
 
