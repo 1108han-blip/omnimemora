@@ -104,7 +104,7 @@ class TestLlmProxyAgentDetection(unittest.TestCase):
         self.assertEqual(response.headers["x-request-id"], "upstream-req-1")
         self.assertEqual(response.headers["x-ratelimit-remaining"], "98")
 
-    def test_non_streaming_passthrough_recomputes_content_length(self):
+    def test_non_streaming_passthrough_drops_content_length(self):
         upstream_resp = httpx.Response(
             200,
             content=gzip.compress(b"{}"),
@@ -124,7 +124,7 @@ class TestLlmProxyAgentDetection(unittest.TestCase):
         )
 
         forwarded = {key.lower(): value for key, value in response.headers.items()}
-        self.assertEqual(forwarded["content-length"], "2")
+        self.assertNotIn("content-length", forwarded)
         self.assertNotIn("content-encoding", forwarded)
         self.assertEqual(response.headers["x-request-id"], "upstream-req-2")
 

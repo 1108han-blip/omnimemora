@@ -2964,6 +2964,11 @@ def _copy_upstream_headers_to_response(response: Response, upstream_headers: htt
         if lower in _HOP_BY_HOP_RESPONSE_HEADERS:
             continue
         response.headers.append(key, value)
+    # Some upstream/provider combinations return bodies that Starlette later
+    # sends through BaseHTTPMiddleware as chunks. Keeping a fixed length here
+    # can abort OpenClaw delivery with h11 "Too much data" errors.
+    if "content-length" in response.headers:
+        del response.headers["content-length"]
 
 
 def _extract_usage_snapshot_from_bytes(raw: bytes) -> Optional[str]:
