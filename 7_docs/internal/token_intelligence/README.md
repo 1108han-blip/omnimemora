@@ -1144,6 +1144,21 @@ Boundary:
 - no raw prompt or raw response storage;
 - no streaming reconstruction, trust score, model fingerprinting, or provider accusation layer in this MVP batch.
 
+Running validation:
+
+- adapter promotion command: `OMNIMEMORA_SERVICE_DIR="$HOME/.omnimemora/app" ./tools/promotion/promotion.sh adapter`;
+- promotion log: `tools/verification/logs/promotion_20260513_204040.log`;
+- result: `running_reality_promoted`;
+- adapter pid changed from `71025` to `72378`;
+- runtime code source remained under `/Users/sc/.omnimemora/app/current/5_connectors/adapter/main.py`;
+- product health: `GET http://127.0.0.1:18011/health` returned healthy;
+- validation request: non-streaming Anthropic-compatible `POST http://127.0.0.1:18011/v1/messages` with `x-agent-id: openclaw`;
+- upstream result: HTTP 200 from MiniMax M2.7 with provider usage `input_tokens=956`, `output_tokens=24`, `cache_creation_input_tokens=0`, `cache_read_input_tokens=0`;
+- ledger result: Token Intelligence audit row count increased from `6` to `7`;
+- latest audit event: `protocol=anthropic_messages`, `route=/v1/messages`, `provider=minimax_anthropic_compatible`, `model_reported=MiniMax-M2.7`, `usage.source=provider_reported`, `usage.confidence=official_usage`, `verification_status=normal`;
+- local report API: `GET http://127.0.0.1:18081/audit/summary?limit=10` read the same ledger and showed `top_agents[openclaw].total_tokens=980`;
+- note: an earlier promotion attempt against the legacy default `~/.omnimemora/service/current` failed because the current desktop beta launchd adapter runs from `~/.omnimemora/app/current`; no running success was claimed from that failed attempt.
+
 ## Validation Requirements
 
 Repo reality:
