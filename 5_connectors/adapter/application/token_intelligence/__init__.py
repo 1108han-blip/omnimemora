@@ -27,6 +27,7 @@ from .ledger import (
 from .models import AuditEvent, NormalizedCost, NormalizedUsage
 from .mcp_companion import dispatch_mcp_jsonrpc, mcp_health
 from .receipts import build_receipt
+from .reconciliation import reconcile_openai_compatible_usage
 from .reports import build_potential_savings_report
 from .savings_proof import build_actual_savings_proof
 from .local_proxy import LocalProxyConfig, check_update_metadata, create_server, serve_forever
@@ -70,6 +71,7 @@ __all__ = [
     "normalize_openai_compatible_usage",
     "purge_audit_events_older_than",
     "record_audit_event",
+    "reconcile_openai_compatible_usage",
     "serve_forever",
     "summarize_recent_events",
     "validate_config",

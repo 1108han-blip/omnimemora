@@ -94,6 +94,7 @@ class AuditEvent:
     metadata: Dict[str, Any] = field(default_factory=dict)
     blocks: list[Dict[str, Any]] = field(default_factory=list)
     opportunities: list[Dict[str, Any]] = field(default_factory=list)
+    reconciliation: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
         return _drop_none(
@@ -114,6 +115,7 @@ class AuditEvent:
                 "metadata": self.metadata,
                 "blocks": self.blocks,
                 "opportunities": self.opportunities,
+                "reconciliation": self.reconciliation,
             }
         )
 

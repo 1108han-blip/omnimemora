@@ -21,6 +21,7 @@ from .ledger import (
     summarize_recent_events,
 )
 from .mcp_companion import dispatch_mcp_jsonrpc, mcp_health
+from .reconciliation import reconcile_openai_compatible_usage
 from .reports import build_potential_savings_report
 from .receipts import build_receipt
 from .savings_proof import build_actual_savings_proof
@@ -424,6 +425,7 @@ def _record_proxy_audit_event(
             },
             blocks=blocks,
             opportunities=detect_openai_compatible_waste(request_payload, blocks),
+            reconciliation=reconcile_openai_compatible_usage(request_payload, response_payload, usage),
         )
         record_audit_event(event, path=config.audit_db_path)
         return event.audit_id, ""

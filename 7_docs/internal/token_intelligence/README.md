@@ -27,6 +27,7 @@
 - 2026-05-13: TI-006 repo-only potential savings report added. The candidate proxy exposes `/audit/reports/potential-savings`, derived from bounded summary data, to show estimated savings opportunities without enabling automatic optimization.
 - 2026-05-13: TI-007 repo-only actual savings proof calculator added. The candidate proxy exposes a stateless `/audit/reports/actual-savings/proof` endpoint that compares recommended, baseline, and actual tokens without modifying structured compile or storing proof rows.
 - 2026-05-13: TI-008 repo-only local MCP companion added inside the candidate local proxy. `/mcp` exposes read-only `token_intelligence.summary` and `token_intelligence.potential_savings` tools for opted-in agents; it does not capture requests, write memory, or replace the primary proxy path.
+- 2026-05-13: TI-009 repo-only usage reconciliation added. Audit events, receipts, and summaries now compare reported total tokens against local estimates and label normal, warning, unexplained, estimated-only, or not-applicable cases without treating deltas as fraud evidence.
 
 ## Product Target
 
@@ -341,6 +342,26 @@ Current behavior:
 - tools are limited to `token_intelligence.summary` and `token_intelligence.potential_savings`;
 - tool calls read bounded local audit summary/report data only;
 - no request capture, memory write, compile routing, or `18011` MCP behavior is changed.
+
+### TI-009 - Usage Reconciliation
+
+Status: repo implementation completed on 2026-05-13 for OpenAI-compatible local-vs-reported usage comparison.
+
+Compare provider or relay reported usage with local estimates.
+
+Exit:
+
+- reported usage remains preferred when present;
+- local estimates are kept as confidence-labeled audit evidence;
+- unexplained deltas are visible without making fraud claims.
+
+Current behavior:
+
+- audit events and receipts include `reconciliation`;
+- `/audit/summary` aggregates reconciliation status counts;
+- statuses are `normal`, `warning`, `unexplained_delta`, `estimated_only`, or `not_applicable`;
+- reconciliation stores only numeric counts, status, source, and confidence;
+- raw prompt, response, tool output, and hidden-context assumptions are not stored or inferred.
 
 ## Validation Requirements
 

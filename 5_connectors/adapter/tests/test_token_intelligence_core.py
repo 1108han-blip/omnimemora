@@ -190,6 +190,30 @@ def test_actual_savings_proof_classifies_realized_and_negative_savings():
     assert negative["negative_saving_tokens"] == 20
 
 
+def test_usage_reconciliation_classifies_normal_and_unexplained_delta():
+    request_payload = {"model": "relay-model", "messages": [{"role": "user", "content": "short request"}]}
+    response_payload = {"choices": [{"message": {"content": "short answer"}}]}
+    local_input = token_intelligence.estimate_openai_compatible_input_tokens(request_payload) or 1
+    local_output = token_intelligence.estimate_openai_compatible_output_tokens(response_payload) or 1
+    local_total = local_input + local_output
+    normal_usage = token_intelligence.normalize_openai_compatible_usage(
+        {"usage": {"prompt_tokens": local_total, "completion_tokens": 0, "total_tokens": local_total}},
+        usage_source="relay_reported",
+    )
+    high_usage = token_intelligence.normalize_openai_compatible_usage(
+        {"usage": {"prompt_tokens": local_total * 3, "completion_tokens": 0, "total_tokens": local_total * 3}},
+        usage_source="relay_reported",
+    )
+
+    normal = token_intelligence.reconcile_openai_compatible_usage(request_payload, response_payload, normal_usage)
+    high = token_intelligence.reconcile_openai_compatible_usage(request_payload, response_payload, high_usage)
+
+    assert normal["status"] == "normal"
+    assert normal["delta_tokens"] == 0
+    assert high["status"] == "unexplained_delta"
+    assert high["delta_ratio"] > 1.0
+
+
 def test_mcp_companion_tools_are_read_only_and_bounded(tmp_path, monkeypatch):
     sqlite_path = tmp_path / "token_intelligence.sqlite3"
     monkeypatch.setenv("OMNIMEMORA_TOKEN_INTELLIGENCE_DB", str(sqlite_path))
@@ -218,6 +242,17 @@ def test_mcp_companion_tools_are_read_only_and_bounded(tmp_path, monkeypatch):
                 "confidence": "compatible_estimate",
             }
         ],
+        reconciliation={
+            "schema_version": "token-intelligence-usage-reconciliation-v1",
+            "reported_total_tokens": 25,
+            "local_total_estimate": 20,
+            "delta_tokens": 5,
+            "delta_ratio": 0.25,
+            "status": "normal",
+            "source": "local_estimated",
+            "confidence": "compatible_estimate",
+            "raw_content": "SECRET_RECONCILIATION_CONTENT_NOT_STORED",
+        },
     )
     token_intelligence.record_audit_event(event)
 
@@ -304,6 +339,17 @@ def test_audit_ledger_roundtrip_and_receipt_are_metadata_only(tmp_path, monkeypa
                 "raw_content": request_secret,
             }
         ],
+        reconciliation={
+            "schema_version": "token-intelligence-usage-reconciliation-v1",
+            "reported_total_tokens": 25,
+            "local_total_estimate": 20,
+            "delta_tokens": 5,
+            "delta_ratio": 0.25,
+            "status": "normal",
+            "source": "local_estimated",
+            "confidence": "compatible_estimate",
+            "raw_content": request_secret,
+        },
     )
 
     token_intelligence.record_audit_event(event)
@@ -338,11 +384,14 @@ def test_audit_ledger_roundtrip_and_receipt_are_metadata_only(tmp_path, monkeypa
             "confidence": "compatible_estimate",
         }
     ]
+    assert loaded.reconciliation["status"] == "normal"
     assert receipt["request_hash"].startswith("sha256:")
     assert receipt["response_hash"].startswith("sha256:")
     assert receipt["usage"]["source"] == "provider_reported"
     assert receipt["blocks"][0]["block_type"] == "current_user_intent"
     assert receipt["opportunities"][0]["category"] == "duplicate_context"
+    assert receipt["reconciliation"]["status"] == "normal"
+    assert "raw_content" not in receipt["reconciliation"]
 
     with sqlite3.connect(str(sqlite_path)) as conn:
         conn.row_factory = sqlite3.Row

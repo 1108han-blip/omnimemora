@@ -70,12 +70,14 @@ def init_schema(path: Optional[str] = None) -> None:
                 metadata_json TEXT NOT NULL,
                 blocks_json TEXT NOT NULL DEFAULT '[]',
                 opportunities_json TEXT NOT NULL DEFAULT '[]',
+                reconciliation_json TEXT NOT NULL DEFAULT '{}',
                 created_at TEXT NOT NULL
             );
             """
         )
         _ensure_column(conn, "audit_events", "blocks_json", "TEXT NOT NULL DEFAULT '[]'")
         _ensure_column(conn, "audit_events", "opportunities_json", "TEXT NOT NULL DEFAULT '[]'")
+        _ensure_column(conn, "audit_events", "reconciliation_json", "TEXT NOT NULL DEFAULT '{}'")
         conn.execute(
             """
             CREATE TABLE IF NOT EXISTS audit_meta (
@@ -108,6 +110,7 @@ def build_audit_event(
     metadata: Optional[dict[str, Any]] = None,
     blocks: Optional[list[dict[str, Any]]] = None,
     opportunities: Optional[list[dict[str, Any]]] = None,
+    reconciliation: Optional[dict[str, Any]] = None,
 ) -> AuditEvent:
     created_at = _utc_now_iso()
     return AuditEvent(
@@ -127,6 +130,7 @@ def build_audit_event(
         metadata=_sanitize_metadata(metadata or {}),
         blocks=_sanitize_blocks(blocks or []),
         opportunities=_sanitize_opportunities(opportunities or []),
+        reconciliation=_sanitize_reconciliation(reconciliation or {}),
     )
 
 
@@ -151,8 +155,9 @@ def record_audit_event(event: AuditEvent, *, path: Optional[str] = None) -> None
                 metadata_json,
                 blocks_json,
                 opportunities_json,
+                reconciliation_json,
                 created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 event.audit_id,
@@ -170,6 +175,7 @@ def record_audit_event(event: AuditEvent, *, path: Optional[str] = None) -> None
                 _json(event.metadata),
                 _json_list(event.blocks),
                 _json_list(event.opportunities),
+                _json(event.reconciliation),
                 event.created_at,
             ),
         )
@@ -216,7 +222,7 @@ def summarize_recent_events(*, path: Optional[str] = None, limit: int = 1000) ->
     with _connect(path) as conn:
         rows = conn.execute(
             """
-            SELECT model_requested, usage_json, cost_json, status_code, latency_ms, blocks_json, opportunities_json, created_at
+            SELECT model_requested, usage_json, cost_json, status_code, latency_ms, blocks_json, opportunities_json, reconciliation_json, created_at
             FROM audit_events
             ORDER BY created_at DESC
             LIMIT ?
@@ -240,6 +246,7 @@ def summarize_recent_events(*, path: Optional[str] = None, limit: int = 1000) ->
     latency_values: list[int] = []
     block_totals: dict[str, dict[str, Any]] = {}
     opportunity_totals: dict[str, dict[str, Any]] = {}
+    reconciliation_status_counts: dict[str, int] = {}
 
     for row in rows:
         usage = _loads(row["usage_json"])
@@ -281,6 +288,10 @@ def summarize_recent_events(*, path: Optional[str] = None, limit: int = 1000) ->
             opp_entry["potential_saving_tokens"] += saving
             opp_entry["item_count"] += _safe_int(_as_dict(opportunity).get("item_count")) or 0
 
+        reconciliation = _loads(row["reconciliation_json"])
+        reconciliation_status = str(reconciliation.get("status") or "unknown")
+        reconciliation_status_counts[reconciliation_status] = reconciliation_status_counts.get(reconciliation_status, 0) + 1
+
         model_entry = model_counts.setdefault(model, {"model": model, "request_count": 0, "total_tokens": 0})
         model_entry["request_count"] += 1
         model_entry["total_tokens"] += total_tokens
@@ -305,6 +316,7 @@ def summarize_recent_events(*, path: Optional[str] = None, limit: int = 1000) ->
         "top_models": top_models,
         "top_blocks": top_blocks,
         "top_opportunities": top_opportunities,
+        "reconciliation": {"status_counts": reconciliation_status_counts},
         "cost": {"total_cost_usd": round(total_cost_usd, 8)} if cost_present else {},
         "latency_ms": _latency_summary(latency_values),
     }
@@ -330,6 +342,7 @@ def _row_to_event(row: sqlite3.Row) -> AuditEvent:
         metadata=_loads(row["metadata_json"]),
         blocks=_loads_list(_row_value(row, "blocks_json", "[]")),
         opportunities=_loads_list(_row_value(row, "opportunities_json", "[]")),
+        reconciliation=_loads(_row_value(row, "reconciliation_json", "{}")),
     )
 
 
@@ -467,6 +480,22 @@ def _sanitize_opportunities(opportunities: list[dict[str, Any]]) -> list[dict[st
             }
         )
     return sanitized
+
+
+def _sanitize_reconciliation(reconciliation: dict[str, Any]) -> dict[str, Any]:
+    allowed = {
+        "schema_version",
+        "reported_total_tokens",
+        "local_total_estimate",
+        "local_input_estimate",
+        "local_output_estimate",
+        "delta_tokens",
+        "delta_ratio",
+        "status",
+        "source",
+        "confidence",
+    }
+    return {key: reconciliation.get(key) for key in allowed if key in reconciliation}
 
 
 def _cap_metadata_value(value: Any) -> Any:

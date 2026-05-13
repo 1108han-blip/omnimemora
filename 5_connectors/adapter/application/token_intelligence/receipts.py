@@ -34,4 +34,5 @@ def build_receipt(event: AuditEvent) -> dict[str, Any]:
         "created_at": event.created_at,
         "blocks": event.blocks,
         "opportunities": event.opportunities,
+        "reconciliation": event.reconciliation,
     }
