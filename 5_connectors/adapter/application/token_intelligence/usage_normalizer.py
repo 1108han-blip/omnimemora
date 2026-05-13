@@ -6,7 +6,7 @@ import importlib
 import json
 from typing import Any, Dict, Optional
 
-from .models import NormalizedUsage
+from .models import NormalizedCost, NormalizedUsage
 
 
 def normalize_openai_compatible_usage(
@@ -75,6 +75,44 @@ def estimate_openai_compatible_output_tokens(payload: Any) -> Optional[int]:
     return None
 
 
+def normalize_openai_compatible_cost(
+    response_payload: Dict[str, Any],
+    *,
+    cost_source: str = "provider_reported",
+) -> NormalizedCost:
+    """Normalize provider/relay-reported OpenAI-compatible cost fields.
+
+    This does not infer cost from a local price table. When no upstream cost is
+    present, the returned object stays empty except for source/confidence labels.
+    """
+    if not isinstance(response_payload, dict):
+        return NormalizedCost()
+    raw_usage = response_payload.get("usage")
+    usage_payload = raw_usage if isinstance(raw_usage, dict) else {}
+    cost_value = _first_float(
+        usage_payload.get("cost"),
+        usage_payload.get("total_cost"),
+        usage_payload.get("total_cost_usd"),
+        response_payload.get("cost"),
+        response_payload.get("total_cost"),
+        response_payload.get("total_cost_usd"),
+    )
+    if cost_value is None:
+        return NormalizedCost()
+    pricing_version = _first_str(
+        usage_payload.get("pricing_version"),
+        usage_payload.get("price_version"),
+        response_payload.get("pricing_version"),
+        response_payload.get("price_version"),
+    )
+    return NormalizedCost(
+        total_cost_usd=cost_value,
+        source=cost_source,
+        confidence="official_usage",
+        pricing_version=pricing_version or "",
+    )
+
+
 def _estimate_payload_tokens(payload: Dict[str, Any]) -> Optional[int]:
     try:
         metrics = importlib.import_module("context_compiler.metrics")
@@ -103,6 +141,31 @@ def _first_int(*values: Any) -> Optional[int]:
         if normalized is not None:
             return normalized
     return None
+
+
+def _first_float(*values: Any) -> Optional[float]:
+    for value in values:
+        normalized = _safe_float(value)
+        if normalized is not None:
+            return normalized
+    return None
+
+
+def _safe_float(value: Any) -> Optional[float]:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        normalized = float(value)
+    except Exception:
+        return None
+    return normalized if normalized >= 0 else None
+
+
+def _first_str(*values: Any) -> str:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
 
 
 def _sum_optional(*values: Optional[int]) -> Optional[int]:

@@ -56,6 +56,28 @@ def test_missing_usage_is_labeled_as_local_estimate():
     assert usage.raw_usage_present is False
 
 
+def test_openai_compatible_cost_normalization_keeps_source_and_pricing_version():
+    cost = token_intelligence.normalize_openai_compatible_cost(
+        {
+            "usage": {
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "total_tokens": 15,
+                "cost": "0.00123",
+                "pricing_version": "relay-price-2026-05-13",
+            }
+        },
+        cost_source="relay_reported",
+    )
+    missing = token_intelligence.normalize_openai_compatible_cost({"usage": {"total_tokens": 15}})
+
+    assert cost.total_cost_usd == 0.00123
+    assert cost.source == "relay_reported"
+    assert cost.confidence == "official_usage"
+    assert cost.pricing_version == "relay-price-2026-05-13"
+    assert missing.total_cost_usd is None
+
+
 def test_openai_compatible_estimator_returns_bounded_counts():
     request_tokens = token_intelligence.estimate_openai_compatible_input_tokens(
         {"model": "relay-model", "messages": [{"role": "user", "content": "中文 mixed request"}]}

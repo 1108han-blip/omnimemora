@@ -35,6 +35,7 @@ from .local_proxy import LocalProxyConfig, check_update_metadata, create_server,
 from .usage_normalizer import (
     estimate_openai_compatible_input_tokens,
     estimate_openai_compatible_output_tokens,
+    normalize_openai_compatible_cost,
     normalize_openai_compatible_usage,
 )
 from .waste_detectors import detect_openai_compatible_waste
@@ -70,6 +71,7 @@ __all__ = [
     "estimate_openai_compatible_input_tokens",
     "estimate_openai_compatible_output_tokens",
     "mcp_health",
+    "normalize_openai_compatible_cost",
     "normalize_openai_compatible_usage",
     "purge_audit_events_older_than",
     "record_audit_event",

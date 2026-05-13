@@ -84,7 +84,13 @@ def test_chat_completions_records_audit_without_raw_prompt(tmp_path):
         "id": "chatcmpl-audited",
         "model": "relay-model-reported",
         "choices": [{"message": {"content": secret_response}}],
-        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+        "usage": {
+            "prompt_tokens": 10,
+            "completion_tokens": 5,
+            "total_tokens": 15,
+            "cost": 0.0015,
+            "pricing_version": "relay-test-price-v1",
+        },
     }
     upstream = _start_fake_upstream(response_body=_json_bytes(upstream_body))
     proxy = _start_proxy(
@@ -116,6 +122,9 @@ def test_chat_completions_records_audit_without_raw_prompt(tmp_path):
     assert receipt_status == 200
     assert receipt["usage"]["source"] == "relay_reported"
     assert receipt["usage"]["confidence"] == "official_usage"
+    assert receipt["cost"]["total_cost_usd"] == 0.0015
+    assert receipt["cost"]["source"] == "relay_reported"
+    assert receipt["cost"]["pricing_version"] == "relay-test-price-v1"
     assert receipt["reconciliation"]["reported_total_tokens"] == 15
     assert receipt["reconciliation"]["status"] in {"normal", "warning", "unexplained_delta"}
     assert {block["block_type"] for block in receipt["blocks"]} >= {"current_user_intent", "provider_output"}
@@ -133,6 +142,7 @@ def test_chat_completions_records_audit_without_raw_prompt(tmp_path):
     assert top_requests["window"] == {"bounded": True, "limit": 1000}
     assert top_requests["top_by_tokens"][0]["audit_id"] == audit_id
     assert top_requests["top_by_tokens"][0]["total_tokens"] == 15
+    assert top_requests["top_by_cost"][0]["total_cost_usd"] == 0.0015
     assert {block["block_type"] for block in summary["top_blocks"]} >= {"current_user_intent", "provider_output"}
     assert sum(summary["reconciliation"]["status_counts"].values()) == 1
     with sqlite3.connect(str(sqlite_path)) as conn:
@@ -144,6 +154,9 @@ def test_chat_completions_records_audit_without_raw_prompt(tmp_path):
     usage = json.loads(row["usage_json"])
     assert usage["total_tokens"] == 15
     assert usage["source"] == "relay_reported"
+    cost = json.loads(row["cost_json"])
+    assert cost["total_cost_usd"] == 0.0015
+    assert cost["source"] == "relay_reported"
     serialized_row = json.dumps(dict(row), sort_keys=True)
     assert secret_prompt not in serialized_row
     assert secret_response not in serialized_row

@@ -30,6 +30,7 @@
 - 2026-05-13: TI-009 repo-only usage reconciliation added. Audit events, receipts, and summaries now compare reported total tokens against local estimates and label normal, warning, unexplained, estimated-only, or not-applicable cases without treating deltas as fraud evidence.
 - 2026-05-13: TI-010 repo-only CLI report surface added. `omni-token-audit report summary` and `omni-token-audit report potential-savings` read bounded local audit data and print metadata-only JSON without starting the proxy or scanning large history.
 - 2026-05-13: TI-011 repo-only top requests report added. The candidate proxy and CLI expose bounded highest-token/highest-cost request summaries from local audit metadata, with source/confidence labels and no raw prompt output.
+- 2026-05-13: TI-012 repo-only reported cost ingestion added. The candidate proxy records provider/relay-reported cost fields with pricing version when present, but does not infer cost from a local price table yet.
 
 ## Product Target
 
@@ -404,6 +405,26 @@ Current behavior:
 - rows include audit id, request id, provider/model, token counts, usage source/confidence, optional cost source/confidence, potential saving tokens, reconciliation status, status code, latency, and timestamp;
 - the report reads at most 1000 recent ledger rows and does not scan large history;
 - raw prompt, response, tool output, and full provider body are not printed.
+
+### TI-012 - Reported Cost Ingestion
+
+Status: repo implementation completed on 2026-05-13 for OpenAI-compatible provider/relay cost fields.
+
+Record cost when the upstream already reports it, without introducing local price-table inference.
+
+Exit:
+
+- receipts preserve reported total cost with source and confidence labels;
+- pricing version is recorded when the upstream supplies it;
+- missing cost remains empty instead of being guessed.
+
+Current behavior:
+
+- OpenAI-compatible responses can provide cost in `usage.cost`, `usage.total_cost`, `usage.total_cost_usd`, `cost`, `total_cost`, or `total_cost_usd`;
+- the candidate proxy records those values as `relay_reported` with `official_usage` confidence;
+- `pricing_version` or `price_version` is copied when present;
+- `/audit/summary` and `/audit/reports/top-requests` can surface cost totals/top-by-cost when cost exists;
+- no local provider pricing table or billing-truth claim is active in TI-012.
 
 ## Validation Requirements
 

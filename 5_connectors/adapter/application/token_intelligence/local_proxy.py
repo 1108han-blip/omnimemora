@@ -29,6 +29,7 @@ from .savings_proof import build_actual_savings_proof
 from .usage_normalizer import (
     estimate_openai_compatible_input_tokens,
     estimate_openai_compatible_output_tokens,
+    normalize_openai_compatible_cost,
     normalize_openai_compatible_usage,
 )
 from .waste_detectors import detect_openai_compatible_waste
@@ -417,6 +418,10 @@ def _record_proxy_audit_event(
             local_output_estimate=estimate_openai_compatible_output_tokens(response_payload),
             local_estimate_confidence="compatible_estimate",
         )
+        cost = normalize_openai_compatible_cost(
+            response_payload if isinstance(response_payload, dict) else {},
+            cost_source="relay_reported",
+        )
         model_requested = _string_field(request_payload, "model")
         model_reported = _string_field(response_payload, "model") or model_requested
         request_id = _string_field(response_payload, "id") or f"local_proxy_{time.time_ns()}"
@@ -430,6 +435,7 @@ def _record_proxy_audit_event(
             model_requested=model_requested,
             model_reported=model_reported,
             usage=usage,
+            cost=cost,
             latency_ms=latency_ms,
             status_code=status_code,
             metadata={
