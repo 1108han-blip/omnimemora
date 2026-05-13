@@ -47,6 +47,7 @@ DoloToken can ship as a proprietary local CLI/local-proxy download. It must supp
 - Agent integration is two-layer:
   - `使用 OmniMemora`: high-frequency routing switch
   - `接入 OmniMemora`: low-frequency install/uninstall switch
+- Claude Code must not have OmniMemora MCP force-mounted as a global default. MCP may remain available as an explicit opt-in auxiliary surface, but it is not the product ingress, does not prove routing, and must not replace the desktop-controlled `接入` / `使用` flow.
 - Codex `接入 OmniMemora` prepares an OmniMemora-managed profile/launcher and must not rewrite the official `~/.codex/config.toml`; legacy provider rewrites remain removable/restorable only for backward compatibility.
 - When routing is off, requests may still enter `:18011`, but the gateway must stay in transparent passthrough mode.
 - Agent detection must not auto-attach or auto-enable routing.

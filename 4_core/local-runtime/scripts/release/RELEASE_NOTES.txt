@@ -4,10 +4,11 @@ Package version: {{PACKAGE_VERSION}}
 Highlights
 - Desktop beta package foundation for local-first OmniMemora usage.
 - Release manifest is published at https://doloclaw.com/releases/latest.json.
-- Product entry remains local: 5173 control surface, 18011 product ingress, 8765 internal memory plane.
+- Product entry remains local: Desktop app control surface, 18011 product ingress, 8765 internal memory plane; 5173 remains legacy/dev only.
 - Desktop service controls now show each local product port and status, so stop/restart/start failures are visible in the app instead of looking like a silent port issue.
 - Fixes Claude Code route enablement by keeping desktop-managed services on the installed runtime agent mode file.
 - Attached agents repair local product startup before falling back to direct upstream when 18011 is unavailable.
+- Claude Code no longer force-mounts the OmniMemora MCP server as a global default; MCP remains optional and does not replace the desktop-controlled attach/use routing flow.
 - Desktop App checks the official release manifest, surfaces new versions in-app, downloads and verifies the installer, then hands off installation to the OS.
 - Agent control refresh waits long enough for the local product control endpoint after a user clicks "Use OmniMemora".
 - Adapter proxy responses strip transport headers that can break streamed client connections.
