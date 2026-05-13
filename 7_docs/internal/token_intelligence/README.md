@@ -6,7 +6,7 @@
 - External product name: DoloToken
 - Internal product line: OmniMemora Token Intelligence Lite
 - Roadmap phase: Phase 8, next formal stage after Structured Compile MVP
-- Current status: direction fixed in product constitution and roadmap; repo-only Token Intelligence core and candidate local proxy exist; no `18011`, GUI, cloud, or running configuration change yet.
+- Current status: DoloToken beta local package is published at `doloclaw.com` as a controlled-beta download; the local proxy remains a separate user-installed CLI/proxy and is not promoted into `18011` or desktop GUI.
 
 ## Repo Implementation Status
 
@@ -48,6 +48,7 @@
 - 2026-05-13: TI-025 repo-only release preflight gate added. The package builder now checks Worker template version alignment, Cloudflare auth visibility, target account/bucket/Worker resolution, upload file count, and manual publish readiness without uploading or deploying.
 - 2026-05-13: TI-026 cloud release completed. Token Intelligence `0.1.0-beta.1` artifacts were uploaded to R2, the control-entry Worker was deployed, live `/download` now lists the Token Intelligence CLI beta, and remote package SHA/version were verified.
 - 2026-05-13: Naming decision recorded. The external product name is DoloToken; Token Intelligence remains the internal module, engineering line, technical capability name, route namespace, and compatibility surface.
+- 2026-05-13: TI-027 DoloToken brand-sync release completed. DoloToken `0.1.0-beta.2` artifacts were uploaded to R2, the control-entry Worker was redeployed, live `/download` now lists the DoloToken CLI beta, and remote package SHA/version were verified.
 
 ## Naming
 
@@ -877,6 +878,61 @@ Boundaries:
 - no desktop app package was rebuilt;
 - no source code was published;
 - Token Intelligence remains unsigned controlled-beta local CLI/proxy material;
+- price/cost calculation remains optional and does not affect token-flow audit truth.
+
+### TI-027 - DoloToken Brand Sync Release
+
+Status: cloud running release completed on 2026-05-13 for DoloToken `0.1.0-beta.2`.
+
+Release action:
+
+- bumped the local proxy, CLI, MCP companion, package builder, tests, and Worker route version to `0.1.0-beta.2`;
+- built local release preview with `--preflight-release-gate`;
+- uploaded 4 R2 objects under `omnimemora/token-intelligence/0.1.0-beta.2/`;
+- deployed Worker `omnimemora-control-entry` with desktop version placeholder kept at `1.0.0-beta.17`;
+- preserved existing desktop beta17 release paths.
+
+Uploaded objects:
+
+- `omnimemora/token-intelligence/0.1.0-beta.2/0.1.0-beta.2.json`
+- `omnimemora/token-intelligence/0.1.0-beta.2/SHA256SUMS.txt`
+- `omnimemora/token-intelligence/0.1.0-beta.2/latest.json`
+- `omnimemora/token-intelligence/0.1.0-beta.2/omni-token-audit-0.1.0-beta.2-local.zip`
+
+Release SHA:
+
+```text
+5e98f18367187af7a3c0cc079b38696c85f422b8f89938db55f096a920d4e989  omni-token-audit-0.1.0-beta.2-local.zip
+```
+
+Running verification:
+
+- `https://doloclaw.com/releases/token-intelligence/latest.json` resolves to product `omnimemora-token-intelligence`, version `0.1.0-beta.2`;
+- `https://doloclaw.com/releases/token-intelligence/0.1.0-beta.2.json` resolves with the same version metadata;
+- `https://doloclaw.com/download/file/token-intelligence/omni-token-audit-0.1.0-beta.2-local.zip` redirects to the DoloToken R2 object;
+- downloaded remote zip SHA matched the release SHA above;
+- unpacked remote zip ran `omni-token-audit version` and returned `0.1.0-beta.2`;
+- unpacked remote zip ran `omni-token-audit snippets --list` and returned the supported snippet list;
+- `https://doloclaw.com/download?verify=beta2` displays "DoloToken CLI (local token audit beta)" and the DoloToken release manifest link;
+- `https://doloclaw.com/releases/latest.json` still reports desktop `1.0.0-beta.17` and `beta_one_click_download_verify_open_dmg`;
+- `https://doloclaw.com/download/file/darwin-arm64` still redirects to the desktop beta17 DMG;
+- `https://doloclaw.com/health` remains healthy and reports `release_posture=proprietary-controlled-beta`;
+- `http://127.0.0.1:18011/health` remains healthy;
+- `http://127.0.0.1:18011/metrics/core_capabilities` remains responsive.
+
+Update capability boundary:
+
+- DoloToken already supports product-owned update metadata checks through `https://doloclaw.com/releases/token-intelligence/latest.json`;
+- the cloud side can push update notices, minimum supported version, and force-update flags by publishing a new versioned package and updating the latest manifest;
+- the current beta CLI does not silently self-replace or install updates;
+- frequent beta updates are operationally supported through versioned packages, checksum manifests, and the Worker download route, but users still manually replace the local package until a dedicated updater or launcher-managed installer is added.
+
+Boundaries:
+
+- no `18011` promotion was performed;
+- no desktop app package was rebuilt;
+- no source code was published;
+- DoloToken remains unsigned controlled-beta local CLI/proxy material;
 - price/cost calculation remains optional and does not affect token-flow audit truth.
 
 ## Validation Requirements
