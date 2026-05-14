@@ -18,6 +18,7 @@ const MODE_ACTIONS = {
 const AGENTS_POLL_MS = 12000;
 const CONTROL_FAILURE_BACKOFF_BASE_MS = 5000;
 const CONTROL_FAILURE_BACKOFF_MAX_MS = 60000;
+const AGENT_SKELETON_KEYS = ['agent-skeleton-primary', 'agent-skeleton-secondary', 'agent-skeleton-tertiary'] as const;
 
 interface RescanResult {
   status: 'added' | 'removed' | 'no_change';
@@ -225,8 +226,8 @@ export function AgentsDashboard({ highlightFamilyId }: AgentsDashboardProps) {
       {loading && cards.length === 0 ? (
         <div className="rounded-xl border border-zinc-200 bg-white p-8 dark:border-zinc-700 dark:bg-zinc-900">
           <div className="space-y-3 animate-pulse">
-            {[...Array(3)].map((_, index) => (
-              <div key={index} className="h-24 rounded bg-zinc-200 dark:bg-zinc-700" />
+            {AGENT_SKELETON_KEYS.map((key) => (
+              <div key={key} className="h-24 rounded bg-zinc-200 dark:bg-zinc-700" />
             ))}
           </div>
         </div>

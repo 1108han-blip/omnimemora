@@ -16,6 +16,10 @@ function toSummary(mem: RequestEvidence['context']['selected_memories'][0], sele
   };
 }
 
+function memoryKey(mem: MemorySummary): string {
+  return [mem.uri || '(missing-uri)', mem.category, mem.content].join(':');
+}
+
 interface ContextComparisonProps {
   evidence: RequestEvidence | null;
   loading: boolean;
@@ -84,8 +88,8 @@ export function ContextComparison({ evidence, loading }: ContextComparisonProps)
             </span>
           </div>
           <div className="max-h-80 overflow-y-auto">
-            {beforeMemories.map((mem, i) => (
-              <div key={mem.uri || i} className="px-4 py-2 border-b border-zinc-50 dark:border-zinc-800 last:border-0">
+            {beforeMemories.map((mem) => (
+              <div key={memoryKey(mem)} className="px-4 py-2 border-b border-zinc-50 dark:border-zinc-800 last:border-0">
                 <div className="text-[10px] font-mono text-zinc-400 truncate">{mem.uri}</div>
                 <div className="text-xs text-zinc-700 dark:text-zinc-300 mt-0.5 line-clamp-2">
                   {mem.content}
@@ -111,8 +115,8 @@ export function ContextComparison({ evidence, loading }: ContextComparisonProps)
             </span>
           </div>
           <div className="max-h-80 overflow-y-auto">
-            {afterMemories.map((mem, i) => (
-              <div key={mem.uri || i} className="px-4 py-2 border-b border-zinc-50 dark:border-zinc-800 last:border-0">
+            {afterMemories.map((mem) => (
+              <div key={memoryKey(mem)} className="px-4 py-2 border-b border-zinc-50 dark:border-zinc-800 last:border-0">
                 <div className="text-[10px] font-mono text-zinc-400 truncate">{mem.uri}</div>
                 <div className="text-xs text-zinc-700 dark:text-zinc-300 mt-0.5 line-clamp-2">
                   {mem.content}

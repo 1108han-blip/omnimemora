@@ -15,6 +15,7 @@ const OVERVIEW_METRICS_POLL_MS = 5000;
 const OVERVIEW_CONTROLS_SNAPSHOT_MS = 60000;
 const CONTROL_FAILURE_BACKOFF_BASE_MS = 5000;
 const CONTROL_FAILURE_BACKOFF_MAX_MS = 60000;
+const HERO_SKELETON_KEYS = ['real-requests', 'context-compression', 'memory-enhancement', 'token-savings'] as const;
 
 function inferInitialTab(): 'overview' | 'agents' {
   const params = new URLSearchParams(window.location.search);
@@ -32,13 +33,6 @@ function buildPathForTab(tab: 'overview' | 'agents'): string {
     return base.endsWith('/') ? `${base}agents` : `${base}/agents`;
   }
   return base || '/';
-}
-
-function buildHrefForTab(tab: 'overview' | 'agents', tenant: string): string {
-  const params = new URLSearchParams();
-  params.set('tenant', tenant);
-  params.set('tab', tab);
-  return `${buildPathForTab(tab)}?${params.toString()}`;
 }
 
 function PersonalValueLoopPanel({
@@ -465,12 +459,10 @@ export default function App() {
       <div className="bg-white dark:bg-zinc-900 border-b border-zinc-200 dark:border-zinc-700">
         <div className="max-w-6xl mx-auto px-6">
           <nav className="flex gap-1">
-            <a
-              href={buildHrefForTab('overview', tenant)}
-              onClick={(e) => {
-                e.preventDefault();
-                setActiveTab('overview');
-              }}
+            <button
+              type="button"
+              onClick={() => setActiveTab('overview')}
+              aria-current={activeTab === 'overview' ? 'page' : undefined}
               className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
                 activeTab === 'overview'
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
@@ -478,13 +470,11 @@ export default function App() {
               }`}
             >
               总览
-            </a>
-            <a
-              href={buildHrefForTab('agents', tenant)}
-              onClick={(e) => {
-                e.preventDefault();
-                setActiveTab('agents');
-              }}
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('agents')}
+              aria-current={activeTab === 'agents' ? 'page' : undefined}
               className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
                 activeTab === 'agents'
                   ? 'border-blue-500 text-blue-600 dark:text-blue-400'
@@ -492,7 +482,7 @@ export default function App() {
               }`}
             >
               Agent 控制
-            </a>
+            </button>
           </nav>
         </div>
       </div>
@@ -519,8 +509,8 @@ export default function App() {
               </h2>
               {loadingMetrics ? (
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {[...Array(4)].map((_, i) => (
-                    <div key={i} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 animate-pulse">
+                  {HERO_SKELETON_KEYS.map((key) => (
+                    <div key={key} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 animate-pulse">
                       <div className="h-3 bg-zinc-200 dark:bg-zinc-700 rounded w-20 mb-3" />
                       <div className="h-8 bg-zinc-200 dark:bg-zinc-700 rounded w-16" />
                     </div>

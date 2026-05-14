@@ -26,6 +26,7 @@ const CARD_CONFIGS: CardConfig[] = [
   { id: 'memory_enhancement', label: 'Memory Enhancement' },
   { id: 'token_savings', label: 'Real Input Savings' },
 ];
+const CARD_SKELETON_KEYS = CARD_CONFIGS.map((card) => `${card.id}-skeleton`);
 
 function formatRatioPct(ratio: number): string {
   const safeRatio = Math.max(0, Math.min(1, Number.isFinite(ratio) ? ratio : 0));
@@ -229,8 +230,8 @@ export function HeroMetrics({ data, trendData }: HeroMetricsProps) {
   if (!data) {
     return (
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        {[...Array(4)].map((_, i) => (
-          <div key={i} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 animate-pulse">
+        {CARD_SKELETON_KEYS.map((key) => (
+          <div key={key} className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-xl p-6 animate-pulse">
             <div className="h-3 bg-zinc-200 dark:bg-zinc-700 rounded w-20 mb-3" />
             <div className="h-8 bg-zinc-200 dark:bg-zinc-700 rounded w-16" />
           </div>

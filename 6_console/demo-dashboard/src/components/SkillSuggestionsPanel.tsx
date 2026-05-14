@@ -18,6 +18,10 @@ function buildPolicyLine(evidence: RequestEvidence): string {
   return `policy: ${name} / ${version} / ${source} / ${status}`;
 }
 
+function suggestionKey(item: RequestEvidence['skill_suggestions'][number]): string {
+  return [item.skill_id, item.source, item.title].join(':');
+}
+
 export function SkillSuggestionsPanel({ evidence, loading }: SkillSuggestionsPanelProps) {
   if (loading) {
     return (
@@ -66,9 +70,9 @@ export function SkillSuggestionsPanel({ evidence, loading }: SkillSuggestionsPan
 
         {suggestions.length > 0 && (
           <div className="space-y-3">
-            {suggestions.map((item, idx) => (
+            {suggestions.map((item) => (
               <div
-                key={`${item.skill_id}-${idx}`}
+                key={suggestionKey(item)}
                 className="border border-zinc-200 dark:border-zinc-700 rounded-lg p-3 bg-zinc-50/60 dark:bg-zinc-800/50"
               >
                 <div className="flex items-center justify-between gap-3">
