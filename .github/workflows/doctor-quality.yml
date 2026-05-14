@@ -134,6 +134,11 @@ jobs:
         continue-on-error: true
         run: python tools/doctor_quality.py --json --react-doctor --react-timeout 180 > doctor-quality-react.json
 
+      - name: Generate readable doctor brief
+        if: always()
+        continue-on-error: true
+        run: python tools/doctor_brief.py --react-json doctor-quality-react.json > doctor-brief.md
+
       - name: Add ReactDoctor summary
         if: always()
         continue-on-error: true
@@ -179,6 +184,10 @@ jobs:
           )
           out.write_text("\n".join(lines), encoding="utf-8")
           PY
+          if [ -f doctor-brief.md ]; then
+            printf '\n' >> "$GITHUB_STEP_SUMMARY"
+            cat doctor-brief.md >> "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Run text ReactDoctor report
         continue-on-error: true
@@ -190,4 +199,12 @@ jobs:
         with:
           name: doctor-quality-react-json
           path: doctor-quality-react.json
+          if-no-files-found: ignore
+
+      - name: Upload readable doctor brief
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: doctor-brief
+          path: doctor-brief.md
           if-no-files-found: ignore

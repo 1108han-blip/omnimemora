@@ -1,4 +1,4 @@
-.PHONY: start start-runtime start-adapter health doctor doctor-json doctor-react data-governance
+.PHONY: start start-runtime start-adapter health doctor doctor-json doctor-react doctor-brief data-governance
 
 start:
 	bash ./start.sh
@@ -21,6 +21,9 @@ doctor-json:
 
 doctor-react:
 	@python3 tools/doctor_quality.py --react-doctor
+
+doctor-brief:
+	@python3 tools/doctor_brief.py
 
 data-governance:
 	powershell -ExecutionPolicy Bypass -File .\tools\verification\data_governance\run_all.ps1 -RunLabel "make" -Tenant all -Salt "replace-me"

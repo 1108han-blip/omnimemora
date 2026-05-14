@@ -39,3 +39,11 @@ def test_react_doctor_package_is_pinned_by_default():
     doctor = load_doctor_module()
 
     assert doctor.REACT_DOCTOR_PACKAGE == "react-doctor@0.1.6"
+
+
+def test_react_diagnostic_classification_prioritizes_correctness():
+    doctor = load_doctor_module()
+
+    finding = {"rule": "no-array-index-as-key", "severity": "warning", "category": "Correctness"}
+
+    assert doctor.classify_react_diagnostic(finding) == "fix_first"

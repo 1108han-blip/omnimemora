@@ -250,6 +250,7 @@ def run_react_doctor(timeout_seconds: int) -> list[dict[str, Any]]:
                 "version": payload.get("version") if isinstance(payload, dict) else None,
                 "score": extract_score(payload),
                 "diagnostic_count": extract_diagnostic_count(payload),
+                "diagnostic_summary": summarize_react_payload(payload),
                 "stdout_json_ok": payload is not None,
                 "stderr_tail": tail(completed.stderr),
             }
@@ -382,6 +383,94 @@ def extract_diagnostic_count(payload: Any) -> Any:
         total = summary.get("total") or summary.get("diagnostics") or summary.get("totalDiagnosticCount")
         return total
     return None
+
+
+def summarize_react_payload(payload: Any) -> dict[str, Any]:
+    diagnostics = extract_diagnostics(payload)
+    category_counts = count_by_key(diagnostics, "category")
+    rule_counts = count_by_key(diagnostics, "rule")
+    severity_counts = count_by_key(diagnostics, "severity")
+    priority_order = {
+        "fix_first": 0,
+        "next": 1,
+        "confirm_before_cleanup": 2,
+        "later": 3,
+    }
+    summarized = [summarize_react_diagnostic(item) for item in diagnostics]
+    summarized.sort(key=lambda item: (priority_order.get(str(item.get("priority")), 9), str(item.get("file") or "")))
+    return {
+        "category_counts": category_counts,
+        "rule_counts": rule_counts,
+        "severity_counts": severity_counts,
+        "priority_findings": summarized[:40],
+    }
+
+
+def extract_diagnostics(payload: Any) -> list[dict[str, Any]]:
+    if not isinstance(payload, dict):
+        return []
+    diagnostics = payload.get("diagnostics")
+    if isinstance(diagnostics, list):
+        return [item for item in diagnostics if isinstance(item, dict)]
+    project_diagnostics: list[dict[str, Any]] = []
+    projects = payload.get("projects")
+    if isinstance(projects, list):
+        for project in projects:
+            if not isinstance(project, dict):
+                continue
+            diagnostics = project.get("diagnostics")
+            if isinstance(diagnostics, list):
+                project_diagnostics.extend(item for item in diagnostics if isinstance(item, dict))
+    return project_diagnostics
+
+
+def count_by_key(items: list[dict[str, Any]], key: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        value = str(item.get(key) or "unknown")
+        counts[value] = counts.get(value, 0) + 1
+    return dict(sorted(counts.items(), key=lambda pair: (-pair[1], pair[0])))
+
+
+def summarize_react_diagnostic(item: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "priority": classify_react_diagnostic(item),
+        "file": item.get("filePath"),
+        "line": item.get("line"),
+        "category": item.get("category"),
+        "rule": item.get("rule"),
+        "message": item.get("message"),
+    }
+
+
+def classify_react_diagnostic(item: dict[str, Any]) -> str:
+    rule = str(item.get("rule") or "")
+    category = str(item.get("category") or "")
+    severity = str(item.get("severity") or "")
+    if severity == "error":
+        return "fix_first"
+    if rule in {
+        "no-array-index-as-key",
+        "no-prevent-default",
+        "no-effect-chain",
+        "rerender-state-only-in-handlers",
+        "rerender-memo-with-default-value",
+        "prefer-useReducer",
+        "async-defer-await",
+    }:
+        return "fix_first"
+    if rule in {
+        "no-giant-component",
+        "prefer-dynamic-import",
+        "js-hoist-intl",
+        "js-flatmap-filter",
+        "js-tosorted-immutable",
+        "heading-has-content",
+    }:
+        return "next"
+    if category == "Dead Code":
+        return "confirm_before_cleanup"
+    return "later"
 
 
 def tail(text: str, limit: int = 1000) -> str:
