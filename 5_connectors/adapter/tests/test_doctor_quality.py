@@ -33,3 +33,9 @@ def test_doctor_json_report_is_observe_only(capsys):
     assert payload["schema_version"] == "omnimemora-doctor-quality-v1"
     assert payload["mode"] == "observe_only"
     assert payload["summary"]["static_errors"] == 0
+
+
+def test_react_doctor_package_is_pinned_by_default():
+    doctor = load_doctor_module()
+
+    assert doctor.REACT_DOCTOR_PACKAGE == "react-doctor@0.1.6"

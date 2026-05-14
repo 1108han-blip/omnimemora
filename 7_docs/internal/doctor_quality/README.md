@@ -24,7 +24,9 @@ Run static checks plus ReactDoctor through `npx` for the React/Vite frontend pac
 make doctor-react
 ```
 
-`doctor-react` is intentionally explicit because it may need network/package-manager access for `npx -y react-doctor@latest`. The baseline `make doctor` command stays local and standard-library only.
+`doctor-react` is intentionally explicit because it may need network/package-manager access for `npx -y react-doctor@0.1.6`. The baseline `make doctor` command stays local and standard-library only.
+
+The default ReactDoctor package is pinned by `tools/doctor_quality.py` as `react-doctor@0.1.6`. Override with `REACT_DOCTOR_PACKAGE=<package>` only when deliberately testing a newer release.
 
 ## Scope
 
@@ -69,9 +71,11 @@ Current workflow posture:
 
 - runs on relevant pull requests, pushes to `master` or `main`, and manual dispatch
 - produces `doctor-quality.json` as a workflow artifact
+- produces `doctor-quality-react.json` as a separate ReactDoctor workflow artifact
 - writes a compact summary to the GitHub Actions step summary
 - runs `make doctor`, Python compilation, and the focused doctor unit test
+- runs ReactDoctor in a separate report-only job pinned to `react-doctor@0.1.6`
 - uses `continue-on-error` so findings remain visible without becoming a merge-blocking gate
-- does not run ReactDoctor by default
+- does not vendor ReactDoctor source code or add it to `package.json`
 
 Promoting any finding to a hard CI failure requires a separate gate decision after the observe-only noise is understood.

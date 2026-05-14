@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -14,6 +15,7 @@ from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+REACT_DOCTOR_PACKAGE = os.environ.get("REACT_DOCTOR_PACKAGE", "react-doctor@0.1.6")
 
 FRONTEND_PACKAGES = [
     REPO_ROOT / "6_console" / "desktop-shell",
@@ -184,6 +186,7 @@ def run_react_doctor(timeout_seconds: int) -> list[dict[str, Any]]:
                 "tool": "react-doctor",
                 "status": "skipped",
                 "severity": "warning",
+                "package": REACT_DOCTOR_PACKAGE,
                 "message": "npx not found; ReactDoctor was not run.",
             }
         ]
@@ -197,6 +200,7 @@ def run_react_doctor(timeout_seconds: int) -> list[dict[str, Any]]:
                     "path": str(package_dir.relative_to(REPO_ROOT)),
                     "status": "skipped",
                     "severity": "warning",
+                    "package": REACT_DOCTOR_PACKAGE,
                     "message": "package.json not found.",
                 }
             )
@@ -204,7 +208,7 @@ def run_react_doctor(timeout_seconds: int) -> list[dict[str, Any]]:
         command = [
             npx_path,
             "-y",
-            "react-doctor@latest",
+            REACT_DOCTOR_PACKAGE,
             str(package_dir),
             "--json",
             "--offline",
@@ -228,6 +232,7 @@ def run_react_doctor(timeout_seconds: int) -> list[dict[str, Any]]:
                     "path": str(package_dir.relative_to(REPO_ROOT)),
                     "status": "timeout",
                     "severity": "warning",
+                    "package": REACT_DOCTOR_PACKAGE,
                     "timeout_seconds": timeout_seconds,
                     "message": str(exc),
                 }
@@ -240,6 +245,7 @@ def run_react_doctor(timeout_seconds: int) -> list[dict[str, Any]]:
                 "path": str(package_dir.relative_to(REPO_ROOT)),
                 "status": "completed" if completed.returncode == 0 else "nonzero_exit",
                 "severity": "warning" if completed.returncode else "info",
+                "package": REACT_DOCTOR_PACKAGE,
                 "exit_code": completed.returncode,
                 "version": payload.get("version") if isinstance(payload, dict) else None,
                 "score": extract_score(payload),

@@ -106,3 +106,88 @@ jobs:
           name: doctor-quality-json
           path: doctor-quality.json
           if-no-files-found: ignore
+
+  react-doctor-report:
+    name: ReactDoctor report
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    env:
+      REACT_DOCTOR_PACKAGE: react-doctor@0.1.6
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Generate ReactDoctor JSON evidence
+        id: react_doctor_json
+        continue-on-error: true
+        run: python tools/doctor_quality.py --json --react-doctor --react-timeout 180 > doctor-quality-react.json
+
+      - name: Add ReactDoctor summary
+        if: always()
+        continue-on-error: true
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          summary_path = Path("doctor-quality-react.json")
+          out = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          if not summary_path.exists():
+              out.write_text("## ReactDoctor\n\nReactDoctor JSON evidence was not produced.\n", encoding="utf-8")
+              raise SystemExit(0)
+
+          payload = json.loads(summary_path.read_text(encoding="utf-8"))
+          results = payload.get("react_doctor", [])
+          lines = [
+              "## ReactDoctor",
+              "",
+              f"- package: `{os.environ.get('REACT_DOCTOR_PACKAGE', 'unknown')}`",
+              f"- completed packages: `{payload.get('summary', {}).get('react_doctor_completed', 0)}/{len(results)}`",
+              "",
+              "| path | status | version | score | diagnostics |",
+              "|---|---:|---:|---:|---:|",
+          ]
+          for result in results:
+              lines.append(
+                  "| {path} | {status} | {version} | {score} | {diagnostics} |".format(
+                      path=result.get("path", ""),
+                      status=result.get("status", ""),
+                      version=result.get("version", ""),
+                      score=result.get("score", ""),
+                      diagnostics=result.get("diagnostic_count", ""),
+                  )
+              )
+          lines.extend(
+              [
+                  "",
+                  "This workflow is report-only. ReactDoctor findings do not define a merge-blocking gate.",
+                  "",
+              ]
+          )
+          out.write_text("\n".join(lines), encoding="utf-8")
+          PY
+
+      - name: Run text ReactDoctor report
+        continue-on-error: true
+        run: make doctor-react
+
+      - name: Upload ReactDoctor JSON evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: doctor-quality-react-json
+          path: doctor-quality-react.json
+          if-no-files-found: ignore
