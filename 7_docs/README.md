@@ -14,6 +14,7 @@
     phase2/
     phase3/
     phase6/          # historical governance and promotion workstream
+    doctor_quality/  # observe-only product doctor quality layer
     structured_compile/  # current Phase 7 compile capability mainline
     token_intelligence/  # next Phase 8 token intelligence value mainline
 ```
