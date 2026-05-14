@@ -87,6 +87,17 @@ CHG-2026-____-__
 1. [ ] ...
 2. [ ] ...
 
+## Codex Closeout Evidence
+
+<!-- Fill this when Codex or another agent produced the change. Use product-local evidence only. -->
+
+- tests: <!-- run / not run / not applicable; include command -->
+- doctor: <!-- run / not run / not applicable; include make doctor or workflow link -->
+- docs: <!-- updated / not needed / not run -->
+- runtime evidence: <!-- run / not run / not applicable -->
+
+Doctor quality is report-only unless a separate release gate explicitly says otherwise.
+
 ## Files Changed
 
 <!-- List the files changed in this PR -->

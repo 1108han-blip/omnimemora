@@ -60,3 +60,18 @@ Current mode is observe-only:
 - no production read-path change
 
 Future CI gates should start as warnings. Blocking gates should be limited to high-confidence product-boundary, token-truth, or release-safety violations.
+
+## Phase E Warning Workflow
+
+`.github/workflows/doctor-quality.yml` runs the product-local doctor as a report-only GitHub Actions workflow.
+
+Current workflow posture:
+
+- runs on relevant pull requests, pushes to `master` or `main`, and manual dispatch
+- produces `doctor-quality.json` as a workflow artifact
+- writes a compact summary to the GitHub Actions step summary
+- runs `make doctor`, Python compilation, and the focused doctor unit test
+- uses `continue-on-error` so findings remain visible without becoming a merge-blocking gate
+- does not run ReactDoctor by default
+
+Promoting any finding to a hard CI failure requires a separate gate decision after the observe-only noise is understood.

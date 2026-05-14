@@ -1,0 +1,108 @@
+name: Doctor Quality
+
+on:
+  pull_request:
+    paths:
+      - ".github/workflows/doctor-quality.yml"
+      - "Makefile"
+      - "tools/doctor_quality.py"
+      - "5_connectors/adapter/application/token_intelligence/**"
+      - "5_connectors/adapter/tests/test_doctor_quality.py"
+      - "6_console/**"
+      - "7_docs/internal/doctor_quality/**"
+      - "7_docs/internal/token_intelligence/**"
+      - "README.md"
+      - "AGENTS.md"
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - ".github/workflows/doctor-quality.yml"
+      - "Makefile"
+      - "tools/doctor_quality.py"
+      - "5_connectors/adapter/application/token_intelligence/**"
+      - "5_connectors/adapter/tests/test_doctor_quality.py"
+      - "6_console/**"
+      - "7_docs/internal/doctor_quality/**"
+      - "7_docs/internal/token_intelligence/**"
+      - "README.md"
+      - "AGENTS.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  doctor-quality-report:
+    name: Doctor quality report
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install test runner
+        run: python -m pip install --upgrade pip pytest
+
+      - name: Generate doctor JSON evidence
+        id: doctor_json
+        continue-on-error: true
+        run: make doctor-json > doctor-quality.json
+
+      - name: Add doctor summary
+        if: always()
+        continue-on-error: true
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          summary_path = Path("doctor-quality.json")
+          out = Path(os.environ["GITHUB_STEP_SUMMARY"])
+          if not summary_path.exists():
+              out.write_text("## Doctor Quality\n\nDoctor JSON evidence was not produced.\n", encoding="utf-8")
+              raise SystemExit(0)
+
+          payload = json.loads(summary_path.read_text(encoding="utf-8"))
+          summary = payload.get("summary", {})
+          lines = [
+              "## Doctor Quality",
+              "",
+              f"- mode: `{payload.get('mode', 'unknown')}`",
+              f"- static checks: `{summary.get('static_passed', 0)}/{summary.get('static_total', 0)}`",
+              f"- static errors: `{summary.get('static_errors', 0)}`",
+              f"- static warnings: `{summary.get('static_warnings', 0)}`",
+              "",
+              "This workflow is report-only. It does not define a merge-blocking gate.",
+              "",
+          ]
+          out.write_text("\n".join(lines), encoding="utf-8")
+          PY
+
+      - name: Run text doctor report
+        continue-on-error: true
+        run: make doctor
+
+      - name: Compile doctor test files
+        continue-on-error: true
+        run: python -m py_compile tools/doctor_quality.py 5_connectors/adapter/tests/test_doctor_quality.py
+
+      - name: Run doctor unit tests
+        continue-on-error: true
+        run: PYTHONPATH=. python -m pytest -q 5_connectors/adapter/tests/test_doctor_quality.py
+
+      - name: Upload doctor JSON evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: doctor-quality-json
+          path: doctor-quality.json
+          if-no-files-found: ignore
