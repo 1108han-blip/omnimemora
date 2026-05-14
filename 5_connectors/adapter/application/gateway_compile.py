@@ -111,6 +111,58 @@ def _contains_tool_context(messages: List[Dict[str, Any]]) -> bool:
     return False
 
 
+def _contains_reasoning_context(messages: List[Dict[str, Any]]) -> bool:
+    """Reasoning-capable clients must receive their provider state unchanged."""
+    for msg in messages:
+        if not isinstance(msg, dict):
+            continue
+        role = str(msg.get("role", "") or "").lower()
+        if role != "assistant":
+            continue
+        for key in ("thinking", "reasoning", "reasoning_details", "reasoning_content"):
+            if _has_non_empty_reasoning_value(msg.get(key)):
+                return True
+        content = msg.get("content")
+        if isinstance(content, str):
+            if _contains_inline_reasoning(content):
+                return True
+            continue
+        if not isinstance(content, list):
+            continue
+        for part in content:
+            if not isinstance(part, dict):
+                continue
+            part_type = str(part.get("type") or "").lower()
+            if part_type in {"thinking", "reasoning"}:
+                return True
+            for key in ("thinking", "reasoning", "reasoning_details", "reasoning_content", "text"):
+                value = part.get(key)
+                if key == "text" and isinstance(value, str):
+                    if _contains_inline_reasoning(value):
+                        return True
+                    continue
+                if _has_non_empty_reasoning_value(value):
+                    return True
+    return False
+
+
+def _has_non_empty_reasoning_value(value: Any) -> bool:
+    if value is None:
+        return False
+    if isinstance(value, str):
+        return bool(value.strip())
+    if isinstance(value, list):
+        return any(_has_non_empty_reasoning_value(item) for item in value)
+    if isinstance(value, dict):
+        return any(_has_non_empty_reasoning_value(item) for item in value.values())
+    return True
+
+
+def _contains_inline_reasoning(text: str) -> bool:
+    lowered = str(text or "").lower()
+    return "<think>" in lowered or "</think>" in lowered
+
+
 def _extract_query_from_messages(messages: List[Dict[str, Any]]) -> str:
     """Extract primary user-visible query, skipping trailing control metadata."""
     fallback = ""
@@ -173,6 +225,12 @@ def _assess_compile_eligibility(
     # passthrough.
     if _contains_tool_context(messages):
         return False, "tool_context_passthrough"
+
+    # Reasoning/interleaved-thinking state is part of the provider protocol
+    # graph. Do not rebuild history into a smaller prompt unless a dedicated
+    # protocol-aware compiler can prove it preserves those fields.
+    if _contains_reasoning_context(messages):
+        return False, "reasoning_context_passthrough"
 
     # Empty query = nothing to search for
     if not query:

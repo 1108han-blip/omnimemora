@@ -4,7 +4,7 @@
 
 - Created: 2026-05-13
 - Product line: OmniMemora structured context compilation
-- Current status: SC-027 document-content preservation implemented in repo reality as the current beta18 compile fix
+- Current status: SC-029 reasoning-context passthrough implemented in repo reality and app running reality promoted on 2026-05-14.
 - Supersedes phase6 as the active engineering line for compile capability work.
 
 ## Product Target
@@ -1300,6 +1300,41 @@ Boundary:
 - This does not manage OpenClaw UX, retries, final answer wording, or model behavior.
 - This does not touch user-facing memory, meter files, retention policy, or the legacy `5173` surface.
 - This does not silently truncate documents; document preservation remains governed by SC-027.
+
+### SC-029 - Reasoning Context Passthrough for Agent Thinking Modes
+
+Goal: keep OmniMemora compatible with model/agent thinking protocols by preserving existing reasoning context instead of rebuilding those histories through the compile path.
+
+Status: repo reality implemented and app running reality promoted on 2026-05-14.
+
+Implementation:
+
+- Gateway compile eligibility now detects provider-neutral reasoning context in assistant history and forces passthrough with `skip_reason=reasoning_context_passthrough`.
+- Detection covers Anthropic-style `thinking` content blocks, OpenAI-style `reasoning_details`, common `reasoning`/`reasoning_content` fields, and inline `<think>` tags.
+- The guard is not MiniMax-specific; it protects any agent/provider that carries reasoning state in message history.
+- Requests without reasoning context keep the existing structured compile eligibility path.
+
+Running validation:
+
+- OpenClaw local config was set to `thinkingDefault=high`, `reasoningDefault=stream`, and `MiniMax-M2.7` agent-layer `reasoning=true`; the OpenClaw gateway restarted successfully.
+- Default-target adapter promotion wrote to `/Users/sc/.omnimemora/service/current` but failed as expected because the current beta17 running adapter is under `/Users/sc/.omnimemora/app/current`.
+- App-target adapter promotion succeeded:
+  - Command: `OMNIMEMORA_SERVICE_DIR=/Users/sc/.omnimemora/app ./tools/promotion/promotion.sh adapter`
+  - Log: `tools/verification/logs/promotion_20260514_005223.log`
+  - Result: `running_reality_promoted`
+  - Adapter PID changed from `22516` to `23896`
+  - Code source: `/Users/sc/.omnimemora/app/current/5_connectors/adapter/main.py`
+- SHA-256 matched for `gateway_compile.py` across repo, `/Users/sc/.omnimemora/app/current`, and `/Users/sc/.omnimemora/service/current`.
+- Endpoint checks after promotion:
+  - `/health`: HTTP `200`, `0.033693s`
+  - `/metrics/summary`: HTTP `200`, `0.031721s`
+  - `/metrics/core_capabilities`: HTTP `200`, `0.144191s`; healthy but above the default internal `<100ms` target in this sample.
+
+Repo validation:
+
+- `/usr/bin/python3 -m pytest 5_connectors/adapter/tests/test_llm_proxy_agent_detection.py`: `15 passed`; post-test async logging emitted a non-failing closed-stream warning.
+- `/usr/bin/python3 -m pytest 5_connectors/adapter/tests/test_gateway_compile_task_type_passthrough.py 5_connectors/adapter/tests/test_context_compiler_anthropic_tool_graph.py 5_connectors/adapter/tests/test_context_compiler_anthropic_tool_schema.py`: `9 passed`.
+- `/usr/bin/python3 -m py_compile 5_connectors/adapter/application/gateway_compile.py 5_connectors/adapter/tests/test_llm_proxy_agent_detection.py`: passed.
 
 ## Success Criteria
 

@@ -145,6 +145,64 @@ class TestLlmProxyAgentDetection(unittest.TestCase):
         self.assertEqual(gateway_compile._extract_query_from_messages(messages), expected)
         self.assertEqual(compile_orchestrator._extract_user_query({"messages": messages}), expected)
 
+    def test_anthropic_thinking_blocks_force_passthrough(self):
+        payload = {
+            "_path": "/llm/v1/messages",
+            "model": "reasoning-model",
+            "messages": [
+                {"role": "user", "content": "Use the tool."},
+                {
+                    "role": "assistant",
+                    "content": [
+                        {"type": "thinking", "thinking": "I need to inspect tool output first."},
+                        {"type": "text", "text": "I will check."},
+                    ],
+                },
+                {"role": "user", "content": "Continue."},
+            ],
+        }
+
+        normalized = gateway_compile.normalize_inbound_request(payload, "openclaw")
+
+        self.assertFalse(normalized["can_compile"])
+        self.assertEqual(normalized["skip_reason"], "reasoning_context_passthrough")
+
+    def test_openai_reasoning_details_force_passthrough(self):
+        payload = {
+            "_path": "/llm/v1/chat/completions",
+            "model": "openai-compatible-reasoner",
+            "messages": [
+                {"role": "user", "content": "Use the tool."},
+                {
+                    "role": "assistant",
+                    "content": "",
+                    "reasoning_details": [{"type": "text", "text": "I need the tool result."}],
+                },
+                {"role": "user", "content": "Continue."},
+            ],
+        }
+
+        normalized = gateway_compile.normalize_inbound_request(payload, "openclaw")
+
+        self.assertFalse(normalized["can_compile"])
+        self.assertEqual(normalized["skip_reason"], "reasoning_context_passthrough")
+
+    def test_inline_think_tags_force_passthrough(self):
+        payload = {
+            "_path": "/llm/v1/chat/completions",
+            "model": "generic-reasoner",
+            "messages": [
+                {"role": "user", "content": "Use the tool."},
+                {"role": "assistant", "content": "<think>I need to preserve this.</think>"},
+                {"role": "user", "content": "Continue."},
+            ],
+        }
+
+        normalized = gateway_compile.normalize_inbound_request(payload, "openclaw")
+
+        self.assertFalse(normalized["can_compile"])
+        self.assertEqual(normalized["skip_reason"], "reasoning_context_passthrough")
+
 
 if __name__ == "__main__":
     unittest.main()
