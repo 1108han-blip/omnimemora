@@ -6,6 +6,7 @@
 - Product line: OmniMemora structured context compilation
 - Current status: SC-029 reasoning-context passthrough implemented in repo reality and app running reality promoted on 2026-05-14.
 - Supersedes phase6 as the active engineering line for compile capability work.
+- Product plan: [OmniMemora Context Runtime Product Plan 2026-05-14](./OmniMemora_Context_Runtime_Product_Plan_2026-05-14.md) frames structured compile and DoloToken as the immediate AI Context Runtime path while deferring standalone runtime infrastructure.
 
 ## Product Target
 
