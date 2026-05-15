@@ -8,6 +8,8 @@ interface LiveRequestFlowProps {
   runningAgents?: AgentControlCard[];
 }
 
+const EMPTY_RUNNING_AGENTS: AgentControlCard[] = [];
+
 function requestClassLabel(cls: RecentRequest['request_class']): string {
   if (cls === 'value_qualified') return 'qualified';
   if (cls === 'task_non_value') return 'non-value';
@@ -42,7 +44,7 @@ function decisionTags(req: RecentRequest): string[] {
   return tags.length > 0 ? tags : ['无'];
 }
 
-export function LiveRequestFlow({ requests, onSelect, selectedRequestId = null, runningAgents = [] }: LiveRequestFlowProps) {
+export function LiveRequestFlow({ requests, onSelect, selectedRequestId = null, runningAgents = EMPTY_RUNNING_AGENTS }: LiveRequestFlowProps) {
   // Filter out internal events and normalize agent names
   const userFacingRequests = requests.filter(req => req.request_class !== 'internal' && !isInternalEvent(req.query, req.agent));
   const normalizedRequests = rankRecentRequests(userFacingRequests).map(req => ({

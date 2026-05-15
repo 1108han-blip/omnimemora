@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, useReducer } from 'react';
 import { HeroMetrics } from './components/HeroMetrics';
 import { LiveRequestFlow } from './components/LiveRequestFlow';
 import { ContextComparison } from './components/ContextComparison';
@@ -17,6 +17,38 @@ const CONTROL_FAILURE_BACKOFF_BASE_MS = 5000;
 const CONTROL_FAILURE_BACKOFF_MAX_MS = 60000;
 const HERO_SKELETON_KEYS = ['real-requests', 'context-compression', 'memory-enhancement', 'token-savings'] as const;
 
+interface OverviewState {
+  usage: UsageSummary | null;
+  agentControls: AgentControlCard[];
+  requests: RecentRequest[];
+  loadingMetrics: boolean;
+  error: string | null;
+  coreCap24h: CoreCapabilitiesResponse | null;
+  coreCapTrend: CoreCapabilitiesTrendResponse | null;
+}
+
+interface RequestSelectionState {
+  selectedRequest: RecentRequest | null;
+  requestEvidence: RequestEvidence | null;
+  loadingEvidence: boolean;
+}
+
+const INITIAL_OVERVIEW_STATE: OverviewState = {
+  usage: null,
+  agentControls: [],
+  requests: [],
+  loadingMetrics: true,
+  error: null,
+  coreCap24h: null,
+  coreCapTrend: null,
+};
+
+const INITIAL_REQUEST_SELECTION_STATE: RequestSelectionState = {
+  selectedRequest: null,
+  requestEvidence: null,
+  loadingEvidence: false,
+};
+
 function inferInitialTab(): 'overview' | 'agents' {
   const params = new URLSearchParams(window.location.search);
   const tab = params.get('tab');
@@ -33,6 +65,18 @@ function buildPathForTab(tab: 'overview' | 'agents'): string {
     return base.endsWith('/') ? `${base}agents` : `${base}/agents`;
   }
   return base || '/';
+}
+
+function replaceDashboardUrl(tenant: string, tab: 'overview' | 'agents', highlight: string | null = null) {
+  const params = new URLSearchParams(window.location.search);
+  params.set('tenant', tenant);
+  params.set('tab', tab);
+  if (highlight) {
+    params.set('highlight', highlight);
+  } else {
+    params.delete('highlight');
+  }
+  window.history.replaceState({}, '', `${buildPathForTab(tab)}?${params.toString()}`);
 }
 
 function PersonalValueLoopPanel({
@@ -82,24 +126,26 @@ function PersonalValueLoopPanel({
 }
 
 export default function App() {
+  const [overviewState, setOverviewState] = useReducer(
+    (state: OverviewState, patch: Partial<OverviewState>) => ({ ...state, ...patch }),
+    INITIAL_OVERVIEW_STATE
+  );
+  const [requestSelectionState, setRequestSelectionState] = useReducer(
+    (state: RequestSelectionState, patch: Partial<RequestSelectionState>) => ({ ...state, ...patch }),
+    INITIAL_REQUEST_SELECTION_STATE
+  );
   const [tenant, setTenant] = useState<string>(() => {
     const fromUrl = new URLSearchParams(window.location.search).get('tenant');
     return fromUrl || 'all';
   });
   const [tenants, setTenants] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'overview' | 'agents'>(() => inferInitialTab());
-  const [usage, setUsage] = useState<UsageSummary | null>(null);
-  const [agentControls, setAgentControls] = useState<AgentControlCard[]>([]);
-  const [requests, setRequests] = useState<RecentRequest[]>([]);
-  const [_selectedRequest, setSelectedRequest] = useState<RecentRequest | null>(null);
-  const [requestEvidence, setRequestEvidence] = useState<RequestEvidence | null>(null);
-  const [loadingMetrics, setLoadingMetrics] = useState(true);
-  const [loadingEvidence, setLoadingEvidence] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [highlightFamilyId, setHighlightFamilyId] = useState<string | null>(null);
-  const [coreCap24h, setCoreCap24h] = useState<CoreCapabilitiesResponse | null>(null);
-  const [coreCapTrend, setCoreCapTrend] = useState<CoreCapabilitiesTrendResponse | null>(null);
-  const [isPageVisible, setIsPageVisible] = useState<boolean>(document.visibilityState === 'visible');
+  const [highlightFamilyId, setHighlightFamilyId] = useState<string | null>(
+    () => new URLSearchParams(window.location.search).get('highlight')
+  );
+  const { usage, agentControls, requests, loadingMetrics, error, coreCap24h, coreCapTrend } = overviewState;
+  const { selectedRequest, requestEvidence, loadingEvidence } = requestSelectionState;
+  const isPageVisibleRef = useRef<boolean>(document.visibilityState === 'visible');
   const controlsBackoffMsRef = useRef<number>(0);
   const controlsPollTimerRef = useRef<number | null>(null);
 
@@ -122,7 +168,7 @@ export default function App() {
 
       // Core capabilities for 四卡 (HeroMetrics)
       if (cc24hRes.status === 'fulfilled' && cc24hRes.value) {
-        setCoreCap24h(cc24hRes.value);
+        setOverviewState({ coreCap24h: cc24hRes.value });
       } else {
         const reason = cc24hRes.status === 'rejected' ? cc24hRes.reason : new Error('empty core capabilities response');
         failures.push(`coreCap24h: ${reason instanceof Error ? reason.message : String(reason)}`);
@@ -130,41 +176,43 @@ export default function App() {
 
       // Core capabilities trend for 四卡背面
       if (ccTrendRes.status === 'fulfilled' && ccTrendRes.value) {
-        setCoreCapTrend(ccTrendRes.value);
+        setOverviewState({ coreCapTrend: ccTrendRes.value });
       }
 
       if (rRes.status === 'fulfilled' && rRes.value) {
         // Overview shows observed task traffic (both task_non_value and value_qualified)
         // Live Request Flow reflects this observed traffic by default
-        setRequests(rRes.value.requests.filter((req: RecentRequest) => req.request_class !== 'internal'));
+        setOverviewState({
+          requests: rRes.value.requests.filter((req: RecentRequest) => req.request_class !== 'internal'),
+        });
       } else {
         const reason = rRes.status === 'rejected' ? rRes.reason : new Error('empty recent response');
         failures.push(`recent: ${reason instanceof Error ? reason.message : String(reason)}`);
       }
 
       if (uRes.status === 'fulfilled') {
-        setUsage(uRes.value);
+        setOverviewState({ usage: uRes.value });
       } else {
         failures.push(`usage: ${uRes.reason instanceof Error ? uRes.reason.message : String(uRes.reason)}`);
       }
 
-      setError(failures.length ? failures.join(' | ') : null);
+      setOverviewState({ error: failures.length ? failures.join(' | ') : null });
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setOverviewState({ error: e instanceof Error ? e.message : String(e) });
     } finally {
-      setLoadingMetrics(false);
+      setOverviewState({ loadingMetrics: false });
     }
   }, [tenant]);
 
   const loadOverviewControlsSnapshot = useCallback(async (): Promise<boolean> => {
     try {
       const payload = await fetchAgentControls();
-      setAgentControls(payload.agents ?? []);
+      setOverviewState({ agentControls: payload.agents ?? [] });
       controlsBackoffMsRef.current = 0;
       return true;
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e);
-      setError(`controls: ${message}`);
+      setOverviewState({ error: `controls: ${message}` });
       const prev = controlsBackoffMsRef.current || CONTROL_FAILURE_BACKOFF_BASE_MS;
       controlsBackoffMsRef.current = Math.min(prev * 2, CONTROL_FAILURE_BACKOFF_MAX_MS);
       return false;
@@ -177,27 +225,6 @@ export default function App() {
       .catch(() => setTenants(['all']));
   }, []);
 
-  // Read highlight param on mount
-  useEffect(() => {
-    const highlightParam = new URLSearchParams(window.location.search).get('highlight');
-    if (highlightParam) setHighlightFamilyId(highlightParam);
-  }, []);
-
-  useEffect(() => {
-    const onVisibilityChange = () => setIsPageVisible(document.visibilityState === 'visible');
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-  }, []);
-
-  useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    params.set('tenant', tenant);
-    params.set('tab', activeTab);
-    if (highlightFamilyId) params.set('highlight', highlightFamilyId);
-    const targetPath = buildPathForTab(activeTab);
-    window.history.replaceState({}, '', `${targetPath}?${params.toString()}`);
-  }, [tenant, activeTab, highlightFamilyId]);
-
   useEffect(() => {
     if (activeTab !== 'overview') return;
     void loadOverviewMetrics();
@@ -209,40 +236,53 @@ export default function App() {
 
   useEffect(() => {
     clearControlsPollTimer();
-    if (activeTab !== 'overview' || !isPageVisible) return;
+    if (activeTab !== 'overview') return;
 
     let cancelled = false;
     const tick = async () => {
-      const ok = await loadOverviewControlsSnapshot();
       if (cancelled || activeTab !== 'overview' || document.visibilityState !== 'visible') return;
-      const failureBackoff = controlsBackoffMsRef.current;
-      const nextDelay = ok
-        ? OVERVIEW_CONTROLS_SNAPSHOT_MS
-        : Math.max(CONTROL_FAILURE_BACKOFF_BASE_MS, failureBackoff);
-      controlsPollTimerRef.current = window.setTimeout(() => {
-        void tick();
-      }, nextDelay);
+      const ok = await loadOverviewControlsSnapshot();
+      if (!cancelled && activeTab === 'overview' && document.visibilityState === 'visible') {
+        const failureBackoff = controlsBackoffMsRef.current;
+        const nextDelay = ok
+          ? OVERVIEW_CONTROLS_SNAPSHOT_MS
+          : Math.max(CONTROL_FAILURE_BACKOFF_BASE_MS, failureBackoff);
+        controlsPollTimerRef.current = window.setTimeout(() => {
+          void tick();
+        }, nextDelay);
+      }
     };
 
-    void tick();
+    const onVisibilityChange = () => {
+      isPageVisibleRef.current = document.visibilityState === 'visible';
+      clearControlsPollTimer();
+      if (isPageVisibleRef.current) void tick();
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    if (isPageVisibleRef.current) void tick();
+
     return () => {
       cancelled = true;
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       clearControlsPollTimer();
     };
-  }, [activeTab, tenant, isPageVisible, loadOverviewControlsSnapshot, clearControlsPollTimer]);
+  }, [activeTab, tenant, loadOverviewControlsSnapshot, clearControlsPollTimer]);
 
   const handleSelectRequest = useCallback(async (req: RecentRequest) => {
-    setSelectedRequest(req);
-    setLoadingEvidence(true);
-    setRequestEvidence(null);
+    setRequestSelectionState({
+      selectedRequest: req,
+      loadingEvidence: true,
+      requestEvidence: null,
+    });
 
     try {
       const evidence = await fetchRequestEvidence(req.request_id).catch(() => null);
-      setRequestEvidence(evidence);
+      setRequestSelectionState({ requestEvidence: evidence });
     } catch {
       // ignore failures
     } finally {
-      setLoadingEvidence(false);
+      setRequestSelectionState({ loadingEvidence: false });
     }
   }, []);
 
@@ -254,35 +294,32 @@ export default function App() {
     );
 
     if (eligibleRequests.length === 0) {
-      setSelectedRequest(null);
-      setRequestEvidence(null);
+      setRequestSelectionState({
+        selectedRequest: null,
+        requestEvidence: null,
+      });
       return;
     }
     const newest = eligibleRequests[0];
-    if (_selectedRequest?.request_id === newest.request_id) return;
+    if (selectedRequest?.request_id === newest.request_id) return;
     void handleSelectRequest(newest);
-  }, [requests, activeTab, _selectedRequest, handleSelectRequest]);
+  }, [requests, activeTab, selectedRequest, handleSelectRequest]);
 
   const handleAgentUsageClick = useCallback((familyId: string) => {
     setHighlightFamilyId(familyId);
     setActiveTab('agents');
-    const params = new URLSearchParams(window.location.search);
-    params.set('tab', 'agents');
-    params.set('highlight', familyId);
-    window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
-  }, []);
+    replaceDashboardUrl(tenant, 'agents', familyId);
+  }, [tenant]);
 
   // Auto-clear highlight after 3 seconds
   useEffect(() => {
     if (!highlightFamilyId) return;
     const timer = setTimeout(() => {
       setHighlightFamilyId(null);
-      const params = new URLSearchParams(window.location.search);
-      params.delete('highlight');
-      window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+      replaceDashboardUrl(tenant, activeTab);
     }, 3000);
     return () => clearTimeout(timer);
-  }, [highlightFamilyId]);
+  }, [activeTab, highlightFamilyId, tenant]);
 
   // Calculate active counts from AgentControlCard.active field (unified activity truth)
   // This ensures overview active(*) matches the Agent control card's active status
@@ -432,7 +469,11 @@ export default function App() {
             </div>
             <select
               value={tenant}
-              onChange={(e) => setTenant(e.target.value)}
+              onChange={(e) => {
+                const nextTenant = e.target.value;
+                setTenant(nextTenant);
+                replaceDashboardUrl(nextTenant, activeTab, highlightFamilyId);
+              }}
               className="text-xs font-mono border border-zinc-300 dark:border-zinc-700 rounded px-2 py-1 bg-white dark:bg-zinc-800 text-zinc-700 dark:text-zinc-200"
             >
               {tenants.map((t) => (
@@ -461,7 +502,10 @@ export default function App() {
           <nav className="flex gap-1">
             <button
               type="button"
-              onClick={() => setActiveTab('overview')}
+              onClick={() => {
+                setActiveTab('overview');
+                replaceDashboardUrl(tenant, 'overview', highlightFamilyId);
+              }}
               aria-current={activeTab === 'overview' ? 'page' : undefined}
               className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
                 activeTab === 'overview'
@@ -473,7 +517,10 @@ export default function App() {
             </button>
             <button
               type="button"
-              onClick={() => setActiveTab('agents')}
+              onClick={() => {
+                setActiveTab('agents');
+                replaceDashboardUrl(tenant, 'agents', highlightFamilyId);
+              }}
               aria-current={activeTab === 'agents' ? 'page' : undefined}
               className={`px-4 py-2.5 text-xs font-medium border-b-2 transition-colors ${
                 activeTab === 'agents'
@@ -577,7 +624,7 @@ export default function App() {
                 requests={requests}
                 runningAgents={agentControls.filter(ctrl => ctrl.process_running)}
                 onSelect={handleSelectRequest}
-                selectedRequestId={_selectedRequest?.request_id ?? null}
+                selectedRequestId={selectedRequest?.request_id ?? null}
               />
             </section>
 

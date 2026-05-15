@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useReducer } from 'react';
 import type { AgentControlCard, SystemStatus } from '../types';
 import {
   disableAgentRoute,
@@ -51,14 +51,31 @@ interface AgentsDashboardProps {
   highlightFamilyId?: string | null;
 }
 
+interface AgentsControlState {
+  cards: AgentControlCard[];
+  systemStatus: SystemStatus | null;
+  loading: boolean;
+  error: string | null;
+  busyAction: string | null;
+  rescanResult: RescanResult | null;
+}
+
+const INITIAL_AGENTS_CONTROL_STATE: AgentsControlState = {
+  cards: [],
+  systemStatus: null,
+  loading: true,
+  error: null,
+  busyAction: null,
+  rescanResult: null,
+};
+
 export function AgentsDashboard({ highlightFamilyId }: AgentsDashboardProps) {
-  const [cards, setCards] = useState<AgentControlCard[]>([]);
-  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [busyAction, setBusyAction] = useState<string | null>(null);
-  const [rescanResult, setRescanResult] = useState<RescanResult | null>(null);
-  const [isPageVisible, setIsPageVisible] = useState<boolean>(document.visibilityState === 'visible');
+  const [controlState, setControlState] = useReducer(
+    (state: AgentsControlState, patch: Partial<AgentsControlState>) => ({ ...state, ...patch }),
+    INITIAL_AGENTS_CONTROL_STATE
+  );
+  const { cards, systemStatus, loading, error, busyAction, rescanResult } = controlState;
+  const isPageVisibleRef = useRef<boolean>(document.visibilityState === 'visible');
   const pollTimerRef = useRef<number | null>(null);
   const backoffMsRef = useRef<number>(0);
 
@@ -72,66 +89,73 @@ export function AgentsDashboard({ highlightFamilyId }: AgentsDashboardProps) {
   const load = useCallback(async (mode: 'normal' | 'rescan' = 'normal'): Promise<boolean> => {
     try {
       const payload = mode === 'rescan' ? await rescanAgentControls() : await fetchAgentControls();
-      setCards(payload.agents ?? []);
-      setSystemStatus(payload.system_status ?? null);
+      const nextState: Partial<AgentsControlState> = {
+        cards: payload.agents ?? [],
+        systemStatus: payload.system_status ?? null,
+        error: null,
+      };
       if (mode === 'normal') {
         backoffMsRef.current = 0;
       }
       if (mode === 'rescan' && payload.rescan_status) {
-        setRescanResult({
+        nextState.rescanResult = {
           status: payload.rescan_status,
           message: payload.rescan_message ?? '',
           added: payload.rescan_added ?? [],
           removed: payload.rescan_removed ?? [],
-        });
+        };
       }
-      setError(null);
+      setControlState(nextState);
       return true;
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setControlState({ error: e instanceof Error ? e.message : String(e) });
       if (mode === 'normal') {
         const prev = backoffMsRef.current || CONTROL_FAILURE_BACKOFF_BASE_MS;
         backoffMsRef.current = Math.min(prev * 2, CONTROL_FAILURE_BACKOFF_MAX_MS);
       }
       return false;
     } finally {
-      setLoading(false);
+      setControlState({ loading: false });
     }
   }, []);
 
   useEffect(() => {
-    const onVisibilityChange = () => setIsPageVisible(document.visibilityState === 'visible');
-    document.addEventListener('visibilitychange', onVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', onVisibilityChange);
-  }, []);
-
-  useEffect(() => {
     clearPollTimer();
-    if (!isPageVisible) return;
 
     let cancelled = false;
     const tick = async () => {
-      const ok = await load('normal');
       if (cancelled || document.visibilityState !== 'visible') return;
-      const nextDelay = ok
-        ? AGENTS_POLL_MS
-        : Math.max(CONTROL_FAILURE_BACKOFF_BASE_MS, backoffMsRef.current);
-      pollTimerRef.current = window.setTimeout(() => {
-        void tick();
-      }, nextDelay);
+      const ok = await load('normal');
+      if (!cancelled && document.visibilityState === 'visible') {
+        const nextDelay = ok
+          ? AGENTS_POLL_MS
+          : Math.max(CONTROL_FAILURE_BACKOFF_BASE_MS, backoffMsRef.current);
+        pollTimerRef.current = window.setTimeout(() => {
+          void tick();
+        }, nextDelay);
+      }
     };
 
-    void tick();
+    const onVisibilityChange = () => {
+      isPageVisibleRef.current = document.visibilityState === 'visible';
+      clearPollTimer();
+      if (isPageVisibleRef.current) void tick();
+    };
+
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    if (isPageVisibleRef.current) void tick();
+
     return () => {
       cancelled = true;
+      document.removeEventListener('visibilitychange', onVisibilityChange);
       clearPollTimer();
     };
-  }, [isPageVisible, load, clearPollTimer]);
+  }, [load, clearPollTimer]);
 
   // Auto-clear rescan feedback after 5 seconds
   useEffect(() => {
     if (!rescanResult) return;
-    const timer = setTimeout(() => setRescanResult(null), 5000);
+    const timer = setTimeout(() => setControlState({ rescanResult: null }), 5000);
     return () => clearTimeout(timer);
   }, [rescanResult]);
 
@@ -148,7 +172,7 @@ export function AgentsDashboard({ highlightFamilyId }: AgentsDashboardProps) {
 
   const applyAction = useCallback(async (action: 'install' | 'uninstall' | 'enable' | 'disable', familyId: string) => {
     const key = `${action}:${familyId}`;
-    setBusyAction(key);
+    setControlState({ busyAction: key });
     try {
       if (action === 'install') await installAgent(familyId);
       if (action === 'uninstall') await uninstallAgent(familyId);
@@ -156,9 +180,9 @@ export function AgentsDashboard({ highlightFamilyId }: AgentsDashboardProps) {
       if (action === 'disable') await disableAgentRoute(familyId);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setControlState({ error: e instanceof Error ? e.message : String(e) });
     } finally {
-      setBusyAction(null);
+      setControlState({ busyAction: null });
     }
   }, [load]);
 
