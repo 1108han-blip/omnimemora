@@ -67,34 +67,26 @@ def _default_openai_model() -> str:
     explicit = os.getenv("OMNIMEMORA_OPENAI_MODEL", "").strip()
     if explicit:
         return explicit
-    return "gemma4:26b"
+    return ""
 
 
 def _default_openai_model_map() -> dict[str, str]:
     explicit = os.getenv("OMNIMEMORA_OPENAI_MODEL_MAP", "").strip()
     if not explicit:
-        return {
-            "gemma4:26b": "gemma4:26b",
-        }
+        return {}
     try:
         parsed = json.loads(explicit)
     except Exception:
-        return {
-            "gemma4:26b": "gemma4:26b",
-        }
+        return {}
     if not isinstance(parsed, dict):
-        return {
-            "gemma4:26b": "gemma4:26b",
-        }
+        return {}
     normalized: dict[str, str] = {}
     for raw_key, raw_value in parsed.items():
         key = str(raw_key).strip()
         value = str(raw_value).strip()
         if key and value:
             normalized[key] = value
-    return normalized or {
-        "gemma4:26b": "gemma4:26b",
-    }
+    return normalized
 
 
 def _default_anthropic_timeout_seconds() -> float:
@@ -411,7 +403,8 @@ class Config(BaseModel):
     anthropic_api_key: str = _default_anthropic_api_key()
     anthropic_default_model: str = _default_anthropic_model()
 
-    # 默认 OpenAI/Ollama 上游（OpenClaw 等使用 OpenAI 格式的 Agent）
+    # OpenAI/Ollama-compatible upstream. Models must be explicit so local Ollama
+    # inventory never becomes OmniMemora product truth by default.
     openai_base_url: str = os.getenv(
         "OMNIMEMORA_OPENAI_BASE_URL",
         "http://127.0.0.1:11434/v1",  # 默认 Ollama 本地

@@ -41,6 +41,7 @@ DoloToken can ship as a proprietary local CLI/local-proxy download. It must supp
 - Current OpenClaw and Claude Code usage is Anthropic-compatible and routes to the user's configured MiniMax M2.7 path when enabled.
 - `gemma4:26b` is a local Ollama model option on this machine, not the current OmniMemora upstream model and not evidence of the real agent route.
 - A `/v1/models` response is only a compatibility surface response; it is not proof of the user's actual agent model, upstream health, or product routing truth.
+- By default, `/v1/models` lists no local Ollama model. OpenAI-compatible models appear there only when explicitly configured, and local Ollama entries must not be labeled as OmniMemora-owned.
 - `/metrics/core_capabilities` is the current MVP savings truth surface (`real_input_v1`); `/metrics/summary` may return degraded no-historical-scan status.
 - Adapter-to-runtime contract changes must pass contract tests.
 - Agent control lives in the desktop GUI, not in agent self-selection.

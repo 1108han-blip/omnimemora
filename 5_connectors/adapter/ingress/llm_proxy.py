@@ -2769,8 +2769,8 @@ def _iter_responses_stream_events(response_obj: dict) -> Iterable[bytes]:
     })
 
 
-def _openai_model_catalog_response() -> dict:
-    upstream = get_upstream_for_openai()
+def _openai_model_catalog_response(upstream: Optional[dict] = None) -> dict:
+    upstream = upstream or _configured_openai_catalog_upstream()
     model_ids: list[str] = []
 
     def _add(model_id: Optional[str]):
@@ -2787,12 +2787,13 @@ def _openai_model_catalog_response() -> dict:
     tier_switch_enabled = os.getenv("OMNIMEMORA_SERVICE_TIER_SWITCH_ENABLED", "true").strip().lower() in {
         "1", "true", "yes", "on",
     }
+    owner = _openai_catalog_owner(upstream)
 
     data = [{
         "id": model_id,
         "object": "model",
         "created": 0,
-        "owned_by": "omnimemora",
+        "owned_by": owner,
         # Minimal capability metadata for GUI feature gating.
         "capabilities": {
             "responses": True,
@@ -2807,6 +2808,32 @@ def _openai_model_catalog_response() -> dict:
     return {
         "object": "list",
         "data": data,
+        "catalog_scope": "openai_compatible_configured_models",
+        "product_model_truth": False,
+    }
+
+
+def _openai_catalog_owner(upstream: dict) -> str:
+    provider = str(upstream.get("provider") or "").strip().lower()
+    base_url = str(upstream.get("base_url") or "").strip().lower()
+    if provider in {"ollama", "local_ollama"} or base_url.startswith((
+        "http://127.0.0.1:11434",
+        "http://localhost:11434",
+        "http://[::1]:11434",
+    )):
+        return "local_ollama"
+    if provider and provider != "openai_compatible":
+        return provider
+    return "configured_upstream"
+
+
+def _configured_openai_catalog_upstream() -> dict:
+    upstream = dict(config.upstreams.get("openai", {}))
+    return {
+        "base_url": upstream.get("base_url", config.openai_base_url),
+        "provider": upstream.get("provider", "openai_compatible"),
+        "model_map": upstream.get("model_map", {}),
+        "default_model": upstream.get("default_model", config.openai_default_model),
     }
 
 
@@ -3843,7 +3870,20 @@ async def proxy_openai_chat(request: Request):
                 agent_id = detected_agent
         else:
             agent_id = detected_agent
-    model = body.get("model", config.openai_default_model)
+    model = str(body.get("model") or config.openai_default_model or "").strip()
+    if not model:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "openai_model_required",
+                    "message": (
+                        "OpenAI-compatible requests must provide an explicit model. "
+                        "OmniMemora does not select a local Ollama model by default."
+                    ),
+                }
+            },
+        )
     is_streaming = body.get("stream", False)
     provider_base = request.headers.get("x-provider-base-url")
     api_key_override = request.headers.get("authorization", "").replace("Bearer ", "")
@@ -4283,7 +4323,20 @@ async def proxy_v1_responses(request: Request):
 
     agent_id = detect_agent(request, body)
     ingress_path = request.url.path or "/v1/responses"
-    requested_model = body.get("model", config.openai_default_model)
+    requested_model = str(body.get("model") or config.openai_default_model or "").strip()
+    if not requested_model:
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": {
+                    "code": "openai_model_required",
+                    "message": (
+                        "Responses-compatible requests must provide an explicit model. "
+                        "OmniMemora does not select a local Ollama model by default."
+                    ),
+                }
+            },
+        )
     wants_stream = bool(body.get("stream", True))
     provider_base = request.headers.get("x-provider-base-url")
     authorization_header = request.headers.get("authorization", "")

@@ -70,6 +70,29 @@ class TestLlmProxyAgentDetection(unittest.TestCase):
 
         self.assertEqual(detected, "openclaw")
 
+    def test_openai_model_catalog_has_no_implicit_local_ollama_default(self):
+        payload = llm_proxy._openai_model_catalog_response({
+            "provider": "openai_compatible",
+            "base_url": "http://127.0.0.1:11434/v1",
+            "default_model": "",
+            "model_map": {},
+        })
+
+        self.assertEqual(payload["data"], [])
+        self.assertFalse(payload["product_model_truth"])
+        self.assertEqual(payload["catalog_scope"], "openai_compatible_configured_models")
+
+    def test_openai_model_catalog_labels_explicit_local_ollama_owner(self):
+        payload = llm_proxy._openai_model_catalog_response({
+            "provider": "openai_compatible",
+            "base_url": "http://127.0.0.1:11434/v1",
+            "default_model": "gemma4:26b",
+            "model_map": {},
+        })
+
+        self.assertEqual(payload["data"][0]["id"], "gemma4:26b")
+        self.assertEqual(payload["data"][0]["owned_by"], "local_ollama")
+
     def test_safe_passthrough_headers_drops_transport_lengths(self):
         headers = httpx.Headers(
             {
@@ -209,6 +232,23 @@ if __name__ == "__main__":
 
 
 class TestOpenClawRouteFallback(unittest.IsolatedAsyncioTestCase):
+    async def test_openai_chat_requires_explicit_model_when_no_product_default_exists(self):
+        class _Req:
+            def __init__(self):
+                self.headers = {}
+                self.query_params = {}
+                self.state = SimpleNamespace()
+                self._json = {"messages": [{"role": "user", "content": "hi"}], "stream": False}
+                self.url = SimpleNamespace(path="/llm/chat")
+
+            async def json(self):
+                return self._json
+
+        response = await llm_proxy.proxy_openai_chat(_Req())
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn(b"openai_model_required", response.body)
+
     async def test_openclaw_anthropic_timeout_returns_protocol_error_without_assistant_takeover(self):
         body = {
             "model": "MiniMax-M2.7",
