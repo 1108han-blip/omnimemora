@@ -131,6 +131,12 @@ fn current_agent_modes_path() -> PathBuf {
     component_dir().join("5_connectors/adapter/config/agent_modes.json")
 }
 
+fn default_provider_env_file_path() -> PathBuf {
+    env::var("OMNIMEMORA_PROVIDER_ENV_FILE")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| home_dir().join(".openclaw").join(".env"))
+}
+
 fn previous_dir() -> PathBuf {
     app_root().join("previous")
 }
@@ -786,6 +792,18 @@ fn plutil_upsert_string(path: &Path, key: &str, value: &str) -> bool {
             .unwrap_or(false)
 }
 
+fn plutil_delete_key(path: &Path, key: &str) -> bool {
+    Command::new("plutil")
+        .arg("-remove")
+        .arg(key)
+        .arg(path)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
 fn align_launch_agents_to_current_components() {
     if use_legacy_launch_agents() {
         return;
@@ -836,6 +854,16 @@ fn align_launch_agents_to_current_components() {
             &adapter_plist,
             "EnvironmentVariables.OMNIMEMORA_INTERNAL_API_TOKEN",
             INTERNAL_TOKEN,
+        );
+        let _ = plutil_upsert_string(
+            &adapter_plist,
+            "EnvironmentVariables.OMNIMEMORA_PROVIDER_ENV_FILE",
+            &default_provider_env_file_path().display().to_string(),
+        );
+        let _ = plutil_delete_key(&adapter_plist, "EnvironmentVariables.MINIMAX_API_KEY");
+        let _ = plutil_delete_key(
+            &adapter_plist,
+            "EnvironmentVariables.OMNIMEMORA_ANTHROPIC_API_KEY",
         );
     }
 }
@@ -933,6 +961,7 @@ fn start_adapter() -> Result<Option<ManagedProcess>, String> {
         )
         .env("OMNIMEMORA_INTERNAL_API_TOKEN", INTERNAL_TOKEN)
         .env("OMNIMEMORA_AGENT_MODES_PATH", agent_modes)
+        .env("OMNIMEMORA_PROVIDER_ENV_FILE", default_provider_env_file_path())
         .env("PYTHONPATH", adapter_root);
     spawn_service(
         "adapter",

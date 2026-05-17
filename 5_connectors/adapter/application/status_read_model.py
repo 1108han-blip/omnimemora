@@ -296,13 +296,79 @@ def derive_integration_truth(card: Dict[str, Any]) -> str:
     return "mcp_attached"
 
 
-def derive_route_truth(routing_enabled: bool, health_state: str) -> str:
+def derive_route_truth(
+    routing_enabled: bool,
+    health_state: str,
+    upstream_auth_drift: bool = False,
+) -> str:
     """Derive route_truth from routing_enabled + health."""
     if not routing_enabled:
         return "off"
+    if upstream_auth_drift:
+        return "intent_on"
     if health_state == "healthy":
         return "effective"
     return "intent_on"
+
+
+def _is_upstream_auth_error(event: Dict[str, Any]) -> bool:
+    try:
+        status_code = int(event.get("status_code") or 0)
+    except (TypeError, ValueError):
+        status_code = 0
+    error_text = str(event.get("error") or "").lower()
+    return status_code == 401 or "invalid api key" in error_text or "authentication_error" in error_text
+
+
+def _recent_upstream_auth_failure(
+    family_id: str,
+    *,
+    window_minutes: int = 30,
+) -> Optional[Dict[str, Any]]:
+    """Return recent provider-auth drift evidence for a family, if any."""
+    try:
+        proxy_store = __import__("5_connectors.adapter.infrastructure.proxy_store", fromlist=["dummy"])
+        recent_events = proxy_store.read_recent_events(limit=1000)
+    except Exception:
+        return None
+
+    cutoff = time.time() - window_minutes * 60
+    newest: Optional[Dict[str, Any]] = None
+    newest_success_ts = 0.0
+    for event in recent_events:
+        try:
+            ts = float(event.get("timestamp") or 0)
+        except (TypeError, ValueError):
+            continue
+        if ts < cutoff:
+            continue
+        if _normalize_agent_to_family(str(event.get("agent_id") or "")) != family_id:
+            continue
+        if event.get("type") == "proxy_response":
+            try:
+                status_code = int(event.get("status_code") or 0)
+            except (TypeError, ValueError):
+                status_code = 0
+            if 200 <= status_code < 300 and ts > newest_success_ts:
+                newest_success_ts = ts
+            continue
+        if event.get("type") != "proxy_error":
+            continue
+        if not _is_upstream_auth_error(event):
+            continue
+        if newest is None or ts > float(newest.get("timestamp") or 0):
+            newest = event
+
+    if newest is None:
+        return None
+    if newest_success_ts > float(newest.get("timestamp") or 0):
+        return None
+    return {
+        "reason": "upstream_auth_invalid",
+        "last_failed_at": _epoch_to_iso(float(newest.get("timestamp") or 0)),
+        "status_code": int(newest.get("status_code") or 401),
+        "request_id": newest.get("request_id"),
+    }
 
 
 def _filter_observed_family_candidates(
@@ -859,11 +925,23 @@ async def build_control_cards() -> List[Dict[str, Any]]:
             )
 
         integration_truth = derive_integration_truth(raw)
-        route_truth = derive_route_truth(route_state.routing_enabled(family_id), health_state)
+        upstream_auth_failure = _recent_upstream_auth_failure(family_id)
+        route_truth = derive_route_truth(
+            route_state.routing_enabled(family_id),
+            health_state,
+            upstream_auth_drift=bool(upstream_auth_failure),
+        )
         observed_client_truth = derive_observed_client_truth(raw)
         process_running = bool(raw.get("running", False))
         activity_state = _activity_state_from_metric_and_process(metric, process_running=process_running)
         truth_message = derive_truth_message(raw, integration_truth, route_truth, traffic_truth, metrics_24h)
+        config_drifted = bool(raw.get("detected", True)) and bool(raw.get("backup_available")) and not bool(raw.get("installed"))
+        drift_reason = None
+        if upstream_auth_failure:
+            drift_reason = upstream_auth_failure["reason"]
+            truth_message = "路由已開啟，但上游 provider 認證失效。請重新連接或同步 provider 憑據。"
+        elif config_drifted:
+            drift_reason = "config_overwritten_after_attach"
 
         cards.append(
             {
@@ -892,8 +970,10 @@ async def build_control_cards() -> List[Dict[str, Any]]:
                 "traffic_truth": traffic_truth,
                 "observed_client_truth": observed_client_truth,
                 "truth_message": truth_message,
-                "drifted": bool(raw.get("detected", True)) and bool(raw.get("backup_available")) and not bool(raw.get("installed")),
-                "drift_reason": "config_overwritten_after_attach" if (bool(raw.get("detected", True)) and bool(raw.get("backup_available")) and not bool(raw.get("installed"))) else None,
+                "drifted": config_drifted or bool(upstream_auth_failure),
+                "drift_reason": drift_reason,
+                "upstream_auth_status": "invalid" if upstream_auth_failure else "unknown",
+                "upstream_auth_last_failed_at": upstream_auth_failure.get("last_failed_at") if upstream_auth_failure else None,
                 # Scope identity fields
                 "identity_scope": "family",
                 "scope_note": _derive_scope_note(family_id),
@@ -927,6 +1007,53 @@ def build_root_payload() -> Dict[str, Any]:
     return result
 
 
+def _parse_env_file_for_provider_auth(path: str) -> Dict[str, str]:
+    values: Dict[str, str] = {}
+    try:
+        with open(os.path.expanduser(path), "r", encoding="utf-8") as handle:
+            for line in handle:
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#") or "=" not in stripped:
+                    continue
+                key, value = stripped.split("=", 1)
+                key = key.strip()
+                if key not in {"MINIMAX_API_KEY", "OMNIMEMORA_ANTHROPIC_API_KEY"}:
+                    continue
+                value = value.strip()
+                if len(value) >= 2 and value[0] == value[-1] and value[0] in {"'", '"'}:
+                    value = value[1:-1]
+                values[key] = value
+    except OSError:
+        return {}
+    return values
+
+
+def _provider_auth_readiness() -> Dict[str, Any]:
+    env_file = os.getenv("OMNIMEMORA_PROVIDER_ENV_FILE", "~/.openclaw/.env").strip()
+    env_file_path = os.path.expanduser(env_file) if env_file else ""
+    env_file_values = _parse_env_file_for_provider_auth(env_file_path) if env_file_path else {}
+    process_key = (
+        os.getenv("OMNIMEMORA_ANTHROPIC_API_KEY", "").strip()
+        or os.getenv("MINIMAX_API_KEY", "").strip()
+    )
+    file_key = (
+        env_file_values.get("OMNIMEMORA_ANTHROPIC_API_KEY", "").strip()
+        or env_file_values.get("MINIMAX_API_KEY", "").strip()
+    )
+    drift_detected = bool(process_key and file_key and process_key != file_key)
+    missing = not bool(process_key or file_key)
+    status = "missing" if missing else ("drifted" if drift_detected else "configured")
+    return {
+        "status": status,
+        "env_file_configured": bool(env_file_path),
+        "env_file_readable": bool(env_file_values),
+        "runtime_key_present": bool(process_key),
+        "env_file_key_present": bool(file_key),
+        "drift_detected": drift_detected,
+        "recommended_action": "sync_provider_env" if drift_detected else None,
+    }
+
+
 async def build_health_payload(mode: str = "local") -> Dict[str, Any]:
     _require_diag_config()
     if mode == "local":
@@ -945,6 +1072,7 @@ async def build_health_payload(mode: str = "local") -> Dict[str, Any]:
                 "max_per_minute": _diag_config.rate_limit_per_minute,
                 "current": _diag_rate_limiter.get_current_count(),
             },
+            "provider_auth": _provider_auth_readiness(),
         }
 
     backend_health = await _diag_get_backend_fn().health()
@@ -996,6 +1124,7 @@ async def build_health_payload(mode: str = "local") -> Dict[str, Any]:
             "structured_http_errors": True,
             "write_error_fields": ["reason", "error_code", "request_id", "support"],
         },
+        "provider_auth": _provider_auth_readiness(),
         "dedup_stats": _diag_get_dedup_cache_fn().get_stats(),
         "rate_limit": {
             "enabled": _diag_config.enable_rate_limit,

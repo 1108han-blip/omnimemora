@@ -360,3 +360,82 @@ def test_derive_route_truth_effective():
 def test_derive_route_truth_intent_on():
     import adapter.application.status_read_model as srm
     assert srm.derive_route_truth(routing_enabled=True, health_state="degraded") == "intent_on"
+
+
+def test_derive_route_truth_auth_drift_downgrades_effective_route():
+    import adapter.application.status_read_model as srm
+    assert (
+        srm.derive_route_truth(
+            routing_enabled=True,
+            health_state="healthy",
+            upstream_auth_drift=True,
+        )
+        == "intent_on"
+    )
+
+
+def test_recent_upstream_auth_failure_detects_family_401(monkeypatch):
+    import adapter.application.status_read_model as srm
+
+    now = time.time()
+
+    class FakeProxyStore:
+        @staticmethod
+        def read_recent_events(limit=1000):
+            return [
+                {
+                    "type": "proxy_error",
+                    "agent_id": "claude_code",
+                    "timestamp": now,
+                    "status_code": 401,
+                    "error": 'upstream_http_error|{"error":{"message":"invalid api key"}}',
+                    "request_id": "req-auth",
+                }
+            ]
+
+    monkeypatch.setitem(
+        sys.modules,
+        "5_connectors.adapter.infrastructure.proxy_store",
+        FakeProxyStore,
+    )
+
+    failure = srm._recent_upstream_auth_failure("claude_code")
+
+    assert failure["reason"] == "upstream_auth_invalid"
+    assert failure["status_code"] == 401
+    assert failure["request_id"] == "req-auth"
+
+
+def test_recent_upstream_auth_failure_cleared_by_later_success(monkeypatch):
+    import adapter.application.status_read_model as srm
+
+    now = time.time()
+
+    class FakeProxyStore:
+        @staticmethod
+        def read_recent_events(limit=1000):
+            return [
+                {
+                    "type": "proxy_error",
+                    "agent_id": "claude_code",
+                    "timestamp": now,
+                    "status_code": 401,
+                    "error": 'upstream_http_error|{"error":{"message":"invalid api key"}}',
+                    "request_id": "req-auth",
+                },
+                {
+                    "type": "proxy_response",
+                    "agent_id": "claude_code",
+                    "timestamp": now + 1,
+                    "status_code": 200,
+                    "request_id": "req-ok",
+                },
+            ]
+
+    monkeypatch.setitem(
+        sys.modules,
+        "5_connectors.adapter.infrastructure.proxy_store",
+        FakeProxyStore,
+    )
+
+    assert srm._recent_upstream_auth_failure("claude_code") is None

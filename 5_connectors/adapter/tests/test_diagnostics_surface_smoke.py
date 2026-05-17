@@ -1,7 +1,9 @@
 import asyncio
 import importlib
+import tempfile
 import unittest
 from unittest import mock
+from pathlib import Path
 
 from fastapi import Response
 
@@ -76,3 +78,22 @@ class StatusReadModelDiagnosticsHelperTests(unittest.TestCase):
         self.assertEqual(payload["status"], "healthy")
         self.assertEqual(payload["interface_policy"]["product_entry_port"], 18011)
         self.assertEqual(payload["rate_limit"]["max_per_minute"], 60)
+        self.assertIn("provider_auth", payload)
+
+    def test_provider_auth_readiness_detects_process_env_file_drift(self):
+        with tempfile.TemporaryDirectory(prefix="omnimemora-provider-auth-") as tmpdir:
+            env_file = Path(tmpdir) / ".env"
+            env_file.write_text("MINIMAX_API_KEY=file-key\n", encoding="utf-8")
+            with mock.patch.dict(
+                "os.environ",
+                {
+                    "OMNIMEMORA_PROVIDER_ENV_FILE": str(env_file),
+                    "OMNIMEMORA_ANTHROPIC_API_KEY": "process-key",
+                },
+                clear=False,
+            ):
+                payload = status_read_model._provider_auth_readiness()
+
+        self.assertEqual(payload["status"], "drifted")
+        self.assertTrue(payload["drift_detected"])
+        self.assertEqual(payload["recommended_action"], "sync_provider_env")
